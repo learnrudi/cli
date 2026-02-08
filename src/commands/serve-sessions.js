@@ -478,7 +478,69 @@ async function readSessionMessages(sessionId) {
   const content = await fsp.readFile(filePath, 'utf-8');
   const messages = parseSessionMessagesFromJsonl(content);
   const byteOffset = Buffer.byteLength(content, 'utf-8');
-  return { messages, byteOffset };
+
+  // Extract usage stats from raw JSONL lines
+  const usage = extractUsageFromJsonl(content);
+
+  return { messages, byteOffset, usage, filePath };
+}
+
+/**
+ * Walk raw JSONL lines and sum token usage from message.usage fields.
+ * Also counts turns (user→assistant transitions).
+ */
+function extractUsageFromJsonl(content) {
+  if (!content || typeof content !== 'string') return null;
+  const lines = content.trim().split('\n').filter(Boolean);
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  let totalCacheReadTokens = 0;
+  let totalCostUsd = 0;
+  let turnCount = 0;
+  let lastRole = null;
+  let model = null;
+  let createdAt = null;
+  let lastActiveAt = null;
+  let cwd = null;
+
+  for (const line of lines) {
+    let entry;
+    try { entry = JSON.parse(line); } catch { continue; }
+
+    const role = getSessionEntryRole(entry);
+    const usage = entry?.message?.usage;
+
+    // Capture metadata from first entries
+    if (!createdAt && entry.timestamp) createdAt = entry.timestamp;
+    if (entry.timestamp) lastActiveAt = entry.timestamp;
+    if (!model && entry.message?.model) model = entry.message.model;
+    if (!cwd && entry.cwd) cwd = entry.cwd;
+
+    if (usage) {
+      totalOutputTokens += usage.output_tokens || 0;
+      totalInputTokens += (usage.input_tokens || 0)
+        + (usage.cache_read_input_tokens || 0)
+        + (usage.cache_creation_input_tokens || 0);
+      totalCacheReadTokens += usage.cache_read_input_tokens || 0;
+    }
+
+    // Extract cost from result events
+    if (entry?.type === 'result' && typeof entry.total_cost_usd === 'number') {
+      totalCostUsd = entry.total_cost_usd; // result event has cumulative cost
+    }
+
+    if (role === 'assistant' && lastRole === 'user') {
+      turnCount++;
+    }
+    if (role) lastRole = role;
+  }
+
+  if (totalInputTokens === 0 && totalOutputTokens === 0) return null;
+  return {
+    totalInputTokens, totalOutputTokens, totalCacheReadTokens, turnCount,
+    totalCostUsd: totalCostUsd || undefined,
+    model, createdAt, lastActiveAt, cwd,
+  };
 }
 
 /**
@@ -722,7 +784,7 @@ export function shouldBroadcastSessionUpdate(watchRoot, relPath) {
 // Factory — stateful session module with caching and watcher
 // ---------------------------------------------------------------------------
 
-export function createSessionsModule({ log, broadcast, json, error, readBody, getProjectGitStatus }) {
+export function createSessionsModule({ log, broadcast, json, error, readBody, getProjectGitStatus, resolveDb }) {
   // Stateful caching
   const sessionsProjectsCache = {
     value: null,
@@ -978,6 +1040,50 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
       // ~/.claude/projects/ may not exist
     }
 
+    // Merge DB titles into session entries
+    const db = resolveDb ? resolveDb() : null;
+    if (db) {
+      try {
+        // Collect all session IDs across all projects
+        const allSessionIds = [];
+        for (const proj of projects) {
+          for (const s of proj.sessions) {
+            allSessionIds.push(s.sessionId);
+          }
+        }
+        if (allSessionIds.length > 0) {
+          // Batch query in chunks of 500 to avoid SQLite variable limit
+          const dbMap = new Map();
+          for (let i = 0; i < allSessionIds.length; i += 500) {
+            const chunk = allSessionIds.slice(i, i + 500);
+            const placeholders = chunk.map(() => '?').join(',');
+            const rows = db.prepare(`
+              SELECT id, title, title_override, total_cost, total_input_tokens, total_output_tokens, turn_count
+              FROM sessions WHERE id IN (${placeholders}) AND provider = 'claude'
+            `).all(...chunk);
+            for (const row of rows) {
+              dbMap.set(row.id, row);
+            }
+          }
+          // Attach DB fields to each session entry
+          for (const proj of projects) {
+            for (const s of proj.sessions) {
+              const row = dbMap.get(s.sessionId);
+              if (!row) continue;
+              const display = row.title_override || row.title;
+              if (display) s.dbTitle = display;
+              if (row.total_cost > 0) s.totalCost = row.total_cost;
+              if (row.total_input_tokens > 0) s.totalInputTokens = row.total_input_tokens;
+              if (row.total_output_tokens > 0) s.totalOutputTokens = row.total_output_tokens;
+              if (row.turn_count > 0) s.turnCount = row.turn_count;
+            }
+          }
+        }
+      } catch (err) {
+        log('sessions', 'warn', `DB title merge failed: ${err.message}`);
+      }
+    }
+
     projects.sort((a, b) => {
       const aTime = a.sessions[0]?.modified || '';
       const bTime = b.sessions[0]?.modified || '';
@@ -1044,8 +1150,70 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
     if (req.method === 'GET' && msgMatch) {
       const sessionId = decodeURIComponent(msgMatch[1]);
       try {
-        const { messages, byteOffset } = await readSessionMessages(sessionId);
-        json(res, { messages, byteOffset });
+        const { messages, byteOffset, usage, filePath } = await readSessionMessages(sessionId);
+
+        // Calculate cost from model pricing if no result-event cost
+        if (usage && !usage.totalCostUsd && usage.model) {
+          try {
+            const db = resolveDb ? resolveDb() : null;
+            if (db) {
+              const pricing = db.prepare(`
+                SELECT input_cost_per_mtok, output_cost_per_mtok, cache_read_cost_per_mtok
+                FROM model_pricing
+                WHERE provider = 'claude'
+                  AND (model_pattern = ? OR ? LIKE model_pattern)
+                  AND (effective_until IS NULL OR effective_until > datetime('now'))
+                ORDER BY CASE WHEN model_pattern = ? THEN 0 ELSE 1 END,
+                  LENGTH(model_pattern) DESC LIMIT 1
+              `).get(usage.model, usage.model, usage.model);
+              if (pricing) {
+                const cost =
+                  (usage.totalInputTokens * pricing.input_cost_per_mtok +
+                   usage.totalOutputTokens * pricing.output_cost_per_mtok +
+                   usage.totalCacheReadTokens * (pricing.cache_read_cost_per_mtok || 0)) / 1_000_000;
+                if (cost > 0) usage.totalCostUsd = cost;
+              }
+            }
+          } catch {
+            // Non-fatal
+          }
+        }
+
+        json(res, { messages, byteOffset, usage });
+
+        // Lazy DB backfill: if we extracted usage and no DB row exists, create one
+        if (usage) {
+          try {
+            const db = resolveDb ? resolveDb() : null;
+            if (db) {
+              const existing = db.prepare(
+                'SELECT id FROM sessions WHERE provider_session_id = ?'
+              ).get(sessionId);
+              if (!existing) {
+                const now = new Date().toISOString();
+                db.prepare(`
+                  INSERT OR IGNORE INTO sessions
+                    (id, provider, provider_session_id, origin, origin_native_file,
+                     model, cwd, status, created_at, last_active_at,
+                     turn_count, total_cost, total_input_tokens, total_output_tokens)
+                  VALUES (?, 'claude', ?, 'provider-import', ?,
+                     ?, ?, 'active', ?, ?,
+                     ?, ?, ?, ?)
+                `).run(
+                  sessionId, sessionId, filePath,
+                  usage.model, usage.cwd,
+                  usage.createdAt || now, usage.lastActiveAt || now,
+                  usage.turnCount, usage.totalCostUsd || 0,
+                  usage.totalInputTokens, usage.totalOutputTokens,
+                );
+                log('sessions', 'info', 'lazy backfill: created DB row', { sessionId: sessionId.slice(0, 8) });
+              }
+            }
+          } catch (dbErr) {
+            // Non-fatal — don't break message loading
+            log('sessions', 'warn', 'lazy backfill failed', { error: dbErr.message });
+          }
+        }
       } catch (err) {
         error(res, err.message, 404);
       }
@@ -1061,6 +1229,42 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
         json(res, { diffs });
       } catch (err) {
         error(res, err.message, 404);
+      }
+      return true;
+    }
+
+    // POST /sessions/:id/title — set a user-chosen title (title_override)
+    const titleMatch = url.pathname.match(/^\/sessions\/([^/]+)\/title$/);
+    if (req.method === 'POST' && titleMatch) {
+      const sessionId = decodeURIComponent(titleMatch[1]);
+      const body = await readBody(req);
+      const title = typeof body.title === 'string' ? body.title.trim() : '';
+      if (!title) return error(res, 'title required');
+
+      const db = resolveDb ? resolveDb() : null;
+      if (!db) {
+        // DB not available — still return OK so localStorage write isn't blocked
+        json(res, { ok: true, title });
+        return true;
+      }
+
+      try {
+        const now = new Date().toISOString();
+        // Ensure session row exists (may be a terminal-originated session with no DB row)
+        db.prepare(`
+          INSERT OR IGNORE INTO sessions
+            (id, provider, provider_session_id, origin, status, created_at, last_active_at)
+          VALUES (?, 'claude', ?, 'provider-import', 'active', ?, ?)
+        `).run(sessionId, sessionId, now, now);
+
+        db.prepare(`
+          UPDATE sessions SET title_override = ? WHERE id = ?
+        `).run(title, sessionId);
+
+        json(res, { ok: true, title });
+      } catch (err) {
+        log('sessions', 'warn', `title update failed: ${err.message}`);
+        json(res, { ok: true, title }); // degrade gracefully
       }
       return true;
     }
