@@ -787,6 +787,61 @@ async function handleNameSession(req, res, url) {
   return true;
 }
 
+async function handleGenerateBranchName(req, res, url) {
+  if (req.method !== 'POST' || url.pathname !== '/agent/generate-branch-name') return false;
+
+  const body = await readBody(req);
+  const prompt = typeof body.prompt === 'string' ? body.prompt.slice(0, 1000) : '';
+  if (!prompt) { json(res, { branchName: '' }); return true; }
+
+  const binaryPath = resolveClaudeBinary();
+  if (!binaryPath) { json(res, { branchName: '' }); return true; }
+
+  const projectName = typeof body.projectName === 'string' ? body.projectName : '';
+  const systemPrompt = `Generate a single kebab-case git branch name (max 40 chars) for the following task. Rules: lowercase letters, numbers, and hyphens only. No leading/trailing hyphens. No branch prefixes like "feature/" or "fix/". Your ENTIRE response must be just the branch name, nothing else.${projectName ? `\n\nProject: ${projectName}` : ''}\n\nTask: ${prompt}\n\nBranch name:`;
+
+  try {
+    const child = spawn(binaryPath, [
+      '-p', systemPrompt,
+      '--model', 'haiku',
+      '--no-session-persistence',
+      '--max-turns', '1',
+      '--output-format', 'json',
+    ], { stdio: ['ignore', 'pipe', 'pipe'], timeout: 10000, cwd: os.tmpdir() });
+
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+
+    const exitCode = await new Promise((resolve) => {
+      const timer = setTimeout(() => { log('generate-branch-name', 'warn', 'timeout — killing process'); try { child.kill(); } catch {} }, 10000);
+      child.on('close', (code) => { clearTimeout(timer); resolve(code); });
+      child.on('error', (e) => { clearTimeout(timer); log('generate-branch-name', 'warn', `spawn error: ${e.message}`); resolve(1); });
+    });
+
+    log('generate-branch-name', 'info', `exit=${exitCode} stdout=${stdout.length}b stderr=${stderr.slice(0, 200)}`);
+
+    if (exitCode !== 0 || !stdout) { json(res, { branchName: '' }); return true; }
+
+    const parsed = JSON.parse(stdout);
+    const raw = (parsed.result || '').trim();
+    log('generate-branch-name', 'info', `raw="${raw}"`);
+    // Post-process: lowercase, strip invalid chars, collapse hyphens, truncate
+    const branchName = raw
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 40);
+    json(res, { branchName });
+  } catch (err) {
+    log('generate-branch-name', 'warn', `generation failed: ${err.message}`);
+    json(res, { branchName: '' });
+  }
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Shell operations
 // ---------------------------------------------------------------------------
@@ -1081,6 +1136,7 @@ export async function cmdServe(args, flags) {
       if (url.pathname.startsWith('/agent/')) {
         if (await handleSuggest(req, res, url)) return;
         if (await handleNameSession(req, res, url)) return;
+        if (await handleGenerateBranchName(req, res, url)) return;
         if (await handleAgent(req, res, url)) return;
       }
       if (url.pathname.startsWith('/shell/')) {

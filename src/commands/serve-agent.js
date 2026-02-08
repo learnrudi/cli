@@ -480,7 +480,7 @@ export function createAgentHandler({
             sessionId: existingId,
             event: { type: 'system', message: 'Resumed existing process' },
           });
-          return json(res, { sessionId: existingId, provider: entry.provider, reused: true });
+          return json(res, { sessionId: existingId, provider: entry.provider, reused: true, cwd: entry.cwd });
         }
       }
 
@@ -817,7 +817,7 @@ export function createAgentHandler({
           agentProcesses.delete(sessionId);
         });
 
-        json(res, { sessionId, provider: 'claude' });
+        json(res, { sessionId, provider: 'claude', cwd: workingDir });
         broadcastProcessCount();
       } catch (err) {
         dropResumeMappingsForSession(sessionId);

@@ -374,6 +374,53 @@ export function createGitHandler({ readBody, error, json }) {
       return true;
     }
 
+    // POST /git/branch/delete — delete a local branch (safe delete by default)
+    if (req.method === 'POST' && url.pathname === '/git/branch/delete') {
+      const body = await readBody(req);
+      const { path: projectPath, name, force } = body;
+
+      if (!projectPath) return error(res, 'path required');
+      if (!name || typeof name !== 'string') return error(res, 'name required');
+
+      // Prevent deleting main/master
+      const protected_branches = ['main', 'master'];
+      if (protected_branches.includes(name)) {
+        return error(res, `Cannot delete protected branch '${name}'`, 400);
+      }
+
+      // Prevent deleting the current branch
+      try {
+        const current = execSync('git rev-parse --abbrev-ref HEAD', {
+          cwd: projectPath,
+          encoding: 'utf-8',
+          timeout: 3000,
+        }).trim();
+        if (current === name) {
+          return error(res, 'Cannot delete the currently checked out branch', 400);
+        }
+      } catch {
+        // continue — worst case git branch -d will fail
+      }
+
+      try {
+        const flag = force ? '-D' : '-d';
+        execSync(`git branch ${flag} ${JSON.stringify(name)}`, {
+          cwd: projectPath,
+          encoding: 'utf-8',
+          timeout: 10000,
+        });
+        json(res, { ok: true, branch: name });
+      } catch (err) {
+        const msg = err.message || 'Failed to delete branch';
+        // If safe delete fails due to unmerged commits, hint about force
+        if (!force && msg.includes('not fully merged')) {
+          return error(res, `Branch '${name}' has unmerged commits. Use force delete to remove it anyway.`, 400);
+        }
+        error(res, msg, 500);
+      }
+      return true;
+    }
+
     // POST /git/worktree/remove — remove a worktree
     if (req.method === 'POST' && url.pathname === '/git/worktree/remove') {
       const body = await readBody(req);
@@ -395,6 +442,26 @@ export function createGitHandler({ readBody, error, json }) {
         json(res, { ok: true });
       } catch (err) {
         error(res, err.message || 'Failed to remove worktree', 500);
+      }
+      return true;
+    }
+
+    // POST /git/init — initialize a new git repo
+    if (req.method === 'POST' && url.pathname === '/git/init') {
+      const body = await readBody(req);
+      const { path: projectPath } = body;
+
+      if (!projectPath) return error(res, 'path required');
+
+      try {
+        execSync('git init', {
+          cwd: projectPath,
+          encoding: 'utf-8',
+          timeout: 10000,
+        });
+        json(res, { ok: true });
+      } catch (err) {
+        error(res, err.message || 'Failed to init repository', 500);
       }
       return true;
     }
