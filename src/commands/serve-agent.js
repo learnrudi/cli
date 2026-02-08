@@ -147,6 +147,42 @@ export async function checkProviderAuth(provider) {
 // Route handler factory
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Idle reaper — kills processes that have been idle too long
+// ---------------------------------------------------------------------------
+
+export function createIdleReaper({
+  agentProcesses,
+  broadcast,
+  log,
+  idleTimeoutMs = 10 * 60 * 1000, // 10 min default
+  maxConcurrent = 3,
+}) {
+  const interval = setInterval(() => {
+    const now = Date.now();
+    for (const [sessionId, entry] of agentProcesses.entries()) {
+      if (!entry.proc || entry.proc.killed) continue;
+      if (entry.turnActive) continue; // actively processing a turn
+      const idle = now - (entry.lastActivityAt || entry.startedAt || now);
+      if (idle > idleTimeoutMs) {
+        log('agent', 'warn', `idle reaper: killing session ${sessionId.slice(0, 8)} (idle ${Math.round(idle / 1000)}s)`);
+        entry.proc.kill('SIGTERM');
+        const killTimer = setTimeout(() => {
+          try { entry.proc.kill('SIGKILL'); } catch {}
+        }, 3000);
+        entry.proc.on('close', () => clearTimeout(killTimer));
+        broadcast('agent:stopped', { sessionId });
+      }
+    }
+  }, 30_000);
+
+  return () => clearInterval(interval);
+}
+
+// ---------------------------------------------------------------------------
+// Route handler factory
+// ---------------------------------------------------------------------------
+
 export function createAgentHandler({
   log,
   broadcast,
@@ -156,6 +192,7 @@ export function createAgentHandler({
   agentProcesses,
   queueSessionsUpdated,
   resumeSessionIndex = new Map(),
+  maxConcurrent = 3,
 }) {
   const dropResumeMappingsForSession = (targetSessionId) => {
     for (const [resumeId, mappedSessionId] of resumeSessionIndex.entries()) {
@@ -190,6 +227,23 @@ export function createAgentHandler({
     return null;
   };
 
+  /** Count alive (non-killed) processes. */
+  const countAlive = () => {
+    let count = 0;
+    for (const [, entry] of agentProcesses) {
+      if (entry.proc && !entry.proc.killed) count++;
+    }
+    return count;
+  };
+
+  /** Broadcast current process count to all WS clients. */
+  const broadcastProcessCount = () => {
+    broadcast('agent:process-count', {
+      count: countAlive(),
+      maxConcurrent,
+    });
+  };
+
   return async function handleAgent(req, res, url) {
     // POST /agent/start — spawn persistent process with streaming stdin/stdout
     if (req.method === 'POST' && url.pathname === '/agent/start') {
@@ -209,6 +263,7 @@ export function createAgentHandler({
             existingSessionId: existingId.slice(0, 8),
           });
           entry.turnActive = true;
+          entry.lastActivityAt = Date.now();
           const inputMsg = JSON.stringify({ type: 'user', message: { role: 'user', content: prompt } }) + '\n';
           entry.proc.stdin.write(inputMsg);
           broadcast('agent:event', {
@@ -217,6 +272,16 @@ export function createAgentHandler({
           });
           return json(res, { sessionId: existingId, provider: entry.provider, reused: true });
         }
+      }
+
+      // Enforce max concurrent process limit
+      const aliveCount = countAlive();
+      if (aliveCount >= maxConcurrent) {
+        log('agent', 'warn', `max concurrent limit reached (${aliveCount}/${maxConcurrent})`);
+        json(res, {
+          error: `Too many active agent processes (${aliveCount}/${maxConcurrent}). Stop an existing session or wait for one to finish.`,
+        }, 429);
+        return true;
       }
 
       const binaryPath = resolveClaudeBinary();
@@ -280,6 +345,9 @@ export function createAgentHandler({
           resumeSessionId: resumeSessionId || null,
           stdoutBuffer: '',
           turnActive: true,
+          startedAt: Date.now(),
+          lastActivityAt: Date.now(),
+          cwd: workingDir,
         };
         agentProcesses.set(sessionId, entry);
 
@@ -290,6 +358,7 @@ export function createAgentHandler({
         log('agent', 'debug', 'wrote first prompt to stdin', { sessionId: sessionId.slice(0, 8) });
 
         proc.stdout.on('data', (chunk) => {
+          entry.lastActivityAt = Date.now();
           entry.stdoutBuffer += chunk.toString();
           const lines = entry.stdoutBuffer.split('\n');
           entry.stdoutBuffer = lines.pop() || '';
@@ -368,6 +437,7 @@ export function createAgentHandler({
           }
           dropResumeMappingsForSession(sessionId);
           agentProcesses.delete(sessionId);
+          broadcastProcessCount();
         });
 
         proc.on('error', (err) => {
@@ -378,6 +448,7 @@ export function createAgentHandler({
         });
 
         json(res, { sessionId, provider: 'claude' });
+        broadcastProcessCount();
       } catch (err) {
         dropResumeMappingsForSession(sessionId);
         log('agent', 'error', `Failed to spawn: ${err.message}`);
@@ -419,6 +490,7 @@ export function createAgentHandler({
 
       try {
         entry.turnActive = true;
+        entry.lastActivityAt = Date.now();
         const inputMsg = JSON.stringify({ type: 'user', message: { role: 'user', content: body.message } }) + '\n';
         entry.proc.stdin.write(inputMsg);
         json(res, { ok: true });
@@ -445,6 +517,7 @@ export function createAgentHandler({
 
       try {
         entry.turnActive = true;
+        entry.lastActivityAt = Date.now();
         const answerSummary = Object.entries(body.answers || {})
           .map(([question, answer]) => `"${question}"="${answer}"`)
           .join(', ');
@@ -482,6 +555,7 @@ export function createAgentHandler({
       const answer = body.response;
       log('agent', 'info', 'sending permission response', { sessionId: body.sessionId.slice(0, 8), answer });
       try {
+        entry.lastActivityAt = Date.now();
         entry.proc.stdin.write(answer + '\n');
         json(res, { ok: true });
       } catch (err) {
@@ -504,6 +578,44 @@ export function createAgentHandler({
       } else {
         json(res, { running: false });
       }
+      return true;
+    }
+
+    // GET /agent/sessions — list all active processes
+    if (req.method === 'GET' && url.pathname === '/agent/sessions') {
+      const sessions = [];
+      for (const [sessionId, entry] of agentProcesses) {
+        const alive = !!(entry.proc && !entry.proc.killed);
+        sessions.push({
+          sessionId,
+          pid: entry.proc?.pid || null,
+          startedAt: entry.startedAt || null,
+          lastActivityAt: entry.lastActivityAt || null,
+          cwd: entry.cwd || null,
+          turnActive: !!entry.turnActive,
+          alive,
+        });
+      }
+      json(res, { sessions, maxConcurrent });
+      return true;
+    }
+
+    // POST /agent/kill-all — emergency kill all processes
+    if (req.method === 'POST' && url.pathname === '/agent/kill-all') {
+      const killed = [];
+      for (const [sessionId, entry] of agentProcesses) {
+        if (entry.proc && !entry.proc.killed) {
+          killed.push(sessionId);
+          entry.proc.kill('SIGTERM');
+          const killTimer = setTimeout(() => {
+            try { entry.proc.kill('SIGKILL'); } catch {}
+          }, 3000);
+          entry.proc.on('close', () => clearTimeout(killTimer));
+          broadcast('agent:stopped', { sessionId });
+        }
+      }
+      log('agent', 'warn', `kill-all: terminated ${killed.length} processes`);
+      json(res, { ok: true, killed: killed.length });
       return true;
     }
 

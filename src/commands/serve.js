@@ -24,7 +24,7 @@ import { PATHS } from '@learnrudi/env';
 import { getDb, isDatabaseInitialized, initSchema } from '@learnrudi/db';
 import { WebSocketServer } from 'ws';
 import { createGitHandler, getProjectGitStatus } from './serve-git.js';
-import { createAgentHandler, resolveClaudeBinary, checkProviderAuth } from './serve-agent.js';
+import { createAgentHandler, createIdleReaper, resolveClaudeBinary, checkProviderAuth } from './serve-agent.js';
 import { createSessionsModule } from './serve-sessions.js';
 
 // Re-exports for test compatibility
@@ -647,6 +647,9 @@ const sessionsModule = createSessionsModule({
 });
 const { handleSessions, startSessionsWatcher, queueSessionsUpdated, cleanup: cleanupSessions } = sessionsModule;
 
+const MAX_CONCURRENT = parseInt(process.env.RUDI_MAX_AGENT_PROCESSES || '3', 10) || 3;
+const IDLE_TIMEOUT_MS = parseInt(process.env.RUDI_IDLE_TIMEOUT_MS || String(10 * 60 * 1000), 10) || 10 * 60 * 1000;
+
 const handleAgent = createAgentHandler({
   agentProcesses,
   resumeSessionIndex,
@@ -656,6 +659,7 @@ const handleAgent = createAgentHandler({
   log,
   broadcast,
   queueSessionsUpdated,
+  maxConcurrent: MAX_CONCURRENT,
 });
 
 // ---------------------------------------------------------------------------
@@ -981,6 +985,14 @@ export async function cmdServe(args, flags) {
 
   startSessionsWatcher();
 
+  const stopIdleReaper = createIdleReaper({
+    agentProcesses,
+    broadcast,
+    log,
+    idleTimeoutMs: IDLE_TIMEOUT_MS,
+    maxConcurrent: MAX_CONCURRENT,
+  });
+
   // Start listening
   server.listen(requestedPort, '127.0.0.1', () => {
     const actualPort = server.address().port;
@@ -1023,6 +1035,7 @@ export async function cmdServe(args, flags) {
     }
     fsWatchers.clear();
     cleanupSessions();
+    stopIdleReaper();
     process.exit(exitCode);
   };
 
