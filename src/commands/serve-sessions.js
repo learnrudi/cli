@@ -476,7 +476,9 @@ async function readSessionMessages(sessionId) {
   }
 
   const content = await fsp.readFile(filePath, 'utf-8');
-  return parseSessionMessagesFromJsonl(content);
+  const messages = parseSessionMessagesFromJsonl(content);
+  const byteOffset = Buffer.byteLength(content, 'utf-8');
+  return { messages, byteOffset };
 }
 
 /**
@@ -834,16 +836,37 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
           originalPath = index.originalPath || null;
 
           if (Array.isArray(index.entries)) {
-            sessions = index.entries.map((entry) => ({
-              sessionId: entry.sessionId,
-              summary: entry.summary || '',
-              firstPrompt: entry.firstPrompt || '',
-              messageCount: entry.messageCount || 0,
-              modified: entry.modified || '',
-              created: entry.created || '',
-              gitBranch: entry.gitBranch || '',
-              fullPath: entry.fullPath || path.join(projPath, `${entry.sessionId}.jsonl`),
-              diffStats: null,
+            const STALE_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes
+            const now = Date.now();
+            sessions = await Promise.all(index.entries.map(async (entry) => {
+              const fullPath = entry.fullPath || path.join(projPath, `${entry.sessionId}.jsonl`);
+              let modified = entry.modified || '';
+              // Only stat the file if the index entry looks stale (>2min old).
+              // Claude CLI only updates sessions-index.json at session boundaries,
+              // so active terminal sessions have stale index timestamps.
+              const indexAge = modified ? now - new Date(modified).getTime() : Infinity;
+              if (indexAge > STALE_THRESHOLD_MS) {
+                try {
+                  const fstat = await fsp.stat(fullPath);
+                  const fileMtime = fstat.mtime.toISOString();
+                  if (!modified || new Date(fileMtime) > new Date(modified)) {
+                    modified = fileMtime;
+                  }
+                } catch {
+                  // File may have been deleted
+                }
+              }
+              return {
+                sessionId: entry.sessionId,
+                summary: entry.summary || '',
+                firstPrompt: entry.firstPrompt || '',
+                messageCount: entry.messageCount || 0,
+                modified,
+                created: entry.created || '',
+                gitBranch: entry.gitBranch || '',
+                fullPath,
+                diffStats: null,
+              };
             }));
           }
 
@@ -1021,8 +1044,8 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
     if (req.method === 'GET' && msgMatch) {
       const sessionId = decodeURIComponent(msgMatch[1]);
       try {
-        const messages = await readSessionMessages(sessionId);
-        json(res, { messages });
+        const { messages, byteOffset } = await readSessionMessages(sessionId);
+        json(res, { messages, byteOffset });
       } catch (err) {
         error(res, err.message, 404);
       }
@@ -1045,6 +1068,407 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
     return false;
   }
 
+  // -------------------------------------------------------------------------
+  // Live tail — follow/unfollow infrastructure
+  // -------------------------------------------------------------------------
+
+  const MAX_FOLLOWED_SESSIONS = 10;
+  const TAIL_FALLBACK_INTERVAL_MS = 5000;
+  const TAIL_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes no growth → auto-cleanup
+
+  // sessionId → { filePath, byteOffset, partialLine, parserState, subscriberCount, watcher, lastGrowth, tailQueued }
+  const followedSessions = new Map();
+  // ws → Set<sessionId>
+  const clientFollows = new WeakMap();
+  let tailFallbackTimer = null;
+
+  function createParserState() {
+    return {
+      lastAssistantMsg: null,    // for merging consecutive assistant blocks
+      pendingToolUses: new Map(), // toolUseId → index in toolCalls array
+      // After flushing, we keep a reference to the emitted toolCalls array
+      // so tool_results arriving in the next chunk can still update statuses.
+      flushedToolCalls: null,
+    };
+  }
+
+  /**
+   * Parse JSONL lines using per-session stateful parser.
+   * Mirrors parseSessionMessagesFromJsonl logic but uses persistent state
+   * for cross-line assistant merging and tool_result linking.
+   */
+  function parseJsonlLinesStateful(lines, state) {
+    const messages = [];
+    const toolUpdates = []; // tool_results that updated already-flushed messages
+
+    function flushAssistant() {
+      if (!state.lastAssistantMsg) return;
+      const msg = {
+        role: 'assistant',
+        content: state.lastAssistantMsg.content.trim(),
+        timestamp: state.lastAssistantMsg.timestamp,
+      };
+      if (state.lastAssistantMsg.thinking) {
+        msg.thinking = state.lastAssistantMsg.thinking.trim();
+      }
+      if (state.lastAssistantMsg.toolCalls.length > 0) {
+        msg.toolCalls = state.lastAssistantMsg.toolCalls;
+        // Keep reference so tool_results in the next chunk can update statuses
+        state.flushedToolCalls = state.lastAssistantMsg.toolCalls;
+      } else {
+        state.flushedToolCalls = null;
+      }
+      if (msg.content || msg.thinking || (msg.toolCalls && msg.toolCalls.length > 0)) {
+        messages.push(msg);
+      }
+      state.lastAssistantMsg = null;
+      // Don't clear pendingToolUses — tool_results may arrive in the next chunk
+    }
+
+    for (const line of lines) {
+      let entry;
+      try {
+        entry = JSON.parse(line);
+      } catch {
+        continue;
+      }
+
+      const role = getSessionEntryRole(entry);
+      if (!role) continue;
+
+      const contentBlocks = entry?.message?.content;
+
+      if (role === 'assistant') {
+        if (!state.lastAssistantMsg) {
+          state.lastAssistantMsg = {
+            content: '',
+            thinking: '',
+            toolCalls: [],
+            timestamp: entry.timestamp,
+          };
+        }
+
+        if (Array.isArray(contentBlocks)) {
+          for (const block of contentBlocks) {
+            if (!block || typeof block !== 'object') continue;
+
+            if (block.type === 'text' && typeof block.text === 'string') {
+              const text = stripSystemXml(block.text);
+              if (text) {
+                if (state.lastAssistantMsg.content) state.lastAssistantMsg.content += '\n';
+                state.lastAssistantMsg.content += text;
+              }
+            } else if (block.type === 'thinking' && typeof block.thinking === 'string') {
+              const thinking = block.thinking.trim();
+              if (thinking) {
+                if (state.lastAssistantMsg.thinking) state.lastAssistantMsg.thinking += '\n\n';
+                state.lastAssistantMsg.thinking += thinking;
+              }
+            } else if (block.type === 'tool_use' && block.id && block.name) {
+              const toolCall = {
+                id: block.id,
+                name: block.name,
+                input: block.input || {},
+                status: 'pending',
+              };
+              state.pendingToolUses.set(block.id, state.lastAssistantMsg.toolCalls.length);
+              state.lastAssistantMsg.toolCalls.push(toolCall);
+            }
+          }
+        } else {
+          const text = extractContent(entry);
+          if (text) {
+            if (state.lastAssistantMsg.content) state.lastAssistantMsg.content += '\n';
+            state.lastAssistantMsg.content += text;
+          }
+        }
+      } else if (role === 'user') {
+        if (Array.isArray(contentBlocks) && isToolResultOnly(contentBlocks)) {
+          // Update tool call statuses — either on the current assistant message
+          // or on an already-flushed one (tool_result arrived in a later chunk).
+          const isFlushed = !state.lastAssistantMsg && !!state.flushedToolCalls;
+          const toolCalls = state.lastAssistantMsg?.toolCalls || state.flushedToolCalls;
+          if (toolCalls) {
+            for (const block of contentBlocks) {
+              const idx = state.pendingToolUses.get(block.tool_use_id);
+              if (idx !== undefined) {
+                const result = extractToolResultText(block.content);
+                const status = block.is_error ? 'error' : 'complete';
+                toolCalls[idx].result = result;
+                toolCalls[idx].status = status;
+                state.pendingToolUses.delete(block.tool_use_id);
+                // If updating an already-broadcast message, track the update
+                if (isFlushed) {
+                  toolUpdates.push({
+                    toolUseId: block.tool_use_id,
+                    status,
+                    result,
+                  });
+                }
+              }
+            }
+          }
+          continue;
+        }
+
+        flushAssistant();
+        // Real user message — no more tool_results for previous assistant
+        state.flushedToolCalls = null;
+        state.pendingToolUses.clear();
+
+        const extracted = extractContent(entry);
+        if (extracted) {
+          messages.push({
+            role: 'user',
+            content: extracted,
+            timestamp: entry.timestamp,
+          });
+        }
+      }
+    }
+
+    // Flush remaining assistant message
+    flushAssistant();
+
+    return { messages, toolUpdates };
+  }
+
+  async function tailSession(entry) {
+    if (entry.tailQueued) return;
+    entry.tailQueued = true;
+
+    try {
+      let stat;
+      try {
+        stat = await fsp.stat(entry.filePath);
+      } catch {
+        return;
+      }
+      if (stat.size <= entry.byteOffset) return;
+
+      const fd = await fsp.open(entry.filePath, 'r');
+      try {
+        const readLen = stat.size - entry.byteOffset;
+        const buf = Buffer.alloc(readLen);
+        await fd.read(buf, 0, buf.length, entry.byteOffset);
+
+        const text = entry.partialLine + buf.toString('utf-8');
+        const lines = text.split('\n');
+        entry.partialLine = lines.pop() || '';
+        entry.byteOffset = stat.size - Buffer.byteLength(entry.partialLine, 'utf-8');
+        entry.lastGrowth = Date.now();
+
+        const validLines = lines.filter(l => l.trim());
+        if (validLines.length > 0) {
+          const { messages: newMessages, toolUpdates } = parseJsonlLinesStateful(validLines, entry.parserState);
+          if (newMessages.length > 0) {
+            broadcast('session:lines-added', {
+              sessionId: entry.sessionId,
+              messages: newMessages,
+            });
+          }
+          if (toolUpdates.length > 0) {
+            broadcast('session:tool-updated', {
+              sessionId: entry.sessionId,
+              updates: toolUpdates,
+            });
+          }
+        }
+      } finally {
+        await fd.close();
+      }
+    } catch (err) {
+      log('sessions', 'warn', `tail error for ${entry.sessionId}: ${err.message}`);
+    } finally {
+      entry.tailQueued = false;
+    }
+  }
+
+  function startFileWatcher(entry) {
+    try {
+      entry.watcher = fs.watch(entry.filePath, () => {
+        setImmediate(() => tailSession(entry));
+      });
+      entry.watcher.on('error', () => {
+        // File may have been deleted
+        if (entry.watcher) {
+          try { entry.watcher.close(); } catch {}
+          entry.watcher = null;
+        }
+      });
+    } catch (err) {
+      log('sessions', 'warn', `failed to watch ${entry.filePath}: ${err.message}`);
+    }
+  }
+
+  function stopFollowEntry(sessionId) {
+    const entry = followedSessions.get(sessionId);
+    if (!entry) return;
+    if (entry.watcher) {
+      try { entry.watcher.close(); } catch {}
+    }
+    followedSessions.delete(sessionId);
+  }
+
+  async function handleSessionFollow(ws, data) {
+    const { sessionId, fromOffset } = data || {};
+    if (!sessionId || typeof sessionId !== 'string') return;
+
+    // Enforce limit
+    if (!followedSessions.has(sessionId) && followedSessions.size >= MAX_FOLLOWED_SESSIONS) {
+      log('sessions', 'warn', `follow limit reached (${MAX_FOLLOWED_SESSIONS}), rejecting ${sessionId}`);
+      try {
+        ws.send(JSON.stringify({
+          type: 'session:follow-error',
+          data: { sessionId, error: 'max_followed_sessions' },
+        }));
+      } catch {}
+      return;
+    }
+
+    // Track client's follows
+    if (!clientFollows.has(ws)) {
+      clientFollows.set(ws, new Set());
+    }
+    const clientSet = clientFollows.get(ws);
+
+    if (followedSessions.has(sessionId)) {
+      // Already followed — increment subscriber count
+      const entry = followedSessions.get(sessionId);
+      if (!clientSet.has(sessionId)) {
+        entry.subscriberCount++;
+        clientSet.add(sessionId);
+      }
+      log('sessions', 'debug', `follow: existing ${sessionId} (subscribers: ${entry.subscriberCount})`);
+      return;
+    }
+
+    // New follow — find the JSONL file
+    const filePath = await findSessionFile(sessionId);
+    if (!filePath) {
+      log('sessions', 'warn', `follow: session file not found for ${sessionId}`);
+      try {
+        ws.send(JSON.stringify({
+          type: 'session:follow-error',
+          data: { sessionId, error: 'not_found' },
+        }));
+      } catch {}
+      return;
+    }
+
+    const entry = {
+      sessionId,
+      filePath,
+      byteOffset: typeof fromOffset === 'number' && fromOffset > 0 ? fromOffset : 0,
+      partialLine: '',
+      parserState: createParserState(),
+      subscriberCount: 1,
+      watcher: null,
+      lastGrowth: Date.now(),
+      tailQueued: false,
+    };
+
+    followedSessions.set(sessionId, entry);
+    clientSet.add(sessionId);
+
+    // Start file watcher
+    startFileWatcher(entry);
+
+    // Ensure fallback timer is running
+    if (!tailFallbackTimer) {
+      tailFallbackTimer = setInterval(tailFallbackTick, TAIL_FALLBACK_INTERVAL_MS);
+    }
+
+    // Initial tail to catch anything between history load and follow
+    setImmediate(() => tailSession(entry));
+
+    log('sessions', 'info', `follow: started ${sessionId} from offset ${entry.byteOffset}`);
+  }
+
+  function handleSessionUnfollow(ws, data) {
+    const { sessionId } = data || {};
+    if (!sessionId || typeof sessionId !== 'string') return;
+
+    const clientSet = clientFollows.get(ws);
+    if (!clientSet || !clientSet.has(sessionId)) return;
+    clientSet.delete(sessionId);
+
+    const entry = followedSessions.get(sessionId);
+    if (!entry) return;
+
+    entry.subscriberCount--;
+    if (entry.subscriberCount <= 0) {
+      stopFollowEntry(sessionId);
+      log('sessions', 'info', `unfollow: stopped ${sessionId} (no subscribers)`);
+    } else {
+      log('sessions', 'debug', `unfollow: ${sessionId} (subscribers: ${entry.subscriberCount})`);
+    }
+
+    // Stop fallback timer if no more followed sessions
+    if (followedSessions.size === 0 && tailFallbackTimer) {
+      clearInterval(tailFallbackTimer);
+      tailFallbackTimer = null;
+    }
+  }
+
+  function handleWsDisconnect(ws) {
+    const clientSet = clientFollows.get(ws);
+    if (!clientSet) return;
+
+    for (const sessionId of clientSet) {
+      const entry = followedSessions.get(sessionId);
+      if (!entry) continue;
+      entry.subscriberCount--;
+      if (entry.subscriberCount <= 0) {
+        stopFollowEntry(sessionId);
+        log('sessions', 'debug', `ws disconnect: stopped following ${sessionId}`);
+      }
+    }
+    // WeakMap will GC the entry when ws is GC'd
+
+    if (followedSessions.size === 0 && tailFallbackTimer) {
+      clearInterval(tailFallbackTimer);
+      tailFallbackTimer = null;
+    }
+  }
+
+  function tailFallbackTick() {
+    const now = Date.now();
+    for (const [sessionId, entry] of followedSessions) {
+      // Auto-cleanup idle sessions
+      if (now - entry.lastGrowth > TAIL_IDLE_TIMEOUT_MS) {
+        log('sessions', 'info', `idle cleanup: ${sessionId} (no growth for ${TAIL_IDLE_TIMEOUT_MS / 1000}s)`);
+        broadcast('session:follow-ended', { sessionId, reason: 'idle' });
+        stopFollowEntry(sessionId);
+        continue;
+      }
+      // Fallback tail for missed fs.watch events
+      setImmediate(() => tailSession(entry));
+    }
+
+    if (followedSessions.size === 0 && tailFallbackTimer) {
+      clearInterval(tailFallbackTimer);
+      tailFallbackTimer = null;
+    }
+  }
+
+  /**
+   * Handle incoming WS messages for session follow/unfollow.
+   * Called from the WS connection handler in serve.js.
+   */
+  function handleWsMessage(ws, msg) {
+    if (!msg || typeof msg !== 'object') return false;
+    if (msg.type === 'session:follow') {
+      handleSessionFollow(ws, msg);
+      return true;
+    }
+    if (msg.type === 'session:unfollow') {
+      handleSessionUnfollow(ws, msg);
+      return true;
+    }
+    return false;
+  }
+
   function cleanup() {
     clearTimeout(sessionsUpdateDebounceTimer);
     clearTimeout(sessionsWatcherRetryTimer);
@@ -1057,6 +1481,17 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
       } catch {}
       sessionsWatcher = null;
     }
+    // Clean up tail infrastructure
+    for (const [, entry] of followedSessions) {
+      if (entry.watcher) {
+        try { entry.watcher.close(); } catch {}
+      }
+    }
+    followedSessions.clear();
+    if (tailFallbackTimer) {
+      clearInterval(tailFallbackTimer);
+      tailFallbackTimer = null;
+    }
   }
 
   return {
@@ -1065,6 +1500,8 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
     startSessionsWatcher,
     queueSessionsUpdated,
     invalidateSessionsProjectsCache,
+    handleWsMessage,
+    handleWsDisconnect,
     cleanup,
   };
 }
