@@ -474,12 +474,12 @@ function handleProjects(req, res, url) {
   // GET /projects
   if (req.method === 'GET' && url.pathname === '/projects') {
     const rows = db.prepare(`
-      SELECT p.id, p.provider, p.name, p.color, p.created_at, p.updated_at,
+      SELECT p.id, p.provider, p.name, p.color, p.created_at,
         COUNT(s.id) as session_count
       FROM projects p
       LEFT JOIN sessions s ON s.project_id = p.id
       GROUP BY p.id
-      ORDER BY p.updated_at DESC
+      ORDER BY p.created_at DESC
     `).all();
     const projects = rows.map(r => ({
       id: r.id,
@@ -489,7 +489,6 @@ function handleProjects(req, res, url) {
       path: '',
       sessionCount: r.session_count,
       createdAt: r.created_at,
-      updatedAt: r.updated_at,
     }));
     json(res, { projects });
     return true;
@@ -503,10 +502,10 @@ function handleProjects(req, res, url) {
       const id = `proj-${body.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')}`;
       try {
         db.prepare(`
-          INSERT INTO projects (id, provider, name, created_at, updated_at)
-          VALUES (?, 'claude', ?, datetime('now'), datetime('now'))
+          INSERT INTO projects (id, provider, name, created_at)
+          VALUES (?, 'claude', ?, datetime('now'))
         `).run(id, body.name);
-        json(res, { id, name: body.name, path: body.path || '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }, 201);
+        json(res, { id, name: body.name, path: body.path || '', createdAt: new Date().toISOString() }, 201);
       } catch (err) {
         error(res, err.message, 409);
       }
@@ -526,7 +525,7 @@ function handleProjects(req, res, url) {
         const params = [];
         if (body.name) { sets.push('name = ?'); params.push(body.name); }
         if (body.color) { sets.push('color = ?'); params.push(body.color); }
-        sets.push("updated_at = datetime('now')");
+        if (sets.length === 0) return json(res, { id, ...body });
         params.push(id);
         db.prepare(`UPDATE projects SET ${sets.join(', ')} WHERE id = ?`).run(...params);
         json(res, { id, ...body });
@@ -641,11 +640,23 @@ async function handleNotes(req, res, url) {
 
 const handleGit = createGitHandler({ readBody, error, json });
 
+// Lazy DB resolver for sessions module
+let _sessionsDb = null;
+let _sessionsDbChecked = false;
+function sessionsResolveDb() {
+  if (_sessionsDb) return _sessionsDb;
+  if (_sessionsDbChecked) return null;
+  _sessionsDbChecked = true;
+  try { _sessionsDb = getDb(); } catch { _sessionsDb = null; }
+  return _sessionsDb;
+}
+
 // Sessions module (stateful — owns watcher, cache, debounce timers)
 const sessionsModule = createSessionsModule({
   log, broadcast, json, error, readBody, getProjectGitStatus,
+  resolveDb: sessionsResolveDb,
 });
-const { handleSessions, startSessionsWatcher, queueSessionsUpdated, cleanup: cleanupSessions } = sessionsModule;
+const { handleSessions, startSessionsWatcher, queueSessionsUpdated, handleWsMessage: handleSessionsWsMessage, handleWsDisconnect: handleSessionsWsDisconnect, cleanup: cleanupSessions } = sessionsModule;
 
 const MAX_CONCURRENT = parseInt(process.env.RUDI_MAX_AGENT_PROCESSES || '3', 10) || 3;
 const IDLE_TIMEOUT_MS = parseInt(process.env.RUDI_IDLE_TIMEOUT_MS || String(10 * 60 * 1000), 10) || 10 * 60 * 1000;
@@ -661,6 +672,120 @@ const handleAgent = createAgentHandler({
   queueSessionsUpdated,
   maxConcurrent: MAX_CONCURRENT,
 });
+
+// ---------------------------------------------------------------------------
+// Suggestion chips — headless Haiku call
+// ---------------------------------------------------------------------------
+
+let _activeSuggestProcess = null;
+
+async function handleSuggest(req, res, url) {
+  if (req.method !== 'POST' || url.pathname !== '/agent/suggest') return false;
+
+  const body = await readBody(req);
+  const lastMessage = typeof body.lastMessage === 'string' ? body.lastMessage.slice(0, 2000) : '';
+  if (!lastMessage) { json(res, { suggestions: [] }); return true; }
+
+  const binaryPath = resolveClaudeBinary();
+  if (!binaryPath) { json(res, { suggestions: [] }); return true; }
+
+  // Kill any in-flight suggestion process
+  if (_activeSuggestProcess) {
+    try { _activeSuggestProcess.kill(); } catch {}
+    _activeSuggestProcess = null;
+  }
+
+  const prompt = `Given this assistant message from a coding assistant, suggest 2-3 short follow-up prompts (3-8 words each) the user might send next. If the message asks a yes/no question, include an affirmative variant. Return ONLY a JSON array of strings like ["suggestion 1","suggestion 2"]. No other text.\n\nAssistant message:\n${lastMessage}`;
+
+  try {
+    const child = spawn(binaryPath, [
+      '-p', prompt,
+      '--model', 'haiku',
+      '--no-session-persistence',
+      '--max-turns', '1',
+      '--output-format', 'json',
+    ], { stdio: ['ignore', 'pipe', 'pipe'], timeout: 10000 });
+
+    _activeSuggestProcess = child;
+
+    let stdout = '';
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+
+    const exitCode = await new Promise((resolve) => {
+      const timer = setTimeout(() => { try { child.kill(); } catch {} }, 10000);
+      child.on('close', (code) => { clearTimeout(timer); resolve(code); });
+      child.on('error', () => { clearTimeout(timer); resolve(1); });
+    });
+
+    _activeSuggestProcess = null;
+
+    if (exitCode !== 0 || !stdout) { json(res, { suggestions: [] }); return true; }
+
+    const parsed = JSON.parse(stdout);
+    const resultStr = parsed.result || '';
+    // Extract JSON array — Haiku may wrap in markdown fencing
+    const arrayMatch = resultStr.match(/\[[\s\S]*\]/);
+    if (!arrayMatch) { json(res, { suggestions: [] }); return true; }
+    const suggestions = JSON.parse(arrayMatch[0]);
+    if (!Array.isArray(suggestions) || !suggestions.every(s => typeof s === 'string')) {
+      json(res, { suggestions: [] });
+      return true;
+    }
+    json(res, { suggestions: suggestions.slice(0, 4) });
+  } catch (err) {
+    log('suggest', 'warn', `suggestion failed: ${err.message}`);
+    _activeSuggestProcess = null;
+    json(res, { suggestions: [] });
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Name session — headless Haiku call to generate a short title
+// ---------------------------------------------------------------------------
+
+async function handleNameSession(req, res, url) {
+  if (req.method !== 'POST' || url.pathname !== '/agent/name-session') return false;
+
+  const body = await readBody(req);
+  const firstMessage = typeof body.firstMessage === 'string' ? body.firstMessage.slice(0, 1000) : '';
+  if (!firstMessage) { json(res, { title: '' }); return true; }
+
+  const binaryPath = resolveClaudeBinary();
+  if (!binaryPath) { json(res, { title: '' }); return true; }
+
+  const projectName = typeof body.projectName === 'string' ? body.projectName : 'unknown';
+  const prompt = `Generate a short title (3-7 words) for this coding session based on the user's request. The title should describe what work is being done. Return ONLY the title text, no quotes, no punctuation at the end.\n\nProject: ${projectName}\nUser request: ${firstMessage}`;
+
+  try {
+    const child = spawn(binaryPath, [
+      '-p', prompt,
+      '--model', 'haiku',
+      '--no-session-persistence',
+      '--max-turns', '1',
+      '--output-format', 'json',
+    ], { stdio: ['ignore', 'pipe', 'pipe'], timeout: 10000 });
+
+    let stdout = '';
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+
+    const exitCode = await new Promise((resolve) => {
+      const timer = setTimeout(() => { try { child.kill(); } catch {} }, 10000);
+      child.on('close', (code) => { clearTimeout(timer); resolve(code); });
+      child.on('error', () => { clearTimeout(timer); resolve(1); });
+    });
+
+    if (exitCode !== 0 || !stdout) { json(res, { title: '' }); return true; }
+
+    const parsed = JSON.parse(stdout);
+    const title = (parsed.result || '').trim();
+    json(res, { title });
+  } catch (err) {
+    log('name-session', 'warn', `naming failed: ${err.message}`);
+    json(res, { title: '' });
+  }
+  return true;
+}
 
 // ---------------------------------------------------------------------------
 // Shell operations
@@ -818,14 +943,26 @@ function broadcast(type, data) {
 // ---------------------------------------------------------------------------
 
 export async function cmdServe(args, flags) {
-  // Ensure database exists so /projects endpoints work
-  if (!isDatabaseInitialized()) {
-    try {
-      initSchema();
-      console.log('[serve] Initialized database schema');
-    } catch (err) {
-      console.warn('[serve] Failed to initialize database schema:', err);
+  // Ensure database schema is up to date (idempotent — safe to run every startup)
+  try {
+    initSchema();
+  } catch (err) {
+    console.warn('[serve] Failed to initialize database schema:', err);
+  }
+
+  // Sweep stale runtime states from previous sidecar run
+  try {
+    const db = getDb();
+    const stale = db.prepare(`
+      UPDATE session_runtime_state
+      SET status = 'crashed', updated_at = ?
+      WHERE status IN ('starting', 'running')
+    `).run(new Date().toISOString());
+    if (stale.changes > 0) {
+      console.log(`[serve] Marked ${stale.changes} stale session(s) as crashed`);
     }
+  } catch (err) {
+    console.warn('[serve] Failed to sweep stale sessions:', err.message);
   }
 
   // Kill orphaned Claude CLI processes from previous sidecar runs.
@@ -942,6 +1079,8 @@ export async function cmdServe(args, flags) {
         if (await handleGit(req, res, url)) return;
       }
       if (url.pathname.startsWith('/agent/')) {
+        if (await handleSuggest(req, res, url)) return;
+        if (await handleNameSession(req, res, url)) return;
         if (await handleAgent(req, res, url)) return;
       }
       if (url.pathname.startsWith('/shell/')) {
@@ -978,8 +1117,19 @@ export async function cmdServe(args, flags) {
   wss.on('connection', (ws) => {
     log('ws', 'info', `client connected (total: ${wss.clients.size})`);
     ws.send(JSON.stringify({ type: 'connected', data: { version: '0.1.0' } }));
+
+    ws.on('message', (raw) => {
+      try {
+        const msg = JSON.parse(typeof raw === 'string' ? raw : raw.toString());
+        handleSessionsWsMessage(ws, msg);
+      } catch {
+        // Ignore malformed messages
+      }
+    });
+
     ws.on('close', () => {
       log('ws', 'info', `client disconnected (total: ${wss.clients.size})`);
+      handleSessionsWsDisconnect(ws);
     });
   });
 
