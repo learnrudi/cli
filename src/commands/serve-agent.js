@@ -11,6 +11,150 @@ import path from 'path';
 import crypto from 'crypto';
 import { spawn, execSync } from 'child_process';
 import { PATHS } from '@learnrudi/env';
+import { getDb } from '@learnrudi/db';
+
+// ---------------------------------------------------------------------------
+// System prompt — two layers:
+// 1. RUDI base (hardcoded) — always present, tells agent about the environment
+// 2. User file (~/.rudi/system-prompt.md) — optional, user-editable customizations
+// ---------------------------------------------------------------------------
+
+const RUDI_BASE_PROMPT = `You are working inside RUDI, an AI-powered development environment.
+
+# Environment
+
+- You are a Claude Code agent spawned by the RUDI sidecar server.
+- The user interacts through the RUDI desktop app (Tauri + React).
+- Your working directory is the user's project folder.
+- Sessions are persisted to ~/.rudi/rudi.db and can be resumed later.
+
+# RUDI CLI
+
+The \`rudi\` CLI manages the development environment. Key commands:
+- \`rudi serve\` — Start the sidecar server (HTTP + WebSocket)
+- \`rudi install <pkg>\` — Install stacks (MCP servers), prompts, runtimes, binaries, or agents
+- \`rudi list [kind]\` — List installed packages (stacks, prompts, runtimes, binaries, agents)
+- \`rudi run <stack>\` — Execute an MCP stack
+- \`rudi mcp <stack>\` — Run an MCP server with secrets injected
+- \`rudi secrets\` — Manage secrets (OS Keychain + encrypted fallback)
+- \`rudi db <cmd>\` — Database operations on ~/.rudi/rudi.db
+- \`rudi import\` — Import sessions from AI providers
+- \`rudi doctor\` — Health check
+- \`rudi home\` — Show ~/.rudi structure
+
+# RUDI Directory Structure
+
+- \`~/.rudi/\` — Root directory
+- \`~/.rudi/rudi.db\` — SQLite database (sessions, turns, projects, file changes, costs)
+- \`~/.rudi/stacks/\` — MCP server stacks (each has manifest.json)
+- \`~/.rudi/prompts/\` — Reusable prompt templates (.md files)
+- \`~/.rudi/runtimes/\` — Language interpreters (node, python)
+- \`~/.rudi/binaries/\` — Utility CLIs (ffmpeg, ripgrep, jq, etc.)
+- \`~/.rudi/agents/\` — AI CLI agents (claude, codex, gemini, ollama)
+- \`~/.rudi/bins/\` — Shims directory (added to PATH)
+- \`~/.rudi/vault/\` — Encrypted secrets store
+- \`~/.rudi/config.json\` — Configuration
+- \`~/.rudi/system-prompt.md\` — User-editable system prompt (appended to this one)
+
+# Database
+
+SQLite at ~/.rudi/rudi.db. Key tables:
+- \`sessions\` — Conversations (title, model, cwd, git_branch, turn_count, total_cost, status)
+- \`turns\` — Individual messages (user_message, assistant_response, tokens, cost, tools_used, duration_ms)
+- \`projects\` — Project containers (provider, name, settings)
+- \`file_changes\` — File operations tracked per session (path, operation, content hashes, diffs)
+- \`file_revisions\` — File snapshots/history
+- \`secrets_meta\` — Secret key metadata (values in vault, not DB)
+- \`packages\` — Installed package metadata
+- \`logs\` — Application logs
+
+# UI Features (available to the user, not directly callable by you)
+
+- Git: staging, committing, reverting, branch switching/creating via the UI header
+- Diff panel: side-by-side view of file changes you make during a session
+- Session management: rename, pin, archive, resume sessions from the sidebar
+- Live tail: other windows/users can watch your session output in real time
+- Context files: user can drag files into the chat as additional context
+- Open-in: one-click open project in VS Code, Cursor, Terminal, Finder, Warp, Xcode
+
+# Best Practices
+
+- Be concise. The user is in a desktop app — keep responses focused.
+- Prefer small targeted edits over full file rewrites.
+- The user sees your tool calls (reads, edits, bash) streaming live — don't narrate every step.
+- If the user's project has a CLAUDE.md, follow its instructions — it takes priority.
+- When the user asks about RUDI itself, you can reference the CLI commands and directory structure above.`;
+
+const USER_PROMPT_PATH = path.join(PATHS.home, 'system-prompt.md');
+
+let _cachedUserPrompt = null;
+let _userPromptMtime = 0;
+
+function loadUserPrompt() {
+  try {
+    const stat = fs.statSync(USER_PROMPT_PATH);
+    if (stat.mtimeMs === _userPromptMtime && _cachedUserPrompt !== null) return _cachedUserPrompt;
+    _cachedUserPrompt = fs.readFileSync(USER_PROMPT_PATH, 'utf-8').trim();
+    _userPromptMtime = stat.mtimeMs;
+    return _cachedUserPrompt;
+  } catch {
+    _cachedUserPrompt = null;
+    _userPromptMtime = 0;
+    return null;
+  }
+}
+
+function buildSystemPrompt(frontendPrompt) {
+  const parts = [RUDI_BASE_PROMPT];
+  const userPrompt = loadUserPrompt();
+  if (userPrompt) parts.push(userPrompt);
+  if (frontendPrompt) parts.push(frontendPrompt);
+  return parts.join('\n\n---\n\n');
+}
+
+// ---------------------------------------------------------------------------
+
+let _db = null;
+let _dbReadyChecked = false;
+const _dbWriteQueue = [];
+let _dbWriteFlushScheduled = false;
+
+function resolveDb() {
+  if (_db) return _db;
+  if (_dbReadyChecked) return null;
+  _dbReadyChecked = true;
+  try {
+    _db = getDb();
+  } catch (err) {
+    console.warn('[agent-db] unavailable:', err.message);
+    _db = null;
+  }
+  return _db;
+}
+
+function flushDbWrites() {
+  _dbWriteFlushScheduled = false;
+  const db = resolveDb();
+  if (!db) {
+    _dbWriteQueue.length = 0;
+    return;
+  }
+  while (_dbWriteQueue.length > 0) {
+    const fn = _dbWriteQueue.shift();
+    try {
+      fn(db);
+    } catch (err) {
+      console.error('[agent-db] write failed:', err.message);
+    }
+  }
+}
+
+function dbWrite(fn) {
+  _dbWriteQueue.push(fn);
+  if (_dbWriteFlushScheduled) return;
+  _dbWriteFlushScheduled = true;
+  setImmediate(flushDbWrites);
+}
 
 // ---------------------------------------------------------------------------
 // Binary resolution + credential checking (module-level, no deps needed)
@@ -166,6 +310,7 @@ export function createIdleReaper({
       const idle = now - (entry.lastActivityAt || entry.startedAt || now);
       if (idle > idleTimeoutMs) {
         log('agent', 'warn', `idle reaper: killing session ${sessionId.slice(0, 8)} (idle ${Math.round(idle / 1000)}s)`);
+        entry._terminationReason = 'stopped';
         entry.proc.kill('SIGTERM');
         const killTimer = setTimeout(() => {
           try { entry.proc.kill('SIGKILL'); } catch {}
@@ -177,6 +322,58 @@ export function createIdleReaper({
   }, 30_000);
 
   return () => clearInterval(interval);
+}
+
+// ---------------------------------------------------------------------------
+// Auto-name: fire-and-forget Haiku call after first turn
+// ---------------------------------------------------------------------------
+
+function autoNameSession(entry, providerSessionId, firstMessage, cwd, broadcast, log) {
+  setImmediate(async () => {
+    try {
+      const binaryPath = resolveClaudeBinary();
+      if (!binaryPath) return;
+
+      const projectName = path.basename(cwd || '');
+      const prompt = `Generate a short title (3-7 words) for this coding session based on the user's request. The title should describe what work is being done. Return ONLY the title text, no quotes, no punctuation at the end.\n\nProject: ${projectName}\nUser request: ${(firstMessage || '').slice(0, 1000)}`;
+
+      const child = spawn(binaryPath, [
+        '-p', prompt,
+        '--model', 'haiku',
+        '--no-session-persistence',
+        '--max-turns', '1',
+        '--output-format', 'json',
+      ], { stdio: ['ignore', 'pipe', 'pipe'], timeout: 15000 });
+
+      let stdout = '';
+      child.stdout.on('data', (chunk) => { stdout += chunk; });
+
+      const exitCode = await new Promise((resolve) => {
+        const timer = setTimeout(() => { try { child.kill(); } catch {} }, 15000);
+        child.on('close', (code) => { clearTimeout(timer); resolve(code); });
+        child.on('error', () => { clearTimeout(timer); resolve(1); });
+      });
+
+      if (exitCode !== 0 || !stdout) return;
+
+      const parsed = JSON.parse(stdout);
+      const title = (parsed.result || '').trim();
+      if (!title) return;
+
+      // Write to DB: sessions.title (not title_override — that's for user renames)
+      dbWrite((db) => {
+        db.prepare(`
+          UPDATE sessions SET title = ? WHERE id = ? AND title_override IS NULL
+        `).run(title, providerSessionId);
+      });
+
+      // Broadcast so frontends can refresh
+      broadcast('session:titled', { sessionId: providerSessionId, title });
+      log('agent', 'info', `auto-named session ${providerSessionId.slice(0, 8)}: "${title}"`);
+    } catch (err) {
+      log('agent', 'warn', `auto-name failed: ${err.message}`);
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -264,6 +461,19 @@ export function createAgentHandler({
           });
           entry.turnActive = true;
           entry.lastActivityAt = Date.now();
+          // Reset per-turn accumulators for the new turn
+          entry._turnPrompt = prompt;
+          entry._turnInputTokens = 0;
+          entry._turnOutputTokens = 0;
+          entry._turnCacheReadTokens = 0;
+          entry._turnCacheCreationTokens = 0;
+          entry._turnToolsUsed = [];
+          // 4j. Reuse — touch updated_at
+          dbWrite((db) => {
+            db.prepare(`
+              UPDATE session_runtime_state SET updated_at = ? WHERE session_id = ?
+            `).run(new Date().toISOString(), existingId);
+          });
           const inputMsg = JSON.stringify({ type: 'user', message: { role: 'user', content: prompt } }) + '\n';
           entry.proc.stdin.write(inputMsg);
           broadcast('agent:event', {
@@ -302,7 +512,10 @@ export function createAgentHandler({
         '--verbose',
       ];
       if (model) args.push('--model', model);
-      if (systemPrompt) args.push('--append-system-prompt', systemPrompt);
+
+      // Build system prompt: RUDI base + user file + frontend override
+      const fullSystemPrompt = buildSystemPrompt(systemPrompt);
+      if (fullSystemPrompt) args.push('--append-system-prompt', fullSystemPrompt);
       if (resumeSessionId) args.push('--resume', resumeSessionId);
       if (planMode) {
         args.push('--permission-mode', 'plan');
@@ -331,6 +544,16 @@ export function createAgentHandler({
         resumeSessionId: resumeSessionId || null,
       });
 
+      // 4a. Session start — insert runtime state row before spawn
+      dbWrite((db) => {
+        const now = new Date().toISOString();
+        db.prepare(`
+          INSERT INTO session_runtime_state
+            (session_id, status, provider, resume_session_id, cwd, started_at, updated_at)
+          VALUES (?, 'starting', 'claude', ?, ?, ?, ?)
+        `).run(sessionId, resumeSessionId || null, workingDir, now, now);
+      });
+
       try {
         const proc = spawn(binaryPath, args, {
           cwd: workingDir,
@@ -348,6 +571,16 @@ export function createAgentHandler({
           startedAt: Date.now(),
           lastActivityAt: Date.now(),
           cwd: workingDir,
+          _terminationReason: null,
+          // Per-turn metric accumulators (reset after each result event)
+          _turnPrompt: prompt,
+          _turnNumber: 1,
+          _turnInputTokens: 0,
+          _turnOutputTokens: 0,
+          _turnCacheReadTokens: 0,
+          _turnCacheCreationTokens: 0,
+          _turnModel: model || null,
+          _turnToolsUsed: [],
         };
         agentProcesses.set(sessionId, entry);
 
@@ -370,12 +603,123 @@ export function createAgentHandler({
               if (event.session_id && entry.providerSessionId !== event.session_id) {
                 entry.providerSessionId = event.session_id;
                 resumeSessionIndex.set(event.session_id, sessionId);
+                // 4b. Provider ID captured — mark running
+                dbWrite((db) => {
+                  db.prepare(`
+                    UPDATE session_runtime_state
+                    SET status = 'running', provider_session_id = ?, updated_at = ?
+                    WHERE session_id = ?
+                  `).run(event.session_id, new Date().toISOString(), sessionId);
+                });
               }
+              // Accumulate per-turn metrics from assistant events
+              if (event.type === 'assistant' && event.message?.usage) {
+                const u = event.message.usage;
+                entry._turnInputTokens += u.input_tokens || 0;
+                entry._turnOutputTokens += u.output_tokens || 0;
+                entry._turnCacheReadTokens += u.cache_read_input_tokens || 0;
+                entry._turnCacheCreationTokens += u.cache_creation_input_tokens || 0;
+                if (event.message.model) entry._turnModel = event.message.model;
+              }
+              if (event.type === 'assistant' && Array.isArray(event.message?.content)) {
+                for (const block of event.message.content) {
+                  if (block.type === 'tool_use' && block.name) {
+                    entry._turnToolsUsed.push(block.name);
+                  }
+                }
+              }
+
               log('agent', 'debug', `stdout event: ${event.type}`, { sessionId: sessionId.slice(0, 8) });
               broadcast('agent:event', { sessionId, event });
 
               if (event.type === 'result') {
                 entry.turnActive = false;
+                const costUsd = typeof event.total_cost_usd === 'number' ? event.total_cost_usd : null;
+                const turnNumber = entry._turnNumber;
+                const turnPrompt = entry._turnPrompt || '';
+                const turnModel = entry._turnModel || null;
+                const turnInputTokens = entry._turnInputTokens;
+                const turnOutputTokens = entry._turnOutputTokens;
+                const turnCacheRead = entry._turnCacheReadTokens;
+                const turnCacheCreation = entry._turnCacheCreationTokens;
+                const turnToolsUsed = entry._turnToolsUsed.length > 0
+                  ? JSON.stringify([...new Set(entry._turnToolsUsed)])
+                  : null;
+                const providerSid = entry.providerSessionId;
+
+                // 4c. Turn complete — runtime state + sessions/turns DB write
+                dbWrite((db) => {
+                  const now = new Date().toISOString();
+                  const nowMs = Date.now();
+
+                  // Update session_runtime_state (existing)
+                  if (costUsd !== null) {
+                    db.prepare(`
+                      UPDATE session_runtime_state
+                      SET turn_count = turn_count + 1, cost_total = ?, updated_at = ?
+                      WHERE session_id = ?
+                    `).run(costUsd, now, sessionId);
+                  } else {
+                    db.prepare(`
+                      UPDATE session_runtime_state
+                      SET turn_count = turn_count + 1, updated_at = ?
+                      WHERE session_id = ?
+                    `).run(now, sessionId);
+                  }
+
+                  if (!providerSid) return; // can't write to sessions without a provider id
+
+                  // Ensure session row exists (idempotent — first turn creates, rest skip)
+                  db.prepare(`
+                    INSERT OR IGNORE INTO sessions
+                      (id, provider, provider_session_id, origin, cwd, model, status, created_at, last_active_at,
+                       turn_count, total_cost, total_input_tokens, total_output_tokens)
+                    VALUES (?, 'claude', ?, 'rudi', ?, ?, 'active', ?, ?, 0, 0, 0, 0)
+                  `).run(providerSid, providerSid, workingDir, turnModel, now, now);
+
+                  // Insert turn
+                  const turnId = crypto.randomUUID();
+                  db.prepare(`
+                    INSERT INTO turns
+                      (id, session_id, provider, provider_session_id, turn_number,
+                       user_message, model, cost, input_tokens, output_tokens,
+                       cache_read_tokens, cache_creation_tokens, tools_used, ts, ts_ms)
+                    VALUES (?, ?, 'claude', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  `).run(
+                    turnId, providerSid, providerSid, turnNumber,
+                    turnPrompt, turnModel, costUsd,
+                    turnInputTokens, turnOutputTokens,
+                    turnCacheRead, turnCacheCreation,
+                    turnToolsUsed, now, nowMs,
+                  );
+
+                  // Increment session aggregates
+                  const turnCost = costUsd !== null ? costUsd : 0;
+                  db.prepare(`
+                    UPDATE sessions
+                    SET turn_count = turn_count + 1,
+                        total_cost = total_cost + ?,
+                        total_input_tokens = total_input_tokens + ?,
+                        total_output_tokens = total_output_tokens + ?,
+                        last_active_at = ?
+                    WHERE id = ?
+                  `).run(turnCost, turnInputTokens, turnOutputTokens, now, providerSid);
+                });
+
+                // Auto-name after first turn completes (fire-and-forget)
+                if (turnNumber === 1 && providerSid) {
+                  autoNameSession(entry, providerSid, turnPrompt, workingDir, broadcast, log);
+                }
+
+                // Advance turn counter & reset accumulators
+                entry._turnNumber++;
+                entry._turnPrompt = '';
+                entry._turnInputTokens = 0;
+                entry._turnOutputTokens = 0;
+                entry._turnCacheReadTokens = 0;
+                entry._turnCacheCreationTokens = 0;
+                entry._turnToolsUsed = [];
+
                 broadcast('agent:done', { sessionId, exitCode: 0, providerSessionId: entry.providerSessionId });
                 queueSessionsUpdated({
                   source: 'agent',
@@ -421,12 +765,30 @@ export function createAgentHandler({
               if (event.session_id && entry.providerSessionId !== event.session_id) {
                 entry.providerSessionId = event.session_id;
                 resumeSessionIndex.set(event.session_id, sessionId);
+                // 4b2. Provider ID captured in close-buffer path
+                dbWrite((db) => {
+                  db.prepare(`
+                    UPDATE session_runtime_state
+                    SET provider_session_id = ?, updated_at = ?
+                    WHERE session_id = ?
+                  `).run(event.session_id, new Date().toISOString(), sessionId);
+                });
               }
               broadcast('agent:event', { sessionId, event });
             } catch {
               // ignore
             }
           }
+          // 4d. Process close — finalize status (respects _terminationReason)
+          dbWrite((db) => {
+            const now = new Date().toISOString();
+            const finalStatus = entry._terminationReason || (exitCode === 0 ? 'completed' : 'error');
+            db.prepare(`
+              UPDATE session_runtime_state
+              SET status = ?, completed_at = ?, updated_at = ?
+              WHERE session_id = ?
+            `).run(finalStatus, now, now, sessionId);
+          });
           if (entry.turnActive) {
             broadcast('agent:done', { sessionId, exitCode, providerSessionId: entry.providerSessionId });
             queueSessionsUpdated({
@@ -443,6 +805,14 @@ export function createAgentHandler({
         proc.on('error', (err) => {
           log('agent', 'error', `spawn error: ${err.message}`, { sessionId: sessionId.slice(0, 8) });
           broadcast('agent:error', { sessionId, error: err.message });
+          // 4e. Spawn error
+          dbWrite((db) => {
+            db.prepare(`
+              UPDATE session_runtime_state
+              SET status = 'error', last_error = ?, updated_at = ?
+              WHERE session_id = ?
+            `).run(err.message, new Date().toISOString(), sessionId);
+          });
           dropResumeMappingsForSession(sessionId);
           agentProcesses.delete(sessionId);
         });
@@ -451,6 +821,14 @@ export function createAgentHandler({
         broadcastProcessCount();
       } catch (err) {
         dropResumeMappingsForSession(sessionId);
+        // 4f. Spawn catch
+        dbWrite((db) => {
+          db.prepare(`
+            UPDATE session_runtime_state
+            SET status = 'error', last_error = ?, updated_at = ?
+            WHERE session_id = ?
+          `).run(err.message, new Date().toISOString(), sessionId);
+        });
         log('agent', 'error', `Failed to spawn: ${err.message}`);
         error(res, `Failed to spawn agent: ${err.message}`, 500);
       }
@@ -462,6 +840,7 @@ export function createAgentHandler({
       const body = await readBody(req);
       const entry = agentProcesses.get(body.sessionId);
       if (entry) {
+        entry._terminationReason = 'stopped';
         entry.proc.kill('SIGTERM');
         const killTimer = setTimeout(() => {
           try { entry.proc.kill('SIGKILL'); } catch {}
@@ -491,6 +870,13 @@ export function createAgentHandler({
       try {
         entry.turnActive = true;
         entry.lastActivityAt = Date.now();
+        // Reset per-turn accumulators for the new turn
+        entry._turnPrompt = body.message;
+        entry._turnInputTokens = 0;
+        entry._turnOutputTokens = 0;
+        entry._turnCacheReadTokens = 0;
+        entry._turnCacheCreationTokens = 0;
+        entry._turnToolsUsed = [];
         const inputMsg = JSON.stringify({ type: 'user', message: { role: 'user', content: body.message } }) + '\n';
         entry.proc.stdin.write(inputMsg);
         json(res, { ok: true });
@@ -606,6 +992,7 @@ export function createAgentHandler({
       for (const [sessionId, entry] of agentProcesses) {
         if (entry.proc && !entry.proc.killed) {
           killed.push(sessionId);
+          entry._terminationReason = 'stopped';
           entry.proc.kill('SIGTERM');
           const killTimer = setTimeout(() => {
             try { entry.proc.kill('SIGKILL'); } catch {}

@@ -704,7 +704,7 @@ async function handleSuggest(req, res, url) {
       '--no-session-persistence',
       '--max-turns', '1',
       '--output-format', 'json',
-    ], { stdio: ['ignore', 'pipe', 'pipe'], timeout: 10000 });
+    ], { stdio: ['ignore', 'pipe', 'pipe'], timeout: 10000, cwd: os.tmpdir() });
 
     _activeSuggestProcess = child;
 
@@ -755,7 +755,7 @@ async function handleNameSession(req, res, url) {
   if (!binaryPath) { json(res, { title: '' }); return true; }
 
   const projectName = typeof body.projectName === 'string' ? body.projectName : 'unknown';
-  const prompt = `Generate a short title (3-7 words) for this coding session based on the user's request. The title should describe what work is being done. Return ONLY the title text, no quotes, no punctuation at the end.\n\nProject: ${projectName}\nUser request: ${firstMessage}`;
+  const prompt = `You are a title generator. Your ENTIRE response must be a short title (3-7 words) for a coding session. No greeting, no explanation, no quotes, no trailing punctuation. Just the title.\n\nProject: ${projectName}\nUser request: ${firstMessage}\n\nTitle:`;
 
   try {
     const child = spawn(binaryPath, [
@@ -764,7 +764,7 @@ async function handleNameSession(req, res, url) {
       '--no-session-persistence',
       '--max-turns', '1',
       '--output-format', 'json',
-    ], { stdio: ['ignore', 'pipe', 'pipe'], timeout: 10000 });
+    ], { stdio: ['ignore', 'pipe', 'pipe'], timeout: 10000, cwd: os.tmpdir() });
 
     let stdout = '';
     child.stdout.on('data', (chunk) => { stdout += chunk; });
