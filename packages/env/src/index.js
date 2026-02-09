@@ -218,7 +218,7 @@ export function ensureDirectories() {
     PATHS.runtimes,    // Language runtimes (node, python, bun, deno)
     PATHS.binaries,    // Utility binaries (ffmpeg, git, jq, etc.)
     PATHS.agents,      // AI CLI agents (claude, codex, gemini, copilot)
-    PATHS.bins,        // Shims directory (Studio only)
+    PATHS.bins,        // Shims directory (opt-in)
     PATHS.locks,       // Lock files
     PATHS.db,          // Database directory
     PATHS.cache        // Registry cache

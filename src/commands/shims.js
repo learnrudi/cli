@@ -5,13 +5,14 @@
  *   rudi shims               List all shims
  *   rudi shims check         Validate all shims and report issues
  *   rudi shims fix           Attempt to fix broken shims
+ *   rudi shims rebuild       Rebuild all shims from installed packages
  *
  * Exit codes:
  *   0 = all shims valid
  *   1 = one or more shims have issues
  */
 
-import { PATHS, validateShim } from '@learnrudi/core';
+import { PATHS, createShimsForTool, ensureDirectories, getNodeRuntimeBinDir, getNodeRuntimeRoot, validateShim } from '@learnrudi/core';
 import fs from 'fs';
 import path from 'path';
 
@@ -80,6 +81,106 @@ function getShimTarget(name, shimPath, type) {
   }
 
   return null;
+}
+
+function createShimLink(shimPath, targetPath) {
+  if (fs.existsSync(shimPath)) {
+    fs.unlinkSync(shimPath);
+  }
+  fs.symlinkSync(targetPath, shimPath);
+}
+
+function writeShimScript(name, script) {
+  const shimPath = path.join(PATHS.bins, name);
+  fs.writeFileSync(shimPath, script, { encoding: 'utf8', mode: 0o755 });
+}
+
+function getCliEntryPath() {
+  const candidates = [
+    path.join(path.dirname(process.argv[1]), '..', 'dist', 'index.cjs'),
+    path.join(path.dirname(process.argv[1]), '..', 'src', 'index.js'),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function copyRouterMcp(routerDir) {
+  const destPath = path.join(routerDir, 'router-mcp.js');
+  const possibleSources = [
+    path.join(path.dirname(process.argv[1]), '..', 'src', 'router-mcp.js'),
+    path.join(path.dirname(process.argv[1]), '..', 'dist', 'router-mcp.js'),
+  ];
+
+  for (const source of possibleSources) {
+    if (fs.existsSync(source)) {
+      fs.copyFileSync(source, destPath);
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function getRuntimeShimDefs() {
+  const pythonBin = path.join(PATHS.runtimes, 'python', 'bin');
+  const nodeBin = getNodeRuntimeBinDir() || path.join(PATHS.runtimes, 'node', 'bin');
+
+  return {
+    node: path.join(nodeBin, 'node'),
+    npm: path.join(nodeBin, 'npm'),
+    npx: path.join(nodeBin, 'npx'),
+    python: path.join(pythonBin, 'python3'),
+    python3: path.join(pythonBin, 'python3'),
+    pip: path.join(pythonBin, 'pip3'),
+    pip3: path.join(pythonBin, 'pip3'),
+  };
+}
+
+function collectManifests(dir, kind) {
+  if (!fs.existsSync(dir)) return [];
+  const entries = fs.readdirSync(dir);
+  const manifests = [];
+
+  for (const entry of entries) {
+    if (entry.startsWith('.')) continue;
+    const entryPath = path.join(dir, entry);
+    const stat = fs.statSync(entryPath);
+    if (!stat.isDirectory()) continue;
+
+    const manifestPath = path.join(entryPath, 'manifest.json');
+    if (!fs.existsSync(manifestPath)) continue;
+
+    try {
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      manifests.push({ kind, name: entry, installPath: entryPath, manifest });
+    } catch {
+      // Skip invalid manifest
+    }
+  }
+
+  return manifests;
+}
+
+function normalizeBins(manifest, fallback) {
+  if (Array.isArray(manifest?.bins) && manifest.bins.length > 0) return manifest.bins;
+  if (Array.isArray(manifest?.binaries) && manifest.binaries.length > 0) return manifest.binaries;
+  if (Array.isArray(manifest?.commands) && manifest.commands.length > 0) return manifest.commands;
+  if (typeof manifest?.bin === 'string') return [manifest.bin];
+  return [fallback];
+}
+
+function inferInstallType(kind, manifest) {
+  if (manifest?.installType) return manifest.installType;
+  if (manifest?.pipPackage || manifest?.venvPath) return 'pip';
+  if (kind === 'agent' && manifest?.npmPackage) return 'npm-global';
+  if (manifest?.npmPackage) return 'npm';
+  return kind === 'binary' ? 'binary' : 'binary';
 }
 
 /**
@@ -164,9 +265,116 @@ function formatShimStatus(shim, flags) {
 export async function cmdShims(args, flags) {
   const subcommand = args[0] || 'list';
 
-  if (!['list', 'check', 'fix'].includes(subcommand)) {
-    console.error('Usage: rudi shims [list|check|fix]');
+  if (!['list', 'check', 'fix', 'rebuild'].includes(subcommand)) {
+    console.error('Usage: rudi shims [list|check|fix|rebuild]');
     process.exit(1);
+  }
+
+  if (subcommand === 'rebuild') {
+    if (process.platform === 'win32') {
+      console.error('Shim rebuild is not supported on Windows yet.');
+      process.exit(1);
+    }
+    ensureDirectories();
+    fs.mkdirSync(PATHS.bins, { recursive: true });
+
+    let created = 0;
+    let missing = 0;
+    let collisions = 0;
+
+    // Runtime shims (explicit opt-in)
+    const runtimeShimDefs = getRuntimeShimDefs();
+    for (const [name, targetPath] of Object.entries(runtimeShimDefs)) {
+      if (!fs.existsSync(targetPath)) {
+        missing++;
+        continue;
+      }
+      const shimPath = path.join(PATHS.bins, name);
+      createShimLink(shimPath, targetPath);
+      created++;
+    }
+
+    const manifests = [
+      ...collectManifests(PATHS.binaries, 'binary'),
+      ...collectManifests(PATHS.agents, 'agent'),
+    ];
+
+    for (const entry of manifests) {
+      const { kind, name, installPath, manifest } = entry;
+      const installType = inferInstallType(kind, manifest);
+      const bins = normalizeBins(manifest, manifest?.name || name);
+      const id = manifest?.id || `${kind}:${name}`;
+      const installDir = installType === 'npm-global'
+        ? (manifest?.npmPrefix || getNodeRuntimeRoot())
+        : installPath;
+
+      const result = await createShimsForTool({
+        id,
+        installType,
+        installDir,
+        bins,
+        name: manifest?.name || name,
+        source: manifest?.source,
+        systemPath: manifest?.systemPath,
+      });
+
+      created += result.created.length;
+      collisions += result.collisions.length;
+    }
+
+    const cliEntryPath = getCliEntryPath();
+    if (cliEntryPath) {
+      const nodeBinDir = getNodeRuntimeBinDir();
+      const nodeBin = path.join(nodeBinDir, process.platform === 'win32' ? 'node.exe' : 'node');
+
+      writeShimScript('rudi', `#!/bin/sh
+CLI_ENTRY="${cliEntryPath.replace(/"/g, '\\"')}"
+NODE_BIN="${nodeBin.replace(/"/g, '\\"')}"
+if [ -x "$CLI_ENTRY" ]; then
+  if [ -x "$NODE_BIN" ]; then
+    exec "$NODE_BIN" "$CLI_ENTRY" "$@"
+  fi
+  exec node "$CLI_ENTRY" "$@"
+fi
+echo "RUDI: CLI entry not found at $CLI_ENTRY" 1>&2
+exit 127
+`);
+      created++;
+    }
+
+    writeShimScript('rudi-mcp', `#!/bin/sh
+# RUDI MCP Shim - Routes agent calls to rudi mcp command
+exec rudi mcp "$@"
+`);
+    created++;
+
+    const routerDir = path.join(PATHS.home, 'router');
+    fs.mkdirSync(routerDir, { recursive: true });
+    fs.writeFileSync(path.join(routerDir, 'package.json'), JSON.stringify({
+      name: 'rudi-router',
+      type: 'module',
+      private: true
+    }, null, 2));
+
+    if (copyRouterMcp(routerDir)) {
+      const routerNodeBin = path.join(getNodeRuntimeBinDir(), process.platform === 'win32' ? 'node.exe' : 'node');
+      writeShimScript('rudi-router', `#!/bin/sh
+# RUDI Router - Master MCP server for all installed stacks
+RUDI_HOME="$HOME/.rudi"
+NODE_BIN="${routerNodeBin.replace(/"/g, '\\"')}"
+if [ -x "$NODE_BIN" ]; then
+  exec "$NODE_BIN" "$RUDI_HOME/router/router-mcp.js" "$@"
+else
+  exec node "$RUDI_HOME/router/router-mcp.js" "$@"
+fi
+`);
+      created++;
+    } else {
+      console.warn('⚠ router-mcp.js not found; rudi-router shim not created');
+    }
+
+    console.log(`✓ Rebuilt shims in ~/.rudi/bins/ (${created} created, ${collisions} collisions, ${missing} missing)`);
+    process.exit(0);
   }
 
   const shimNames = listShims();
@@ -282,7 +490,7 @@ export async function cmdShims(args, flags) {
       for (const pkg of brokenPackages) {
         console.log(`Reinstalling ${pkg}...`);
         try {
-          await installPackage(pkg, { force: true });
+          await installPackage(pkg, { force: true, withShims: true });
           console.log(`\x1b[32m✓\x1b[0m Fixed ${pkg}`);
         } catch (err) {
           console.log(`\x1b[31m✗\x1b[0m Failed to fix ${pkg}: ${err.message}`);

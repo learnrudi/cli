@@ -41,6 +41,9 @@ importers:
       better-sqlite3:
         specifier: ^12.5.0
         version: 12.5.0
+      ws:
+        specifier: ^8.18.0
+        version: 8.19.0
     devDependencies:
       esbuild:
         specifier: ^0.27.2
@@ -86,7 +89,7 @@ importers:
         version: 1.0.0
       openai:
         specifier: ^4.77.0
-        version: 4.104.0
+        version: 4.104.0(ws@8.19.0)
 
   packages/env: {}
 
@@ -300,12 +303,16 @@ packages:
     resolution: {integrity: sha512-h5T0No1dZ/Qk/FQYr6cCRGUKlBoqznz4a1+sGC7puDkjWjTJxnXJhNkrORNCSy0PKnB9Uf61f4A2H0VuaNnyaw==}
     engines: {node: '>=18.0.0'}
 
+  '@learnrudi/env@1.0.1':
+    resolution: {integrity: sha512-vNo/tpGuH0fTC+qIimbcwhDutnGLjPbwSEg5pG2KyAvQOXxPJx0VcuuBbXJsk6fNwte1FKArWKpUennzEw1vsQ==}
+    engines: {node: '>=18.0.0'}
+
   '@learnrudi/manifest@1.0.0':
     resolution: {integrity: sha512-HimnqHunAfpSMvKu0F7RJg+IixOfrpeYo6MwGqMlhl/7nduXcrLU37BrDMbgIlgl5EXHNoQIN3e+BTMrM77emw==}
     engines: {node: '>=18.0.0'}
 
-  '@learnrudi/registry-client@1.0.1':
-    resolution: {integrity: sha512-JRK0i7PWx3PG/bDBqQEae0R2BXfL33DK0nx62z44L7cM1wsw89L39RfSDi08YHr0XY+lCMgTZ5nwooqhOOzg+w==}
+  '@learnrudi/registry-client@1.0.5':
+    resolution: {integrity: sha512-LzBcX7mvnn3h/Nxu4kqkZ9+2oJeM/T47BX5IolF9Thgg221PLKG27T41AJMoFI4P4YVpd30vq72FsZS3U6zVtg==}
     engines: {node: '>=18.0.0'}
 
   '@types/node-fetch@2.6.13':
@@ -728,6 +735,18 @@ packages:
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
+  ws@8.19.0:
+    resolution: {integrity: sha512-blAT2mjOEIi0ZzruJfIhb3nps74PRWTCz1IjglWEEpQl5XS/UNama6u2/rjFkDDouqr4L67ry+1aGIALViWjDg==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
   yaml@2.8.2:
     resolution: {integrity: sha512-mplynKqc1C2hTVYxd0PU2xQAc22TI1vShAYGksCCfxbn/dFwnHTNi1bvYsBTkhdUNtGIf5xNOg938rrSSYvS9A==}
     engines: {node: '>= 14.6'}
@@ -815,18 +834,20 @@ snapshots:
 
   '@learnrudi/core@1.0.2':
     dependencies:
-      '@learnrudi/env': 1.0.0
+      '@learnrudi/env': 1.0.1
       '@learnrudi/manifest': 1.0.0
-      '@learnrudi/registry-client': 1.0.1
+      '@learnrudi/registry-client': 1.0.5
       yaml: 2.8.2
 
   '@learnrudi/db@1.0.2':
     dependencies:
-      '@learnrudi/env': 1.0.0
+      '@learnrudi/env': 1.0.1
       better-sqlite3: 12.5.0
       uuid: 11.1.0
 
   '@learnrudi/env@1.0.0': {}
+
+  '@learnrudi/env@1.0.1': {}
 
   '@learnrudi/manifest@1.0.0':
     dependencies:
@@ -834,9 +855,9 @@ snapshots:
       ajv-formats: 3.0.1(ajv@8.17.1)
       yaml: 2.8.2
 
-  '@learnrudi/registry-client@1.0.1':
+  '@learnrudi/registry-client@1.0.5':
     dependencies:
-      '@learnrudi/env': 1.0.0
+      '@learnrudi/env': 1.0.1
 
   '@types/node-fetch@2.6.13':
     dependencies:
@@ -1143,7 +1164,7 @@ snapshots:
     dependencies:
       wrappy: 1.0.2
 
-  openai@4.104.0:
+  openai@4.104.0(ws@8.19.0):
     dependencies:
       '@types/node': 18.19.130
       '@types/node-fetch': 2.6.13
@@ -1152,6 +1173,8 @@ snapshots:
       form-data-encoder: 1.7.2
       formdata-node: 4.4.1
       node-fetch: 2.7.0
+    optionalDependencies:
+      ws: 8.19.0
     transitivePeerDependencies:
       - encoding
 
@@ -1298,5 +1321,7 @@ snapshots:
       has-tostringtag: 1.0.2
 
   wrappy@1.0.2: {}
+
+  ws@8.19.0: {}
 
   yaml@2.8.2: {}

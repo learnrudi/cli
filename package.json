@@ -21,17 +21,18 @@
     "test": "node --test src/__tests__/"
   },
   "dependencies": {
-    "@learnrudi/core": "1.0.5",
-    "@learnrudi/db": "1.0.2",
-    "@learnrudi/embeddings": "0.1.0",
-    "@learnrudi/env": "1.0.1",
-    "@learnrudi/manifest": "1.0.0",
-    "@learnrudi/mcp": "1.0.0",
-    "@learnrudi/registry-client": "1.0.5",
-    "@learnrudi/runner": "1.0.1",
-    "@learnrudi/secrets": "1.0.1",
-    "@learnrudi/utils": "1.0.0",
-    "better-sqlite3": "^12.5.0"
+    "@learnrudi/core": "workspace:*",
+    "@learnrudi/db": "workspace:*",
+    "@learnrudi/embeddings": "workspace:*",
+    "@learnrudi/env": "workspace:*",
+    "@learnrudi/manifest": "workspace:*",
+    "@learnrudi/mcp": "workspace:*",
+    "@learnrudi/registry-client": "workspace:*",
+    "@learnrudi/runner": "workspace:*",
+    "@learnrudi/secrets": "workspace:*",
+    "@learnrudi/utils": "workspace:*",
+    "better-sqlite3": "^12.5.0",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "esbuild": "^0.27.2"

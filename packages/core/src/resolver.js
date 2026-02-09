@@ -62,7 +62,9 @@ export async function resolvePackage(id) {
     bins: mergedPkg.bins,
     binaries: mergedPkg.binaries, // backward compat
     installDir: mergedPkg.installDir,
-    installType: mergedPkg.installType
+    installType: mergedPkg.installType,
+    nativeInstaller: mergedPkg.nativeInstaller,
+    nativeBinPath: mergedPkg.nativeBinPath
   };
 }
 

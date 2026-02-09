@@ -4,7 +4,7 @@
 
 import { getDb } from './index.js';
 
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 export const SCHEMA_SQL = `
 -- Schema version tracking
@@ -335,13 +335,16 @@ CREATE INDEX IF NOT EXISTS idx_system_events_type ON system_events(event_type);
 
 CREATE TABLE IF NOT EXISTS session_runtime_state (
   session_id TEXT PRIMARY KEY,
-  status TEXT NOT NULL CHECK(status IN ('running','completed','error','stopped')),
+  status TEXT NOT NULL CHECK(status IN ('starting','running','completed','error','stopped','crashed')),
   provider TEXT,
   provider_session_id TEXT,
+  resume_session_id TEXT,
+  cwd TEXT,
   started_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   completed_at TEXT,
   last_seq INTEGER NOT NULL DEFAULT 0,
+  turn_count INTEGER NOT NULL DEFAULT 0,
   cost_total REAL NOT NULL DEFAULT 0,
   tokens_total INTEGER NOT NULL DEFAULT 0,
   unseen_completion INTEGER NOT NULL DEFAULT 0,
@@ -823,19 +826,29 @@ export function applySchemaUpdates(db) {
   ensureTable(db, 'session_runtime_state', `
     CREATE TABLE IF NOT EXISTS session_runtime_state (
       session_id TEXT PRIMARY KEY,
-      status TEXT NOT NULL CHECK(status IN ('running','completed','error','stopped')),
+      status TEXT NOT NULL CHECK(status IN ('starting','running','completed','error','stopped','crashed')),
       provider TEXT,
       provider_session_id TEXT,
+      resume_session_id TEXT,
+      cwd TEXT,
       started_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       completed_at TEXT,
       last_seq INTEGER NOT NULL DEFAULT 0,
+      turn_count INTEGER NOT NULL DEFAULT 0,
       cost_total REAL NOT NULL DEFAULT 0,
       tokens_total INTEGER NOT NULL DEFAULT 0,
       unseen_completion INTEGER NOT NULL DEFAULT 0,
       last_error TEXT
     )
   `);
+
+  // Defensive ensureColumn for tables that exist but weren't migrated
+  if (tableExists(db, 'session_runtime_state')) {
+    ensureColumn(db, 'session_runtime_state', 'turn_count', 'ALTER TABLE session_runtime_state ADD COLUMN turn_count INTEGER NOT NULL DEFAULT 0');
+    ensureColumn(db, 'session_runtime_state', 'cwd', 'ALTER TABLE session_runtime_state ADD COLUMN cwd TEXT');
+    ensureColumn(db, 'session_runtime_state', 'resume_session_id', 'ALTER TABLE session_runtime_state ADD COLUMN resume_session_id TEXT');
+  }
 
   ensureTable(db, 'session_runtime_events', `
     CREATE TABLE IF NOT EXISTS session_runtime_events (
@@ -940,6 +953,13 @@ export function applySchemaUpdates(db) {
     const count = db.prepare('SELECT COUNT(*) as count FROM model_pricing').get();
     if (count && count.count === 0) {
       seedModelPricing(db);
+    } else {
+      // Ensure new models get added to existing DBs
+      db.prepare(`
+        INSERT OR IGNORE INTO model_pricing
+        (provider, model_pattern, display_name, input_cost_per_mtok, output_cost_per_mtok, cache_read_cost_per_mtok, cache_write_cost_per_mtok, effective_from, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run('claude', 'claude-opus-4-6-%', 'Claude Opus 4.6', 15.0, 75.0, 1.5, 18.75, '2025-01-01', 'Most capable');
     }
   }
 }
@@ -1177,6 +1197,43 @@ function runMigrations(db, from, to) {
     // Version 6: Bring schema to Studio parity
     6: (db) => {
       applySchemaUpdates(db);
+    },
+
+    // Version 7: Expand session_runtime_state CHECK + add columns for lifecycle tracking
+    7: (db) => {
+      if (tableExists(db, 'session_runtime_state')) {
+        db.exec(`
+          ALTER TABLE session_runtime_state RENAME TO _srs_old;
+          CREATE TABLE session_runtime_state (
+            session_id TEXT PRIMARY KEY,
+            status TEXT NOT NULL CHECK(status IN ('starting','running','completed','error','stopped','crashed')),
+            provider TEXT,
+            provider_session_id TEXT,
+            resume_session_id TEXT,
+            cwd TEXT,
+            started_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            completed_at TEXT,
+            last_seq INTEGER NOT NULL DEFAULT 0,
+            turn_count INTEGER NOT NULL DEFAULT 0,
+            cost_total REAL NOT NULL DEFAULT 0,
+            tokens_total INTEGER NOT NULL DEFAULT 0,
+            unseen_completion INTEGER NOT NULL DEFAULT 0,
+            last_error TEXT
+          );
+          INSERT INTO session_runtime_state
+            (session_id, status, provider, provider_session_id,
+             resume_session_id, cwd, started_at, updated_at, completed_at,
+             last_seq, turn_count, cost_total, tokens_total, unseen_completion, last_error)
+          SELECT
+            session_id, status, provider, provider_session_id,
+            NULL, NULL, started_at, updated_at, completed_at,
+            last_seq, 0, cost_total, tokens_total, unseen_completion, last_error
+          FROM _srs_old;
+          DROP TABLE _srs_old;
+        `);
+      }
+      applySchemaUpdates(db);
     }
   };
 
@@ -1189,7 +1246,7 @@ function runMigrations(db, from, to) {
           .run(v, new Date().toISOString());
       };
 
-      if (v === 4) {
+      if (v === 4 || v === 7) {
         applyMigration();
       } else {
         db.transaction(applyMigration)();
@@ -1330,6 +1387,7 @@ export function seedModelPricing(db) {
 
   const pricingData = [
     // Claude models (Anthropic)
+    ['claude', 'claude-opus-4-6-%', 'Claude Opus 4.6', 15.0, 75.0, 1.5, 18.75, '2025-01-01', 'Most capable'],
     ['claude', 'claude-opus-4-5-%', 'Claude Opus 4.5', 15.0, 75.0, 1.5, 18.75, '2025-01-01', 'Most capable'],
     ['claude', 'claude-sonnet-4-5-%', 'Claude Sonnet 4.5', 3.0, 15.0, 0.3, 3.75, '2025-01-01', 'Best balance'],
     ['claude', 'claude-haiku-4-5-%', 'Claude Haiku 4.5', 0.8, 4.0, 0.08, 1.0, '2025-01-01', 'Fastest'],

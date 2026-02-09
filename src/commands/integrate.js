@@ -21,19 +21,19 @@ import { PATHS } from '@learnrudi/env';
 import { AGENT_CONFIGS, findAgentConfig, getInstalledAgents } from '@learnrudi/mcp';
 
 const HOME = os.homedir();
-const ROUTER_SHIM_PATH = path.join(PATHS.home, 'shims', 'rudi-router');
+const ROUTER_SHIM_PATH = path.join(PATHS.bins, 'rudi-router');
+const LEGACY_ROUTER_SHIM_PATH = path.join(PATHS.home, 'shims', 'rudi-router');
 
 /**
  * Check if router shim exists
  */
 function checkRouterShim() {
-  if (!fs.existsSync(ROUTER_SHIM_PATH)) {
-    throw new Error(
-      `Router shim not found at ${ROUTER_SHIM_PATH}\n` +
-      `Run: npm install -g @learnrudi/cli@latest`
-    );
-  }
-  return ROUTER_SHIM_PATH;
+  if (fs.existsSync(ROUTER_SHIM_PATH)) return ROUTER_SHIM_PATH;
+  if (fs.existsSync(LEGACY_ROUTER_SHIM_PATH)) return LEGACY_ROUTER_SHIM_PATH;
+  throw new Error(
+    `Router shim not found at ${ROUTER_SHIM_PATH}\n` +
+    `Run: rudi shims rebuild`
+  );
 }
 
 /**
@@ -76,9 +76,9 @@ function writeJsonConfig(configPath, config) {
  * Build MCP server entry for the router
  * Format varies slightly by agent
  */
-function buildRouterEntry(agentId) {
+function buildRouterEntry(agentId, routerPath) {
   const base = {
-    command: ROUTER_SHIM_PATH,
+    command: routerPath,
     args: [],
   };
 
@@ -129,7 +129,8 @@ async function integrateAgent(agentId, flags) {
   // Clean up entries that should go through the router:
   // 1. Old rudi-mcp shim entries
   // 2. Direct stack entries (cwd or args pointing to ~/.rudi/stacks/)
-  const rudiMcpShimPath = path.join(PATHS.home, 'shims', 'rudi-mcp');
+  const rudiMcpShimPath = path.join(PATHS.bins, 'rudi-mcp');
+  const legacyMcpShimPath = path.join(PATHS.home, 'shims', 'rudi-mcp');
   const rudiStacksPath = path.join(PATHS.home, 'stacks');
   const removedEntries = [];
 
@@ -140,7 +141,7 @@ async function integrateAgent(agentId, flags) {
     let shouldRemove = false;
 
     // Check for old rudi-mcp shim
-    if (serverConfig.command === rudiMcpShimPath) {
+    if (serverConfig.command === rudiMcpShimPath || serverConfig.command === legacyMcpShimPath) {
       shouldRemove = true;
     }
 
@@ -169,7 +170,8 @@ async function integrateAgent(agentId, flags) {
   }
 
   // Add/update the RUDI router entry
-  const routerEntry = buildRouterEntry(agentId);
+  const routerPath = checkRouterShim();
+  const routerEntry = buildRouterEntry(agentId, routerPath);
   const existing = config[key]['rudi'];
 
   let action = 'none';

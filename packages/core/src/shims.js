@@ -1,8 +1,7 @@
 /**
  * Shim manager for RUDI binaries
  *
- * All installed tools (upstream binaries, npm packages, pip packages, system tools)
- * are made available via shims in ~/.rudi/bins/
+ * Installed tools can be exposed via shims in ~/.rudi/bins/ (opt-in).
  *
  * This provides a unified execution contract:
  * - PATH only needs to include ~/.rudi/bins

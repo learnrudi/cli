@@ -5,7 +5,7 @@
  * Fetches runtime manifests from registry and downloads:
  * 1. Node.js runtime → ~/.rudi/runtimes/node/
  * 2. Python runtime → ~/.rudi/runtimes/python/
- * 3. Creates shims → ~/.rudi/bins/
+ * 3. (Optional) Creates shims → ~/.rudi/bins/ (opt-in)
  * 4. Initializes rudi.json → ~/.rudi/rudi.json
  */
 
@@ -21,6 +21,7 @@ const REGISTRY_BASE = 'https://raw.githubusercontent.com/learn-rudi/registry/mai
 
 // Use 'bins' (consistent with @learnrudi/env) not 'shims'
 const BINS_DIR = path.join(RUDI_HOME, 'bins');
+const CREATE_SHIMS = process.env.RUDI_CREATE_SHIMS === '1' || process.env.RUDI_WITH_SHIMS === '1';
 
 // =============================================================================
 // RUDI.JSON CONFIG MANAGEMENT
@@ -640,9 +641,10 @@ async function setup() {
     // Still init rudi.json in case it's missing (migration from older version)
     console.log('\nUpdating configuration...');
     initRudiConfig();
-    // Ensure shims are up to date
-    console.log('\nUpdating shims...');
-    createShims();
+    if (CREATE_SHIMS) {
+      console.log('\nUpdating shims...');
+      createShims();
+    }
     console.log('  Skipping runtime and binary downloads\n');
     console.log('Run `rudi doctor` to check system health\n');
     return;
@@ -666,9 +668,11 @@ async function setup() {
   await downloadBinary('sqlite', platformArch);
   await downloadBinary('ripgrep', platformArch);
 
-  // Create shims (rudi-mcp for direct access, rudi-router for aggregated MCP)
-  console.log('\nSetting up shims...');
-  createShims();
+  // Create shims (opt-in)
+  if (CREATE_SHIMS) {
+    console.log('\nSetting up shims...');
+    createShims();
+  }
 
   // Initialize secrets
   initSecrets();
@@ -685,6 +689,10 @@ async function setup() {
   console.log('  rudi search --all      # See available stacks');
   console.log('  rudi install slack     # Install a stack');
   console.log('  rudi doctor            # Check system health\n');
+  if (!CREATE_SHIMS) {
+    console.log('Shims are opt-in. To expose installed tools on PATH:');
+    console.log('  rudi shims rebuild\n');
+  }
 }
 
 // Run

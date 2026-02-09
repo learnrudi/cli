@@ -146,7 +146,7 @@ function processPackages(catalogPath, kind) {
       commands = normalizeGlobalNpmCommands(commands);
     }
 
-    return {
+    const entry = {
       id,
       name: pkg.name,
       kind,
@@ -155,6 +155,14 @@ function processPackages(catalogPath, kind) {
       installType,
       commands,
     };
+
+    // Carry native installer fields for native-installer packages
+    if (installType === 'native-installer') {
+      if (pkg.nativeInstaller) entry.nativeInstaller = pkg.nativeInstaller;
+      if (pkg.nativeBinPath) entry.nativeBinPath = pkg.nativeBinPath;
+    }
+
+    return entry;
   });
 }
 

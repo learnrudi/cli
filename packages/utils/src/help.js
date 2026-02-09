@@ -19,7 +19,7 @@ USAGE
   rudi <command> [options]
 
 SETUP
-  init                  Bootstrap RUDI (download runtimes, create shims)
+  init                  Bootstrap RUDI (download runtimes, optional shims)
 
 REGISTRY
   search <query>        Search registry for packages
@@ -34,6 +34,7 @@ INSTALLED
   doctor                Check system health and dependencies
   which <cmd>           Show path to a command
   info <pkg>            Show package details
+  shims [cmd]           Manage shims in ~/.rudi/bins (list, check, fix, rebuild)
 
 AGENT INTEGRATION
   integrate <agent>     Wire up RUDI router (claude, cursor, gemini, codex, all)
@@ -238,13 +239,14 @@ USAGE
 OPTIONS
   --force            Reinitialize even if already set up
   --skip-downloads   Skip downloading runtimes/binaries
+  --with-shims       Create shims in ~/.rudi/bins/ (opt-in)
   --quiet            Minimal output (for programmatic use)
 
 WHAT IT DOES
   1. Creates ~/.rudi directory structure (if missing)
   2. Downloads bundled runtimes (Node.js, Python) if not installed
   3. Downloads essential binaries (sqlite3, ripgrep) if not installed
-  4. Creates/updates shims in ~/.rudi/shims/
+  4. Optionally creates shims in ~/.rudi/bins/ (use --with-shims)
   5. Initializes the database (if missing)
   6. Creates settings.json (if missing)
 
@@ -253,6 +255,7 @@ NOTE: Safe to run multiple times - only creates what's missing.
 EXAMPLES
   rudi init
   rudi init --force
+  rudi init --with-shims
   rudi init --skip-downloads
   rudi init --quiet
 `,

@@ -4,7 +4,7 @@
  * Creates ~/.rudi structure and downloads essential runtimes/binaries:
  * - Runtimes: node, python (bundled)
  * - Binaries: sqlite3, ripgrep (essential)
- * - Shims: symlinks to all installed tools
+ * - Shims (opt-in): symlinks to installed tools in ~/.rudi/bins
  * - Database: rudi.db with schema
  */
 
@@ -29,6 +29,7 @@ export async function cmdInit(args, flags) {
   const force = flags.force || false;
   const skipDownloads = flags['skip-downloads'] || false;
   const quiet = flags.quiet || false;
+  const withShims = flags['with-shims'] || flags.withShims || false;
 
   if (!quiet) {
     console.log('═'.repeat(60));
@@ -52,7 +53,7 @@ export async function cmdInit(args, flags) {
     PATHS.binaries,
     PATHS.agents,
     PATHS.cache,
-    path.join(PATHS.home, 'shims')
+    PATHS.bins
   ];
 
   for (const dir of dirs) {
@@ -136,11 +137,14 @@ export async function cmdInit(args, flags) {
   }
 
   // Step 4: Create shims
-  if (!quiet) console.log('\n4. Updating shims...');
-  const shimsDir = path.join(PATHS.home, 'shims');
-  const shimCount = await createShims(shimsDir, quiet);
-  if (shimCount > 0) {
-    actions.created.push(`shims:${shimCount}`);
+  if (!quiet) console.log('\n4. Shims (opt-in)...');
+  if (withShims) {
+    const shimCount = await createShims(PATHS.bins, quiet);
+    if (shimCount > 0) {
+      actions.created.push(`shims:${shimCount}`);
+    }
+  } else if (!quiet) {
+    console.log('   ⚠ Shims not created (opt-in). Run: rudi shims rebuild');
   }
 
   // Step 5: Initialize database
@@ -189,8 +193,8 @@ export async function cmdInit(args, flags) {
     console.log('═'.repeat(60));
 
     // Show PATH instructions only on first run
-    if (actions.created.includes('settings')) {
-      const shimsPath = path.join(PATHS.home, 'shims');
+    if (actions.created.includes('settings') && withShims) {
+      const shimsPath = PATHS.bins;
       console.log('\nAdd to your shell profile (~/.zshrc or ~/.bashrc):');
       console.log(`  export PATH="${shimsPath}:$PATH"`);
       console.log('\nThen run:');

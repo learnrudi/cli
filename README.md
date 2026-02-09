@@ -14,11 +14,12 @@ RUDI provides a unified installation and management system for:
 npm install -g @learnrudi/cli
 ```
 
-Requires Node.js 18 or later. The installer creates `~/.rudi/` and adds shims to `~/.rudi/bins/`.
+Requires Node.js 18 or later. The installer creates `~/.rudi/`.
 
-Add to your shell profile (`.bashrc`, `.zshrc`, or `.profile`):
+Shims are opt-in. If you want PATH exposure for installed tools:
 
 ```bash
+rudi shims rebuild
 export PATH="$HOME/.rudi/bins:$PATH"
 ```
 
@@ -26,7 +27,7 @@ export PATH="$HOME/.rudi/bins:$PATH"
 
 ### Shim-Based Architecture
 
-Every tool installed through RUDI gets a wrapper script (shim) in `~/.rudi/bins/`. This provides:
+When you opt in (`rudi shims rebuild`), tools installed through RUDI get a wrapper script (shim) in `~/.rudi/bins/`. This provides:
 
 - Clean PATH integration without modifying system directories
 - Version isolation per package
@@ -64,6 +65,9 @@ rudi install binary:supabase      # Supabase CLI
 
 # Install with scripts enabled (when needed)
 rudi install npm:puppeteer --allow-scripts
+
+# Optional: create shims immediately (opt-in)
+rudi install binary:ffmpeg --with-shims
 ```
 
 ### Listing Installed Packages
@@ -97,6 +101,7 @@ rudi secrets remove SLACK_BOT_TOKEN    # Remove a secret
 ### Integrating with AI Agents
 
 ```bash
+rudi shims rebuild     # Create rudi-router and rudi-mcp shims (opt-in)
 rudi integrate claude    # Add stacks to Claude Desktop config
 rudi integrate codex     # Add stacks to Codex config
 rudi integrate gemini    # Add stacks to Gemini config
@@ -128,7 +133,7 @@ rudi doctor              # Check system health
 
 ```
 ~/.rudi/
-├── bins/                 # Shims (add to PATH)
+├── bins/                 # Shims (opt-in; add to PATH if desired)
 │   ├── tsc              # → binaries/npm/typescript/...
 │   ├── ffmpeg           # → binaries/ffmpeg/...
 │   └── rudi-mcp         # MCP router for agents

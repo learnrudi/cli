@@ -4,6 +4,7 @@
  */
 
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { pipeline } from 'stream/promises';
 import { createWriteStream } from 'fs';
@@ -109,11 +110,12 @@ function hasInstallScripts(installRoot, packageName, scope = 'local') {
  * @param {string} id - Package ID
  * @param {Object} options
  * @param {boolean} [options.force] - Force reinstall
+ * @param {boolean} [options.withShims] - Create/update shims in ~/.rudi/bins
  * @param {Function} [options.onProgress] - Progress callback
  * @returns {Promise<InstallResult>}
  */
 export async function installPackage(id, options = {}) {
-  const { force = false, allowScripts = false, onProgress } = options;
+  const { force = false, allowScripts = false, withShims = false, onProgress } = options;
 
   // Ensure directories exist
   ensureDirectories();
@@ -146,7 +148,7 @@ export async function installPackage(id, options = {}) {
     onProgress?.({ phase: 'installing', package: pkg.id, total: toInstall.length, current: results.length + 1 });
 
     try {
-      const result = await installSinglePackage(pkg, { force, allowScripts, onProgress });
+      const result = await installSinglePackage(pkg, { force, allowScripts, withShims, onProgress });
       results.push(result);
     } catch (error) {
       return {
@@ -176,7 +178,7 @@ export async function installPackage(id, options = {}) {
  * @returns {Promise<InstallResult>}
  */
 async function installSinglePackage(pkg, options = {}) {
-  const { force = false, allowScripts = false, onProgress } = options;
+  const { force = false, allowScripts = false, withShims = false, onProgress } = options;
   const installPath = getPackagePath(pkg.id);
   const pkgName = pkg.id.replace(/^(runtime|binary|agent):/, '');
   const isAgentNpm = pkg.kind === 'agent' && pkg.npmPackage;
@@ -211,6 +213,75 @@ async function installSinglePackage(pkg, options = {}) {
   // Handle runtimes, binaries, agents - download from GitHub releases or install via npm
   if (pkg.kind === 'runtime' || pkg.kind === 'binary' || pkg.kind === 'agent') {
     onProgress?.({ phase: 'downloading', package: pkg.id });
+
+    // Handle native installer packages (e.g., Claude CLI)
+    if (pkg.installType === 'native-installer' && pkg.nativeInstaller) {
+      const { execSync } = await import('child_process');
+      const homedir = os.homedir();
+      const nativeBin = pkg.nativeBinPath
+        ? path.join(homedir, pkg.nativeBinPath)
+        : null;
+
+      // Check if already installed at native path
+      if (nativeBin && fs.existsSync(nativeBin) && !force) {
+        console.log(`  Found ${pkg.name} at ${nativeBin}`);
+        if (!fs.existsSync(installPath)) fs.mkdirSync(installPath, { recursive: true });
+        fs.writeFileSync(path.join(installPath, 'manifest.json'), JSON.stringify({
+          id: pkg.id, kind: pkg.kind, name: pkgName,
+          installType: 'native',
+          detectedPath: nativeBin,
+          installedAt: new Date().toISOString(),
+        }, null, 2));
+        return { success: true, id: pkg.id, path: installPath };
+      }
+
+      // Also check PATH
+      if (!force) {
+        try {
+          const which = execSync(`which ${pkgName}`, { encoding: 'utf-8' }).trim();
+          if (which && fs.existsSync(which)) {
+            console.log(`  Found ${pkg.name} in PATH: ${which}`);
+            if (!fs.existsSync(installPath)) fs.mkdirSync(installPath, { recursive: true });
+            fs.writeFileSync(path.join(installPath, 'manifest.json'), JSON.stringify({
+              id: pkg.id, kind: pkg.kind, name: pkgName,
+              installType: 'native',
+              detectedPath: which,
+              installedAt: new Date().toISOString(),
+            }, null, 2));
+            return { success: true, id: pkg.id, path: installPath };
+          }
+        } catch {}
+      }
+
+      // Run native installer
+      const platform = process.platform;
+      const installerCmd = pkg.nativeInstaller[platform];
+      if (!installerCmd) {
+        throw new Error(`No native installer available for platform: ${platform}`);
+      }
+
+      console.log(`  Running native installer for ${pkg.name}...`);
+      execSync(installerCmd, { stdio: 'inherit' });
+
+      // Verify installation
+      const verifyPath = nativeBin && fs.existsSync(nativeBin) ? nativeBin : (() => {
+        try { return execSync(`which ${pkgName}`, { encoding: 'utf-8' }).trim(); }
+        catch { return null; }
+      })();
+      if (!verifyPath || !fs.existsSync(verifyPath)) {
+        throw new Error(`Installation completed but ${pkgName} binary not found. You may need to restart your shell.`);
+      }
+
+      if (!fs.existsSync(installPath)) fs.mkdirSync(installPath, { recursive: true });
+      fs.writeFileSync(path.join(installPath, 'manifest.json'), JSON.stringify({
+        id: pkg.id, kind: pkg.kind, name: pkgName,
+        installType: 'native',
+        detectedPath: verifyPath,
+        installedAt: new Date().toISOString(),
+      }, null, 2));
+
+      return { success: true, id: pkg.id, path: installPath };
+    }
 
     // Handle npm-based packages (agents, cloud CLIs)
     if (pkg.npmPackage) {
@@ -326,17 +397,19 @@ async function installSinglePackage(pkg, options = {}) {
           JSON.stringify(manifest, null, 2)
         );
 
-        // Create shims for discovered/specified bins
-        if (bins && bins.length > 0) {
-          await createShimsForTool({
-            id: pkg.id,
-            installType: isAgentNpm ? 'npm-global' : 'npm',
-            installDir: npmInstallRoot,
-            bins: bins,
-            name: pkgName
-          });
-        } else {
-          console.warn(`[Installer] Warning: No binaries found for ${pkg.npmPackage}`);
+        // Create shims for discovered/specified bins (opt-in)
+        if (withShims) {
+          if (bins && bins.length > 0) {
+            await createShimsForTool({
+              id: pkg.id,
+              installType: isAgentNpm ? 'npm-global' : 'npm',
+              installDir: npmInstallRoot,
+              bins: bins,
+              name: pkgName
+            });
+          } else {
+            console.warn(`[Installer] Warning: No binaries found for ${pkg.npmPackage}`);
+          }
         }
 
         // Remove legacy local node_modules for agents (global canonical install)
@@ -384,14 +457,16 @@ async function installSinglePackage(pkg, options = {}) {
           JSON.stringify(manifest, null, 2)
         );
 
-        // Create shims for pip package
-        await createShimsForTool({
-          id: pkg.id,
-          installType: 'pip',
-          installDir: installPath,
-          bins: pkg.bins || [pkgName],
-          name: pkgName
-        });
+        // Create shims for pip package (opt-in)
+        if (withShims) {
+          await createShimsForTool({
+            id: pkg.id,
+            installType: 'pip',
+            installDir: installPath,
+            bins: pkg.bins || [pkgName],
+            name: pkgName
+          });
+        }
 
         return { success: true, id: pkg.id, path: installPath };
       } catch (error) {
@@ -413,14 +488,16 @@ async function installSinglePackage(pkg, options = {}) {
         const manifestPath = path.join(installPath, 'manifest.json');
         const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
 
-        // Create shims for binary (support both 'bins' and 'binaries' for backward compat)
-        await createShimsForTool({
-          id: pkg.id,
-          installType: 'binary',
-          installDir: installPath,
-          bins: manifest.bins || manifest.binaries || pkg.bins || [pkgName],
-          name: pkgName
-        });
+        // Create shims for binary (support both 'bins' and 'binaries' for backward compat, opt-in)
+        if (withShims) {
+          await createShimsForTool({
+            id: pkg.id,
+            installType: 'binary',
+            installDir: installPath,
+            bins: manifest.bins || manifest.binaries || pkg.bins || [pkgName],
+            name: pkgName
+          });
+        }
       } else {
         // Runtimes and agents: use GitHub releases
         await downloadRuntime(pkgName, version, installPath, {
