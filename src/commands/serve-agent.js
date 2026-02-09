@@ -557,10 +557,102 @@ export function createAgentHandler({
 
       const workingDir = cwd || process.env.HOME || os.homedir();
 
+      // Detect git repo + branch for drift detection and worktree isolation
+      let currentBranch = null;
+      let repoRoot = null;
+      let isGitRepo = false;
+      try {
+        execSync('git rev-parse --is-inside-work-tree', { cwd: workingDir, stdio: 'pipe' });
+        isGitRepo = true;
+        repoRoot = execSync('git rev-parse --show-toplevel', { cwd: workingDir, stdio: 'pipe' }).toString().trim();
+        currentBranch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: workingDir, stdio: 'pipe' }).toString().trim();
+      } catch {
+        // Not a git repo — leave null
+      }
+
+      // Worktree isolation: create per-session worktree for new sessions in git repos
+      const shortId = sessionId.slice(0, 8);
+      let worktreePath = null;
+      let worktreeBranch = null;
+      let baseBranch = currentBranch;
+      let gitignoreWarning = false;
+      let effectiveCwd = workingDir;
+
+      if (isGitRepo && repoRoot) {
+        if (!resumeSessionId) {
+          // New session — create a worktree
+          const worktreeDir = path.join(repoRoot, '.rudi', 'worktrees', `session-${shortId}`);
+          const branchName = `rudi/session-${shortId}`;
+          try {
+            fs.mkdirSync(path.join(repoRoot, '.rudi', 'worktrees'), { recursive: true });
+            execSync(
+              `git worktree add -b ${branchName} ${JSON.stringify(worktreeDir)}`,
+              { cwd: repoRoot, stdio: 'pipe' }
+            );
+            worktreePath = worktreeDir;
+            worktreeBranch = branchName;
+            effectiveCwd = worktreeDir;
+            log('agent', 'info', `worktree created: ${worktreeDir}`, { sessionId: shortId });
+
+            // Check if .rudi/ is in .gitignore
+            try {
+              const gitignorePath = path.join(repoRoot, '.gitignore');
+              const gitignoreContent = fs.existsSync(gitignorePath)
+                ? fs.readFileSync(gitignorePath, 'utf-8')
+                : '';
+              if (!gitignoreContent.split('\n').some(line => line.trim() === '.rudi/' || line.trim() === '.rudi')) {
+                gitignoreWarning = true;
+              }
+            } catch {
+              gitignoreWarning = true;
+            }
+          } catch (wtErr) {
+            log('agent', 'warn', `worktree creation failed, using shared cwd: ${wtErr.message}`, { sessionId: shortId });
+            // Non-fatal — fall back to shared cwd
+          }
+        } else {
+          // Resume — check DB for existing worktree
+          try {
+            const db = getDb();
+            const row = db.prepare(
+              'SELECT worktree_path, worktree_branch, base_branch FROM session_runtime_state WHERE session_id = ? OR resume_session_id = ?'
+            ).get(resumeSessionId, resumeSessionId);
+
+            if (row?.worktree_path && fs.existsSync(row.worktree_path)) {
+              worktreePath = row.worktree_path;
+              worktreeBranch = row.worktree_branch;
+              baseBranch = row.base_branch || currentBranch;
+              effectiveCwd = row.worktree_path;
+              log('agent', 'info', `resumed into existing worktree: ${worktreePath}`, { sessionId: shortId });
+            } else if (row?.worktree_branch) {
+              // Worktree dir missing but branch exists — try recreating
+              const worktreeDir = path.join(repoRoot, '.rudi', 'worktrees', `session-${shortId}`);
+              try {
+                fs.mkdirSync(path.join(repoRoot, '.rudi', 'worktrees'), { recursive: true });
+                execSync(
+                  `git worktree add ${JSON.stringify(worktreeDir)} ${row.worktree_branch}`,
+                  { cwd: repoRoot, stdio: 'pipe' }
+                );
+                worktreePath = worktreeDir;
+                worktreeBranch = row.worktree_branch;
+                baseBranch = row.base_branch || currentBranch;
+                effectiveCwd = worktreeDir;
+                log('agent', 'info', `recreated worktree from existing branch: ${worktreeDir}`, { sessionId: shortId });
+              } catch (recreateErr) {
+                log('agent', 'warn', `worktree recreate failed: ${recreateErr.message}`, { sessionId: shortId });
+              }
+            }
+          } catch (dbErr) {
+            log('agent', 'warn', `worktree DB lookup failed: ${dbErr.message}`, { sessionId: shortId });
+          }
+        }
+      }
+
       log('agent', 'info', 'spawning persistent agent', {
-        sessionId: sessionId.slice(0, 8),
+        sessionId: shortId,
         binary: binaryPath,
-        cwd: workingDir,
+        cwd: effectiveCwd,
+        worktreeBranch,
         prompt: prompt.slice(0, 80),
         resumeSessionId: resumeSessionId || null,
       });
@@ -570,14 +662,16 @@ export function createAgentHandler({
         const now = new Date().toISOString();
         db.prepare(`
           INSERT INTO session_runtime_state
-            (session_id, status, provider, resume_session_id, cwd, started_at, updated_at)
-          VALUES (?, 'starting', 'claude', ?, ?, ?, ?)
-        `).run(sessionId, resumeSessionId || null, workingDir, now, now);
+            (session_id, status, provider, resume_session_id, cwd, started_at, updated_at,
+             worktree_path, worktree_branch, project_root, base_branch)
+          VALUES (?, 'starting', 'claude', ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(sessionId, resumeSessionId || null, effectiveCwd, now, now,
+               worktreePath, worktreeBranch, repoRoot, baseBranch);
       });
 
       try {
         const proc = spawn(binaryPath, args, {
-          cwd: workingDir,
+          cwd: effectiveCwd,
           env,
           stdio: ['pipe', 'pipe', 'pipe'],
         });
@@ -591,7 +685,10 @@ export function createAgentHandler({
           turnActive: true,
           startedAt: Date.now(),
           lastActivityAt: Date.now(),
-          cwd: workingDir,
+          cwd: effectiveCwd,
+          worktreePath,
+          worktreeBranch,
+          baseBranch,
           _terminationReason: null,
           // Per-turn metric accumulators (reset after each result event)
           _turnPrompt: prompt,
@@ -607,7 +704,7 @@ export function createAgentHandler({
 
         log('agent', 'info', `process spawned pid=${proc.pid}`, { sessionId: sessionId.slice(0, 8) });
 
-        const inputMsg = JSON.stringify({ type: 'user', message: { role: 'user', content: buildUserContent(prompt, images, workingDir) } }) + '\n';
+        const inputMsg = JSON.stringify({ type: 'user', message: { role: 'user', content: buildUserContent(prompt, images, effectiveCwd) } }) + '\n';
         proc.stdin.write(inputMsg);
         log('agent', 'debug', 'wrote first prompt to stdin', { sessionId: sessionId.slice(0, 8) });
 
@@ -843,7 +940,17 @@ export function createAgentHandler({
           agentProcesses.delete(sessionId);
         });
 
-        json(res, { sessionId, provider: 'claude', cwd: workingDir });
+        json(res, {
+          sessionId,
+          provider: 'claude',
+          cwd: effectiveCwd,
+          currentBranch,
+          repoRoot,
+          worktreeBranch: worktreeBranch || undefined,
+          projectCwd: worktreePath ? workingDir : undefined,
+          baseBranch: baseBranch || undefined,
+          gitignoreWarning: gitignoreWarning || undefined,
+        });
         broadcastProcessCount();
       } catch (err) {
         dropResumeMappingsForSession(sessionId);
@@ -1029,6 +1136,125 @@ export function createAgentHandler({
       }
       log('agent', 'warn', `kill-all: terminated ${killed.length} processes`);
       json(res, { ok: true, killed: killed.length });
+      return true;
+    }
+
+    // POST /agent/cleanup-worktree — safely remove a session's worktree
+    if (req.method === 'POST' && url.pathname === '/agent/cleanup-worktree') {
+      const body = await readBody(req);
+      if (!body.sessionId) return error(res, 'sessionId required');
+
+      try {
+        const db = getDb();
+        const row = db.prepare(
+          'SELECT worktree_path, worktree_branch, base_branch, project_root FROM session_runtime_state WHERE session_id = ?'
+        ).get(body.sessionId);
+
+        if (!row?.worktree_path) {
+          return json(res, { ok: false, reason: 'no_worktree', details: 'No worktree associated with this session' });
+        }
+
+        if (!fs.existsSync(row.worktree_path)) {
+          // Worktree dir already gone — clean up DB
+          db.prepare('UPDATE session_runtime_state SET worktree_path = NULL WHERE session_id = ?').run(body.sessionId);
+          return json(res, { ok: true });
+        }
+
+        const repoDir = row.project_root || path.dirname(path.dirname(path.dirname(row.worktree_path)));
+
+        // Check for uncommitted changes
+        let uncommitted = '';
+        try {
+          uncommitted = execSync('git status --porcelain', { cwd: row.worktree_path, stdio: 'pipe' }).toString().trim();
+        } catch {}
+
+        // Check for unmerged commits
+        let unmerged = '';
+        if (row.worktree_branch && row.base_branch) {
+          try {
+            unmerged = execSync(
+              `git log ${row.base_branch}..${row.worktree_branch} --oneline`,
+              { cwd: repoDir, stdio: 'pipe' }
+            ).toString().trim();
+          } catch {}
+        }
+
+        if ((uncommitted || unmerged) && !body.force) {
+          const reason = uncommitted ? 'uncommitted_changes' : 'unmerged_commits';
+          const details = uncommitted
+            ? `Uncommitted changes:\n${uncommitted}`
+            : `Unmerged commits:\n${unmerged}`;
+          return json(res, { ok: false, reason, details });
+        }
+
+        // Remove worktree
+        try {
+          if (body.force) {
+            execSync(`git worktree remove --force ${JSON.stringify(row.worktree_path)}`, { cwd: repoDir, stdio: 'pipe' });
+          } else {
+            execSync(`git worktree remove ${JSON.stringify(row.worktree_path)}`, { cwd: repoDir, stdio: 'pipe' });
+          }
+        } catch (wtErr) {
+          return json(res, { ok: false, reason: 'remove_failed', details: wtErr.message });
+        }
+
+        // Try to delete the branch (only with -d, fails if unmerged)
+        let branchRetained = false;
+        if (row.worktree_branch && !body.force) {
+          try {
+            execSync(`git branch -d ${row.worktree_branch}`, { cwd: repoDir, stdio: 'pipe' });
+          } catch {
+            branchRetained = true; // Branch has unmerged commits, keep it
+          }
+        } else if (row.worktree_branch && body.force) {
+          // Force mode: worktree removed but branch always retained
+          branchRetained = true;
+        }
+
+        // Update DB
+        db.prepare('UPDATE session_runtime_state SET worktree_path = NULL WHERE session_id = ?').run(body.sessionId);
+
+        json(res, { ok: true, branchRetained, branch: branchRetained ? row.worktree_branch : null });
+        log('agent', 'info', `worktree cleaned up for session ${body.sessionId.slice(0, 8)}`, { branchRetained });
+      } catch (err) {
+        error(res, `Cleanup failed: ${err.message}`, 500);
+      }
+      return true;
+    }
+
+    // POST /agent/delete-worktree-branch — explicitly delete a retained worktree branch
+    if (req.method === 'POST' && url.pathname === '/agent/delete-worktree-branch') {
+      const body = await readBody(req);
+      if (!body.sessionId) return error(res, 'sessionId required');
+
+      try {
+        const db = getDb();
+        const row = db.prepare(
+          'SELECT worktree_branch, project_root FROM session_runtime_state WHERE session_id = ?'
+        ).get(body.sessionId);
+
+        if (!row?.worktree_branch) {
+          return json(res, { ok: false, reason: 'no_branch', details: 'No worktree branch for this session' });
+        }
+
+        const repoDir = row.project_root;
+        if (!repoDir) {
+          return json(res, { ok: false, reason: 'no_repo', details: 'No project root recorded' });
+        }
+
+        try {
+          // Use -d (lowercase) — fails safely if unmerged
+          execSync(`git branch -d ${row.worktree_branch}`, { cwd: repoDir, stdio: 'pipe' });
+        } catch (brErr) {
+          return json(res, { ok: false, reason: 'branch_unmerged', details: brErr.message });
+        }
+
+        db.prepare('UPDATE session_runtime_state SET worktree_branch = NULL WHERE session_id = ?').run(body.sessionId);
+        json(res, { ok: true });
+        log('agent', 'info', `worktree branch deleted for session ${body.sessionId.slice(0, 8)}`, { branch: row.worktree_branch });
+      } catch (err) {
+        error(res, `Branch delete failed: ${err.message}`, 500);
+      }
       return true;
     }
 

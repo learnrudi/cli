@@ -486,6 +486,57 @@ async function readSessionMessages(sessionId) {
 }
 
 /**
+ * Read session messages with pagination support.
+ * Returns a tail window of parsed messages plus a cursor for loading older pages.
+ * If no pagination params are given, falls back to full load.
+ */
+async function readSessionMessagesPaginated(sessionId, { tail, before } = {}) {
+  const filePath = await findSessionFile(sessionId);
+  if (!filePath) {
+    throw new Error(`Session not found: ${sessionId}`);
+  }
+
+  const content = await fsp.readFile(filePath, 'utf-8');
+  const rawLines = content.split('\n').filter(Boolean);
+  const totalCount = rawLines.length;
+  const byteOffset = Buffer.byteLength(content, 'utf-8');
+
+  // If no pagination requested, return full result (backward compat)
+  if (!tail && before === undefined) {
+    const messages = parseSessionMessagesFromJsonl(content);
+    const usage = extractUsageFromJsonl(content);
+    return { messages, byteOffset, usage, filePath, totalCount };
+  }
+
+  // Determine line range: we want `tail` lines ending at `before` (exclusive)
+  const endLine = before !== undefined ? Math.min(before, totalCount) : totalCount;
+  const pageSize = tail || 50;
+  const startLine = Math.max(0, endLine - pageSize);
+
+  // Extract the subset of lines
+  const subset = rawLines.slice(startLine, endLine);
+  const subsetContent = subset.join('\n');
+  const messages = parseSessionMessagesFromJsonl(subsetContent);
+
+  // Build cursor and hasMore
+  const hasMore = startLine > 0;
+  const beforeCursor = startLine;
+
+  // Extract usage only on full load (first page from bottom)
+  const usage = before === undefined ? extractUsageFromJsonl(content) : null;
+
+  return {
+    messages,
+    byteOffset,
+    usage,
+    filePath,
+    before: beforeCursor,
+    hasMore,
+    totalCount,
+  };
+}
+
+/**
  * Walk raw JSONL lines and sum token usage from message.usage fields.
  * Also counts turns (user→assistant transitions).
  */
@@ -1145,12 +1196,19 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
       return true;
     }
 
-    // GET /sessions/:id/messages
+    // GET /sessions/:id/messages?tail=N&before=lineIndex
     const msgMatch = url.pathname.match(/^\/sessions\/([^/]+)\/messages$/);
     if (req.method === 'GET' && msgMatch) {
       const sessionId = decodeURIComponent(msgMatch[1]);
+      const tailParam = url.searchParams.get('tail');
+      const beforeParam = url.searchParams.get('before');
+      const paginationOpts = {};
+      if (tailParam) paginationOpts.tail = parseInt(tailParam, 10);
+      if (beforeParam) paginationOpts.before = parseInt(beforeParam, 10);
       try {
-        const { messages, byteOffset, usage, filePath } = await readSessionMessages(sessionId);
+        const result = await readSessionMessagesPaginated(sessionId, paginationOpts);
+        const { messages, byteOffset, filePath } = result;
+        const usage = result.usage;
 
         // Calculate cost from model pricing if no result-event cost
         if (usage && !usage.totalCostUsd && usage.model) {
@@ -1179,7 +1237,14 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
           }
         }
 
-        json(res, { messages, byteOffset, usage });
+        json(res, {
+          messages,
+          byteOffset,
+          usage,
+          before: result.before,
+          hasMore: result.hasMore,
+          totalCount: result.totalCount,
+        });
 
         // Lazy DB backfill: if we extracted usage and no DB row exists, create one
         if (usage) {

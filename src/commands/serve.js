@@ -1200,6 +1200,60 @@ export async function cmdServe(args, flags) {
     maxConcurrent: MAX_CONCURRENT,
   });
 
+  // Conservative orphan worktree cleanup on startup
+  try {
+    const db = getDb();
+    const orphans = db.prepare(`
+      SELECT session_id, worktree_path, worktree_branch, base_branch, project_root
+      FROM session_runtime_state
+      WHERE worktree_path IS NOT NULL
+        AND status IN ('completed', 'error', 'stopped', 'crashed')
+    `).all();
+
+    for (const row of orphans) {
+      if (!row.worktree_path || !fs.existsSync(row.worktree_path)) {
+        // Dir already gone — clear DB reference
+        db.prepare('UPDATE session_runtime_state SET worktree_path = NULL WHERE session_id = ?').run(row.session_id);
+        continue;
+      }
+
+      try {
+        const uncommitted = execSync('git status --porcelain', { cwd: row.worktree_path, stdio: 'pipe' }).toString().trim();
+        if (uncommitted) {
+          log('serve', 'warn', `orphan worktree has uncommitted changes, skipping: ${row.worktree_path}`);
+          continue;
+        }
+
+        let unmerged = '';
+        if (row.worktree_branch && row.base_branch && row.project_root) {
+          try {
+            unmerged = execSync(
+              `git log ${row.base_branch}..${row.worktree_branch} --oneline`,
+              { cwd: row.project_root, stdio: 'pipe' }
+            ).toString().trim();
+          } catch {}
+        }
+        if (unmerged) {
+          log('serve', 'warn', `orphan worktree has unmerged commits, skipping: ${row.worktree_path}`);
+          continue;
+        }
+
+        // Fully clean — remove
+        const repoDir = row.project_root || path.dirname(path.dirname(path.dirname(row.worktree_path)));
+        execSync(`git worktree remove ${JSON.stringify(row.worktree_path)}`, { cwd: repoDir, stdio: 'pipe' });
+        if (row.worktree_branch) {
+          try { execSync(`git branch -d ${row.worktree_branch}`, { cwd: repoDir, stdio: 'pipe' }); } catch {}
+        }
+        db.prepare('UPDATE session_runtime_state SET worktree_path = NULL, worktree_branch = NULL WHERE session_id = ?').run(row.session_id);
+        log('serve', 'info', `cleaned up orphan worktree: ${row.worktree_path}`);
+      } catch (err) {
+        log('serve', 'warn', `orphan worktree cleanup failed for ${row.worktree_path}: ${err.message}`);
+      }
+    }
+  } catch (err) {
+    log('serve', 'warn', `orphan worktree cleanup sweep failed: ${err.message}`);
+  }
+
   // Start listening
   server.listen(requestedPort, '127.0.0.1', () => {
     const actualPort = server.address().port;

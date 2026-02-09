@@ -4,7 +4,7 @@
 
 import { getDb } from './index.js';
 
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 export const SCHEMA_SQL = `
 -- Schema version tracking
@@ -348,7 +348,11 @@ CREATE TABLE IF NOT EXISTS session_runtime_state (
   cost_total REAL NOT NULL DEFAULT 0,
   tokens_total INTEGER NOT NULL DEFAULT 0,
   unseen_completion INTEGER NOT NULL DEFAULT 0,
-  last_error TEXT
+  last_error TEXT,
+  worktree_path TEXT,
+  worktree_branch TEXT,
+  project_root TEXT,
+  base_branch TEXT
 );
 
 CREATE TABLE IF NOT EXISTS session_runtime_events (
@@ -848,6 +852,11 @@ export function applySchemaUpdates(db) {
     ensureColumn(db, 'session_runtime_state', 'turn_count', 'ALTER TABLE session_runtime_state ADD COLUMN turn_count INTEGER NOT NULL DEFAULT 0');
     ensureColumn(db, 'session_runtime_state', 'cwd', 'ALTER TABLE session_runtime_state ADD COLUMN cwd TEXT');
     ensureColumn(db, 'session_runtime_state', 'resume_session_id', 'ALTER TABLE session_runtime_state ADD COLUMN resume_session_id TEXT');
+    // Worktree isolation columns (v8)
+    ensureColumn(db, 'session_runtime_state', 'worktree_path', 'ALTER TABLE session_runtime_state ADD COLUMN worktree_path TEXT');
+    ensureColumn(db, 'session_runtime_state', 'worktree_branch', 'ALTER TABLE session_runtime_state ADD COLUMN worktree_branch TEXT');
+    ensureColumn(db, 'session_runtime_state', 'project_root', 'ALTER TABLE session_runtime_state ADD COLUMN project_root TEXT');
+    ensureColumn(db, 'session_runtime_state', 'base_branch', 'ALTER TABLE session_runtime_state ADD COLUMN base_branch TEXT');
   }
 
   ensureTable(db, 'session_runtime_events', `
@@ -1233,6 +1242,11 @@ function runMigrations(db, from, to) {
           DROP TABLE _srs_old;
         `);
       }
+      applySchemaUpdates(db);
+    },
+
+    // Version 8: Add worktree isolation columns to session_runtime_state
+    8: (db) => {
       applySchemaUpdates(db);
     }
   };
