@@ -300,7 +300,7 @@ export function createIdleReaper({
   broadcast,
   log,
   idleTimeoutMs = 10 * 60 * 1000, // 10 min default
-  maxConcurrent = 3,
+  maxConcurrent = 6,
 }) {
   const interval = setInterval(() => {
     const now = Date.now();
@@ -389,7 +389,7 @@ export function createAgentHandler({
   agentProcesses,
   queueSessionsUpdated,
   resumeSessionIndex = new Map(),
-  maxConcurrent = 3,
+  maxConcurrent = 6,
 }) {
   const dropResumeMappingsForSession = (targetSessionId) => {
     for (const [resumeId, mappedSessionId] of resumeSessionIndex.entries()) {
@@ -441,14 +441,35 @@ export function createAgentHandler({
     });
   };
 
+  /** Save pasted images to .rudi/images/ and return augmented prompt text. */
+  function buildUserContent(text, images, cwd) {
+    if (!images || images.length === 0) return text;
+    const imgDir = path.join(cwd || os.homedir(), '.rudi', 'images');
+    fs.mkdirSync(imgDir, { recursive: true });
+    const paths = [];
+    for (const img of images) {
+      const ext = img.mediaType === 'image/jpeg' ? '.jpg'
+        : img.mediaType === 'image/gif' ? '.gif'
+        : img.mediaType === 'image/webp' ? '.webp'
+        : '.png';
+      const filename = `paste-${Date.now()}-${crypto.randomUUID().slice(0, 8)}${ext}`;
+      const filePath = path.join(imgDir, filename);
+      fs.writeFileSync(filePath, Buffer.from(img.data, 'base64'));
+      paths.push(filePath);
+      log('agent', 'info', `saved pasted image to ${filePath}`, { size: img.data.length, mediaType: img.mediaType });
+    }
+    const imageRefs = paths.map((p) => `[Pasted image: ${p}]`).join('\n');
+    return text ? `${imageRefs}\n\n${text}` : imageRefs;
+  }
+
   return async function handleAgent(req, res, url) {
     // POST /agent/start — spawn persistent process with streaming stdin/stdout
     if (req.method === 'POST' && url.pathname === '/agent/start') {
       const body = await readBody(req);
       log('agent', 'info', 'received /agent/start request', { bodyKeys: Object.keys(body), resumeSessionId: body.resumeSessionId || null });
-      const { prompt, model, systemPrompt, resumeSessionId, cwd, permissionMode, planMode } = body;
+      const { prompt, model, systemPrompt, resumeSessionId, cwd, permissionMode, planMode, images } = body;
 
-      if (!prompt) return error(res, 'prompt required');
+      if (!prompt && (!images || images.length === 0)) return error(res, 'prompt required');
 
       // If resuming a session that already has a running process, reuse it
       // instead of spawning a duplicate (which would corrupt the JSONL file).
@@ -474,7 +495,7 @@ export function createAgentHandler({
               UPDATE session_runtime_state SET updated_at = ? WHERE session_id = ?
             `).run(new Date().toISOString(), existingId);
           });
-          const inputMsg = JSON.stringify({ type: 'user', message: { role: 'user', content: prompt } }) + '\n';
+          const inputMsg = JSON.stringify({ type: 'user', message: { role: 'user', content: buildUserContent(prompt, images, entry.cwd) } }) + '\n';
           entry.proc.stdin.write(inputMsg);
           broadcast('agent:event', {
             sessionId: existingId,
@@ -586,7 +607,7 @@ export function createAgentHandler({
 
         log('agent', 'info', `process spawned pid=${proc.pid}`, { sessionId: sessionId.slice(0, 8) });
 
-        const inputMsg = JSON.stringify({ type: 'user', message: { role: 'user', content: prompt } }) + '\n';
+        const inputMsg = JSON.stringify({ type: 'user', message: { role: 'user', content: buildUserContent(prompt, images, workingDir) } }) + '\n';
         proc.stdin.write(inputMsg);
         log('agent', 'debug', 'wrote first prompt to stdin', { sessionId: sessionId.slice(0, 8) });
 
@@ -729,8 +750,13 @@ export function createAgentHandler({
               }
             } catch {
               log('agent', 'debug', `stdout non-json: ${line.slice(0, 120)}`, { sessionId: sessionId.slice(0, 8) });
-              const isPermissionPrompt = /allow|deny|permission|approve/i.test(line) &&
-                /\b(y|n|a|yes|no|always)\b/i.test(line);
+              const trimmed = line.trim();
+              const isPermissionPrompt =
+                // Standard tool permission prompts (Allow Bash? y/n/a)
+                (/allow|deny|permission|approve/i.test(trimmed) && /\b(y|n|a|yes|no|always)\b/i.test(trimmed)) ||
+                // Catch-all: any short non-JSON line ending with "?" is likely
+                // an interactive CLI prompt (plan mode, workspace trust, etc.)
+                (trimmed.length < 200 && trimmed.endsWith('?'));
               if (isPermissionPrompt) {
                 log('agent', 'info', 'detected permission prompt', { sessionId: sessionId.slice(0, 8), line: line.slice(0, 200) });
                 broadcast('agent:event', {
@@ -855,7 +881,7 @@ export function createAgentHandler({
     // POST /agent/send
     if (req.method === 'POST' && url.pathname === '/agent/send') {
       const body = await readBody(req);
-      if (!body.sessionId || !body.message) return error(res, 'sessionId and message required');
+      if (!body.sessionId || (!body.message && (!body.images || body.images.length === 0))) return error(res, 'sessionId and message required');
 
       const entry = agentProcesses.get(body.sessionId);
       if (!entry || !entry.proc || entry.proc.killed) {
@@ -877,7 +903,7 @@ export function createAgentHandler({
         entry._turnCacheReadTokens = 0;
         entry._turnCacheCreationTokens = 0;
         entry._turnToolsUsed = [];
-        const inputMsg = JSON.stringify({ type: 'user', message: { role: 'user', content: body.message } }) + '\n';
+        const inputMsg = JSON.stringify({ type: 'user', message: { role: 'user', content: buildUserContent(body.message, body.images, entry.cwd) } }) + '\n';
         entry.proc.stdin.write(inputMsg);
         json(res, { ok: true });
       } catch (err) {

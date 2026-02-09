@@ -72,6 +72,7 @@ function checkAuth(req, token) {
 function json(res, data, status = 200) {
   res.writeHead(status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
   res.end(JSON.stringify(data));
+  return true;
 }
 
 function error(res, message, status = 400) {
