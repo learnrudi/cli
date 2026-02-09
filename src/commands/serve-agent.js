@@ -605,6 +605,8 @@ export function createAgentHandler({
               );
             } catch {
               // Branch already checked out (expected — main repo is on it)
+              // Clean up any partial directory from the failed attempt
+              try { fs.rmSync(worktreeDir, { recursive: true, force: true }); } catch {}
               // Collision fallback: currentBranch/session-<id>
               branchName = `${currentBranch}/session-${shortId}`;
               execSync(
@@ -613,9 +615,14 @@ export function createAgentHandler({
               );
             }
 
-            worktreePath = worktreeDir;
-            worktreeBranch = branchName;
-            effectiveCwd = worktreeDir;
+            // Verify worktree directory actually exists before using it
+            if (fs.existsSync(worktreeDir)) {
+              worktreePath = worktreeDir;
+              worktreeBranch = branchName;
+              effectiveCwd = worktreeDir;
+            } else {
+              log('agent', 'warn', `worktree dir missing after creation, using shared cwd`, { sessionId: shortId });
+            }
             log('agent', 'info', `worktree created on branch ${branchName}: ${worktreeDir}`, { sessionId: shortId });
 
             // Check if .rudi/ is in .gitignore
@@ -673,10 +680,36 @@ export function createAgentHandler({
         }
       }
 
+      // Node spawn can throw ENOENT when cwd doesn't exist. Validate and
+      // fall back before spawning so binary-not-found and cwd-not-found are distinct.
+      let spawnCwd = effectiveCwd;
+      try {
+        const st = fs.statSync(spawnCwd);
+        if (!st.isDirectory()) throw new Error('not_a_directory');
+      } catch {
+        const cwdFallbacks = [workingDir, repoRoot, process.env.HOME, os.homedir()]
+          .filter((p) => typeof p === 'string' && p.length > 0);
+        const fallback = cwdFallbacks.find((p) => {
+          try {
+            return fs.statSync(p).isDirectory();
+          } catch {
+            return false;
+          }
+        });
+        if (fallback) {
+          log('agent', 'warn', `spawn cwd missing, falling back to: ${fallback}`, {
+            sessionId: shortId,
+            missingCwd: effectiveCwd,
+          });
+          spawnCwd = fallback;
+          effectiveCwd = fallback;
+        }
+      }
+
       log('agent', 'info', 'spawning persistent agent', {
         sessionId: shortId,
         binary: binaryPath,
-        cwd: effectiveCwd,
+        cwd: spawnCwd,
         worktreeBranch,
         prompt: prompt.slice(0, 80),
         resumeSessionId: resumeSessionId || null,
@@ -696,7 +729,7 @@ export function createAgentHandler({
 
       try {
         const proc = spawn(binaryPath, args, {
-          cwd: effectiveCwd,
+          cwd: spawnCwd,
           env,
           stdio: ['pipe', 'pipe', 'pipe'],
         });
