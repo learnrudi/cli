@@ -570,7 +570,7 @@ export function createAgentHandler({
         // Not a git repo — leave null
       }
 
-      // Worktree isolation: create per-session worktree for new sessions in git repos
+      // Worktree isolation: branch-attached, named after the current branch
       const shortId = sessionId.slice(0, 8);
       let worktreePath = null;
       let worktreeBranch = null;
@@ -580,19 +580,32 @@ export function createAgentHandler({
 
       if (isGitRepo && repoRoot) {
         if (!resumeSessionId) {
-          // New session — create a worktree
+          // New session — create worktree on the current branch (or collision fallback)
           const worktreeDir = path.join(repoRoot, '.rudi', 'worktrees', `session-${shortId}`);
-          const branchName = `rudi/session-${shortId}`;
           try {
             fs.mkdirSync(path.join(repoRoot, '.rudi', 'worktrees'), { recursive: true });
-            execSync(
-              `git worktree add -b ${branchName} ${JSON.stringify(worktreeDir)}`,
-              { cwd: repoRoot, stdio: 'pipe' }
-            );
+
+            // Try the current branch directly first (works if not checked out elsewhere)
+            let branchName = currentBranch;
+            try {
+              execSync(
+                `git worktree add ${JSON.stringify(worktreeDir)} ${branchName}`,
+                { cwd: repoRoot, stdio: 'pipe' }
+              );
+            } catch {
+              // Branch already checked out (expected — main repo is on it)
+              // Collision fallback: currentBranch/session-<id>
+              branchName = `${currentBranch}/session-${shortId}`;
+              execSync(
+                `git worktree add -b ${branchName} ${JSON.stringify(worktreeDir)}`,
+                { cwd: repoRoot, stdio: 'pipe' }
+              );
+            }
+
             worktreePath = worktreeDir;
             worktreeBranch = branchName;
             effectiveCwd = worktreeDir;
-            log('agent', 'info', `worktree created: ${worktreeDir}`, { sessionId: shortId });
+            log('agent', 'info', `worktree created on branch ${branchName}: ${worktreeDir}`, { sessionId: shortId });
 
             // Check if .rudi/ is in .gitignore
             try {
