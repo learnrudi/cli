@@ -580,10 +580,21 @@ export function createAgentHandler({
 
       if (isGitRepo && repoRoot) {
         if (!resumeSessionId) {
-          // New session — create worktree on the current branch (or collision fallback)
-          const worktreeDir = path.join(repoRoot, '.rudi', 'worktrees', `session-${shortId}`);
+          // New session — create worktree named after the branch
+          // Sanitize branch for use as directory name (replace / with -)
+          const safeBranchDir = currentBranch.replace(/\//g, '-');
+          const worktreesBase = path.join(repoRoot, '.rudi', 'worktrees');
+
+          // Find unique directory name: branch, branch-2, branch-3, ...
+          let worktreeDir = path.join(worktreesBase, safeBranchDir);
+          if (fs.existsSync(worktreeDir)) {
+            let suffix = 2;
+            while (fs.existsSync(path.join(worktreesBase, `${safeBranchDir}-${suffix}`))) suffix++;
+            worktreeDir = path.join(worktreesBase, `${safeBranchDir}-${suffix}`);
+          }
+
           try {
-            fs.mkdirSync(path.join(repoRoot, '.rudi', 'worktrees'), { recursive: true });
+            fs.mkdirSync(worktreesBase, { recursive: true });
 
             // Try the current branch directly first (works if not checked out elsewhere)
             let branchName = currentBranch;
@@ -639,7 +650,8 @@ export function createAgentHandler({
               log('agent', 'info', `resumed into existing worktree: ${worktreePath}`, { sessionId: shortId });
             } else if (row?.worktree_branch) {
               // Worktree dir missing but branch exists — try recreating
-              const worktreeDir = path.join(repoRoot, '.rudi', 'worktrees', `session-${shortId}`);
+              const recreateName = row.worktree_branch.replace(/\//g, '-');
+              const worktreeDir = path.join(repoRoot, '.rudi', 'worktrees', recreateName);
               try {
                 fs.mkdirSync(path.join(repoRoot, '.rudi', 'worktrees'), { recursive: true });
                 execSync(
