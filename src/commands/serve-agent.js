@@ -607,8 +607,10 @@ export function createAgentHandler({
               // Branch already checked out (expected — main repo is on it)
               // Clean up any partial directory from the failed attempt
               try { fs.rmSync(worktreeDir, { recursive: true, force: true }); } catch {}
-              // Collision fallback: currentBranch/session-<id>
-              branchName = `${currentBranch}/session-${shortId}`;
+              // Collision fallback: sanitize slashes to dashes to avoid git ref conflict
+              // (git can't have both refs/heads/foo and refs/heads/foo/bar)
+              const safeBase = currentBranch.replace(/\//g, '-');
+              branchName = `${safeBase}-session-${shortId}`;
               execSync(
                 `git worktree add -b ${branchName} ${JSON.stringify(worktreeDir)}`,
                 { cwd: repoRoot, stdio: 'pipe' }
