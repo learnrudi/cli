@@ -250,18 +250,21 @@ export function createGitHandler({ readBody, error, json }) {
         let current = '';
 
         for (const rawLine of output.split('\n')) {
-          const line = rawLine.trimEnd();
+          const line = rawLine.trim();
           if (!line) continue;
-          if (line.startsWith('* ')) {
-            const name = line.slice(2).trim();
-            if (name) {
-              current = name;
-              branches.push(name);
-            }
-          } else {
-            const name = line.trim();
-            if (name) branches.push(name);
+
+          // git branch markers:
+          //   "* <name>" -> current branch in this worktree
+          //   "+ <name>" -> checked out in another worktree
+          const marker = line[0];
+          const hasMarker = (marker === '*' || marker === '+') && line[1] === ' ';
+          const name = hasMarker ? line.slice(2).trim() : line;
+          if (!name) continue;
+
+          if (marker === '*') {
+            current = name;
           }
+          branches.push(name);
         }
 
         json(res, { branches, current });

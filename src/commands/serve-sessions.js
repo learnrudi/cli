@@ -1135,13 +1135,63 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
       }
     }
 
-    projects.sort((a, b) => {
+    // Merge worktree projects into their parent project.
+    // Claude CLI records the worktree cwd as the project path, creating separate
+    // entries like /repo/.rudi/worktrees/main. Fold those sessions back into /repo.
+    const worktreeMarker = '/.rudi/worktrees/';
+    const mergedProjects = [];
+    const parentMap = new Map(); // realRoot -> index in mergedProjects
+
+    for (const proj of projects) {
+      const op = proj.originalPath || '';
+      const wtIdx = op.indexOf(worktreeMarker);
+      if (wtIdx !== -1) {
+        // This is a worktree project — merge into parent
+        const realRoot = op.slice(0, wtIdx);
+        if (parentMap.has(realRoot)) {
+          // Parent already exists — merge sessions
+          const parent = mergedProjects[parentMap.get(realRoot)];
+          parent.sessions.push(...proj.sessions);
+        } else {
+          // Parent not seen yet — rewrite this entry as the parent
+          const realName = path.basename(realRoot);
+          parentMap.set(realRoot, mergedProjects.length);
+          mergedProjects.push({
+            ...proj,
+            name: realName,
+            originalPath: realRoot,
+          });
+        }
+      } else {
+        // Regular project
+        if (parentMap.has(op)) {
+          // Already have an entry from a worktree — merge into it
+          const existing = mergedProjects[parentMap.get(op)];
+          existing.sessions.push(...proj.sessions);
+          // Prefer the real project's metadata
+          existing.path = proj.path;
+          existing.gitStatus = proj.gitStatus;
+        } else {
+          parentMap.set(op, mergedProjects.length);
+          mergedProjects.push(proj);
+        }
+      }
+    }
+
+    // Re-sort sessions within each project after merging
+    for (const proj of mergedProjects) {
+      proj.sessions.sort((a, b) =>
+        new Date(b.modified).getTime() - new Date(a.modified).getTime()
+      );
+    }
+
+    mergedProjects.sort((a, b) => {
       const aTime = a.sessions[0]?.modified || '';
       const bTime = b.sessions[0]?.modified || '';
       return new Date(bTime).getTime() - new Date(aTime).getTime();
     });
 
-    return projects;
+    return mergedProjects;
   }
 
   async function getProjectsWithSessionsCached() {
