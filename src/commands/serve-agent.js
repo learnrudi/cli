@@ -545,6 +545,85 @@ export function createAgentHandler({
     return text ? `${imageRefs}\n\n${text}` : imageRefs;
   }
 
+  // ---------------------------------------------------------------------------
+  // Pending permission requests — hook-based flow
+  // ---------------------------------------------------------------------------
+  // Key: requestId (UUID), Value: { rudiSessionId, claudeSessionId, toolName,
+  //   toolInput, permissionSuggestions, decision, resolve, timer }
+  const pendingPermissions = new Map();
+  const sessionAlwaysAllowed = new Map(); // rudiSessionId → Set<toolName>
+
+  // ---------------------------------------------------------------------------
+  // ensurePermissionHook — install/update the hook script + settings.json entry
+  // ---------------------------------------------------------------------------
+  function ensurePermissionHook() {
+    const hookBinPath = path.join(PATHS.home, 'bins', 'permission-hook');
+    const hookScriptPath = path.join(PATHS.home, 'router', 'permission-hook.js');
+    const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+
+    // 1. Shell shim
+    if (!fs.existsSync(hookBinPath)) {
+      const nodeBin = path.join(PATHS.home, 'runtimes', 'node', 'bin', 'node');
+      const shim = [
+        '#!/bin/sh',
+        '# RUDI Permission Hook - Routes CLI tool approvals through RUDI sidecar',
+        `RUDI_HOME="$HOME/.rudi"`,
+        `NODE_BIN="${nodeBin}"`,
+        'if [ -x "$NODE_BIN" ]; then',
+        '  exec "$NODE_BIN" "$RUDI_HOME/router/permission-hook.js" "$@"',
+        'else',
+        '  exec node "$RUDI_HOME/router/permission-hook.js" "$@"',
+        'fi',
+        '',
+      ].join('\n');
+      fs.writeFileSync(hookBinPath, shim, { mode: 0o755 });
+      log('agent', 'info', 'installed permission hook shim', { path: hookBinPath });
+    }
+
+    // 2. Settings.json — add hooks.PreToolUse entry if not present
+    try {
+      let settings = {};
+      if (fs.existsSync(settingsPath)) {
+        settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+      }
+      if (!settings.hooks) settings.hooks = {};
+
+      // Clean up old PermissionRequest entry if present
+      if (settings.hooks.PermissionRequest) {
+        delete settings.hooks.PermissionRequest;
+      }
+
+      const existing = settings.hooks.PreToolUse;
+      const alreadyInstalled = Array.isArray(existing) && existing.some((entry) =>
+        entry.hooks?.some((h) => h.command && h.command.includes('permission-hook')),
+      );
+      if (!alreadyInstalled) {
+        settings.hooks.PreToolUse = [
+          ...(Array.isArray(existing) ? existing : []),
+          {
+            matcher: '',
+            hooks: [{
+              type: 'command',
+              command: hookBinPath,
+              timeout: 600,
+            }],
+          },
+        ];
+        fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+        log('agent', 'info', 'installed PreToolUse hook in Claude settings', { path: settingsPath });
+        log('agent', 'warn', 'Permission hook installed — you may need to approve it via /hooks in Claude CLI on first use');
+      }
+    } catch (err) {
+      log('agent', 'warn', `failed to update Claude settings for permission hook: ${err.message}`);
+    }
+  }
+
+  // Install hook on handler creation
+  try { ensurePermissionHook(); } catch (err) {
+    log('agent', 'warn', `ensurePermissionHook failed: ${err.message}`);
+  }
+
   return async function handleAgent(req, res, url) {
     // POST /agent/start — spawn persistent process with streaming stdin/stdout
     if (req.method === 'POST' && url.pathname === '/agent/start') {
@@ -633,6 +712,7 @@ export function createAgentHandler({
       }
 
       const args = [
+        '--print',
         '--output-format', 'stream-json',
         '--input-format', 'stream-json',
         '--verbose',
@@ -646,8 +726,10 @@ export function createAgentHandler({
       if (resumeSessionId) args.push('--resume', resumeSessionId);
       if (planMode) {
         args.push('--permission-mode', 'plan');
-      } else if (permissionMode && permissionMode !== 'default') {
-        args.push('--permission-mode', permissionMode);
+      } else {
+        // Always pass --permission-mode explicitly.
+        // The PreToolUse hook fires regardless of permission mode.
+        args.push('--permission-mode', permissionMode || 'default');
       }
 
       // Headless sessions cannot interactively approve MCP tool prompts.
@@ -1080,25 +1162,12 @@ export function createAgentHandler({
               }
             } catch {
               log('agent', 'debug', `stdout non-json: ${line.slice(0, 120)}`, { sessionId: sessionId.slice(0, 8) });
-              const trimmed = line.trim();
-              const isPermissionPrompt =
-                // Standard tool permission prompts (Allow Bash? y/n/a)
-                (/allow|deny|permission|approve/i.test(trimmed) && /\b(y|n|a|yes|no|always)\b/i.test(trimmed)) ||
-                // Catch-all: any short non-JSON line ending with "?" is likely
-                // an interactive CLI prompt (plan mode, workspace trust, etc.)
-                (trimmed.length < 200 && trimmed.endsWith('?'));
-              if (isPermissionPrompt) {
-                log('agent', 'info', 'detected permission prompt', { sessionId: sessionId.slice(0, 8), line: line.slice(0, 200) });
-                broadcast('agent:event', {
-                  sessionId,
-                  event: { type: 'system', subtype: 'permission_request', message: line },
-                });
-              } else {
-                broadcast('agent:event', {
-                  sessionId,
-                  event: { type: 'system', message: line },
-                });
-              }
+              // Permission detection is now handled by the PreToolUse hook —
+              // non-JSON stdout lines are just logged as system events
+              broadcast('agent:event', {
+                sessionId,
+                event: { type: 'system', message: line },
+              });
             }
           }
         });
@@ -1154,6 +1223,17 @@ export function createAgentHandler({
             });
           }
           dropResumeMappingsForSession(sessionId);
+          // Resolve any pending permission requests for this session with deny
+          for (const [reqId, pending] of pendingPermissions) {
+            if (pending.rudiSessionId === sessionId) {
+              const denyDecision = { permissionDecision: 'deny', reason: 'Session ended' };
+              if (pending.resolve) pending.resolve(denyDecision);
+              else pending.decision = denyDecision;
+              if (pending.timer) clearTimeout(pending.timer);
+              pendingPermissions.delete(reqId);
+            }
+          }
+          sessionAlwaysAllowed.delete(sessionId);
           agentProcesses.delete(sessionId);
           broadcastProcessCount();
           // Cleanup temp MCP config file
@@ -1304,21 +1384,179 @@ export function createAgentHandler({
       return true;
     }
 
-    // POST /agent/permission-response
+    // POST /agent/permission-request (called by PreToolUse hook script)
+    if (req.method === 'POST' && url.pathname === '/agent/permission-request') {
+      const body = await readBody(req);
+      const { rudiSessionId, claudeSessionId, requestId, toolName, toolInput } = body;
+      if (!requestId || !rudiSessionId) return error(res, 'requestId and rudiSessionId required');
+
+      log('agent', 'info', 'permission request from hook', {
+        requestId: requestId.slice(0, 8),
+        rudiSessionId: rudiSessionId.slice(0, 8),
+        toolName,
+      });
+
+      // Check if this tool is auto-allowed for this session ("Allow always")
+      const allowed = sessionAlwaysAllowed.get(rudiSessionId);
+      if (allowed && allowed.has(toolName)) {
+        log('agent', 'debug', 'auto-allowing tool (always allowed)', { toolName, sessionId: rudiSessionId.slice(0, 8) });
+        // Store decision immediately so the long-poll returns it
+        pendingPermissions.set(requestId, {
+          rudiSessionId,
+          claudeSessionId,
+          toolName,
+          toolInput,
+          decision: { permissionDecision: 'allow', reason: 'Auto-allowed by user in RUDI' },
+          resolve: null,
+          timer: null,
+        });
+        json(res, { ok: true });
+        return true;
+      }
+
+      // Format a human-readable message
+      let message = `Allow **${toolName || 'tool'}**?`;
+      if (toolInput) {
+        if (toolName === 'Bash' && toolInput.command) {
+          message = `Allow **Bash**: \`${String(toolInput.command).slice(0, 200)}\`?`;
+        } else if ((toolName === 'Write' || toolName === 'Edit') && toolInput.file_path) {
+          message = `Allow **${toolName}**: \`${toolInput.file_path}\`?`;
+        } else if (toolName === 'Read' && toolInput.file_path) {
+          message = `Allow **Read**: \`${toolInput.file_path}\`?`;
+        }
+      }
+
+      pendingPermissions.set(requestId, {
+        rudiSessionId,
+        claudeSessionId,
+        toolName,
+        toolInput,
+        decision: null,
+        resolve: null,
+        timer: null,
+      });
+
+      // Broadcast to frontend
+      broadcast('agent:event', {
+        sessionId: rudiSessionId,
+        event: {
+          type: 'system',
+          subtype: 'permission_request',
+          requestId,
+          toolName: toolName || 'unknown',
+          toolInput: toolInput || {},
+          message,
+        },
+      });
+
+      json(res, { ok: true });
+      return true;
+    }
+
+    // GET /agent/permission-decision/:requestId (long-poll, called by hook script)
+    const permDecisionMatch = url.pathname.match(/^\/agent\/permission-decision\/([^/]+)$/);
+    if (req.method === 'GET' && permDecisionMatch) {
+      const requestId = decodeURIComponent(permDecisionMatch[1]);
+      const pending = pendingPermissions.get(requestId);
+
+      if (!pending) {
+        json(res, { permissionDecision: 'deny', reason: 'Unknown permission request' });
+        return true;
+      }
+
+      // Decision already arrived before long-poll connected
+      if (pending.decision) {
+        const decision = pending.decision;
+        pendingPermissions.delete(requestId);
+        json(res, decision);
+        return true;
+      }
+
+      // Hold connection open until decision arrives or timeout
+      const TIMEOUT_MS = 590_000; // Just under CLI's 600s hook timeout
+      const timer = setTimeout(() => {
+        pending.resolve = null;
+        pendingPermissions.delete(requestId);
+        json(res, { permissionDecision: 'deny', reason: 'Timed out waiting for user decision' });
+      }, TIMEOUT_MS);
+
+      pending.timer = timer;
+      pending.resolve = (decision) => {
+        clearTimeout(timer);
+        pendingPermissions.delete(requestId);
+        json(res, decision);
+      };
+
+      // Handle client disconnect
+      req.on('close', () => {
+        clearTimeout(timer);
+        // Don't delete — frontend may still respond; keep pending for resolve
+        if (pending.resolve) pending.resolve = null;
+      });
+
+      return true;
+    }
+
+    // POST /agent/permission-response (called by frontend)
     if (req.method === 'POST' && url.pathname === '/agent/permission-response') {
       const body = await readBody(req);
-      if (!body.sessionId || !body.response) return error(res, 'sessionId and response required');
+      const { sessionId, response, requestId } = body;
+      if (!response) return error(res, 'response required');
 
-      const entry = agentProcesses.get(body.sessionId);
+      // Hook-based flow: resolve via requestId
+      if (requestId) {
+        const pending = pendingPermissions.get(requestId);
+        if (!pending) {
+          // Already resolved or expired — still return ok
+          json(res, { ok: true });
+          return true;
+        }
+
+        let decision;
+        if (response === 'y') {
+          decision = { permissionDecision: 'allow', reason: 'Approved by user in RUDI' };
+        } else if (response === 'a') {
+          decision = { permissionDecision: 'allow', reason: 'Always allowed by user in RUDI' };
+          // Track "always allow" for this session
+          if (pending.toolName) {
+            if (!sessionAlwaysAllowed.has(pending.rudiSessionId)) {
+              sessionAlwaysAllowed.set(pending.rudiSessionId, new Set());
+            }
+            sessionAlwaysAllowed.get(pending.rudiSessionId).add(pending.toolName);
+            log('agent', 'info', 'added to always-allowed', { toolName: pending.toolName, sessionId: pending.rudiSessionId.slice(0, 8) });
+          }
+        } else {
+          decision = { permissionDecision: 'deny', reason: 'Denied by user in RUDI' };
+        }
+
+        log('agent', 'info', 'permission response via hook', {
+          requestId: requestId.slice(0, 8),
+          response,
+          permissionDecision: decision.permissionDecision,
+        });
+
+        if (pending.resolve) {
+          pending.resolve(decision);
+        } else {
+          // Hook hasn't polled yet — store decision for when it does
+          pending.decision = decision;
+        }
+
+        json(res, { ok: true });
+        return true;
+      }
+
+      // Legacy fallback: stdin-based (kept for backwards compat but unlikely to fire)
+      if (!sessionId) return error(res, 'sessionId or requestId required');
+      const entry = agentProcesses.get(sessionId);
       if (!entry || !entry.proc || entry.proc.killed) {
         return error(res, 'No active process for this session', 400);
       }
 
-      const answer = body.response;
-      log('agent', 'info', 'sending permission response', { sessionId: body.sessionId.slice(0, 8), answer });
+      log('agent', 'info', 'sending permission response (legacy stdin)', { sessionId: sessionId.slice(0, 8), response });
       try {
         entry.lastActivityAt = Date.now();
-        entry.proc.stdin.write(answer + '\n');
+        entry.proc.stdin.write(response + '\n');
         json(res, { ok: true });
       } catch (err) {
         error(res, `Failed to send permission response: ${err.message}`, 500);
