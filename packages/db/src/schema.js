@@ -4,7 +4,7 @@
 
 import { getDb } from './index.js';
 
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 export const SCHEMA_SQL = `
 -- Schema version tracking
@@ -72,6 +72,13 @@ CREATE TABLE IF NOT EXISTS sessions (
   slug TEXT,
   version TEXT,
   user_type TEXT DEFAULT 'external',
+
+  -- Child session lifecycle
+  started_at TEXT,
+  ended_at TEXT,
+  exit_code INTEGER,
+  error_code TEXT,
+  error_message TEXT,
 
   -- Timestamps
   created_at TEXT NOT NULL,
@@ -594,6 +601,12 @@ export function applySchemaUpdates(db) {
       'user_type',
       "ALTER TABLE sessions ADD COLUMN user_type TEXT DEFAULT 'external'"
     );
+    // Child session lifecycle columns (v9)
+    ensureColumn(db, 'sessions', 'started_at', 'ALTER TABLE sessions ADD COLUMN started_at TEXT');
+    ensureColumn(db, 'sessions', 'ended_at', 'ALTER TABLE sessions ADD COLUMN ended_at TEXT');
+    ensureColumn(db, 'sessions', 'exit_code', 'ALTER TABLE sessions ADD COLUMN exit_code INTEGER');
+    ensureColumn(db, 'sessions', 'error_code', 'ALTER TABLE sessions ADD COLUMN error_code TEXT');
+    ensureColumn(db, 'sessions', 'error_message', 'ALTER TABLE sessions ADD COLUMN error_message TEXT');
 
     if (columnExists(db, 'sessions', 'session_type')) {
       db.exec("UPDATE sessions SET session_type = 'main' WHERE session_type = 'task'");
@@ -857,6 +870,7 @@ export function applySchemaUpdates(db) {
     ensureColumn(db, 'session_runtime_state', 'worktree_branch', 'ALTER TABLE session_runtime_state ADD COLUMN worktree_branch TEXT');
     ensureColumn(db, 'session_runtime_state', 'project_root', 'ALTER TABLE session_runtime_state ADD COLUMN project_root TEXT');
     ensureColumn(db, 'session_runtime_state', 'base_branch', 'ALTER TABLE session_runtime_state ADD COLUMN base_branch TEXT');
+    ensureColumn(db, 'session_runtime_state', 'use_worktree', 'ALTER TABLE session_runtime_state ADD COLUMN use_worktree INTEGER NOT NULL DEFAULT 1');
   }
 
   ensureTable(db, 'session_runtime_events', `
@@ -1247,6 +1261,11 @@ function runMigrations(db, from, to) {
 
     // Version 8: Add worktree isolation columns to session_runtime_state
     8: (db) => {
+      applySchemaUpdates(db);
+    },
+
+    // Version 9: Add child session lifecycle columns to sessions
+    9: (db) => {
       applySchemaUpdates(db);
     }
   };

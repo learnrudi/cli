@@ -17,6 +17,7 @@
  */
 
 import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import {
@@ -31,6 +32,23 @@ const AGENT_CONFIGS = {
   codex: path.join(HOME, '.codex', 'config.toml'),
   gemini: path.join(HOME, '.gemini', 'settings.json')
 };
+
+// Router-only enforcement: if the rudi router is registered, skip direct stack
+// registration for Claude Code. All stacks go through the router instead.
+const RUDI_ROUTER_SHIM = path.join(HOME, '.rudi', 'bins', 'rudi-router');
+
+function isRouterConfigured(configPath, key = 'mcpServers') {
+  try {
+    const content = fsSync.readFileSync(configPath, 'utf-8');
+    const settings = JSON.parse(content);
+    const entry = settings[key]?.['rudi'];
+    if (!entry) return false;
+    // Verify it points to the router shim
+    return entry.command === RUDI_ROUTER_SHIM || (entry.command && entry.command.endsWith('/rudi-router'));
+  } catch {
+    return false;
+  }
+}
 
 // =============================================================================
 // JSON Utilities
@@ -411,6 +429,12 @@ async function optimizeEntryPoint(installPath, command, args) {
 export async function registerMcpClaude(stackId, installPath, manifest) {
   const configPath = AGENT_CONFIGS.claude;
 
+  // Router-only: skip direct registration when router is configured
+  if (stackId !== 'rudi' && isRouterConfigured(configPath)) {
+    console.log(`  Skipped direct MCP registration for ${stackId} — router is active`);
+    return { success: true, skipped: true };
+  }
+
   try {
     const mcpConfig = await buildMcpConfig(stackId, installPath, manifest);
     if (!mcpConfig) {
@@ -606,6 +630,13 @@ async function registerMcpGeneric(agentId, stackId, installPath, manifest) {
   const configPath = findAgentConfig(agentConfig);
   if (!configPath) {
     return { success: true, skipped: true, reason: 'Agent not installed' };
+  }
+
+  // Router-only: skip direct stack registration when router is active for this agent.
+  // The 'rudi' entry itself is exempt (it IS the router).
+  if (stackId !== 'rudi' && isRouterConfigured(configPath, agentConfig.key)) {
+    console.log(`  Skipped direct MCP registration for ${stackId} in ${agentConfig.name} — router is active`);
+    return { success: true, skipped: true, reason: 'Router active' };
   }
 
   // Codex uses TOML

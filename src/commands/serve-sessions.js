@@ -1109,7 +1109,8 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
             const chunk = allSessionIds.slice(i, i + 500);
             const placeholders = chunk.map(() => '?').join(',');
             const rows = db.prepare(`
-              SELECT id, title, title_override, total_cost, total_input_tokens, total_output_tokens, turn_count
+              SELECT id, title, title_override, total_cost, total_input_tokens, total_output_tokens, turn_count,
+                     parent_session_id, is_sidechain, session_type
               FROM sessions WHERE id IN (${placeholders}) AND provider = 'claude'
             `).all(...chunk);
             for (const row of rows) {
@@ -1127,6 +1128,9 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
               if (row.total_input_tokens > 0) s.totalInputTokens = row.total_input_tokens;
               if (row.total_output_tokens > 0) s.totalOutputTokens = row.total_output_tokens;
               if (row.turn_count > 0) s.turnCount = row.turn_count;
+              if (row.parent_session_id) s.parentSessionId = row.parent_session_id;
+              if (row.is_sidechain) s.isSidechain = true;
+              if (row.session_type && row.session_type !== 'main') s.sessionType = row.session_type;
             }
           }
         }

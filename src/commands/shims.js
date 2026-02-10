@@ -127,6 +127,23 @@ function copyRouterMcp(routerDir) {
   return false;
 }
 
+function copySpawnMcp(routerDir) {
+  const destPath = path.join(routerDir, 'spawn-mcp.js');
+  const possibleSources = [
+    path.join(path.dirname(process.argv[1]), '..', 'src', 'spawn-mcp.js'),
+    path.join(path.dirname(process.argv[1]), '..', 'dist', 'spawn-mcp.js'),
+  ];
+
+  for (const source of possibleSources) {
+    if (fs.existsSync(source)) {
+      fs.copyFileSync(source, destPath);
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function getRuntimeShimDefs() {
   const pythonBin = path.join(PATHS.runtimes, 'python', 'bin');
   const nodeBin = getNodeRuntimeBinDir() || path.join(PATHS.runtimes, 'node', 'bin');
@@ -371,6 +388,23 @@ fi
       created++;
     } else {
       console.warn('⚠ router-mcp.js not found; rudi-router shim not created');
+    }
+
+    if (copySpawnMcp(routerDir)) {
+      const spawnNodeBin = path.join(getNodeRuntimeBinDir(), process.platform === 'win32' ? 'node.exe' : 'node');
+      writeShimScript('rudi-spawn', `#!/bin/sh
+# RUDI Spawn MCP - Child session spawning via sidecar
+RUDI_HOME="$HOME/.rudi"
+NODE_BIN="${spawnNodeBin.replace(/"/g, '\\"')}"
+if [ -x "$NODE_BIN" ]; then
+  exec "$NODE_BIN" "$RUDI_HOME/router/spawn-mcp.js" "$@"
+else
+  exec node "$RUDI_HOME/router/spawn-mcp.js" "$@"
+fi
+`);
+      created++;
+    } else {
+      console.warn('⚠ spawn-mcp.js not found; rudi-spawn shim not created');
     }
 
     console.log(`✓ Rebuilt shims in ~/.rudi/bins/ (${created} created, ${collisions} collisions, ${missing} missing)`);

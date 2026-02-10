@@ -255,7 +255,7 @@ export function createGitHandler({ readBody, error, json }) {
 
           // git branch markers:
           //   "* <name>" -> current branch in this worktree
-          //   "+ <name>" -> checked out in another worktree
+          //   "+ <name>" -> checked out in another worktree (can't be switched to)
           const marker = line[0];
           const hasMarker = (marker === '*' || marker === '+') && line[1] === ' ';
           const name = hasMarker ? line.slice(2).trim() : line;
@@ -264,6 +264,8 @@ export function createGitHandler({ readBody, error, json }) {
           if (marker === '*') {
             current = name;
           }
+          // Skip branches locked by other worktrees — git won't allow checkout
+          if (marker === '+') continue;
           branches.push(name);
         }
 
@@ -445,6 +447,34 @@ export function createGitHandler({ readBody, error, json }) {
         json(res, { ok: true });
       } catch (err) {
         error(res, err.message || 'Failed to remove worktree', 500);
+      }
+      return true;
+    }
+
+    // POST /git/stash — stash uncommitted changes
+    if (req.method === 'POST' && url.pathname === '/git/stash') {
+      const body = await readBody(req);
+      const { path: projectPath, pop } = body;
+
+      if (!projectPath) return error(res, 'path required');
+
+      try {
+        if (pop) {
+          execSync('git stash pop', {
+            cwd: projectPath,
+            encoding: 'utf-8',
+            timeout: 10000,
+          });
+        } else {
+          execSync('git stash', {
+            cwd: projectPath,
+            encoding: 'utf-8',
+            timeout: 10000,
+          });
+        }
+        json(res, { ok: true });
+      } catch (err) {
+        error(res, err.message || 'Failed to stash', 500);
       }
       return true;
     }

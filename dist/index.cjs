@@ -38292,7 +38292,7 @@ var import_fs13 = __toESM(require("fs"), 1);
 init_src2();
 
 // packages/db/src/schema.js
-var SCHEMA_VERSION = 7;
+var SCHEMA_VERSION = 8;
 var SCHEMA_SQL = `
 -- Schema version tracking
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -38635,7 +38635,11 @@ CREATE TABLE IF NOT EXISTS session_runtime_state (
   cost_total REAL NOT NULL DEFAULT 0,
   tokens_total INTEGER NOT NULL DEFAULT 0,
   unseen_completion INTEGER NOT NULL DEFAULT 0,
-  last_error TEXT
+  last_error TEXT,
+  worktree_path TEXT,
+  worktree_branch TEXT,
+  project_root TEXT,
+  base_branch TEXT
 );
 
 CREATE TABLE IF NOT EXISTS session_runtime_events (
@@ -39091,6 +39095,10 @@ function applySchemaUpdates(db3) {
     ensureColumn(db3, "session_runtime_state", "turn_count", "ALTER TABLE session_runtime_state ADD COLUMN turn_count INTEGER NOT NULL DEFAULT 0");
     ensureColumn(db3, "session_runtime_state", "cwd", "ALTER TABLE session_runtime_state ADD COLUMN cwd TEXT");
     ensureColumn(db3, "session_runtime_state", "resume_session_id", "ALTER TABLE session_runtime_state ADD COLUMN resume_session_id TEXT");
+    ensureColumn(db3, "session_runtime_state", "worktree_path", "ALTER TABLE session_runtime_state ADD COLUMN worktree_path TEXT");
+    ensureColumn(db3, "session_runtime_state", "worktree_branch", "ALTER TABLE session_runtime_state ADD COLUMN worktree_branch TEXT");
+    ensureColumn(db3, "session_runtime_state", "project_root", "ALTER TABLE session_runtime_state ADD COLUMN project_root TEXT");
+    ensureColumn(db3, "session_runtime_state", "base_branch", "ALTER TABLE session_runtime_state ADD COLUMN base_branch TEXT");
   }
   ensureTable(db3, "session_runtime_events", `
     CREATE TABLE IF NOT EXISTS session_runtime_events (
@@ -39455,6 +39463,10 @@ function runMigrations(db3, from, to) {
           DROP TABLE _srs_old;
         `);
       }
+      applySchemaUpdates(db4);
+    },
+    // Version 8: Add worktree isolation columns to session_runtime_state
+    8: (db4) => {
       applySchemaUpdates(db4);
     }
   };
@@ -45796,18 +45808,16 @@ function createGitHandler({ readBody: readBody2, error: error2, json: json2 }) {
         const branches = [];
         let current = "";
         for (const rawLine of output.split("\n")) {
-          const line = rawLine.trimEnd();
+          const line = rawLine.trim();
           if (!line) continue;
-          if (line.startsWith("* ")) {
-            const name = line.slice(2).trim();
-            if (name) {
-              current = name;
-              branches.push(name);
-            }
-          } else {
-            const name = line.trim();
-            if (name) branches.push(name);
+          const marker = line[0];
+          const hasMarker = (marker === "*" || marker === "+") && line[1] === " ";
+          const name = hasMarker ? line.slice(2).trim() : line;
+          if (!name) continue;
+          if (marker === "*") {
+            current = name;
           }
+          branches.push(name);
         }
         json2(res, { branches, current });
       } catch (err) {
@@ -45893,6 +45903,43 @@ function createGitHandler({ readBody: readBody2, error: error2, json: json2 }) {
       }
       return true;
     }
+    if (req.method === "POST" && url.pathname === "/git/branch/delete") {
+      const body = await readBody2(req);
+      const { path: projectPath, name, force } = body;
+      if (!projectPath) return error2(res, "path required");
+      if (!name || typeof name !== "string") return error2(res, "name required");
+      const protected_branches = ["main", "master"];
+      if (protected_branches.includes(name)) {
+        return error2(res, `Cannot delete protected branch '${name}'`, 400);
+      }
+      try {
+        const current = (0, import_child_process14.execSync)("git rev-parse --abbrev-ref HEAD", {
+          cwd: projectPath,
+          encoding: "utf-8",
+          timeout: 3e3
+        }).trim();
+        if (current === name) {
+          return error2(res, "Cannot delete the currently checked out branch", 400);
+        }
+      } catch {
+      }
+      try {
+        const flag = force ? "-D" : "-d";
+        (0, import_child_process14.execSync)(`git branch ${flag} ${JSON.stringify(name)}`, {
+          cwd: projectPath,
+          encoding: "utf-8",
+          timeout: 1e4
+        });
+        json2(res, { ok: true, branch: name });
+      } catch (err) {
+        const msg = err.message || "Failed to delete branch";
+        if (!force && msg.includes("not fully merged")) {
+          return error2(res, `Branch '${name}' has unmerged commits. Use force delete to remove it anyway.`, 400);
+        }
+        error2(res, msg, 500);
+      }
+      return true;
+    }
     if (req.method === "POST" && url.pathname === "/git/worktree/remove") {
       const body = await readBody2(req);
       const { path: projectPath, directory, force } = body;
@@ -45911,6 +45958,22 @@ function createGitHandler({ readBody: readBody2, error: error2, json: json2 }) {
       }
       return true;
     }
+    if (req.method === "POST" && url.pathname === "/git/init") {
+      const body = await readBody2(req);
+      const { path: projectPath } = body;
+      if (!projectPath) return error2(res, "path required");
+      try {
+        (0, import_child_process14.execSync)("git init", {
+          cwd: projectPath,
+          encoding: "utf-8",
+          timeout: 1e4
+        });
+        json2(res, { ok: true });
+      } catch (err) {
+        error2(res, err.message || "Failed to init repository", 500);
+      }
+      return true;
+    }
     return false;
   };
 }
@@ -45922,6 +45985,94 @@ var import_path31 = __toESM(require("path"), 1);
 var import_crypto4 = __toESM(require("crypto"), 1);
 var import_child_process15 = require("child_process");
 init_src();
+var RUDI_BASE_PROMPT = `You are working inside RUDI, an AI-powered development environment.
+
+# Environment
+
+- You are a Claude Code agent spawned by the RUDI sidecar server.
+- The user interacts through the RUDI desktop app (Tauri + React).
+- Your working directory is the user's project folder.
+- Sessions are persisted to ~/.rudi/rudi.db and can be resumed later.
+
+# RUDI CLI
+
+The \`rudi\` CLI manages the development environment. Key commands:
+- \`rudi serve\` \u2014 Start the sidecar server (HTTP + WebSocket)
+- \`rudi install <pkg>\` \u2014 Install stacks (MCP servers), prompts, runtimes, binaries, or agents
+- \`rudi list [kind]\` \u2014 List installed packages (stacks, prompts, runtimes, binaries, agents)
+- \`rudi run <stack>\` \u2014 Execute an MCP stack
+- \`rudi mcp <stack>\` \u2014 Run an MCP server with secrets injected
+- \`rudi secrets\` \u2014 Manage secrets (OS Keychain + encrypted fallback)
+- \`rudi db <cmd>\` \u2014 Database operations on ~/.rudi/rudi.db
+- \`rudi import\` \u2014 Import sessions from AI providers
+- \`rudi doctor\` \u2014 Health check
+- \`rudi home\` \u2014 Show ~/.rudi structure
+
+# RUDI Directory Structure
+
+- \`~/.rudi/\` \u2014 Root directory
+- \`~/.rudi/rudi.db\` \u2014 SQLite database (sessions, turns, projects, file changes, costs)
+- \`~/.rudi/stacks/\` \u2014 MCP server stacks (each has manifest.json)
+- \`~/.rudi/prompts/\` \u2014 Reusable prompt templates (.md files)
+- \`~/.rudi/runtimes/\` \u2014 Language interpreters (node, python)
+- \`~/.rudi/binaries/\` \u2014 Utility CLIs (ffmpeg, ripgrep, jq, etc.)
+- \`~/.rudi/agents/\` \u2014 AI CLI agents (claude, codex, gemini, ollama)
+- \`~/.rudi/bins/\` \u2014 Shims directory (added to PATH)
+- \`~/.rudi/vault/\` \u2014 Encrypted secrets store
+- \`~/.rudi/config.json\` \u2014 Configuration
+- \`~/.rudi/system-prompt.md\` \u2014 User-editable system prompt (appended to this one)
+
+# Database
+
+SQLite at ~/.rudi/rudi.db. Key tables:
+- \`sessions\` \u2014 Conversations (title, model, cwd, git_branch, turn_count, total_cost, status)
+- \`turns\` \u2014 Individual messages (user_message, assistant_response, tokens, cost, tools_used, duration_ms)
+- \`projects\` \u2014 Project containers (provider, name, settings)
+- \`file_changes\` \u2014 File operations tracked per session (path, operation, content hashes, diffs)
+- \`file_revisions\` \u2014 File snapshots/history
+- \`secrets_meta\` \u2014 Secret key metadata (values in vault, not DB)
+- \`packages\` \u2014 Installed package metadata
+- \`logs\` \u2014 Application logs
+
+# UI Features (available to the user, not directly callable by you)
+
+- Git: staging, committing, reverting, branch switching/creating via the UI header
+- Diff panel: side-by-side view of file changes you make during a session
+- Session management: rename, pin, archive, resume sessions from the sidebar
+- Live tail: other windows/users can watch your session output in real time
+- Context files: user can drag files into the chat as additional context
+- Open-in: one-click open project in VS Code, Cursor, Terminal, Finder, Warp, Xcode
+
+# Best Practices
+
+- Be concise. The user is in a desktop app \u2014 keep responses focused.
+- Prefer small targeted edits over full file rewrites.
+- The user sees your tool calls (reads, edits, bash) streaming live \u2014 don't narrate every step.
+- If the user's project has a CLAUDE.md, follow its instructions \u2014 it takes priority.
+- When the user asks about RUDI itself, you can reference the CLI commands and directory structure above.`;
+var USER_PROMPT_PATH = import_path31.default.join(PATHS.home, "system-prompt.md");
+var _cachedUserPrompt = null;
+var _userPromptMtime = 0;
+function loadUserPrompt() {
+  try {
+    const stat = import_fs32.default.statSync(USER_PROMPT_PATH);
+    if (stat.mtimeMs === _userPromptMtime && _cachedUserPrompt !== null) return _cachedUserPrompt;
+    _cachedUserPrompt = import_fs32.default.readFileSync(USER_PROMPT_PATH, "utf-8").trim();
+    _userPromptMtime = stat.mtimeMs;
+    return _cachedUserPrompt;
+  } catch {
+    _cachedUserPrompt = null;
+    _userPromptMtime = 0;
+    return null;
+  }
+}
+function buildSystemPrompt(frontendPrompt) {
+  const parts = [RUDI_BASE_PROMPT];
+  const userPrompt = loadUserPrompt();
+  if (userPrompt) parts.push(userPrompt);
+  if (frontendPrompt) parts.push(frontendPrompt);
+  return parts.join("\n\n---\n\n");
+}
 var _db = null;
 var _dbReadyChecked = false;
 var _dbWriteQueue = [];
@@ -46068,7 +46219,7 @@ function createIdleReaper({
   log: log2,
   idleTimeoutMs = 10 * 60 * 1e3,
   // 10 min default
-  maxConcurrent = 3
+  maxConcurrent = 6
 }) {
   const interval = setInterval(() => {
     const now = Date.now();
@@ -46159,7 +46310,7 @@ function createAgentHandler({
   agentProcesses: agentProcesses2,
   queueSessionsUpdated: queueSessionsUpdated2,
   resumeSessionIndex: resumeSessionIndex2 = /* @__PURE__ */ new Map(),
-  maxConcurrent = 3
+  maxConcurrent = 6
 }) {
   const dropResumeMappingsForSession = (targetSessionId) => {
     for (const [resumeId, mappedSessionId] of resumeSessionIndex2.entries()) {
@@ -46203,12 +46354,30 @@ function createAgentHandler({
       maxConcurrent
     });
   };
+  function buildUserContent(text, images, cwd) {
+    if (!images || images.length === 0) return text;
+    const imgDir = import_path31.default.join(cwd || import_os13.default.homedir(), ".rudi", "images");
+    import_fs32.default.mkdirSync(imgDir, { recursive: true });
+    const paths = [];
+    for (const img of images) {
+      const ext = img.mediaType === "image/jpeg" ? ".jpg" : img.mediaType === "image/gif" ? ".gif" : img.mediaType === "image/webp" ? ".webp" : ".png";
+      const filename = `paste-${Date.now()}-${import_crypto4.default.randomUUID().slice(0, 8)}${ext}`;
+      const filePath = import_path31.default.join(imgDir, filename);
+      import_fs32.default.writeFileSync(filePath, Buffer.from(img.data, "base64"));
+      paths.push(filePath);
+      log2("agent", "info", `saved pasted image to ${filePath}`, { size: img.data.length, mediaType: img.mediaType });
+    }
+    const imageRefs = paths.map((p2) => `[Pasted image: ${p2}]`).join("\n");
+    return text ? `${imageRefs}
+
+${text}` : imageRefs;
+  }
   return async function handleAgent2(req, res, url) {
     if (req.method === "POST" && url.pathname === "/agent/start") {
       const body = await readBody2(req);
       log2("agent", "info", "received /agent/start request", { bodyKeys: Object.keys(body), resumeSessionId: body.resumeSessionId || null });
-      const { prompt, model, systemPrompt, resumeSessionId, cwd, permissionMode, planMode } = body;
-      if (!prompt) return error2(res, "prompt required");
+      const { prompt, model, systemPrompt, resumeSessionId, cwd, permissionMode, planMode, images } = body;
+      if (!prompt && (!images || images.length === 0)) return error2(res, "prompt required");
       if (resumeSessionId) {
         const reusable = resolveReusableEntry(resumeSessionId);
         if (reusable) {
@@ -46229,13 +46398,13 @@ function createAgentHandler({
               UPDATE session_runtime_state SET updated_at = ? WHERE session_id = ?
             `).run((/* @__PURE__ */ new Date()).toISOString(), existingId);
           });
-          const inputMsg = JSON.stringify({ type: "user", message: { role: "user", content: prompt } }) + "\n";
+          const inputMsg = JSON.stringify({ type: "user", message: { role: "user", content: buildUserContent(prompt, images, entry.cwd) } }) + "\n";
           entry.proc.stdin.write(inputMsg);
           broadcast2("agent:event", {
             sessionId: existingId,
             event: { type: "system", message: "Resumed existing process" }
           });
-          return json2(res, { sessionId: existingId, provider: entry.provider, reused: true });
+          return json2(res, { sessionId: existingId, provider: entry.provider, reused: true, cwd: entry.cwd });
         }
       }
       const aliveCount = countAlive();
@@ -46263,7 +46432,8 @@ function createAgentHandler({
         "--verbose"
       ];
       if (model) args.push("--model", model);
-      if (systemPrompt) args.push("--append-system-prompt", systemPrompt);
+      const fullSystemPrompt = buildSystemPrompt(systemPrompt);
+      if (fullSystemPrompt) args.push("--append-system-prompt", fullSystemPrompt);
       if (resumeSessionId) args.push("--resume", resumeSessionId);
       if (planMode) {
         args.push("--permission-mode", "plan");
@@ -46281,24 +46451,162 @@ function createAgentHandler({
         env.CI = "true";
       }
       const workingDir = cwd || process.env.HOME || import_os13.default.homedir();
+      let currentBranch = null;
+      let repoRoot = null;
+      let isGitRepo = false;
+      try {
+        (0, import_child_process15.execSync)("git rev-parse --is-inside-work-tree", { cwd: workingDir, stdio: "pipe" });
+        repoRoot = (0, import_child_process15.execSync)("git rev-parse --show-toplevel", { cwd: workingDir, stdio: "pipe" }).toString().trim();
+        currentBranch = (0, import_child_process15.execSync)("git rev-parse --abbrev-ref HEAD", { cwd: workingDir, stdio: "pipe" }).toString().trim();
+        isGitRepo = true;
+      } catch {
+        isGitRepo = false;
+        repoRoot = null;
+        currentBranch = null;
+      }
+      const shortId = sessionId.slice(0, 8);
+      let worktreePath = null;
+      let worktreeBranch = null;
+      let baseBranch = currentBranch;
+      let gitignoreWarning = false;
+      let effectiveCwd = workingDir;
+      if (isGitRepo && repoRoot && currentBranch) {
+        if (!resumeSessionId) {
+          const safeBranchDir = (currentBranch || "detached").replace(/\//g, "-");
+          const worktreesBase = import_path31.default.join(repoRoot, ".rudi", "worktrees");
+          let worktreeDir = import_path31.default.join(worktreesBase, safeBranchDir);
+          if (import_fs32.default.existsSync(worktreeDir)) {
+            let suffix = 2;
+            while (import_fs32.default.existsSync(import_path31.default.join(worktreesBase, `${safeBranchDir}-${suffix}`))) suffix++;
+            worktreeDir = import_path31.default.join(worktreesBase, `${safeBranchDir}-${suffix}`);
+          }
+          try {
+            import_fs32.default.mkdirSync(worktreesBase, { recursive: true });
+            let branchName = currentBranch;
+            try {
+              (0, import_child_process15.execSync)(
+                `git worktree add ${JSON.stringify(worktreeDir)} ${branchName}`,
+                { cwd: repoRoot, stdio: "pipe" }
+              );
+            } catch {
+              try {
+                import_fs32.default.rmSync(worktreeDir, { recursive: true, force: true });
+              } catch {
+              }
+              const safeBase = currentBranch.replace(/\//g, "-");
+              branchName = `${safeBase}-session-${shortId}`;
+              (0, import_child_process15.execSync)(
+                `git worktree add -b ${branchName} ${JSON.stringify(worktreeDir)}`,
+                { cwd: repoRoot, stdio: "pipe" }
+              );
+            }
+            if (import_fs32.default.existsSync(worktreeDir)) {
+              worktreePath = worktreeDir;
+              worktreeBranch = branchName;
+              effectiveCwd = worktreeDir;
+            } else {
+              log2("agent", "warn", `worktree dir missing after creation, using shared cwd`, { sessionId: shortId });
+            }
+            log2("agent", "info", `worktree created on branch ${branchName}: ${worktreeDir}`, { sessionId: shortId });
+            try {
+              const gitignorePath = import_path31.default.join(repoRoot, ".gitignore");
+              const gitignoreContent = import_fs32.default.existsSync(gitignorePath) ? import_fs32.default.readFileSync(gitignorePath, "utf-8") : "";
+              if (!gitignoreContent.split("\n").some((line) => line.trim() === ".rudi/" || line.trim() === ".rudi")) {
+                gitignoreWarning = true;
+              }
+            } catch {
+              gitignoreWarning = true;
+            }
+          } catch (wtErr) {
+            log2("agent", "warn", `worktree creation failed, using shared cwd: ${wtErr.message}`, { sessionId: shortId });
+          }
+        } else {
+          try {
+            const db3 = getDb();
+            const row = db3.prepare(
+              "SELECT worktree_path, worktree_branch, base_branch FROM session_runtime_state WHERE session_id = ? OR resume_session_id = ?"
+            ).get(resumeSessionId, resumeSessionId);
+            if (row?.worktree_path && import_fs32.default.existsSync(row.worktree_path)) {
+              worktreePath = row.worktree_path;
+              worktreeBranch = row.worktree_branch;
+              baseBranch = row.base_branch || currentBranch;
+              effectiveCwd = row.worktree_path;
+              log2("agent", "info", `resumed into existing worktree: ${worktreePath}`, { sessionId: shortId });
+            } else if (row?.worktree_branch) {
+              const recreateName = row.worktree_branch.replace(/\//g, "-");
+              const worktreeDir = import_path31.default.join(repoRoot, ".rudi", "worktrees", recreateName);
+              try {
+                import_fs32.default.mkdirSync(import_path31.default.join(repoRoot, ".rudi", "worktrees"), { recursive: true });
+                (0, import_child_process15.execSync)(
+                  `git worktree add ${JSON.stringify(worktreeDir)} ${row.worktree_branch}`,
+                  { cwd: repoRoot, stdio: "pipe" }
+                );
+                worktreePath = worktreeDir;
+                worktreeBranch = row.worktree_branch;
+                baseBranch = row.base_branch || currentBranch;
+                effectiveCwd = worktreeDir;
+                log2("agent", "info", `recreated worktree from existing branch: ${worktreeDir}`, { sessionId: shortId });
+              } catch (recreateErr) {
+                log2("agent", "warn", `worktree recreate failed: ${recreateErr.message}`, { sessionId: shortId });
+              }
+            }
+          } catch (dbErr) {
+            log2("agent", "warn", `worktree DB lookup failed: ${dbErr.message}`, { sessionId: shortId });
+          }
+        }
+      }
+      let spawnCwd = effectiveCwd;
+      try {
+        const st2 = import_fs32.default.statSync(spawnCwd);
+        if (!st2.isDirectory()) throw new Error("not_a_directory");
+      } catch {
+        const cwdFallbacks = [workingDir, repoRoot, process.env.HOME, import_os13.default.homedir()].filter((p2) => typeof p2 === "string" && p2.length > 0);
+        const fallback = cwdFallbacks.find((p2) => {
+          try {
+            return import_fs32.default.statSync(p2).isDirectory();
+          } catch {
+            return false;
+          }
+        });
+        if (fallback) {
+          log2("agent", "warn", `spawn cwd missing, falling back to: ${fallback}`, {
+            sessionId: shortId,
+            missingCwd: effectiveCwd
+          });
+          spawnCwd = fallback;
+          effectiveCwd = fallback;
+        }
+      }
       log2("agent", "info", "spawning persistent agent", {
-        sessionId: sessionId.slice(0, 8),
+        sessionId: shortId,
         binary: binaryPath,
-        cwd: workingDir,
-        prompt: prompt.slice(0, 80),
+        cwd: spawnCwd,
+        worktreeBranch,
+        prompt: (prompt || "").slice(0, 80),
         resumeSessionId: resumeSessionId || null
       });
       dbWrite((db3) => {
         const now = (/* @__PURE__ */ new Date()).toISOString();
         db3.prepare(`
           INSERT INTO session_runtime_state
-            (session_id, status, provider, resume_session_id, cwd, started_at, updated_at)
-          VALUES (?, 'starting', 'claude', ?, ?, ?, ?)
-        `).run(sessionId, resumeSessionId || null, workingDir, now, now);
+            (session_id, status, provider, resume_session_id, cwd, started_at, updated_at,
+             worktree_path, worktree_branch, project_root, base_branch)
+          VALUES (?, 'starting', 'claude', ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          sessionId,
+          resumeSessionId || null,
+          effectiveCwd,
+          now,
+          now,
+          worktreePath,
+          worktreeBranch,
+          repoRoot,
+          baseBranch
+        );
       });
       try {
         const proc = (0, import_child_process15.spawn)(binaryPath, args, {
-          cwd: workingDir,
+          cwd: spawnCwd,
           env,
           stdio: ["pipe", "pipe", "pipe"]
         });
@@ -46311,7 +46619,10 @@ function createAgentHandler({
           turnActive: true,
           startedAt: Date.now(),
           lastActivityAt: Date.now(),
-          cwd: workingDir,
+          cwd: effectiveCwd,
+          worktreePath,
+          worktreeBranch,
+          baseBranch,
           _terminationReason: null,
           // Per-turn metric accumulators (reset after each result event)
           _turnPrompt: prompt,
@@ -46325,7 +46636,7 @@ function createAgentHandler({
         };
         agentProcesses2.set(sessionId, entry);
         log2("agent", "info", `process spawned pid=${proc.pid}`, { sessionId: sessionId.slice(0, 8) });
-        const inputMsg = JSON.stringify({ type: "user", message: { role: "user", content: prompt } }) + "\n";
+        const inputMsg = JSON.stringify({ type: "user", message: { role: "user", content: buildUserContent(prompt, images, effectiveCwd) } }) + "\n";
         proc.stdin.write(inputMsg);
         log2("agent", "debug", "wrote first prompt to stdin", { sessionId: sessionId.slice(0, 8) });
         proc.stdout.on("data", (chunk) => {
@@ -46453,7 +46764,13 @@ function createAgentHandler({
               }
             } catch {
               log2("agent", "debug", `stdout non-json: ${line.slice(0, 120)}`, { sessionId: sessionId.slice(0, 8) });
-              const isPermissionPrompt = /allow|deny|permission|approve/i.test(line) && /\b(y|n|a|yes|no|always)\b/i.test(line);
+              const trimmed = line.trim();
+              const isPermissionPrompt = (
+                // Standard tool permission prompts (Allow Bash? y/n/a)
+                /allow|deny|permission|approve/i.test(trimmed) && /\b(y|n|a|yes|no|always)\b/i.test(trimmed) || // Catch-all: any short non-JSON line ending with "?" is likely
+                // an interactive CLI prompt (plan mode, workspace trust, etc.)
+                trimmed.length < 200 && trimmed.endsWith("?")
+              );
               if (isPermissionPrompt) {
                 log2("agent", "info", "detected permission prompt", { sessionId: sessionId.slice(0, 8), line: line.slice(0, 200) });
                 broadcast2("agent:event", {
@@ -46532,7 +46849,17 @@ function createAgentHandler({
           dropResumeMappingsForSession(sessionId);
           agentProcesses2.delete(sessionId);
         });
-        json2(res, { sessionId, provider: "claude" });
+        json2(res, {
+          sessionId,
+          provider: "claude",
+          cwd: effectiveCwd,
+          currentBranch,
+          repoRoot,
+          worktreeBranch: worktreeBranch || void 0,
+          projectCwd: worktreePath ? workingDir : void 0,
+          baseBranch: baseBranch || void 0,
+          gitignoreWarning: gitignoreWarning || void 0
+        });
         broadcastProcessCount();
       } catch (err) {
         dropResumeMappingsForSession(sessionId);
@@ -46568,7 +46895,7 @@ function createAgentHandler({
     }
     if (req.method === "POST" && url.pathname === "/agent/send") {
       const body = await readBody2(req);
-      if (!body.sessionId || !body.message) return error2(res, "sessionId and message required");
+      if (!body.sessionId || !body.message && (!body.images || body.images.length === 0)) return error2(res, "sessionId and message required");
       const entry = agentProcesses2.get(body.sessionId);
       if (!entry || !entry.proc || entry.proc.killed) {
         return error2(res, "No active process for this session \u2014 start a new one via /agent/start", 400);
@@ -46586,7 +46913,7 @@ function createAgentHandler({
         entry._turnCacheReadTokens = 0;
         entry._turnCacheCreationTokens = 0;
         entry._turnToolsUsed = [];
-        const inputMsg = JSON.stringify({ type: "user", message: { role: "user", content: body.message } }) + "\n";
+        const inputMsg = JSON.stringify({ type: "user", message: { role: "user", content: buildUserContent(body.message, body.images, entry.cwd) } }) + "\n";
         entry.proc.stdin.write(inputMsg);
         json2(res, { ok: true });
       } catch (err) {
@@ -46696,6 +47023,99 @@ function createAgentHandler({
       }
       log2("agent", "warn", `kill-all: terminated ${killed.length} processes`);
       json2(res, { ok: true, killed: killed.length });
+      return true;
+    }
+    if (req.method === "POST" && url.pathname === "/agent/cleanup-worktree") {
+      const body = await readBody2(req);
+      if (!body.sessionId) return error2(res, "sessionId required");
+      try {
+        const db3 = getDb();
+        const row = db3.prepare(
+          "SELECT worktree_path, worktree_branch, base_branch, project_root FROM session_runtime_state WHERE session_id = ?"
+        ).get(body.sessionId);
+        if (!row?.worktree_path) {
+          return json2(res, { ok: false, reason: "no_worktree", details: "No worktree associated with this session" });
+        }
+        if (!import_fs32.default.existsSync(row.worktree_path)) {
+          db3.prepare("UPDATE session_runtime_state SET worktree_path = NULL WHERE session_id = ?").run(body.sessionId);
+          return json2(res, { ok: true });
+        }
+        const repoDir = row.project_root || import_path31.default.dirname(import_path31.default.dirname(import_path31.default.dirname(row.worktree_path)));
+        let uncommitted = "";
+        try {
+          uncommitted = (0, import_child_process15.execSync)("git status --porcelain", { cwd: row.worktree_path, stdio: "pipe" }).toString().trim();
+        } catch {
+        }
+        let unmerged = "";
+        if (row.worktree_branch && row.base_branch) {
+          try {
+            unmerged = (0, import_child_process15.execSync)(
+              `git log ${row.base_branch}..${row.worktree_branch} --oneline`,
+              { cwd: repoDir, stdio: "pipe" }
+            ).toString().trim();
+          } catch {
+          }
+        }
+        if ((uncommitted || unmerged) && !body.force) {
+          const reason = uncommitted ? "uncommitted_changes" : "unmerged_commits";
+          const details = uncommitted ? `Uncommitted changes:
+${uncommitted}` : `Unmerged commits:
+${unmerged}`;
+          return json2(res, { ok: false, reason, details });
+        }
+        try {
+          if (body.force) {
+            (0, import_child_process15.execSync)(`git worktree remove --force ${JSON.stringify(row.worktree_path)}`, { cwd: repoDir, stdio: "pipe" });
+          } else {
+            (0, import_child_process15.execSync)(`git worktree remove ${JSON.stringify(row.worktree_path)}`, { cwd: repoDir, stdio: "pipe" });
+          }
+        } catch (wtErr) {
+          return json2(res, { ok: false, reason: "remove_failed", details: wtErr.message });
+        }
+        let branchRetained = false;
+        if (row.worktree_branch && !body.force) {
+          try {
+            (0, import_child_process15.execSync)(`git branch -d ${row.worktree_branch}`, { cwd: repoDir, stdio: "pipe" });
+          } catch {
+            branchRetained = true;
+          }
+        } else if (row.worktree_branch && body.force) {
+          branchRetained = true;
+        }
+        db3.prepare("UPDATE session_runtime_state SET worktree_path = NULL WHERE session_id = ?").run(body.sessionId);
+        json2(res, { ok: true, branchRetained, branch: branchRetained ? row.worktree_branch : null });
+        log2("agent", "info", `worktree cleaned up for session ${body.sessionId.slice(0, 8)}`, { branchRetained });
+      } catch (err) {
+        error2(res, `Cleanup failed: ${err.message}`, 500);
+      }
+      return true;
+    }
+    if (req.method === "POST" && url.pathname === "/agent/delete-worktree-branch") {
+      const body = await readBody2(req);
+      if (!body.sessionId) return error2(res, "sessionId required");
+      try {
+        const db3 = getDb();
+        const row = db3.prepare(
+          "SELECT worktree_branch, project_root FROM session_runtime_state WHERE session_id = ?"
+        ).get(body.sessionId);
+        if (!row?.worktree_branch) {
+          return json2(res, { ok: false, reason: "no_branch", details: "No worktree branch for this session" });
+        }
+        const repoDir = row.project_root;
+        if (!repoDir) {
+          return json2(res, { ok: false, reason: "no_repo", details: "No project root recorded" });
+        }
+        try {
+          (0, import_child_process15.execSync)(`git branch -d ${row.worktree_branch}`, { cwd: repoDir, stdio: "pipe" });
+        } catch (brErr) {
+          return json2(res, { ok: false, reason: "branch_unmerged", details: brErr.message });
+        }
+        db3.prepare("UPDATE session_runtime_state SET worktree_branch = NULL WHERE session_id = ?").run(body.sessionId);
+        json2(res, { ok: true });
+        log2("agent", "info", `worktree branch deleted for session ${body.sessionId.slice(0, 8)}`, { branch: row.worktree_branch });
+      } catch (err) {
+        error2(res, `Branch delete failed: ${err.message}`, 500);
+      }
       return true;
     }
     return false;
@@ -47041,15 +47461,90 @@ async function findSessionFile(sessionId) {
   }
   return null;
 }
-async function readSessionMessages(sessionId) {
+async function readSessionMessagesPaginated(sessionId, { tail, before } = {}) {
   const filePath = await findSessionFile(sessionId);
   if (!filePath) {
     throw new Error(`Session not found: ${sessionId}`);
   }
   const content = await import_promises2.default.readFile(filePath, "utf-8");
-  const messages = parseSessionMessagesFromJsonl(content);
+  const rawLines = content.split("\n").filter(Boolean);
+  const totalCount = rawLines.length;
   const byteOffset = Buffer.byteLength(content, "utf-8");
-  return { messages, byteOffset };
+  if (!tail && before === void 0) {
+    const messages2 = parseSessionMessagesFromJsonl(content);
+    const usage2 = extractUsageFromJsonl(content);
+    return { messages: messages2, byteOffset, usage: usage2, filePath, totalCount };
+  }
+  const endLine = before !== void 0 ? Math.min(before, totalCount) : totalCount;
+  const pageSize = tail || 50;
+  const startLine = Math.max(0, endLine - pageSize);
+  const subset = rawLines.slice(startLine, endLine);
+  const subsetContent = subset.join("\n");
+  const messages = parseSessionMessagesFromJsonl(subsetContent);
+  const hasMore = startLine > 0;
+  const beforeCursor = startLine;
+  const usage = before === void 0 ? extractUsageFromJsonl(content) : null;
+  return {
+    messages,
+    byteOffset,
+    usage,
+    filePath,
+    before: beforeCursor,
+    hasMore,
+    totalCount
+  };
+}
+function extractUsageFromJsonl(content) {
+  if (!content || typeof content !== "string") return null;
+  const lines = content.trim().split("\n").filter(Boolean);
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  let totalCacheReadTokens = 0;
+  let totalCostUsd = 0;
+  let turnCount = 0;
+  let lastRole = null;
+  let model = null;
+  let createdAt = null;
+  let lastActiveAt = null;
+  let cwd = null;
+  for (const line of lines) {
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const role = getSessionEntryRole(entry);
+    const usage = entry?.message?.usage;
+    if (!createdAt && entry.timestamp) createdAt = entry.timestamp;
+    if (entry.timestamp) lastActiveAt = entry.timestamp;
+    if (!model && entry.message?.model) model = entry.message.model;
+    if (!cwd && entry.cwd) cwd = entry.cwd;
+    if (usage) {
+      totalOutputTokens += usage.output_tokens || 0;
+      totalInputTokens += (usage.input_tokens || 0) + (usage.cache_read_input_tokens || 0) + (usage.cache_creation_input_tokens || 0);
+      totalCacheReadTokens += usage.cache_read_input_tokens || 0;
+    }
+    if (entry?.type === "result" && typeof entry.total_cost_usd === "number") {
+      totalCostUsd = entry.total_cost_usd;
+    }
+    if (role === "assistant" && lastRole === "user") {
+      turnCount++;
+    }
+    if (role) lastRole = role;
+  }
+  if (totalInputTokens === 0 && totalOutputTokens === 0) return null;
+  return {
+    totalInputTokens,
+    totalOutputTokens,
+    totalCacheReadTokens,
+    turnCount,
+    totalCostUsd: totalCostUsd || void 0,
+    model,
+    createdAt,
+    lastActiveAt,
+    cwd
+  };
 }
 function parseSessionMessagesFromJsonl(content) {
   if (!content || typeof content !== "string") return [];
@@ -47466,23 +47961,28 @@ function createSessionsModule({ log: log2, broadcast: broadcast2, json: json2, e
           }
         }
         if (allSessionIds.length > 0) {
-          const titleMap = /* @__PURE__ */ new Map();
+          const dbMap = /* @__PURE__ */ new Map();
           for (let i2 = 0; i2 < allSessionIds.length; i2 += 500) {
             const chunk = allSessionIds.slice(i2, i2 + 500);
             const placeholders = chunk.map(() => "?").join(",");
             const rows = db3.prepare(`
-              SELECT id, title, title_override
+              SELECT id, title, title_override, total_cost, total_input_tokens, total_output_tokens, turn_count
               FROM sessions WHERE id IN (${placeholders}) AND provider = 'claude'
             `).all(...chunk);
             for (const row of rows) {
-              const display = row.title_override || row.title;
-              if (display) titleMap.set(row.id, display);
+              dbMap.set(row.id, row);
             }
           }
           for (const proj of projects) {
             for (const s2 of proj.sessions) {
-              const dbTitle = titleMap.get(s2.sessionId);
-              if (dbTitle) s2.dbTitle = dbTitle;
+              const row = dbMap.get(s2.sessionId);
+              if (!row) continue;
+              const display = row.title_override || row.title;
+              if (display) s2.dbTitle = display;
+              if (row.total_cost > 0) s2.totalCost = row.total_cost;
+              if (row.total_input_tokens > 0) s2.totalInputTokens = row.total_input_tokens;
+              if (row.total_output_tokens > 0) s2.totalOutputTokens = row.total_output_tokens;
+              if (row.turn_count > 0) s2.turnCount = row.turn_count;
             }
           }
         }
@@ -47490,12 +47990,49 @@ function createSessionsModule({ log: log2, broadcast: broadcast2, json: json2, e
         log2("sessions", "warn", `DB title merge failed: ${err.message}`);
       }
     }
-    projects.sort((a2, b2) => {
+    const worktreeMarker = "/.rudi/worktrees/";
+    const mergedProjects = [];
+    const parentMap = /* @__PURE__ */ new Map();
+    for (const proj of projects) {
+      const op = proj.originalPath || "";
+      const wtIdx = op.indexOf(worktreeMarker);
+      if (wtIdx !== -1) {
+        const realRoot = op.slice(0, wtIdx);
+        if (parentMap.has(realRoot)) {
+          const parent = mergedProjects[parentMap.get(realRoot)];
+          parent.sessions.push(...proj.sessions);
+        } else {
+          const realName = import_path32.default.basename(realRoot);
+          parentMap.set(realRoot, mergedProjects.length);
+          mergedProjects.push({
+            ...proj,
+            name: realName,
+            originalPath: realRoot
+          });
+        }
+      } else {
+        if (parentMap.has(op)) {
+          const existing = mergedProjects[parentMap.get(op)];
+          existing.sessions.push(...proj.sessions);
+          existing.path = proj.path;
+          existing.gitStatus = proj.gitStatus;
+        } else {
+          parentMap.set(op, mergedProjects.length);
+          mergedProjects.push(proj);
+        }
+      }
+    }
+    for (const proj of mergedProjects) {
+      proj.sessions.sort(
+        (a2, b2) => new Date(b2.modified).getTime() - new Date(a2.modified).getTime()
+      );
+    }
+    mergedProjects.sort((a2, b2) => {
       const aTime = a2.sessions[0]?.modified || "";
       const bTime = b2.sessions[0]?.modified || "";
       return new Date(bTime).getTime() - new Date(aTime).getTime();
     });
-    return projects;
+    return mergedProjects;
   }
   async function getProjectsWithSessionsCached() {
     const now = Date.now();
@@ -47539,9 +48076,81 @@ function createSessionsModule({ log: log2, broadcast: broadcast2, json: json2, e
     const msgMatch = url.pathname.match(/^\/sessions\/([^/]+)\/messages$/);
     if (req.method === "GET" && msgMatch) {
       const sessionId = decodeURIComponent(msgMatch[1]);
+      const tailParam = url.searchParams.get("tail");
+      const beforeParam = url.searchParams.get("before");
+      const paginationOpts = {};
+      if (tailParam) paginationOpts.tail = parseInt(tailParam, 10);
+      if (beforeParam) paginationOpts.before = parseInt(beforeParam, 10);
       try {
-        const { messages, byteOffset } = await readSessionMessages(sessionId);
-        json2(res, { messages, byteOffset });
+        const result = await readSessionMessagesPaginated(sessionId, paginationOpts);
+        const { messages, byteOffset, filePath } = result;
+        const usage = result.usage;
+        if (usage && !usage.totalCostUsd && usage.model) {
+          try {
+            const db3 = resolveDb2 ? resolveDb2() : null;
+            if (db3) {
+              const pricing = db3.prepare(`
+                SELECT input_cost_per_mtok, output_cost_per_mtok, cache_read_cost_per_mtok
+                FROM model_pricing
+                WHERE provider = 'claude'
+                  AND (model_pattern = ? OR ? LIKE model_pattern)
+                  AND (effective_until IS NULL OR effective_until > datetime('now'))
+                ORDER BY CASE WHEN model_pattern = ? THEN 0 ELSE 1 END,
+                  LENGTH(model_pattern) DESC LIMIT 1
+              `).get(usage.model, usage.model, usage.model);
+              if (pricing) {
+                const cost = (usage.totalInputTokens * pricing.input_cost_per_mtok + usage.totalOutputTokens * pricing.output_cost_per_mtok + usage.totalCacheReadTokens * (pricing.cache_read_cost_per_mtok || 0)) / 1e6;
+                if (cost > 0) usage.totalCostUsd = cost;
+              }
+            }
+          } catch {
+          }
+        }
+        json2(res, {
+          messages,
+          byteOffset,
+          usage,
+          before: result.before,
+          hasMore: result.hasMore,
+          totalCount: result.totalCount
+        });
+        if (usage) {
+          try {
+            const db3 = resolveDb2 ? resolveDb2() : null;
+            if (db3) {
+              const existing = db3.prepare(
+                "SELECT id FROM sessions WHERE provider_session_id = ?"
+              ).get(sessionId);
+              if (!existing) {
+                const now = (/* @__PURE__ */ new Date()).toISOString();
+                db3.prepare(`
+                  INSERT OR IGNORE INTO sessions
+                    (id, provider, provider_session_id, origin, origin_native_file,
+                     model, cwd, status, created_at, last_active_at,
+                     turn_count, total_cost, total_input_tokens, total_output_tokens)
+                  VALUES (?, 'claude', ?, 'provider-import', ?,
+                     ?, ?, 'active', ?, ?,
+                     ?, ?, ?, ?)
+                `).run(
+                  sessionId,
+                  sessionId,
+                  filePath,
+                  usage.model,
+                  usage.cwd,
+                  usage.createdAt || now,
+                  usage.lastActiveAt || now,
+                  usage.turnCount,
+                  usage.totalCostUsd || 0,
+                  usage.totalInputTokens,
+                  usage.totalOutputTokens
+                );
+                log2("sessions", "info", "lazy backfill: created DB row", { sessionId: sessionId.slice(0, 8) });
+              }
+            }
+          } catch (dbErr) {
+            log2("sessions", "warn", "lazy backfill failed", { error: dbErr.message });
+          }
+        }
       } catch (err) {
         error2(res, err.message, 404);
       }
@@ -47971,6 +48580,14 @@ var fsWatchers = /* @__PURE__ */ new Map();
 var fsReaddirCache = /* @__PURE__ */ new Map();
 var fsReaddirInFlight = /* @__PURE__ */ new Map();
 var fsReaddirCacheGeneration = 0;
+var terminalSessions = /* @__PURE__ */ new Map();
+var ptyModulePromise = null;
+async function getPtyModule() {
+  if (!ptyModulePromise) {
+    ptyModulePromise = import("@lydell/node-pty").then((mod) => mod?.spawn ? mod : mod?.default?.spawn ? mod.default : null).catch(() => null);
+  }
+  return ptyModulePromise;
+}
 function generateToken() {
   return import_crypto5.default.randomBytes(32).toString("hex");
 }
@@ -47984,6 +48601,7 @@ function checkAuth2(req, token) {
 function json(res, data, status = 200) {
   res.writeHead(status, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
   res.end(JSON.stringify(data));
+  return true;
 }
 function error(res, message, status = 400) {
   json(res, { error: message }, status);
@@ -47993,6 +48611,93 @@ async function readBody(req) {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
   return JSON.parse(Buffer.concat(chunks).toString());
+}
+async function handleTerminal(req, res, url) {
+  if (req.method === "POST" && url.pathname === "/terminal/open") {
+    const body = await readBody(req);
+    const sessionKey = String(body.sessionKey || "global");
+    const cwd = body.cwd;
+    const shellPath = body.shell || "/bin/zsh";
+    if (!cwd || typeof cwd !== "string") return error(res, "cwd required");
+    const nodePty = await getPtyModule();
+    if (!nodePty?.spawn) {
+      return error(res, "Real PTY backend unavailable: install @lydell/node-pty in cli workspace", 503);
+    }
+    try {
+      const existing = terminalSessions.get(sessionKey);
+      if (existing) {
+        try {
+          existing.proc.kill();
+        } catch {
+        }
+        terminalSessions.delete(sessionKey);
+      }
+      const proc = nodePty.spawn(shellPath, ["-il"], {
+        name: "xterm-color",
+        cols: 80,
+        rows: 24,
+        cwd,
+        env: { ...process.env, TERM: "xterm-256color", COLORTERM: "truecolor" }
+      });
+      const entry = { proc, cwd, shell: shellPath };
+      terminalSessions.set(sessionKey, entry);
+      proc.onData((data) => {
+        broadcast("terminal:data", { sessionKey, data });
+      });
+      proc.onExit(({ exitCode }) => {
+        if (terminalSessions.get(sessionKey)?.proc === proc) {
+          terminalSessions.delete(sessionKey);
+        }
+        broadcast("terminal:exit", { sessionKey, code: typeof exitCode === "number" ? exitCode : null });
+      });
+      return json(res, { ok: true, sessionKey });
+    } catch (err) {
+      return error(res, err.message || "Failed to open terminal", 500);
+    }
+  }
+  if (req.method === "POST" && url.pathname === "/terminal/write") {
+    const body = await readBody(req);
+    const sessionKey = String(body.sessionKey || "global");
+    const data = typeof body.data === "string" ? body.data : "";
+    const entry = terminalSessions.get(sessionKey);
+    if (!entry) return error(res, "terminal session not found", 404);
+    try {
+      entry.proc.write(data);
+      return json(res, { ok: true });
+    } catch (err) {
+      return error(res, err.message || "Failed to write terminal", 500);
+    }
+  }
+  if (req.method === "POST" && url.pathname === "/terminal/resize") {
+    const body = await readBody(req);
+    const sessionKey = String(body.sessionKey || "global");
+    const cols = Number(body.cols || 0);
+    const rows = Number(body.rows || 0);
+    const entry = terminalSessions.get(sessionKey);
+    if (!entry) return error(res, "terminal session not found", 404);
+    if (!Number.isFinite(cols) || !Number.isFinite(rows) || cols <= 0 || rows <= 0) {
+      return error(res, "cols and rows required", 400);
+    }
+    try {
+      entry.proc.resize(Math.floor(cols), Math.floor(rows));
+      return json(res, { ok: true });
+    } catch (err) {
+      return error(res, err.message || "Failed to resize terminal", 500);
+    }
+  }
+  if (req.method === "POST" && url.pathname === "/terminal/close") {
+    const body = await readBody(req);
+    const sessionKey = String(body.sessionKey || "global");
+    const entry = terminalSessions.get(sessionKey);
+    if (!entry) return json(res, { ok: true });
+    try {
+      entry.proc.kill();
+    } catch {
+    }
+    terminalSessions.delete(sessionKey);
+    return json(res, { ok: true });
+  }
+  return false;
 }
 function invalidateFsReaddirCache() {
   fsReaddirCacheGeneration += 1;
@@ -48499,7 +49204,7 @@ var sessionsModule = createSessionsModule({
   resolveDb: sessionsResolveDb
 });
 var { handleSessions, startSessionsWatcher, queueSessionsUpdated, handleWsMessage: handleSessionsWsMessage, handleWsDisconnect: handleSessionsWsDisconnect, cleanup: cleanupSessions } = sessionsModule;
-var MAX_CONCURRENT = parseInt(process.env.RUDI_MAX_AGENT_PROCESSES || "3", 10) || 3;
+var MAX_CONCURRENT = parseInt(process.env.RUDI_MAX_AGENT_PROCESSES || "10", 10) || 10;
 var IDLE_TIMEOUT_MS = parseInt(process.env.RUDI_IDLE_TIMEOUT_MS || String(10 * 60 * 1e3), 10) || 10 * 60 * 1e3;
 var handleAgent = createAgentHandler({
   agentProcesses,
@@ -48548,7 +49253,7 @@ ${lastMessage}`;
       "1",
       "--output-format",
       "json"
-    ], { stdio: ["ignore", "pipe", "pipe"], timeout: 1e4 });
+    ], { stdio: ["ignore", "pipe", "pipe"], timeout: 1e4, cwd: import_os15.default.tmpdir() });
     _activeSuggestProcess = child;
     let stdout = "";
     child.stdout.on("data", (chunk) => {
@@ -48577,12 +49282,17 @@ ${lastMessage}`;
     }
     const parsed = JSON.parse(stdout);
     const resultStr = parsed.result || "";
-    const suggestions = JSON.parse(resultStr);
+    const arrayMatch = resultStr.match(/\[[\s\S]*\]/);
+    if (!arrayMatch) {
+      json(res, { suggestions: [] });
+      return true;
+    }
+    const suggestions = JSON.parse(arrayMatch[0]);
     if (!Array.isArray(suggestions) || !suggestions.every((s2) => typeof s2 === "string")) {
       json(res, { suggestions: [] });
       return true;
     }
-    json(res, { suggestions });
+    json(res, { suggestions: suggestions.slice(0, 4) });
   } catch (err) {
     log("suggest", "warn", `suggestion failed: ${err.message}`);
     _activeSuggestProcess = null;
@@ -48590,7 +49300,6 @@ ${lastMessage}`;
   }
   return true;
 }
-var _activeNameProcess = null;
 async function handleNameSession(req, res, url) {
   if (req.method !== "POST" || url.pathname !== "/agent/name-session") return false;
   const body = await readBody(req);
@@ -48604,18 +49313,13 @@ async function handleNameSession(req, res, url) {
     json(res, { title: "" });
     return true;
   }
-  if (_activeNameProcess) {
-    try {
-      _activeNameProcess.kill();
-    } catch {
-    }
-    _activeNameProcess = null;
-  }
   const projectName = typeof body.projectName === "string" ? body.projectName : "unknown";
-  const prompt = `Generate a short title (3-7 words) for this coding session based on the user's request. The title should describe what work is being done. Return ONLY the title text, no quotes, no punctuation at the end.
+  const prompt = `You are a title generator. Your ENTIRE response must be a short title (3-7 words) for a coding session. No greeting, no explanation, no quotes, no trailing punctuation. Just the title.
 
 Project: ${projectName}
-User request: ${firstMessage}`;
+User request: ${firstMessage}
+
+Title:`;
   try {
     const child = (0, import_child_process17.spawn)(binaryPath, [
       "-p",
@@ -48627,8 +49331,7 @@ User request: ${firstMessage}`;
       "1",
       "--output-format",
       "json"
-    ], { stdio: ["ignore", "pipe", "pipe"], timeout: 1e4 });
-    _activeNameProcess = child;
+    ], { stdio: ["ignore", "pipe", "pipe"], timeout: 1e4, cwd: import_os15.default.tmpdir() });
     let stdout = "";
     child.stdout.on("data", (chunk) => {
       stdout += chunk;
@@ -48649,7 +49352,6 @@ User request: ${firstMessage}`;
         resolve(1);
       });
     });
-    _activeNameProcess = null;
     if (exitCode !== 0 || !stdout) {
       json(res, { title: "" });
       return true;
@@ -48659,8 +49361,82 @@ User request: ${firstMessage}`;
     json(res, { title });
   } catch (err) {
     log("name-session", "warn", `naming failed: ${err.message}`);
-    _activeNameProcess = null;
     json(res, { title: "" });
+  }
+  return true;
+}
+async function handleGenerateBranchName(req, res, url) {
+  if (req.method !== "POST" || url.pathname !== "/agent/generate-branch-name") return false;
+  const body = await readBody(req);
+  const prompt = typeof body.prompt === "string" ? body.prompt.slice(0, 1e3) : "";
+  if (!prompt) {
+    json(res, { branchName: "" });
+    return true;
+  }
+  const binaryPath = resolveClaudeBinary();
+  if (!binaryPath) {
+    json(res, { branchName: "" });
+    return true;
+  }
+  const projectName = typeof body.projectName === "string" ? body.projectName : "";
+  const systemPrompt = `Generate a single kebab-case git branch name (max 40 chars) for the following task. Rules: lowercase letters, numbers, and hyphens only. No leading/trailing hyphens. No branch prefixes like "feature/" or "fix/". Your ENTIRE response must be just the branch name, nothing else.${projectName ? `
+
+Project: ${projectName}` : ""}
+
+Task: ${prompt}
+
+Branch name:`;
+  try {
+    const child = (0, import_child_process17.spawn)(binaryPath, [
+      "-p",
+      systemPrompt,
+      "--model",
+      "haiku",
+      "--no-session-persistence",
+      "--max-turns",
+      "1",
+      "--output-format",
+      "json"
+    ], { stdio: ["ignore", "pipe", "pipe"], timeout: 1e4, cwd: import_os15.default.tmpdir() });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    const exitCode = await new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        log("generate-branch-name", "warn", "timeout \u2014 killing process");
+        try {
+          child.kill();
+        } catch {
+        }
+      }, 1e4);
+      child.on("close", (code) => {
+        clearTimeout(timer);
+        resolve(code);
+      });
+      child.on("error", (e2) => {
+        clearTimeout(timer);
+        log("generate-branch-name", "warn", `spawn error: ${e2.message}`);
+        resolve(1);
+      });
+    });
+    log("generate-branch-name", "info", `exit=${exitCode} stdout=${stdout.length}b stderr=${stderr.slice(0, 200)}`);
+    if (exitCode !== 0 || !stdout) {
+      json(res, { branchName: "" });
+      return true;
+    }
+    const parsed = JSON.parse(stdout);
+    const raw = (parsed.result || "").trim();
+    log("generate-branch-name", "info", `raw="${raw}"`);
+    const branchName = raw.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
+    json(res, { branchName });
+  } catch (err) {
+    log("generate-branch-name", "warn", `generation failed: ${err.message}`);
+    json(res, { branchName: "" });
   }
   return true;
 }
@@ -48932,16 +49708,20 @@ async function cmdServe(args, flags) {
       if (url.pathname.startsWith("/agent/")) {
         if (await handleSuggest(req, res, url)) return;
         if (await handleNameSession(req, res, url)) return;
+        if (await handleGenerateBranchName(req, res, url)) return;
         if (await handleAgent(req, res, url)) return;
       }
       if (url.pathname.startsWith("/shell/")) {
         if (await handleShell(req, res, url)) return;
       }
+      if (url.pathname.startsWith("/terminal/")) {
+        if (await handleTerminal(req, res, url)) return;
+      }
       log("http", "warn", `404 ${req.method} ${url.pathname}`);
       error(res, "Not found", 404);
     } catch (err) {
       log("http", "error", `500 ${req.method} ${url.pathname}: ${err.message}`, { stack: err.stack });
-      error(res, "Internal server error", 500);
+      error(res, `Internal server error: ${err.message}`, 500);
     } finally {
       const ms = Date.now() - start;
       if (!url.pathname.startsWith("/logs") && url.pathname !== "/health") {
@@ -48983,6 +49763,56 @@ async function cmdServe(args, flags) {
     idleTimeoutMs: IDLE_TIMEOUT_MS,
     maxConcurrent: MAX_CONCURRENT
   });
+  try {
+    const db3 = getDb();
+    const orphans = db3.prepare(`
+      SELECT session_id, worktree_path, worktree_branch, base_branch, project_root
+      FROM session_runtime_state
+      WHERE worktree_path IS NOT NULL
+        AND status IN ('completed', 'error', 'stopped', 'crashed')
+    `).all();
+    for (const row of orphans) {
+      if (!row.worktree_path || !import_fs34.default.existsSync(row.worktree_path)) {
+        db3.prepare("UPDATE session_runtime_state SET worktree_path = NULL WHERE session_id = ?").run(row.session_id);
+        continue;
+      }
+      try {
+        const uncommitted = (0, import_child_process17.execSync)("git status --porcelain", { cwd: row.worktree_path, stdio: "pipe" }).toString().trim();
+        if (uncommitted) {
+          log("serve", "warn", `orphan worktree has uncommitted changes, skipping: ${row.worktree_path}`);
+          continue;
+        }
+        let unmerged = "";
+        if (row.worktree_branch && row.base_branch && row.project_root) {
+          try {
+            unmerged = (0, import_child_process17.execSync)(
+              `git log ${row.base_branch}..${row.worktree_branch} --oneline`,
+              { cwd: row.project_root, stdio: "pipe" }
+            ).toString().trim();
+          } catch {
+          }
+        }
+        if (unmerged) {
+          log("serve", "warn", `orphan worktree has unmerged commits, skipping: ${row.worktree_path}`);
+          continue;
+        }
+        const repoDir = row.project_root || import_path33.default.dirname(import_path33.default.dirname(import_path33.default.dirname(row.worktree_path)));
+        (0, import_child_process17.execSync)(`git worktree remove ${JSON.stringify(row.worktree_path)}`, { cwd: repoDir, stdio: "pipe" });
+        if (row.worktree_branch) {
+          try {
+            (0, import_child_process17.execSync)(`git branch -d ${row.worktree_branch}`, { cwd: repoDir, stdio: "pipe" });
+          } catch {
+          }
+        }
+        db3.prepare("UPDATE session_runtime_state SET worktree_path = NULL, worktree_branch = NULL WHERE session_id = ?").run(row.session_id);
+        log("serve", "info", `cleaned up orphan worktree: ${row.worktree_path}`);
+      } catch (err) {
+        log("serve", "warn", `orphan worktree cleanup failed for ${row.worktree_path}: ${err.message}`);
+      }
+    }
+  } catch (err) {
+    log("serve", "warn", `orphan worktree cleanup sweep failed: ${err.message}`);
+  }
   server.listen(requestedPort, "127.0.0.1", () => {
     const actualPort = server.address().port;
     import_fs34.default.mkdirSync(PATHS.home, { recursive: true });
@@ -49019,6 +49849,13 @@ async function cmdServe(args, flags) {
       } catch {
       }
     }
+    for (const [, { proc }] of terminalSessions) {
+      try {
+        proc.kill();
+      } catch {
+      }
+    }
+    terminalSessions.clear();
     resumeSessionIndex.clear();
     for (const [, entry] of fsWatchers) {
       try {

@@ -9,7 +9,7 @@ import os from 'os';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { spawn, execSync } from 'child_process';
+import { spawn, execSync, execFileSync, spawnSync } from 'child_process';
 import { PATHS } from '@learnrudi/env';
 import { getDb } from '@learnrudi/db';
 
@@ -104,10 +104,69 @@ function loadUserPrompt() {
   }
 }
 
-function buildSystemPrompt(frontendPrompt) {
+const SPAWN_CHILDREN_PROMPT = `# Spawning Child Sessions
+
+You have \`spawn_child\` and \`list_children\` tools available. Use them to spawn and monitor
+child agent sessions. Each child gets its own git worktree and runs headlessly with full autonomy.
+
+## When to spawn children
+
+- A task has clearly separable subtasks that can run in parallel
+- The user asks you to "start working on X in the background"
+- You want to delegate a subtask without leaving the current conversation
+- You're planning work and want to kick off execution in parallel sessions
+
+## spawn_child tool
+
+Call the \`spawn_child\` tool directly with these fields:
+
+- **prompt** (required): Full task brief for the child. Be specific — include scope, files to touch, acceptance criteria, and commit message convention. The child has zero other context.
+- **description** (optional): Short label (e.g. "login-form", "api-tests"). Used in branch name and sidebar. Auto-generated from prompt if omitted.
+- **model** (optional): "haiku" (fast, cheap — great for boilerplate/mechanical tasks), "sonnet" (balanced — good default), "opus" (most capable — complex architecture or reasoning). Defaults to parent's model.
+- **provider** (optional): Default "claude". Future-proofs non-Claude routing.
+- **baseRef** (optional): Git ref to branch from. Defaults to parent HEAD.
+
+## list_children tool
+
+Call \`list_children\` (no arguments) to check on all your spawned children. Returns status, alive state, branch, description, and model for each child.
+
+## Guidelines
+
+- Spawn children FIRST before doing any file work yourself — let children handle the files
+- Each child works in its own isolated git worktree — no merge conflicts possible
+- Keep child tasks focused and independent (avoid overlapping file edits)
+- Each child should create any directories it needs and commit its work when done
+- Children cannot spawn further children
+- The user sees all child sessions in the sidebar and can click into any child to review
+- Write thorough prompts — the child has zero context beyond what you put in the prompt field
+- Choose the right model per task: haiku for boilerplate, sonnet for standard work, opus for complex logic
+- Issue one spawn_child call per tool turn (prevents concurrency errors)
+- Never issue concurrent spawn_child calls in a single response; spawn one child at a time
+
+## Fallback (only if spawn_child tool is unavailable)
+
+If the spawn_child MCP tool is not available, fall back to curl:
+
+\`\`\`bash
+curl -s -X POST "$RUDI_SIDECAR_URL/agent/spawn-child" \\
+  -H "X-Rudi-Token: $RUDI_SIDECAR_TOKEN" \\
+  -H "X-Rudi-Caller-Session: $RUDI_SESSION_ID" \\
+  -H "Content-Type: application/json" \\
+  -d '{"parentSessionId":"'$RUDI_SESSION_ID'","prompt":"...","description":"...","model":"sonnet","origin":"bash_curl"}'
+\`\`\`
+
+Check children via curl:
+\`\`\`bash
+curl -s "$RUDI_SIDECAR_URL/agent/children/$RUDI_SESSION_ID" \\
+  -H "X-Rudi-Token: $RUDI_SIDECAR_TOKEN" \\
+  -H "X-Rudi-Caller-Session: $RUDI_SESSION_ID"
+\`\`\``;
+
+function buildSystemPrompt(frontendPrompt, { canSpawnChildren = false } = {}) {
   const parts = [RUDI_BASE_PROMPT];
   const userPrompt = loadUserPrompt();
   if (userPrompt) parts.push(userPrompt);
+  if (canSpawnChildren) parts.push(SPAWN_CHILDREN_PROMPT);
   if (frontendPrompt) parts.push(frontendPrompt);
   return parts.join('\n\n---\n\n');
 }
@@ -390,7 +449,14 @@ export function createAgentHandler({
   queueSessionsUpdated,
   resumeSessionIndex = new Map(),
   maxConcurrent = 6,
+  getSidecarPort = () => 0,
+  getSidecarToken = () => '',
 }) {
+  // Rate limit tracking for spawn-child (per parent, in-memory)
+  const spawnRateMap = new Map(); // parentSessionId -> [timestamp, ...]
+  const MAX_SPAWNS_PER_WINDOW = 3;
+  const SPAWN_RATE_WINDOW_MS = 10_000;
+  const MAX_CHILDREN_PER_PARENT = 5;
   const dropResumeMappingsForSession = (targetSessionId) => {
     for (const [resumeId, mappedSessionId] of resumeSessionIndex.entries()) {
       if (mappedSessionId === targetSessionId) {
@@ -441,6 +507,23 @@ export function createAgentHandler({
     });
   };
 
+  /** Normalize an HTTP header value to a single string (Node may return string[]). */
+  const normalizeHeader = (val) => Array.isArray(val) ? val[0] : val || '';
+
+  /**
+   * Get the actual repository root, even when called from inside a worktree.
+   * git rev-parse --show-toplevel returns the worktree root (wrong for our purposes).
+   * git rev-parse --git-common-dir returns the shared .git dir → parent = real repo root.
+   */
+  function getRepoRoot(cwd) {
+    const gitCommonDir = execFileSync('git', ['rev-parse', '--git-common-dir'], {
+      cwd, stdio: 'pipe',
+    }).toString().trim();
+    // Resolve relative path (e.g., ".git" → absolute)
+    const absGitDir = path.resolve(cwd, gitCommonDir);
+    return path.dirname(absGitDir);
+  }
+
   /** Save pasted images to .rudi/images/ and return augmented prompt text. */
   function buildUserContent(text, images, cwd) {
     if (!images || images.length === 0) return text;
@@ -467,7 +550,22 @@ export function createAgentHandler({
     if (req.method === 'POST' && url.pathname === '/agent/start') {
       const body = await readBody(req);
       log('agent', 'info', 'received /agent/start request', { bodyKeys: Object.keys(body), resumeSessionId: body.resumeSessionId || null });
-      const { prompt, model, systemPrompt, resumeSessionId, cwd, permissionMode, planMode, images } = body;
+      const {
+        prompt,
+        model,
+        systemPrompt,
+        resumeSessionId,
+        cwd,
+        permissionMode,
+        planMode,
+        images,
+        useWorktree,
+        parentSessionId,
+      } = body;
+      const isChildSession = Boolean(parentSessionId);
+      let shouldUseWorktree = useWorktree !== false;
+      // Belt-and-suspenders: child sessions are always isolated.
+      if (isChildSession) shouldUseWorktree = true;
 
       if (!prompt && (!images || images.length === 0)) return error(res, 'prompt required');
 
@@ -501,7 +599,13 @@ export function createAgentHandler({
             sessionId: existingId,
             event: { type: 'system', message: 'Resumed existing process' },
           });
-          return json(res, { sessionId: existingId, provider: entry.provider, reused: true, cwd: entry.cwd });
+          return json(res, {
+            sessionId: existingId,
+            provider: entry.provider,
+            reused: true,
+            cwd: entry.cwd,
+            useWorktree: Boolean(entry.worktreePath),
+          });
         }
       }
 
@@ -522,6 +626,7 @@ export function createAgentHandler({
       }
 
       const sessionId = crypto.randomUUID();
+      const shortId = sessionId.slice(0, 8);
       if (resumeSessionId) {
         // Pre-index the requested resume id to avoid near-simultaneous duplicates.
         resumeSessionIndex.set(resumeSessionId, sessionId);
@@ -534,14 +639,63 @@ export function createAgentHandler({
       ];
       if (model) args.push('--model', model);
 
-      // Build system prompt: RUDI base + user file + frontend override
-      const fullSystemPrompt = buildSystemPrompt(systemPrompt);
+      // Build system prompt: RUDI base + user file + frontend override + spawn section for main sessions
+      const canSpawnChildren = getSidecarPort() > 0;
+      const fullSystemPrompt = buildSystemPrompt(systemPrompt, { canSpawnChildren });
       if (fullSystemPrompt) args.push('--append-system-prompt', fullSystemPrompt);
       if (resumeSessionId) args.push('--resume', resumeSessionId);
       if (planMode) {
         args.push('--permission-mode', 'plan');
       } else if (permissionMode && permissionMode !== 'default') {
         args.push('--permission-mode', permissionMode);
+      }
+
+      // Headless sessions cannot interactively approve MCP tool prompts.
+      // Pre-allow spawn tools so parent agents can delegate without blocking.
+      if (canSpawnChildren) {
+        args.push(
+          '--allowed-tools',
+          'mcp__rudi-spawn__spawn_child,mcp__rudi-spawn__list_children'
+        );
+      }
+
+      // MCP config injection: merge user's MCP servers with rudi-spawn for child spawning
+      let mcpConfigPath = null;
+      if (canSpawnChildren) {
+        const spawnShimPath = path.join(PATHS.home, 'bins', 'rudi-spawn');
+        if (fs.existsSync(spawnShimPath)) {
+          try {
+            // Read user's existing MCP servers from ~/.claude.json
+            let existingMcpServers = {};
+            const claudeJsonPath = path.join(os.homedir(), '.claude.json');
+            try {
+              const claudeJson = JSON.parse(fs.readFileSync(claudeJsonPath, 'utf-8'));
+              existingMcpServers = claudeJson.mcpServers || {};
+            } catch {
+              // No ~/.claude.json or malformed — use empty
+            }
+
+            // Merge in rudi-spawn
+            const mergedConfig = {
+              mcpServers: {
+                ...existingMcpServers,
+                'rudi-spawn': { command: spawnShimPath, args: [] },
+              },
+            };
+
+            // Write to temp file
+            const tmpDir = path.join(PATHS.home, 'tmp');
+            fs.mkdirSync(tmpDir, { recursive: true });
+            mcpConfigPath = path.join(tmpDir, `spawn-mcp-${shortId}.json`);
+            fs.writeFileSync(mcpConfigPath, JSON.stringify(mergedConfig, null, 2), { mode: 0o600 });
+
+            args.push('--mcp-config', mcpConfigPath, '--strict-mcp-config');
+
+            log('agent', 'info', `injected spawn MCP config: ${mcpConfigPath}`, { sessionId: shortId, serverCount: Object.keys(mergedConfig.mcpServers).length });
+          } catch (mcpErr) {
+            log('agent', 'warn', `MCP config injection failed: ${mcpErr.message}`, { sessionId: shortId });
+          }
+        }
       }
 
       const env = {
@@ -554,6 +708,14 @@ export function createAgentHandler({
       if (permissionMode && permissionMode !== 'default') {
         env.CI = 'true';
       }
+      // Inject sidecar connection env vars for child spawning
+      const port = getSidecarPort();
+      if (port > 0) {
+        env.RUDI_SIDECAR_URL = `http://127.0.0.1:${port}`;
+        env.RUDI_SIDECAR_TOKEN = getSidecarToken();
+        env.RUDI_SESSION_ID = sessionId;
+        env.RUDI_CAN_SPAWN_CHILDREN = '1';
+      }
 
       const workingDir = cwd || process.env.HOME || os.homedir();
 
@@ -563,85 +725,91 @@ export function createAgentHandler({
       let isGitRepo = false;
       try {
         execSync('git rev-parse --is-inside-work-tree', { cwd: workingDir, stdio: 'pipe' });
-        isGitRepo = true;
-        repoRoot = execSync('git rev-parse --show-toplevel', { cwd: workingDir, stdio: 'pipe' }).toString().trim();
+        // Use getRepoRoot() to get the actual repo root, not worktree root
+        repoRoot = getRepoRoot(workingDir);
         currentBranch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: workingDir, stdio: 'pipe' }).toString().trim();
+        isGitRepo = true;
       } catch {
-        // Not a git repo — leave null
+        // Not a usable git repo context for branch-attached worktree creation.
+        // Keep isGitRepo=false so we fall back to shared cwd instead of 500.
+        isGitRepo = false;
+        repoRoot = null;
+        currentBranch = null;
       }
 
       // Worktree isolation: branch-attached, named after the current branch
-      const shortId = sessionId.slice(0, 8);
       let worktreePath = null;
       let worktreeBranch = null;
       let baseBranch = currentBranch;
       let gitignoreWarning = false;
       let effectiveCwd = workingDir;
 
-      if (isGitRepo && repoRoot) {
+      if (isGitRepo && repoRoot && currentBranch) {
         if (!resumeSessionId) {
-          // New session — create worktree named after the branch
-          // Sanitize branch for use as directory name (replace / with -)
-          const safeBranchDir = currentBranch.replace(/\//g, '-');
-          const worktreesBase = path.join(repoRoot, '.rudi', 'worktrees');
+          if (shouldUseWorktree) {
+            // New session — create worktree named after the branch
+            // Sanitize branch for use as directory name (replace / with -)
+            const safeBranchDir = (currentBranch || 'detached').replace(/\//g, '-');
+            const worktreesBase = path.join(repoRoot, '.rudi', 'worktrees');
 
-          // Find unique directory name: branch, branch-2, branch-3, ...
-          let worktreeDir = path.join(worktreesBase, safeBranchDir);
-          if (fs.existsSync(worktreeDir)) {
-            let suffix = 2;
-            while (fs.existsSync(path.join(worktreesBase, `${safeBranchDir}-${suffix}`))) suffix++;
-            worktreeDir = path.join(worktreesBase, `${safeBranchDir}-${suffix}`);
-          }
-
-          try {
-            fs.mkdirSync(worktreesBase, { recursive: true });
-
-            // Try the current branch directly first (works if not checked out elsewhere)
-            let branchName = currentBranch;
-            try {
-              execSync(
-                `git worktree add ${JSON.stringify(worktreeDir)} ${branchName}`,
-                { cwd: repoRoot, stdio: 'pipe' }
-              );
-            } catch {
-              // Branch already checked out (expected — main repo is on it)
-              // Clean up any partial directory from the failed attempt
-              try { fs.rmSync(worktreeDir, { recursive: true, force: true }); } catch {}
-              // Collision fallback: sanitize slashes to dashes to avoid git ref conflict
-              // (git can't have both refs/heads/foo and refs/heads/foo/bar)
-              const safeBase = currentBranch.replace(/\//g, '-');
-              branchName = `${safeBase}-session-${shortId}`;
-              execSync(
-                `git worktree add -b ${branchName} ${JSON.stringify(worktreeDir)}`,
-                { cwd: repoRoot, stdio: 'pipe' }
-              );
-            }
-
-            // Verify worktree directory actually exists before using it
+            // Find unique directory name: branch, branch-2, branch-3, ...
+            let worktreeDir = path.join(worktreesBase, safeBranchDir);
             if (fs.existsSync(worktreeDir)) {
-              worktreePath = worktreeDir;
-              worktreeBranch = branchName;
-              effectiveCwd = worktreeDir;
-            } else {
-              log('agent', 'warn', `worktree dir missing after creation, using shared cwd`, { sessionId: shortId });
+              let suffix = 2;
+              while (fs.existsSync(path.join(worktreesBase, `${safeBranchDir}-${suffix}`))) suffix++;
+              worktreeDir = path.join(worktreesBase, `${safeBranchDir}-${suffix}`);
             }
-            log('agent', 'info', `worktree created on branch ${branchName}: ${worktreeDir}`, { sessionId: shortId });
 
-            // Check if .rudi/ is in .gitignore
             try {
-              const gitignorePath = path.join(repoRoot, '.gitignore');
-              const gitignoreContent = fs.existsSync(gitignorePath)
-                ? fs.readFileSync(gitignorePath, 'utf-8')
-                : '';
-              if (!gitignoreContent.split('\n').some(line => line.trim() === '.rudi/' || line.trim() === '.rudi')) {
+              fs.mkdirSync(worktreesBase, { recursive: true });
+
+              // Try the current branch directly first (works if not checked out elsewhere)
+              let branchName = currentBranch;
+              try {
+                execSync(
+                  `git worktree add ${JSON.stringify(worktreeDir)} ${branchName}`,
+                  { cwd: repoRoot, stdio: 'pipe' }
+                );
+              } catch {
+                // Branch already checked out (expected — main repo is on it)
+                // Clean up any partial directory from the failed attempt
+                try { fs.rmSync(worktreeDir, { recursive: true, force: true }); } catch {}
+                // Collision fallback: sanitize slashes to dashes to avoid git ref conflict
+                // (git can't have both refs/heads/foo and refs/heads/foo/bar)
+                const safeBase = currentBranch.replace(/\//g, '-');
+                branchName = `${safeBase}-session-${shortId}`;
+                execSync(
+                  `git worktree add -b ${branchName} ${JSON.stringify(worktreeDir)}`,
+                  { cwd: repoRoot, stdio: 'pipe' }
+                );
+              }
+
+              // Verify worktree directory actually exists before using it
+              if (fs.existsSync(worktreeDir)) {
+                worktreePath = worktreeDir;
+                worktreeBranch = branchName;
+                effectiveCwd = worktreeDir;
+              } else {
+                log('agent', 'warn', `worktree dir missing after creation, using shared cwd`, { sessionId: shortId });
+              }
+              log('agent', 'info', `worktree created on branch ${branchName}: ${worktreeDir}`, { sessionId: shortId });
+
+              // Check if .rudi/ is in .gitignore
+              try {
+                const gitignorePath = path.join(repoRoot, '.gitignore');
+                const gitignoreContent = fs.existsSync(gitignorePath)
+                  ? fs.readFileSync(gitignorePath, 'utf-8')
+                  : '';
+                if (!gitignoreContent.split('\n').some(line => line.trim() === '.rudi/' || line.trim() === '.rudi')) {
+                  gitignoreWarning = true;
+                }
+              } catch {
                 gitignoreWarning = true;
               }
-            } catch {
-              gitignoreWarning = true;
+            } catch (wtErr) {
+              log('agent', 'warn', `worktree creation failed, using shared cwd: ${wtErr.message}`, { sessionId: shortId });
+              // Non-fatal — fall back to shared cwd
             }
-          } catch (wtErr) {
-            log('agent', 'warn', `worktree creation failed, using shared cwd: ${wtErr.message}`, { sessionId: shortId });
-            // Non-fatal — fall back to shared cwd
           }
         } else {
           // Resume — check DB for existing worktree
@@ -682,6 +850,9 @@ export function createAgentHandler({
         }
       }
 
+      // Persist/echo the resolved mode (actual behavior), not just requested preference.
+      const resolvedUseWorktree = Boolean(worktreePath);
+
       // Node spawn can throw ENOENT when cwd doesn't exist. Validate and
       // fall back before spawning so binary-not-found and cwd-not-found are distinct.
       let spawnCwd = effectiveCwd;
@@ -713,7 +884,7 @@ export function createAgentHandler({
         binary: binaryPath,
         cwd: spawnCwd,
         worktreeBranch,
-        prompt: prompt.slice(0, 80),
+        prompt: (prompt || '').slice(0, 80),
         resumeSessionId: resumeSessionId || null,
       });
 
@@ -723,10 +894,10 @@ export function createAgentHandler({
         db.prepare(`
           INSERT INTO session_runtime_state
             (session_id, status, provider, resume_session_id, cwd, started_at, updated_at,
-             worktree_path, worktree_branch, project_root, base_branch)
-          VALUES (?, 'starting', 'claude', ?, ?, ?, ?, ?, ?, ?, ?)
+             worktree_path, worktree_branch, project_root, base_branch, use_worktree)
+          VALUES (?, 'starting', 'claude', ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(sessionId, resumeSessionId || null, effectiveCwd, now, now,
-               worktreePath, worktreeBranch, repoRoot, baseBranch);
+               worktreePath, worktreeBranch, repoRoot, baseBranch, resolvedUseWorktree ? 1 : 0);
       });
 
       try {
@@ -741,11 +912,13 @@ export function createAgentHandler({
           provider: 'claude',
           providerSessionId: null,
           resumeSessionId: resumeSessionId || null,
+          parentSessionId: null, // main sessions have no parent
           stdoutBuffer: '',
           turnActive: true,
           startedAt: Date.now(),
           lastActivityAt: Date.now(),
           cwd: effectiveCwd,
+          repoRoot,
           worktreePath,
           worktreeBranch,
           baseBranch,
@@ -983,6 +1156,13 @@ export function createAgentHandler({
           dropResumeMappingsForSession(sessionId);
           agentProcesses.delete(sessionId);
           broadcastProcessCount();
+          // Cleanup temp MCP config file
+          if (mcpConfigPath) { try { fs.unlinkSync(mcpConfigPath); } catch {} }
+        });
+
+        proc.on('exit', () => {
+          // Cleanup temp MCP config file (symmetric with close/error)
+          if (mcpConfigPath) { try { fs.unlinkSync(mcpConfigPath); } catch {} }
         });
 
         proc.on('error', (err) => {
@@ -998,6 +1178,8 @@ export function createAgentHandler({
           });
           dropResumeMappingsForSession(sessionId);
           agentProcesses.delete(sessionId);
+          // Cleanup temp MCP config file
+          if (mcpConfigPath) { try { fs.unlinkSync(mcpConfigPath); } catch {} }
         });
 
         json(res, {
@@ -1010,6 +1192,7 @@ export function createAgentHandler({
           projectCwd: worktreePath ? workingDir : undefined,
           baseBranch: baseBranch || undefined,
           gitignoreWarning: gitignoreWarning || undefined,
+          useWorktree: resolvedUseWorktree,
         });
         broadcastProcessCount();
       } catch (err) {
@@ -1225,15 +1408,15 @@ export function createAgentHandler({
         // Check for uncommitted changes
         let uncommitted = '';
         try {
-          uncommitted = execSync('git status --porcelain', { cwd: row.worktree_path, stdio: 'pipe' }).toString().trim();
+          uncommitted = execFileSync('git', ['status', '--porcelain'], { cwd: row.worktree_path, stdio: 'pipe' }).toString().trim();
         } catch {}
 
         // Check for unmerged commits
         let unmerged = '';
         if (row.worktree_branch && row.base_branch) {
           try {
-            unmerged = execSync(
-              `git log ${row.base_branch}..${row.worktree_branch} --oneline`,
+            unmerged = execFileSync(
+              'git', ['log', `${row.base_branch}..${row.worktree_branch}`, '--oneline'],
               { cwd: repoDir, stdio: 'pipe' }
             ).toString().trim();
           } catch {}
@@ -1249,20 +1432,19 @@ export function createAgentHandler({
 
         // Remove worktree
         try {
-          if (body.force) {
-            execSync(`git worktree remove --force ${JSON.stringify(row.worktree_path)}`, { cwd: repoDir, stdio: 'pipe' });
-          } else {
-            execSync(`git worktree remove ${JSON.stringify(row.worktree_path)}`, { cwd: repoDir, stdio: 'pipe' });
-          }
+          const removeArgs = body.force
+            ? ['worktree', 'remove', '--force', row.worktree_path]
+            : ['worktree', 'remove', row.worktree_path];
+          execFileSync('git', removeArgs, { cwd: repoDir, stdio: 'pipe' });
         } catch (wtErr) {
           return json(res, { ok: false, reason: 'remove_failed', details: wtErr.message });
         }
 
         // Try to delete the branch (only with -d, fails if unmerged)
         let branchRetained = false;
-        if (row.worktree_branch && !body.force) {
+        if (row.worktree_branch && !row.worktree_branch.startsWith('-') && !body.force) {
           try {
-            execSync(`git branch -d ${row.worktree_branch}`, { cwd: repoDir, stdio: 'pipe' });
+            execFileSync('git', ['branch', '-d', '--', row.worktree_branch], { cwd: repoDir, stdio: 'pipe' });
           } catch {
             branchRetained = true; // Branch has unmerged commits, keep it
           }
@@ -1304,7 +1486,10 @@ export function createAgentHandler({
 
         try {
           // Use -d (lowercase) — fails safely if unmerged
-          execSync(`git branch -d ${row.worktree_branch}`, { cwd: repoDir, stdio: 'pipe' });
+          if (row.worktree_branch.startsWith('-')) {
+            return json(res, { ok: false, reason: 'invalid_branch', details: 'Branch name starts with dash' });
+          }
+          execFileSync('git', ['branch', '-d', '--', row.worktree_branch], { cwd: repoDir, stdio: 'pipe' });
         } catch (brErr) {
           return json(res, { ok: false, reason: 'branch_unmerged', details: brErr.message });
         }
@@ -1315,6 +1500,602 @@ export function createAgentHandler({
       } catch (err) {
         error(res, `Branch delete failed: ${err.message}`, 500);
       }
+      return true;
+    }
+
+    // POST /agent/spawn-child — spawn a child session in its own worktree
+    if (req.method === 'POST' && url.pathname === '/agent/spawn-child') {
+      // Guard: sidecar must be fully initialized
+      if (getSidecarPort() === 0) {
+        return json(res, { error: 'SIDECAR_NOT_READY', message: 'Sidecar server is still initializing' }, 503);
+      }
+
+      const body = await readBody(req);
+      const { parentSessionId, prompt: childPrompt, description, model: childModel, baseRef, provider: childProvider, origin: childOrigin } = body;
+      const callerSession = normalizeHeader(req.headers['x-rudi-caller-session']);
+      const provider = childProvider || 'claude';
+      const origin = childOrigin || 'unknown';
+
+      // --- Validation ---
+      if (!childPrompt || typeof childPrompt !== 'string' || !childPrompt.trim()) {
+        return error(res, 'prompt required', 400);
+      }
+      if (childPrompt.length > 25000) {
+        return error(res, 'prompt too long (max 25000 chars)', 400);
+      }
+      if (!parentSessionId || typeof parentSessionId !== 'string') {
+        return error(res, 'parentSessionId required', 400);
+      }
+      // UUID format check (loose)
+      if (!/^[0-9a-f-]{36}$/i.test(parentSessionId)) {
+        return error(res, 'parentSessionId must be a valid UUID', 400);
+      }
+      if (!callerSession || callerSession !== parentSessionId) {
+        return error(res, 'X-Rudi-Caller-Session must match parentSessionId', 403);
+      }
+      if (description && description.length > 64) {
+        return error(res, 'description too long (max 64 chars)', 400);
+      }
+      // Model: free-form string — validated by Claude API at runtime
+      if (childModel && typeof childModel !== 'string') {
+        return error(res, 'model must be a string', 400);
+      }
+
+      // Rate limit: max 3 spawns per 10s per parent
+      const now = Date.now();
+      const parentTimestamps = spawnRateMap.get(parentSessionId) || [];
+      const recentTimestamps = parentTimestamps.filter(t => now - t < SPAWN_RATE_WINDOW_MS);
+      if (recentTimestamps.length >= MAX_SPAWNS_PER_WINDOW) {
+        return json(res, { error: 'SPAWN_RATE_LIMITED', message: `Max ${MAX_SPAWNS_PER_WINDOW} spawns per ${SPAWN_RATE_WINDOW_MS / 1000}s` }, 429);
+      }
+
+      // --- Parent eligibility: must be a main session with no parent ---
+      // Memory fast-path
+      const parentEntry = agentProcesses.get(parentSessionId);
+      if (parentEntry?.parentSessionId) {
+        return json(res, { error: 'NESTED_CHILD_SPAWN_NOT_SUPPORTED', message: 'Children cannot spawn further children' }, 400);
+      }
+      // DB authoritative check: require session_type='main' and parent_session_id IS NULL
+      try {
+        const db = getDb();
+        const parentRow = db.prepare('SELECT parent_session_id, session_type FROM sessions WHERE id = ?').get(parentSessionId);
+        if (parentRow?.parent_session_id) {
+          return json(res, { error: 'NESTED_CHILD_SPAWN_NOT_SUPPORTED', message: 'Children cannot spawn further children' }, 400);
+        }
+        if (parentRow && parentRow.session_type && parentRow.session_type !== 'main') {
+          return json(res, { error: 'SPAWN_NOT_ALLOWED', message: `Only main sessions can spawn children (this session is '${parentRow.session_type}')` }, 403);
+        }
+      } catch {
+        // DB check is best-effort on new sessions (row may not exist yet); memory check is primary
+      }
+
+      // --- Per-parent child limit ---
+      let childCount = 0;
+      for (const [, entry] of agentProcesses) {
+        if (entry.parentSessionId === parentSessionId && entry.proc && !entry.proc.killed) {
+          childCount++;
+        }
+      }
+      if (childCount >= MAX_CHILDREN_PER_PARENT) {
+        return json(res, { error: 'CHILD_LIMIT_REACHED', message: `Max ${MAX_CHILDREN_PER_PARENT} children per parent`, max: MAX_CHILDREN_PER_PARENT }, 429);
+      }
+
+      // --- Global concurrency ---
+      const aliveCount = countAlive();
+      if (aliveCount >= maxConcurrent) {
+        return json(res, { error: 'MAX_CONCURRENT_REACHED', message: `Too many active agent processes (${aliveCount}/${maxConcurrent})` }, 429);
+      }
+
+      // --- Resolve parent context ---
+      let parentCwd = null;
+      let parentRepoRoot = null;
+      let parentModel = null;
+      let parentBaseBranch = null;
+
+      if (parentEntry) {
+        parentCwd = parentEntry.cwd;
+        parentRepoRoot = parentEntry.repoRoot || null;
+        parentModel = parentEntry._turnModel || null;
+        parentBaseBranch = parentEntry.baseBranch || null;
+      }
+
+      // DB fallback for cwd / repo root
+      if (!parentCwd || !parentRepoRoot) {
+        try {
+          const db = getDb();
+          const runtimeRow = db.prepare(`
+            SELECT cwd, project_root, base_branch FROM session_runtime_state WHERE session_id = ?
+          `).get(parentSessionId);
+          if (runtimeRow) {
+            if (!parentCwd) parentCwd = runtimeRow.cwd;
+            if (!parentRepoRoot) parentRepoRoot = runtimeRow.project_root;
+            if (!parentBaseBranch) parentBaseBranch = runtimeRow.base_branch;
+          }
+        } catch {
+          // best effort
+        }
+      }
+
+      if (!parentCwd) {
+        return json(res, { error: 'PARENT_CONTEXT_UNAVAILABLE', message: 'Parent session has ended and required runtime context is missing.' }, 409);
+      }
+
+      // Detect/verify repo root — ensure it's the actual repo root, not a worktree root.
+      // Re-resolve even if we have a value, since stale DB entries may have worktree paths.
+      try {
+        const resolvedRoot = getRepoRoot(parentCwd);
+        if (!parentRepoRoot || parentRepoRoot !== resolvedRoot) {
+          log('agent', 'debug', `repo root resolved: ${parentRepoRoot} → ${resolvedRoot}`, { sessionId: shortId });
+          parentRepoRoot = resolvedRoot;
+        }
+      } catch {
+        if (!parentRepoRoot) {
+          return json(res, { error: 'NOT_A_GIT_REPO', message: 'Parent cwd is not inside a git repository' }, 400);
+        }
+      }
+
+      // Resolve baseRef (default to parent HEAD)
+      let resolvedBaseRef = baseRef || null;
+      if (!resolvedBaseRef) {
+        try {
+          resolvedBaseRef = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: parentCwd, stdio: 'pipe' }).toString().trim();
+        } catch {
+          resolvedBaseRef = 'HEAD';
+        }
+      }
+      // Validate baseRef: block option injection and invalid chars
+      if (resolvedBaseRef.startsWith('-') || resolvedBaseRef === '--') {
+        return json(res, { error: 'INVALID_BASE_REF', message: 'baseRef must not start with -' }, 400);
+      }
+      if (!/^[a-zA-Z0-9_.\/\-~^{}@]+$/.test(resolvedBaseRef)) {
+        return json(res, { error: 'INVALID_BASE_REF', message: 'baseRef contains invalid characters' }, 400);
+      }
+      // Verify the ref actually resolves in the parent repo
+      try {
+        execFileSync('git', ['rev-parse', '--verify', `${resolvedBaseRef}^{commit}`], { cwd: parentRepoRoot, stdio: 'pipe' });
+      } catch {
+        return json(res, { error: 'INVALID_BASE_REF', message: `baseRef '${resolvedBaseRef}' does not resolve to a valid commit` }, 400);
+      }
+
+      // --- Sanitize description for branch name ---
+      // Auto-generate from prompt if description not provided (first few words, slugified)
+      const rawDesc = description || childPrompt.trim().split(/\s+/).slice(0, 5).join(' ');
+      const sanitizedDesc = rawDesc
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 32) || 'child';
+
+      // --- Binary ---
+      const binaryPath = resolveClaudeBinary();
+      if (!binaryPath) {
+        return error(res, 'Claude CLI not found', 500);
+      }
+
+      const childSessionId = crypto.randomUUID();
+      const shortId = childSessionId.slice(0, 8);
+
+      // --- Worktree creation with collision loop ---
+      const worktreesBase = path.join(parentRepoRoot, '.rudi', 'worktrees');
+      let worktreeBranch = null;
+      let worktreePath = null;
+
+      fs.mkdirSync(worktreesBase, { recursive: true });
+
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const suffix = crypto.randomUUID().slice(0, 8);
+        const branchName = `child-${sanitizedDesc}-${suffix}`;
+        const wtDir = path.join(worktreesBase, branchName);
+
+        try {
+          execFileSync('git', ['worktree', 'add', '-b', branchName, wtDir, resolvedBaseRef], {
+            cwd: parentRepoRoot, stdio: 'pipe',
+          });
+          worktreeBranch = branchName;
+          worktreePath = wtDir;
+          break;
+        } catch (wtErr) {
+          // Clean up partial dir and any partially-created branch
+          try { fs.rmSync(wtDir, { recursive: true, force: true }); } catch {}
+          try { execFileSync('git', ['branch', '-D', '--', branchName], { cwd: parentRepoRoot, stdio: 'pipe' }); } catch {}
+          if (attempt === 4) {
+            log('agent', 'error', `worktree creation failed after 5 attempts: ${wtErr.message}`, { sessionId: shortId });
+            return json(res, { error: 'WORKTREE_BRANCH_COLLISION', message: 'Could not create worktree after 5 attempts' }, 500);
+          }
+        }
+      }
+
+      // --- Insert session row ---
+      const nowIso = new Date().toISOString();
+      log('agent', 'info', `spawn-child request`, { origin, provider, parentSessionId: parentSessionId.slice(0, 8) });
+      dbWrite((db) => {
+        db.prepare(`
+          INSERT INTO sessions
+            (id, provider, origin, cwd, model, status, session_type, parent_session_id,
+             title_override, started_at, created_at, last_active_at)
+          VALUES (?, ?, 'rudi', ?, ?, 'active', 'child', ?, ?, ?, ?, ?)
+        `).run(childSessionId, provider, worktreePath, childModel || parentModel, parentSessionId, sanitizedDesc, nowIso, nowIso, nowIso);
+      });
+
+      // --- Insert runtime state ---
+      dbWrite((db) => {
+        db.prepare(`
+          INSERT INTO session_runtime_state
+            (session_id, status, provider, cwd, started_at, updated_at,
+             worktree_path, worktree_branch, project_root, base_branch, use_worktree)
+          VALUES (?, 'starting', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(childSessionId, provider, worktreePath, nowIso, nowIso,
+               worktreePath, worktreeBranch, parentRepoRoot, parentBaseBranch, 1);
+      });
+
+      // --- Build args ---
+      // Children use -p (print mode): process prompt and exit.
+      // stream-json output lets us capture events, but no stream-json input needed.
+      const childArgs = [
+        '--output-format', 'stream-json',
+        '--verbose',
+        '-p', childPrompt,
+      ];
+      if (childModel) childArgs.push('--model', childModel);
+
+      const childSystemPrompt = buildSystemPrompt(null, { canSpawnChildren: false });
+      if (childSystemPrompt) childArgs.push('--append-system-prompt', childSystemPrompt);
+
+      // Children run headlessly with full permissions (isolated in their own worktree)
+      childArgs.push('--dangerously-skip-permissions');
+
+      // Skip MCP servers for children — they don't need them and they add 15-20s startup
+      const emptyMcpPath = path.join(os.tmpdir(), 'rudi-empty-mcp.json');
+      if (!fs.existsSync(emptyMcpPath)) {
+        fs.writeFileSync(emptyMcpPath, '{"mcpServers":{}}', { mode: 0o600 });
+      }
+      childArgs.push('--mcp-config', emptyMcpPath, '--strict-mcp-config');
+
+      // --- Build env ---
+      const childEnv = {
+        ...process.env,
+        TERM: 'xterm-256color',
+        CLAUDE_NO_UPDATE_CHECK: 'true',
+        DISABLE_AUTOUPDATE: '1',
+        NO_COLOR: '1',
+        CI: 'true',
+      };
+      const port = getSidecarPort();
+      if (port > 0) {
+        childEnv.RUDI_SIDECAR_URL = `http://127.0.0.1:${port}`;
+        childEnv.RUDI_SIDECAR_TOKEN = getSidecarToken();
+        childEnv.RUDI_SESSION_ID = childSessionId;
+        childEnv.RUDI_CAN_SPAWN_CHILDREN = '0';
+      }
+
+      // --- Spawn ---
+      try {
+        const proc = spawn(binaryPath, childArgs, {
+          cwd: worktreePath,
+          env: childEnv,
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+
+        // Close stdin immediately — child is in -p mode and doesn't read stdin.
+        // Some CLIs hang waiting for stdin EOF.
+        proc.stdin.end();
+
+        const entry = {
+          proc,
+          provider,
+          providerSessionId: null,
+          resumeSessionId: null,
+          parentSessionId,
+          stdoutBuffer: '',
+          turnActive: true,
+          startedAt: Date.now(),
+          lastActivityAt: Date.now(),
+          cwd: worktreePath,
+          repoRoot: parentRepoRoot,
+          worktreePath,
+          worktreeBranch,
+          baseBranch: parentBaseBranch,
+          _terminationReason: null,
+          _turnPrompt: childPrompt,
+          _turnNumber: 1,
+          _turnInputTokens: 0,
+          _turnOutputTokens: 0,
+          _turnCacheReadTokens: 0,
+          _turnCacheCreationTokens: 0,
+          _turnModel: childModel || parentModel || null,
+          _turnToolsUsed: [],
+          _isChild: true,
+          _description: sanitizedDesc,
+        };
+        agentProcesses.set(childSessionId, entry);
+
+        // Mark running
+        dbWrite((db) => {
+          db.prepare(`
+            UPDATE session_runtime_state SET status = 'running', updated_at = ? WHERE session_id = ?
+          `).run(new Date().toISOString(), childSessionId);
+          db.prepare(`
+            UPDATE sessions SET started_at = ? WHERE id = ?
+          `).run(new Date().toISOString(), childSessionId);
+        });
+
+        log('agent', 'info', `child process spawned pid=${proc.pid}`, {
+          sessionId: shortId,
+          parentSessionId: parentSessionId.slice(0, 8),
+          worktreeBranch,
+          cwd: worktreePath,
+          binary: binaryPath,
+          origin,
+          provider,
+          argsCount: childArgs.length,
+          promptLen: childPrompt.length,
+          args: childArgs.filter(a => a !== childPrompt && (a.length < 60 || a.startsWith('--'))).join(' '),
+        });
+
+        // --- Helper: SIGTERM then SIGKILL after 5s ---
+        const killWithFallback = (p) => {
+          try { p.kill('SIGTERM'); } catch {}
+          setTimeout(() => { try { if (!p.killed) p.kill('SIGKILL'); } catch {} }, 5000);
+        };
+
+        // --- Startup watchdog: if no stdout/stderr within 120s, mark as stalled ---
+        const STARTUP_TIMEOUT_MS = 120_000;
+        let startupTimer = setTimeout(() => {
+          if (entry.turnActive && entry.lastActivityAt === entry.startedAt) {
+            log('agent', 'error', `child startup stall — no output in ${STARTUP_TIMEOUT_MS / 1000}s`, { sessionId: shortId });
+            entry._terminationReason = 'startup_stall';
+            killWithFallback(proc);
+          }
+        }, STARTUP_TIMEOUT_MS);
+
+        // --- Hard runtime timeout: 15 minutes max ---
+        const RUNTIME_TIMEOUT_MS = 15 * 60 * 1000;
+        const runtimeTimer = setTimeout(() => {
+          if (entry.proc && !entry.proc.killed) {
+            log('agent', 'warn', `child runtime timeout (${RUNTIME_TIMEOUT_MS / 1000}s)`, { sessionId: shortId });
+            entry._terminationReason = 'timeout';
+            killWithFallback(proc);
+          }
+        }, RUNTIME_TIMEOUT_MS);
+
+        // --- stdout handler ---
+        let _childStdoutBytes = 0;
+        proc.stdout.on('data', (chunk) => {
+          _childStdoutBytes += chunk.length;
+          entry.lastActivityAt = Date.now();
+          if (startupTimer) { clearTimeout(startupTimer); startupTimer = null; }
+          // Log first few chunks for debugging child startup
+          if (_childStdoutBytes <= 2000) {
+            log('agent', 'debug', `child stdout (${chunk.length}b, total=${_childStdoutBytes}): ${chunk.toString().slice(0, 200)}`, { sessionId: shortId });
+          }
+          entry.stdoutBuffer += chunk.toString();
+          const lines = entry.stdoutBuffer.split('\n');
+          entry.stdoutBuffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const event = JSON.parse(line);
+              if (event.session_id && entry.providerSessionId !== event.session_id) {
+                entry.providerSessionId = event.session_id;
+                resumeSessionIndex.set(event.session_id, childSessionId);
+                dbWrite((db) => {
+                  db.prepare(`
+                    UPDATE session_runtime_state SET provider_session_id = ?, updated_at = ? WHERE session_id = ?
+                  `).run(event.session_id, new Date().toISOString(), childSessionId);
+                });
+              }
+              if (event.type === 'assistant' && event.message?.usage) {
+                const u = event.message.usage;
+                entry._turnInputTokens += u.input_tokens || 0;
+                entry._turnOutputTokens += u.output_tokens || 0;
+                entry._turnCacheReadTokens += u.cache_read_input_tokens || 0;
+                entry._turnCacheCreationTokens += u.cache_creation_input_tokens || 0;
+                if (event.message.model) entry._turnModel = event.message.model;
+              }
+              if (event.type === 'assistant' && Array.isArray(event.message?.content)) {
+                for (const block of event.message.content) {
+                  if (block.type === 'tool_use' && block.name) {
+                    entry._turnToolsUsed.push(block.name);
+                  }
+                }
+              }
+
+              broadcast('agent:event', { sessionId: childSessionId, event });
+
+              if (event.type === 'result') {
+                entry.turnActive = false;
+                const costUsd = typeof event.total_cost_usd === 'number' ? event.total_cost_usd : null;
+                const providerSid = entry.providerSessionId;
+                dbWrite((db) => {
+                  const now = new Date().toISOString();
+                  if (costUsd !== null) {
+                    db.prepare(`
+                      UPDATE session_runtime_state SET turn_count = turn_count + 1, cost_total = ?, updated_at = ? WHERE session_id = ?
+                    `).run(costUsd, now, childSessionId);
+                  } else {
+                    db.prepare(`
+                      UPDATE session_runtime_state SET turn_count = turn_count + 1, updated_at = ? WHERE session_id = ?
+                    `).run(now, childSessionId);
+                  }
+                  if (providerSid) {
+                    db.prepare(`
+                      UPDATE sessions SET provider_session_id = ?, last_active_at = ?, total_cost = ? WHERE id = ?
+                    `).run(providerSid, now, costUsd || 0, childSessionId);
+                  }
+                });
+                broadcast('agent:done', { sessionId: childSessionId, exitCode: 0, providerSessionId: entry.providerSessionId });
+                queueSessionsUpdated({ source: 'agent', event: 'child-result', sessionId: entry.providerSessionId || null });
+              }
+            } catch {
+              broadcast('agent:event', { sessionId: childSessionId, event: { type: 'system', message: line } });
+            }
+          }
+        });
+
+        let _childStderrBytes = 0;
+        proc.stderr.on('data', (chunk) => {
+          _childStderrBytes += chunk.length;
+          entry.lastActivityAt = Date.now();
+          if (startupTimer) { clearTimeout(startupTimer); startupTimer = null; }
+          const text = chunk.toString().trim();
+          if (text) {
+            // Log all stderr for debugging (not just first 200 chars)
+            log('agent', 'warn', `child stderr (${_childStderrBytes}b): ${text.slice(0, 500)}`, { sessionId: shortId });
+            if (entry.turnActive) {
+              broadcast('agent:error', { sessionId: childSessionId, error: text });
+            }
+          }
+        });
+
+        // Shared cleanup — called from both 'close' and the 'exit' safety net.
+        // Guard against double-fire (close + exit can both trigger).
+        let _childCleanedUp = false;
+        const cleanupChild = (exitCode, source) => {
+          if (_childCleanedUp) return;
+          _childCleanedUp = true;
+          if (startupTimer) { clearTimeout(startupTimer); startupTimer = null; }
+          clearTimeout(runtimeTimer);
+          try {
+            log('agent', 'info', `child process exited code=${exitCode} (${source})`, { sessionId: shortId });
+            const finalStatus = entry._terminationReason || (exitCode === 0 ? 'completed' : 'error');
+            dbWrite((db) => {
+              const now = new Date().toISOString();
+              db.prepare(`
+                UPDATE session_runtime_state SET status = ?, completed_at = ?, updated_at = ? WHERE session_id = ?
+              `).run(finalStatus, now, now, childSessionId);
+              db.prepare(`
+                UPDATE sessions SET ended_at = ?, exit_code = ? WHERE id = ?
+              `).run(now, exitCode, childSessionId);
+            });
+            if (entry.turnActive) {
+              broadcast('agent:done', { sessionId: childSessionId, exitCode, providerSessionId: entry.providerSessionId });
+            }
+            broadcast('sessions:updated', { source: 'agent', event: 'child-completed', sessionId: childSessionId });
+          } catch (cleanupErr) {
+            log('agent', 'error', `child cleanup error: ${cleanupErr.message}`, { sessionId: shortId });
+          }
+          agentProcesses.delete(childSessionId);
+          broadcastProcessCount();
+        };
+
+        proc.on('close', (exitCode) => cleanupChild(exitCode, 'close'));
+        proc.on('exit', (exitCode) => cleanupChild(exitCode, 'exit'));
+
+        proc.on('error', (err) => {
+          log('agent', 'error', `child spawn error: ${err.message}`, { sessionId: shortId });
+          if (startupTimer) { clearTimeout(startupTimer); startupTimer = null; }
+          clearTimeout(runtimeTimer);
+          try {
+            dbWrite((db) => {
+              const now = new Date().toISOString();
+              db.prepare(`
+                UPDATE session_runtime_state SET status = 'error', last_error = ?, updated_at = ? WHERE session_id = ?
+              `).run(err.message, now, childSessionId);
+              db.prepare(`
+                UPDATE sessions SET error_code = 'SPAWN_ERROR', error_message = ?, ended_at = ? WHERE id = ?
+              `).run(err.message, now, childSessionId);
+            });
+          } catch (dbErr) {
+            log('agent', 'error', `child error handler DB write failed: ${dbErr.message}`, { sessionId: shortId });
+          }
+          broadcast('agent:error', { sessionId: childSessionId, error: err.message });
+          agentProcesses.delete(childSessionId);
+        });
+
+        // Track rate limit
+        recentTimestamps.push(now);
+        spawnRateMap.set(parentSessionId, recentTimestamps);
+
+        broadcastProcessCount();
+        broadcast('sessions:updated', { source: 'agent', event: 'child-spawned', sessionId: childSessionId });
+
+        json(res, {
+          sessionId: childSessionId,
+          worktreeBranch,
+          worktreePath,
+          status: 'spawned',
+        });
+      } catch (spawnErr) {
+        // Compensating transaction: clean up worktree on spawn failure
+        log('agent', 'error', `child spawn failed: ${spawnErr.message}`, { sessionId: shortId });
+        try {
+          execFileSync('git', ['worktree', 'remove', '--force', worktreePath], { cwd: parentRepoRoot, stdio: 'pipe' });
+          try { execFileSync('git', ['branch', '-D', '--', worktreeBranch], { cwd: parentRepoRoot, stdio: 'pipe' }); } catch {}
+        } catch {}
+        dbWrite((db) => {
+          const now = new Date().toISOString();
+          db.prepare(`
+            UPDATE session_runtime_state SET status = 'error', last_error = ?, updated_at = ? WHERE session_id = ?
+          `).run(spawnErr.message, now, childSessionId);
+          db.prepare(`
+            UPDATE sessions SET error_code = 'SPAWN_FAILED', error_message = ?, ended_at = ? WHERE id = ?
+          `).run(spawnErr.message, now, childSessionId);
+        });
+        return error(res, `Failed to spawn child: ${spawnErr.message}`, 500);
+      }
+      return true;
+    }
+
+    // GET /agent/children/:parentSessionId — list child sessions
+    const childrenMatch = url.pathname.match(/^\/agent\/children\/([^/]+)$/);
+    if (req.method === 'GET' && childrenMatch) {
+      const parentId = decodeURIComponent(childrenMatch[1]);
+
+      // Caller binding: require X-Rudi-Caller-Session to match parentId
+      const callerSession = normalizeHeader(req.headers['x-rudi-caller-session']);
+      if (!callerSession || callerSession !== parentId) {
+        return json(res, { error: 'CALLER_SESSION_MISMATCH', message: 'X-Rudi-Caller-Session header required and must match parentSessionId' }, 403);
+      }
+
+      // Build from DB + overlay live status from agentProcesses
+      const children = [];
+
+      try {
+        const db = getDb();
+        const rows = db.prepare(`
+          SELECT s.id, s.status, s.model, s.started_at, s.ended_at, s.exit_code, s.title_override,
+                 srs.worktree_branch, srs.worktree_path, srs.status as runtime_status
+          FROM sessions s
+          LEFT JOIN session_runtime_state srs ON srs.session_id = s.id
+          WHERE s.parent_session_id = ?
+          ORDER BY s.created_at DESC
+        `).all(parentId);
+
+        for (const row of rows) {
+          const liveEntry = agentProcesses.get(row.id);
+          const alive = !!(liveEntry?.proc && !liveEntry.proc.killed);
+          children.push({
+            sessionId: row.id,
+            status: alive ? 'running' : (row.runtime_status || row.status || 'unknown'),
+            alive,
+            worktreeBranch: row.worktree_branch || liveEntry?.worktreeBranch || null,
+            description: liveEntry?._description || row.title_override || null,
+            turnActive: liveEntry?.turnActive || false,
+            model: row.model,
+            startedAt: row.started_at,
+            endedAt: row.ended_at,
+            exitCode: row.exit_code,
+          });
+        }
+      } catch (dbErr) {
+        // Fall back to memory only
+        for (const [sessionId, entry] of agentProcesses) {
+          if (entry.parentSessionId === parentId) {
+            children.push({
+              sessionId,
+              status: entry.proc && !entry.proc.killed ? 'running' : 'completed',
+              alive: !!(entry.proc && !entry.proc.killed),
+              worktreeBranch: entry.worktreeBranch || null,
+              description: entry._description || null,
+              turnActive: entry.turnActive || false,
+            });
+          }
+        }
+      }
+
+      json(res, { children });
       return true;
     }
 
