@@ -549,9 +549,110 @@ export function createAgentHandler({
   // Pending permission requests — hook-based flow
   // ---------------------------------------------------------------------------
   // Key: requestId (UUID), Value: { rudiSessionId, claudeSessionId, toolName,
-  //   toolInput, permissionSuggestions, decision, resolve, timer }
+  //   toolInput, batchId, status, decision, resolve, timer, createdAt }
+  // status: 'pending' | 'decided' | 'expired'
   const pendingPermissions = new Map();
   const sessionAlwaysAllowed = new Map(); // rudiSessionId → Set<toolName>
+
+  /** Derive a batch ID from (session + tool + 500ms time bucket). */
+  function deriveBatchId(rudiSessionId, toolName, createdAt) {
+    const bucket = Math.floor(createdAt / 500);
+    return `${rudiSessionId}:${toolName || ''}:${bucket}`;
+  }
+
+  /** Resolve a single pending permission entry. */
+  function resolvePermission(reqId, entry, decision) {
+    if (entry.status !== 'pending') return; // idempotent
+    entry.status = 'decided';
+    entry.decision = decision;
+    if (entry.resolve) {
+      entry.resolve(decision);
+      entry.resolve = null;
+    }
+    if (entry.timer) {
+      clearTimeout(entry.timer);
+      entry.timer = null;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Project-level permission persistence (.claude/settings.local.json)
+  // ---------------------------------------------------------------------------
+
+  /** Load allowed tool patterns from a project's .claude/settings.local.json */
+  function loadProjectPermissions(projectCwd) {
+    try {
+      const settingsPath = path.join(projectCwd, '.claude', 'settings.local.json');
+      if (!fs.existsSync(settingsPath)) return [];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+      return settings?.permissions?.allow || [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** Check if a tool call matches a Claude CLI permission pattern */
+  function toolMatchesPattern(toolName, toolInput, pattern) {
+    // Simple match: "Edit", "Read", "WebSearch", etc.
+    if (pattern === toolName) return true;
+
+    // Parameterized match: "Bash(prefix:*)" or "WebFetch(domain:x)"
+    const m = pattern.match(/^(\w+)\((.+)\)$/);
+    if (!m) return false;
+    const [, patternTool, patternArgs] = m;
+    if (patternTool !== toolName) return false;
+
+    if (toolName === 'Bash' && toolInput?.command) {
+      const command = String(toolInput.command).trim();
+      if (patternArgs.endsWith(':*')) {
+        const prefix = patternArgs.slice(0, -2);
+        return command.startsWith(prefix);
+      }
+      return command === patternArgs;
+    }
+    return false;
+  }
+
+  /** Check if a tool call is allowed by project settings */
+  function isToolAllowedByProject(projectCwd, toolName, toolInput) {
+    if (!projectCwd) return false;
+    const patterns = loadProjectPermissions(projectCwd);
+    return patterns.some((p) => toolMatchesPattern(toolName, toolInput, p));
+  }
+
+  /** Generate a Claude CLI permission pattern for a tool call */
+  function generatePermissionPattern(toolName, toolInput) {
+    if (toolName === 'Bash' && toolInput?.command) {
+      const cmd = String(toolInput.command).trim();
+      const tokens = cmd.split(/\s+/);
+      const compound = ['git', 'npm', 'npx', 'pnpm', 'cargo', 'docker', 'kubectl', 'yarn', 'bun'];
+      const prefix = (tokens.length >= 2 && compound.includes(tokens[0]))
+        ? tokens.slice(0, 2).join(' ')
+        : tokens[0];
+      return `Bash(${prefix}:*)`;
+    }
+    return toolName;
+  }
+
+  /** Append a permission pattern to a project's .claude/settings.local.json */
+  function saveToolPermission(projectCwd, pattern) {
+    try {
+      const settingsPath = path.join(projectCwd, '.claude', 'settings.local.json');
+      let settings = {};
+      if (fs.existsSync(settingsPath)) {
+        settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+      }
+      if (!settings.permissions) settings.permissions = {};
+      if (!Array.isArray(settings.permissions.allow)) settings.permissions.allow = [];
+      if (settings.permissions.allow.includes(pattern)) return; // already exists
+      settings.permissions.allow.push(pattern);
+      fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+      fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      log('agent', 'info', 'saved tool permission to settings.local.json', { pattern, path: settingsPath });
+    } catch (err) {
+      log('agent', 'warn', `failed to save tool permission: ${err.message}`);
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // ensurePermissionHook — install/update the hook script + settings.json entry
@@ -1390,25 +1491,52 @@ export function createAgentHandler({
       const { rudiSessionId, claudeSessionId, requestId, toolName, toolInput } = body;
       if (!requestId || !rudiSessionId) return error(res, 'requestId and rudiSessionId required');
 
+      const createdAt = Date.now();
+      const batchId = deriveBatchId(rudiSessionId, toolName, createdAt);
+
       log('agent', 'info', 'permission request from hook', {
         requestId: requestId.slice(0, 8),
         rudiSessionId: rudiSessionId.slice(0, 8),
         toolName,
+        batchId: batchId.slice(-12),
       });
 
-      // Check if this tool is auto-allowed for this session ("Allow always")
+      // Check if this tool is auto-allowed for this session (in-memory "Always")
       const allowed = sessionAlwaysAllowed.get(rudiSessionId);
       if (allowed && allowed.has(toolName)) {
-        log('agent', 'debug', 'auto-allowing tool (always allowed)', { toolName, sessionId: rudiSessionId.slice(0, 8) });
-        // Store decision immediately so the long-poll returns it
+        log('agent', 'debug', 'auto-allowing tool (session always-allowed)', { toolName, sessionId: rudiSessionId.slice(0, 8) });
         pendingPermissions.set(requestId, {
           rudiSessionId,
           claudeSessionId,
           toolName,
           toolInput,
+          batchId,
+          status: 'decided',
           decision: { permissionDecision: 'allow', reason: 'Auto-allowed by user in RUDI' },
           resolve: null,
           timer: null,
+          createdAt,
+        });
+        json(res, { ok: true });
+        return true;
+      }
+
+      // Check project-level .claude/settings.local.json permissions
+      const processEntry = agentProcesses.get(rudiSessionId);
+      const projectCwd = processEntry?.cwd;
+      if (projectCwd && isToolAllowedByProject(projectCwd, toolName, toolInput)) {
+        log('agent', 'debug', 'auto-allowing tool (project settings)', { toolName, sessionId: rudiSessionId.slice(0, 8) });
+        pendingPermissions.set(requestId, {
+          rudiSessionId,
+          claudeSessionId,
+          toolName,
+          toolInput,
+          batchId,
+          status: 'decided',
+          decision: { permissionDecision: 'allow', reason: 'Allowed by project settings' },
+          resolve: null,
+          timer: null,
+          createdAt,
         });
         json(res, { ok: true });
         return true;
@@ -1431,9 +1559,12 @@ export function createAgentHandler({
         claudeSessionId,
         toolName,
         toolInput,
+        batchId,
+        status: 'pending',
         decision: null,
         resolve: null,
         timer: null,
+        createdAt,
       });
 
       // Broadcast to frontend
@@ -1443,6 +1574,7 @@ export function createAgentHandler({
           type: 'system',
           subtype: 'permission_request',
           requestId,
+          batchId,
           toolName: toolName || 'unknown',
           toolInput: toolInput || {},
           message,
@@ -1457,31 +1589,39 @@ export function createAgentHandler({
     const permDecisionMatch = url.pathname.match(/^\/agent\/permission-decision\/([^/]+)$/);
     if (req.method === 'GET' && permDecisionMatch) {
       const requestId = decodeURIComponent(permDecisionMatch[1]);
-      const pending = pendingPermissions.get(requestId);
+      const entry = pendingPermissions.get(requestId);
 
-      if (!pending) {
+      if (!entry) {
         json(res, { permissionDecision: 'deny', reason: 'Unknown permission request' });
         return true;
       }
 
-      // Decision already arrived before long-poll connected
-      if (pending.decision) {
-        const decision = pending.decision;
+      // Already decided (idempotent — hook can retry safely)
+      if (entry.status === 'decided' && entry.decision) {
+        const decision = entry.decision;
         pendingPermissions.delete(requestId);
         json(res, decision);
+        return true;
+      }
+
+      // Already expired
+      if (entry.status === 'expired') {
+        pendingPermissions.delete(requestId);
+        json(res, { permissionDecision: 'deny', reason: 'Request expired' });
         return true;
       }
 
       // Hold connection open until decision arrives or timeout
       const TIMEOUT_MS = 590_000; // Just under CLI's 600s hook timeout
       const timer = setTimeout(() => {
-        pending.resolve = null;
+        entry.status = 'expired';
+        entry.resolve = null;
         pendingPermissions.delete(requestId);
         json(res, { permissionDecision: 'deny', reason: 'Timed out waiting for user decision' });
       }, TIMEOUT_MS);
 
-      pending.timer = timer;
-      pending.resolve = (decision) => {
+      entry.timer = timer;
+      entry.resolve = (decision) => {
         clearTimeout(timer);
         pendingPermissions.delete(requestId);
         json(res, decision);
@@ -1490,8 +1630,7 @@ export function createAgentHandler({
       // Handle client disconnect
       req.on('close', () => {
         clearTimeout(timer);
-        // Don't delete — frontend may still respond; keep pending for resolve
-        if (pending.resolve) pending.resolve = null;
+        if (entry.resolve) entry.resolve = null;
       });
 
       return true;
@@ -1505,10 +1644,11 @@ export function createAgentHandler({
 
       // Hook-based flow: resolve via requestId
       if (requestId) {
-        const pending = pendingPermissions.get(requestId);
-        if (!pending) {
-          // Already resolved or expired — still return ok
-          json(res, { ok: true });
+        const entry = pendingPermissions.get(requestId);
+
+        // Already resolved or expired — idempotent 200
+        if (!entry || entry.status !== 'pending') {
+          json(res, { ok: true, status: entry?.status || 'unknown' });
           return true;
         }
 
@@ -1517,13 +1657,20 @@ export function createAgentHandler({
           decision = { permissionDecision: 'allow', reason: 'Approved by user in RUDI' };
         } else if (response === 'a') {
           decision = { permissionDecision: 'allow', reason: 'Always allowed by user in RUDI' };
-          // Track "always allow" for this session
-          if (pending.toolName) {
-            if (!sessionAlwaysAllowed.has(pending.rudiSessionId)) {
-              sessionAlwaysAllowed.set(pending.rudiSessionId, new Set());
+          // Record policy for this session (in-memory fast path)
+          if (entry.toolName) {
+            if (!sessionAlwaysAllowed.has(entry.rudiSessionId)) {
+              sessionAlwaysAllowed.set(entry.rudiSessionId, new Set());
             }
-            sessionAlwaysAllowed.get(pending.rudiSessionId).add(pending.toolName);
-            log('agent', 'info', 'added to always-allowed', { toolName: pending.toolName, sessionId: pending.rudiSessionId.slice(0, 8) });
+            sessionAlwaysAllowed.get(entry.rudiSessionId).add(entry.toolName);
+            log('agent', 'info', 'added to always-allowed', { toolName: entry.toolName, sessionId: entry.rudiSessionId.slice(0, 8) });
+
+            // Persist to project .claude/settings.local.json
+            const proc = agentProcesses.get(entry.rudiSessionId);
+            if (proc?.cwd) {
+              const pattern = generatePermissionPattern(entry.toolName, entry.toolInput);
+              saveToolPermission(proc.cwd, pattern);
+            }
           }
         } else {
           decision = { permissionDecision: 'deny', reason: 'Denied by user in RUDI' };
@@ -1533,13 +1680,37 @@ export function createAgentHandler({
           requestId: requestId.slice(0, 8),
           response,
           permissionDecision: decision.permissionDecision,
+          batchId: (entry.batchId || '').slice(-12),
         });
 
-        if (pending.resolve) {
-          pending.resolve(decision);
-        } else {
-          // Hook hasn't polled yet — store decision for when it does
-          pending.decision = decision;
+        // Resolve the target request
+        resolvePermission(requestId, entry, decision);
+
+        // Batch resolution: also resolve siblings in the same batch.
+        // "Allow once" → resolve same batch (same session + tool + 500ms window).
+        // "Always allow" → resolve same batch + any other pending for same session+tool.
+        if (decision.permissionDecision === 'allow' && entry.batchId) {
+          let batchResolved = 0;
+          for (const [otherId, other] of pendingPermissions) {
+            if (otherId === requestId) continue;
+            if (other.status !== 'pending') continue;
+            // Same batch: always resolve together
+            const sameBatch = other.batchId === entry.batchId;
+            // "Always allow": also resolve other pending for same session+tool
+            const samePolicy = response === 'a'
+              && other.rudiSessionId === entry.rudiSessionId
+              && other.toolName === entry.toolName;
+            if (sameBatch || samePolicy) {
+              const batchDecision = { permissionDecision: 'allow', reason: 'Batch-resolved' };
+              resolvePermission(otherId, other, batchDecision);
+              batchResolved++;
+            }
+          }
+          if (batchResolved > 0) {
+            log('agent', 'info', `batch-resolved ${batchResolved} sibling(s)`, {
+              batchId: entry.batchId.slice(-12),
+            });
+          }
         }
 
         json(res, { ok: true });
@@ -1548,19 +1719,39 @@ export function createAgentHandler({
 
       // Legacy fallback: stdin-based (kept for backwards compat but unlikely to fire)
       if (!sessionId) return error(res, 'sessionId or requestId required');
-      const entry = agentProcesses.get(sessionId);
-      if (!entry || !entry.proc || entry.proc.killed) {
+      const agentEntry = agentProcesses.get(sessionId);
+      if (!agentEntry || !agentEntry.proc || agentEntry.proc.killed) {
         return error(res, 'No active process for this session', 400);
       }
 
       log('agent', 'info', 'sending permission response (legacy stdin)', { sessionId: sessionId.slice(0, 8), response });
       try {
-        entry.lastActivityAt = Date.now();
-        entry.proc.stdin.write(response + '\n');
+        agentEntry.lastActivityAt = Date.now();
+        agentEntry.proc.stdin.write(response + '\n');
         json(res, { ok: true });
       } catch (err) {
         error(res, `Failed to send permission response: ${err.message}`, 500);
       }
+      return true;
+    }
+
+    // GET /agent/permissions?sessionId=... — pending permission state for UI resync
+    if (req.method === 'GET' && url.pathname === '/agent/permissions') {
+      const sessionId = url.searchParams.get('sessionId');
+      const pending = [];
+      for (const [reqId, entry] of pendingPermissions) {
+        if (entry.status !== 'pending') continue;
+        if (sessionId && entry.rudiSessionId !== sessionId) continue;
+        pending.push({
+          requestId: reqId,
+          batchId: entry.batchId,
+          toolName: entry.toolName,
+          toolInput: entry.toolInput,
+          createdAt: entry.createdAt,
+          rudiSessionId: entry.rudiSessionId,
+        });
+      }
+      json(res, { pending });
       return true;
     }
 

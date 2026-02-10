@@ -852,7 +852,24 @@ async function handleSuggest(req, res, url) {
     _activeSuggestProcess = null;
   }
 
-  const prompt = `Given this assistant message from a coding assistant, suggest 2-3 short follow-up prompts (3-8 words each) the user might send next. If the message asks a yes/no question, include an affirmative variant. Return ONLY a JSON array of strings like ["suggestion 1","suggestion 2"]. No other text.\n\nAssistant message:\n${lastMessage}`;
+  // Gather git context if a project cwd was provided
+  let gitContext = '';
+  const cwd = typeof body.cwd === 'string' ? body.cwd : null;
+  if (cwd) {
+    try {
+      const statusOut = execSync('git status --porcelain', { cwd, stdio: 'pipe', timeout: 3000 }).toString().trim();
+      const logOut = execSync('git log --oneline -5 2>/dev/null', { cwd, stdio: 'pipe', timeout: 3000 }).toString().trim();
+      const branchOut = execSync('git branch --show-current 2>/dev/null', { cwd, stdio: 'pipe', timeout: 3000 }).toString().trim();
+      const parts = [];
+      if (branchOut) parts.push(`Branch: ${branchOut}`);
+      if (statusOut) parts.push(`Uncommitted changes:\n${statusOut}`);
+      else parts.push('Working tree is clean (no uncommitted changes).');
+      if (logOut) parts.push(`Recent commits:\n${logOut}`);
+      if (parts.length) gitContext = `\n\nGit context for this project:\n${parts.join('\n')}`;
+    } catch { /* not a git repo or git not available — skip */ }
+  }
+
+  const prompt = `Given this assistant message from a coding assistant, suggest 2-3 short follow-up prompts (3-8 words each) the user might send next. Consider the git context if provided — if there are uncommitted changes, one suggestion could be about committing. If the message asks a yes/no question, include an affirmative variant. Return ONLY a JSON array of strings like ["suggestion 1","suggestion 2"]. No other text.\n\nAssistant message:\n${lastMessage}${gitContext}`;
 
   try {
     const child = spawn(binaryPath, [
@@ -861,7 +878,7 @@ async function handleSuggest(req, res, url) {
       '--no-session-persistence',
       '--max-turns', '1',
       '--output-format', 'json',
-    ], { stdio: ['ignore', 'pipe', 'pipe'], timeout: 10000, cwd: os.tmpdir() });
+    ], { stdio: ['ignore', 'pipe', 'pipe'], timeout: 10000, cwd: cwd || os.tmpdir() });
 
     _activeSuggestProcess = child;
 
