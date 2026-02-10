@@ -46,6 +46,38 @@ const fsWatchers = new Map(); // path -> { watcher, debounceTimer }
 const fsReaddirCache = new Map(); // key -> { entries, fetchedAt }
 const fsReaddirInFlight = new Map(); // key -> Promise<entries>
 let fsReaddirCacheGeneration = 0;
+const terminalSessions = new Map(); // sessionKey -> { proc, cwd, shell, buffer }
+const pendingTerminalOpens = new Set(); // sessionKey lock to prevent double-spawn races
+let ptyModulePromise = null;
+
+class TerminalBuffer {
+  constructor(maxBytes = 100 * 1024) {
+    this._maxBytes = maxBytes;
+    this._chunks = [];
+    this._totalBytes = 0;
+  }
+  append(data) {
+    const len = Buffer.byteLength(data);
+    this._chunks.push({ data, len });
+    this._totalBytes += len;
+    while (this._totalBytes > this._maxBytes && this._chunks.length > 1) {
+      const evicted = this._chunks.shift();
+      this._totalBytes -= evicted.len;
+    }
+  }
+  getAll() {
+    return this._chunks.map((c) => c.data).join('');
+  }
+}
+
+async function getPtyModule() {
+  if (!ptyModulePromise) {
+    ptyModulePromise = import('@lydell/node-pty')
+      .then((mod) => (mod?.spawn ? mod : (mod?.default?.spawn ? mod.default : null)))
+      .catch(() => null);
+  }
+  return ptyModulePromise;
+}
 
 // ---------------------------------------------------------------------------
 // Auth helpers
@@ -84,6 +116,124 @@ async function readBody(req) {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
   return JSON.parse(Buffer.concat(chunks).toString());
+}
+
+// ---------------------------------------------------------------------------
+// Route: Embedded Terminal (single/global PTY-friendly session API)
+// ---------------------------------------------------------------------------
+
+async function handleTerminal(req, res, url) {
+  // POST /terminal/open { sessionKey, cwd, shell? }
+  if (req.method === 'POST' && url.pathname === '/terminal/open') {
+    const body = await readBody(req);
+    const sessionKey = String(body.sessionKey || 'global');
+    const cwd = body.cwd;
+    const shellPath = body.shell || '/bin/zsh';
+    if (!cwd || typeof cwd !== 'string') return error(res, 'cwd required');
+
+    // Prevent double-spawn races (concurrent open requests for same key)
+    if (pendingTerminalOpens.has(sessionKey)) {
+      return error(res, 'Terminal open already in progress for this key', 409);
+    }
+
+    // Reuse existing session if CWD matches
+    const existing = terminalSessions.get(sessionKey);
+    if (existing) {
+      if (existing.cwd === cwd) {
+        // Same project — reuse PTY, return buffered output
+        return json(res, { ok: true, sessionKey, reused: true, buffer: existing.buffer.getAll() });
+      }
+      // Different CWD — kill old PTY, spawn fresh below
+      try { existing.proc.kill(); } catch {}
+      terminalSessions.delete(sessionKey);
+    }
+
+    const nodePty = await getPtyModule();
+    if (!nodePty?.spawn) {
+      return error(res, 'Real PTY backend unavailable: install @lydell/node-pty in cli workspace', 503);
+    }
+
+    pendingTerminalOpens.add(sessionKey);
+    try {
+      const cols = Number(body.cols) || 80;
+      const rows = Number(body.rows) || 24;
+      const proc = nodePty.spawn(shellPath, ['-il'], {
+        name: 'xterm-256color',
+        cols,
+        rows,
+        cwd,
+        env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' },
+      });
+
+      const buffer = new TerminalBuffer();
+      const entry = { proc, cwd, shell: shellPath, buffer };
+      terminalSessions.set(sessionKey, entry);
+
+      proc.onData((data) => {
+        entry.buffer.append(data);
+        broadcast('terminal:data', { sessionKey, data });
+      });
+      proc.onExit(({ exitCode }) => {
+        if (terminalSessions.get(sessionKey)?.proc === proc) {
+          terminalSessions.delete(sessionKey);
+        }
+        broadcast('terminal:exit', { sessionKey, code: typeof exitCode === 'number' ? exitCode : null });
+      });
+
+      return json(res, { ok: true, sessionKey, reused: false });
+    } catch (err) {
+      return error(res, err.message || 'Failed to open terminal', 500);
+    } finally {
+      pendingTerminalOpens.delete(sessionKey);
+    }
+  }
+
+  // POST /terminal/write { sessionKey, data }
+  if (req.method === 'POST' && url.pathname === '/terminal/write') {
+    const body = await readBody(req);
+    const sessionKey = String(body.sessionKey || 'global');
+    const data = typeof body.data === 'string' ? body.data : '';
+    const entry = terminalSessions.get(sessionKey);
+    if (!entry) return error(res, 'terminal session not found', 404);
+    try {
+      entry.proc.write(data);
+      return json(res, { ok: true });
+    } catch (err) {
+      return error(res, err.message || 'Failed to write terminal', 500);
+    }
+  }
+
+  // POST /terminal/resize { sessionKey, cols, rows }
+  if (req.method === 'POST' && url.pathname === '/terminal/resize') {
+    const body = await readBody(req);
+    const sessionKey = String(body.sessionKey || 'global');
+    const cols = Number(body.cols || 0);
+    const rows = Number(body.rows || 0);
+    const entry = terminalSessions.get(sessionKey);
+    if (!entry) return error(res, 'terminal session not found', 404);
+    if (!Number.isFinite(cols) || !Number.isFinite(rows) || cols <= 0 || rows <= 0) {
+      return error(res, 'cols and rows required', 400);
+    }
+    try {
+      entry.proc.resize(Math.floor(cols), Math.floor(rows));
+      return json(res, { ok: true });
+    } catch (err) {
+      return error(res, err.message || 'Failed to resize terminal', 500);
+    }
+  }
+
+  // POST /terminal/close { sessionKey }
+  if (req.method === 'POST' && url.pathname === '/terminal/close') {
+    const body = await readBody(req);
+    const sessionKey = String(body.sessionKey || 'global');
+    const entry = terminalSessions.get(sessionKey);
+    if (!entry) return json(res, { ok: true });
+    try { entry.proc.kill(); } catch {}
+    terminalSessions.delete(sessionKey);
+    return json(res, { ok: true });
+  }
+
+  return false;
 }
 
 function invalidateFsReaddirCache() {
@@ -659,8 +809,12 @@ const sessionsModule = createSessionsModule({
 });
 const { handleSessions, startSessionsWatcher, queueSessionsUpdated, handleWsMessage: handleSessionsWsMessage, handleWsDisconnect: handleSessionsWsDisconnect, cleanup: cleanupSessions } = sessionsModule;
 
-const MAX_CONCURRENT = parseInt(process.env.RUDI_MAX_AGENT_PROCESSES || '3', 10) || 3;
+const MAX_CONCURRENT = parseInt(process.env.RUDI_MAX_AGENT_PROCESSES || '10', 10) || 10;
 const IDLE_TIMEOUT_MS = parseInt(process.env.RUDI_IDLE_TIMEOUT_MS || String(10 * 60 * 1000), 10) || 10 * 60 * 1000;
+
+// Sidecar port — resolved after listen(), used by child agent sessions
+let sidecarPort = 0;
+let sidecarToken = '';
 
 const handleAgent = createAgentHandler({
   agentProcesses,
@@ -672,6 +826,8 @@ const handleAgent = createAgentHandler({
   broadcast,
   queueSessionsUpdated,
   maxConcurrent: MAX_CONCURRENT,
+  getSidecarPort: () => sidecarPort,
+  getSidecarToken: () => sidecarToken,
 });
 
 // ---------------------------------------------------------------------------
@@ -1082,7 +1238,7 @@ export async function cmdServe(args, flags) {
       res.writeHead(204, {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, X-Rudi-Token',
+        'Access-Control-Allow-Headers': 'Content-Type, X-Rudi-Token, X-Rudi-Caller-Session',
       });
       res.end();
       return;
@@ -1143,12 +1299,15 @@ export async function cmdServe(args, flags) {
       if (url.pathname.startsWith('/shell/')) {
         if (await handleShell(req, res, url)) return;
       }
+      if (url.pathname.startsWith('/terminal/')) {
+        if (await handleTerminal(req, res, url)) return;
+      }
 
       log('http', 'warn', `404 ${req.method} ${url.pathname}`);
       error(res, 'Not found', 404);
     } catch (err) {
       log('http', 'error', `500 ${req.method} ${url.pathname}: ${err.message}`, { stack: err.stack });
-      error(res, 'Internal server error', 500);
+      error(res, `Internal server error: ${err.message}`, 500);
     } finally {
       const ms = Date.now() - start;
       if (!url.pathname.startsWith('/logs') && url.pathname !== '/health') {
@@ -1257,11 +1416,13 @@ export async function cmdServe(args, flags) {
   // Start listening
   server.listen(requestedPort, '127.0.0.1', () => {
     const actualPort = server.address().port;
+    sidecarPort = actualPort;
+    sidecarToken = token;
 
-    // Write port and token files
+    // Write port and token files (owner-readable only)
     fs.mkdirSync(PATHS.home, { recursive: true });
-    fs.writeFileSync(PORT_FILE, String(actualPort));
-    fs.writeFileSync(TOKEN_FILE, token);
+    fs.writeFileSync(PORT_FILE, String(actualPort), { mode: 0o600 });
+    fs.writeFileSync(TOKEN_FILE, token, { mode: 0o600 });
 
     console.log('');
     console.log('═'.repeat(50));
@@ -1287,6 +1448,10 @@ export async function cmdServe(args, flags) {
     for (const [, { proc }] of agentProcesses) {
       try { proc.kill(); } catch {}
     }
+    for (const [, { proc }] of terminalSessions) {
+      try { proc.kill(); } catch {}
+    }
+    terminalSessions.clear();
     resumeSessionIndex.clear();
     for (const [, entry] of fsWatchers) {
       try {
