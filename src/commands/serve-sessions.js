@@ -621,6 +621,9 @@ export function parseSessionMessagesFromJsonl(content) {
     if (currentAssistant.toolCalls.length > 0) {
       msg.toolCalls = currentAssistant.toolCalls;
     }
+    if (currentAssistant.contentBlocks.length > 0) {
+      msg.contentBlocks = currentAssistant.contentBlocks;
+    }
     if (msg.content || msg.thinking || (msg.toolCalls && msg.toolCalls.length > 0)) {
       messages.push(msg);
     }
@@ -646,6 +649,7 @@ export function parseSessionMessagesFromJsonl(content) {
           content: '',
           thinking: '',
           toolCalls: [],
+          contentBlocks: [],
           pendingToolIds: new Map(),
           timestamp: entry.timestamp,
         };
@@ -660,6 +664,13 @@ export function parseSessionMessagesFromJsonl(content) {
             if (text) {
               if (currentAssistant.content) currentAssistant.content += '\n';
               currentAssistant.content += text;
+              // Merge consecutive text blocks
+              const lastBlock = currentAssistant.contentBlocks[currentAssistant.contentBlocks.length - 1];
+              if (lastBlock && lastBlock.type === 'text') {
+                lastBlock.text += '\n' + text;
+              } else {
+                currentAssistant.contentBlocks.push({ type: 'text', text });
+              }
             }
           } else if (block.type === 'thinking' && typeof block.thinking === 'string') {
             const thinking = block.thinking.trim();
@@ -674,11 +685,10 @@ export function parseSessionMessagesFromJsonl(content) {
               input: block.input || {},
               status: 'pending',
             };
-            currentAssistant.pendingToolIds.set(
-              block.id,
-              currentAssistant.toolCalls.length
-            );
+            const idx = currentAssistant.toolCalls.length;
+            currentAssistant.pendingToolIds.set(block.id, idx);
             currentAssistant.toolCalls.push(toolCall);
+            currentAssistant.contentBlocks.push({ type: 'tool', toolIndex: idx });
           }
         }
       } else {
@@ -686,6 +696,12 @@ export function parseSessionMessagesFromJsonl(content) {
         if (text) {
           if (currentAssistant.content) currentAssistant.content += '\n';
           currentAssistant.content += text;
+          const lastBlock = currentAssistant.contentBlocks[currentAssistant.contentBlocks.length - 1];
+          if (lastBlock && lastBlock.type === 'text') {
+            lastBlock.text += '\n' + text;
+          } else {
+            currentAssistant.contentBlocks.push({ type: 'text', text });
+          }
         }
       }
     } else if (role === 'user') {
@@ -846,6 +862,8 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
   let sessionsUpdateDebounceTimer = null;
   let sessionsWatcherRetryTimer = null;
   let pendingSessionsUpdate = null;
+  /** @type {Set<string>|null} Accumulated sessionIds across watcher events within debounce window */
+  let pendingSessionIds = null;
   let sessionsWatcher = null;
 
   function invalidateSessionsProjectsCache() {
@@ -857,6 +875,13 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
 
   function queueSessionsUpdated(data = {}) {
     invalidateSessionsProjectsCache();
+
+    // Accumulate sessionIds across multiple watcher events within the debounce window
+    if (data.sessionId) {
+      if (!pendingSessionIds) pendingSessionIds = new Set();
+      pendingSessionIds.add(data.sessionId);
+    }
+
     pendingSessionsUpdate = {
       ...pendingSessionsUpdate,
       ...data,
@@ -866,7 +891,18 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
     clearTimeout(sessionsUpdateDebounceTimer);
     sessionsUpdateDebounceTimer = setTimeout(() => {
       const payload = pendingSessionsUpdate || { source: 'unknown', ts: new Date().toISOString() };
+      // Attach coalesced sessionIds (may be from multiple watcher events)
+      if (pendingSessionIds && pendingSessionIds.size > 0) {
+        payload.sessionIds = [...pendingSessionIds];
+        // If exactly one, also set singular for compat
+        if (pendingSessionIds.size === 1) {
+          payload.sessionId = payload.sessionIds[0];
+        } else {
+          delete payload.sessionId; // multiple — use sessionIds array
+        }
+      }
       pendingSessionsUpdate = null;
+      pendingSessionIds = null;
       sessionsUpdateDebounceTimer = null;
       broadcast('sessions:updated', payload);
     }, SESSIONS_UPDATE_DEBOUNCE_MS);
@@ -903,11 +939,31 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
           return;
         }
         if (!shouldBroadcastSessionUpdate(watchRoot, relPath)) return;
-        queueSessionsUpdated({
+
+        // Parse sessionId and projectDir from JSONL file paths
+        // relPath is relative to watchRoot. When watchRoot === CLAUDE_PROJECTS_DIR,
+        // relPath looks like "<projectDir>/<sessionId>.jsonl"
+        const updateData = {
           source: 'watcher',
           event: eventType,
           path: path.join(watchRoot, relPath),
-        });
+        };
+        const normalized = relPath.replace(/\\/g, '/');
+        if (normalized.endsWith('.jsonl')) {
+          const parts = normalized.split('/');
+          // When watching CLAUDE_PROJECTS_DIR: parts = [projectDir, sessionId.jsonl]
+          // When watching CLAUDE_ROOT_DIR: parts = [projects, projectDir, sessionId.jsonl]
+          const inProjects = watchRoot === CLAUDE_PROJECTS_DIR;
+          const projIdx = inProjects ? 0 : 1; // skip 'projects/' prefix
+          if (parts.length > projIdx + 1) {
+            updateData.projectDir = parts[projIdx] || null;
+            const fname = parts[projIdx + 1];
+            if (fname && fname.endsWith('.jsonl')) {
+              updateData.sessionId = fname.slice(0, -6); // strip '.jsonl'
+            }
+          }
+        }
+        queueSessionsUpdated(updateData);
       });
 
       sessionsWatcher = { watcher, rootPath: watchRoot };
@@ -1441,6 +1497,9 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
       } else {
         state.flushedToolCalls = null;
       }
+      if (state.lastAssistantMsg.contentBlocks && state.lastAssistantMsg.contentBlocks.length > 0) {
+        msg.contentBlocks = state.lastAssistantMsg.contentBlocks;
+      }
       if (msg.content || msg.thinking || (msg.toolCalls && msg.toolCalls.length > 0)) {
         messages.push(msg);
       }
@@ -1467,6 +1526,7 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
             content: '',
             thinking: '',
             toolCalls: [],
+            contentBlocks: [],
             timestamp: entry.timestamp,
           };
         }
@@ -1480,6 +1540,12 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
               if (text) {
                 if (state.lastAssistantMsg.content) state.lastAssistantMsg.content += '\n';
                 state.lastAssistantMsg.content += text;
+                const lastCB = state.lastAssistantMsg.contentBlocks[state.lastAssistantMsg.contentBlocks.length - 1];
+                if (lastCB && lastCB.type === 'text') {
+                  lastCB.text += '\n' + text;
+                } else {
+                  state.lastAssistantMsg.contentBlocks.push({ type: 'text', text });
+                }
               }
             } else if (block.type === 'thinking' && typeof block.thinking === 'string') {
               const thinking = block.thinking.trim();
@@ -1494,8 +1560,10 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
                 input: block.input || {},
                 status: 'pending',
               };
-              state.pendingToolUses.set(block.id, state.lastAssistantMsg.toolCalls.length);
+              const idx = state.lastAssistantMsg.toolCalls.length;
+              state.pendingToolUses.set(block.id, idx);
               state.lastAssistantMsg.toolCalls.push(toolCall);
+              state.lastAssistantMsg.contentBlocks.push({ type: 'tool', toolIndex: idx });
             }
           }
         } else {
@@ -1503,6 +1571,12 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
           if (text) {
             if (state.lastAssistantMsg.content) state.lastAssistantMsg.content += '\n';
             state.lastAssistantMsg.content += text;
+            const lastCB = state.lastAssistantMsg.contentBlocks[state.lastAssistantMsg.contentBlocks.length - 1];
+            if (lastCB && lastCB.type === 'text') {
+              lastCB.text += '\n' + text;
+            } else {
+              state.lastAssistantMsg.contentBlocks.push({ type: 'text', text });
+            }
           }
         }
       } else if (role === 'user') {
