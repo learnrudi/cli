@@ -9,7 +9,8 @@ import fs from 'fs';
 import fsp from 'fs/promises';
 import path from 'path';
 import os from 'os';
-import { execSync } from 'child_process';
+import { execSync, execFile } from 'child_process';
+import { createInterface } from 'readline';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -485,10 +486,161 @@ async function readSessionMessages(sessionId) {
   return { messages, byteOffset, usage, filePath };
 }
 
+// ---------------------------------------------------------------------------
+// Line-index cache — avoids reading entire JSONL for paginated loads
+// ---------------------------------------------------------------------------
+
+/**
+ * Cache of session JSONL file info: line byte-offsets + usage.
+ * Keyed by filePath, invalidated by mtime.
+ */
+const _sessionFileInfoCache = new Map();
+
+/**
+ * Build (or return cached) line-offset index + usage for a JSONL file.
+ * Line index: fast byte scan (no string allocation) — blocks the response.
+ * Usage: streamed in the background — available on subsequent requests.
+ */
+async function getSessionFileInfo(filePath) {
+  const stat = await fsp.stat(filePath);
+  const cached = _sessionFileInfoCache.get(filePath);
+  if (cached && cached.mtimeMs === stat.mtimeMs) return cached;
+
+  const { size } = stat;
+  if (size === 0) {
+    const empty = { lineOffsets: [], fileSize: 0, lineCount: 0, mtimeMs: stat.mtimeMs, usage: null };
+    _sessionFileInfoCache.set(filePath, empty);
+    return empty;
+  }
+
+  // Byte scan for line offsets — fast, no string conversion, blocks the response
+  const lineOffsets = await _buildLineOffsets(filePath, size);
+
+  // Drop trailing offset past EOF (from trailing newline)
+  if (lineOffsets.length > 0 && lineOffsets[lineOffsets.length - 1] >= size) {
+    lineOffsets.pop();
+  }
+
+  const result = {
+    lineOffsets,
+    fileSize: size,
+    lineCount: lineOffsets.length,
+    mtimeMs: stat.mtimeMs,
+    usage: null,
+  };
+  _sessionFileInfoCache.set(filePath, result);
+
+  // Extract usage in background — don't block the response.
+  // Available on subsequent cached requests or if the response handler awaits it.
+  result._usagePromise = _extractUsageStreaming(filePath).then(usage => {
+    result.usage = usage;
+    return usage;
+  }).catch(() => null);
+
+  return result;
+}
+
+/**
+ * Byte scan for newline positions. Returns array of line-start offsets.
+ * No string allocation — just reads raw bytes looking for 0x0a.
+ */
+async function _buildLineOffsets(filePath, fileSize) {
+  const lineOffsets = [0]; // line 0 starts at byte 0
+  const fd = await fsp.open(filePath, 'r');
+  try {
+    const CHUNK = 1024 * 1024; // 1MB chunks — fewer async round-trips for large files
+    const buf = Buffer.alloc(CHUNK);
+    let pos = 0;
+    let bytesRead;
+    do {
+      ({ bytesRead } = await fd.read(buf, 0, CHUNK, pos));
+      for (let i = 0; i < bytesRead; i++) {
+        if (buf[i] === 0x0a) lineOffsets.push(pos + i + 1);
+      }
+      pos += bytesRead;
+    } while (bytesRead === CHUNK);
+  } finally {
+    await fd.close();
+  }
+  return lineOffsets;
+}
+
+/**
+ * Extract usage stats by streaming through the file line-by-line.
+ * Uses readline so only one line is in memory at a time.
+ */
+async function _extractUsageStreaming(filePath) {
+  const rl = createInterface({
+    input: fs.createReadStream(filePath, { encoding: 'utf-8', highWaterMark: 256 * 1024 }),
+    crlfDelay: Infinity,
+  });
+
+  let totalInputTokens = 0, totalOutputTokens = 0, totalCacheReadTokens = 0;
+  let totalCostUsd = 0, turnCount = 0;
+  let lastRole = null, model = null, createdAt = null, lastActiveAt = null, cwd = null;
+
+  for await (const line of rl) {
+    if (!line) continue;
+    // Skip JSON-parsing huge lines (tool_result payloads) that can't contain usage data.
+    // Lines with usage/result fields are small assistant responses or result events.
+    if (line.length > 50_000 && !line.includes('"usage"') && !line.includes('"result"')) {
+      continue;
+    }
+    let entry;
+    try { entry = JSON.parse(line); } catch { continue; }
+
+    const role = getSessionEntryRole(entry);
+    const usage = entry?.message?.usage;
+
+    if (!createdAt && entry.timestamp) createdAt = entry.timestamp;
+    if (entry.timestamp) lastActiveAt = entry.timestamp;
+    if (!model && entry.message?.model) model = entry.message.model;
+    if (!cwd && entry.cwd) cwd = entry.cwd;
+
+    if (usage) {
+      totalOutputTokens += usage.output_tokens || 0;
+      totalInputTokens += (usage.input_tokens || 0)
+        + (usage.cache_read_input_tokens || 0)
+        + (usage.cache_creation_input_tokens || 0);
+      totalCacheReadTokens += usage.cache_read_input_tokens || 0;
+    }
+
+    if (entry?.type === 'result' && typeof entry.total_cost_usd === 'number') {
+      totalCostUsd = entry.total_cost_usd;
+    }
+
+    if (role === 'assistant' && lastRole === 'user') turnCount++;
+    if (role) lastRole = role;
+  }
+
+  if (totalInputTokens === 0 && totalOutputTokens === 0) return null;
+  return {
+    totalInputTokens, totalOutputTokens, totalCacheReadTokens, turnCount,
+    totalCostUsd: totalCostUsd || undefined,
+    model, createdAt, lastActiveAt, cwd,
+  };
+}
+
+/**
+ * Read a byte range from a file and return as UTF-8 string.
+ */
+async function _readByteRange(filePath, startByte, endByte) {
+  const len = endByte - startByte;
+  if (len <= 0) return '';
+  const fd = await fsp.open(filePath, 'r');
+  try {
+    const buf = Buffer.alloc(len);
+    await fd.read(buf, 0, len, startByte);
+    return buf.toString('utf-8');
+  } finally {
+    await fd.close();
+  }
+}
+
 /**
  * Read session messages with pagination support.
- * Returns a tail window of parsed messages plus a cursor for loading older pages.
- * If no pagination params are given, falls back to full load.
+ * Uses a cached line-offset index so pagination only reads the needed bytes
+ * instead of the entire JSONL file.
  */
 async function readSessionMessagesPaginated(sessionId, { tail, before } = {}) {
   const filePath = await findSessionFile(sessionId);
@@ -496,43 +648,55 @@ async function readSessionMessagesPaginated(sessionId, { tail, before } = {}) {
     throw new Error(`Session not found: ${sessionId}`);
   }
 
-  const content = await fsp.readFile(filePath, 'utf-8');
-  const rawLines = content.split('\n').filter(Boolean);
-  const totalCount = rawLines.length;
-  const byteOffset = Buffer.byteLength(content, 'utf-8');
-
-  // If no pagination requested, return full result (backward compat)
+  // No pagination params: full load (backward compat)
   if (!tail && before === undefined) {
+    const content = await fsp.readFile(filePath, 'utf-8');
     const messages = parseSessionMessagesFromJsonl(content);
     const usage = extractUsageFromJsonl(content);
+    const byteOffset = Buffer.byteLength(content, 'utf-8');
+    const totalCount = content.split('\n').filter(Boolean).length;
     return { messages, byteOffset, usage, filePath, totalCount };
   }
 
-  // Determine line range: we want `tail` lines ending at `before` (exclusive)
-  const endLine = before !== undefined ? Math.min(before, totalCount) : totalCount;
+  // Build (or use cached) line index + usage
+  const info = await getSessionFileInfo(filePath);
+  const { lineOffsets, fileSize, lineCount } = info;
+
+  // Determine line range
+  const endLine = before !== undefined ? Math.min(before, lineCount) : lineCount;
   const pageSize = tail || 50;
   const startLine = Math.max(0, endLine - pageSize);
 
-  // Extract the subset of lines
-  const subset = rawLines.slice(startLine, endLine);
-  const subsetContent = subset.join('\n');
-  const messages = parseSessionMessagesFromJsonl(subsetContent);
+  // Read only the needed byte range
+  const startByte = lineOffsets[startLine] ?? 0;
+  const endByte = endLine < lineOffsets.length ? lineOffsets[endLine] : fileSize;
+  const content = await _readByteRange(filePath, startByte, endByte);
+  const messages = parseSessionMessagesFromJsonl(content);
 
-  // Build cursor and hasMore
   const hasMore = startLine > 0;
-  const beforeCursor = startLine;
 
-  // Extract usage only on full load (first page from bottom)
-  const usage = before === undefined ? extractUsageFromJsonl(content) : null;
+  // Usage: use cached value if ready, otherwise wait briefly (200ms max).
+  // For large files, usage extraction runs in background and will be cached
+  // for subsequent requests. Frontend falls back to DB meta if null.
+  let usage = null;
+  if (before === undefined) {
+    usage = info.usage;
+    if (!usage && info._usagePromise) {
+      usage = await Promise.race([
+        info._usagePromise,
+        new Promise(resolve => setTimeout(resolve, 200, null)),
+      ]);
+    }
+  }
 
   return {
     messages,
-    byteOffset,
+    byteOffset: fileSize,
     usage,
     filePath,
-    before: beforeCursor,
+    before: startLine,
     hasMore,
-    totalCount,
+    totalCount: lineCount,
   };
 }
 
@@ -859,12 +1023,173 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
     inFlight: null,
   };
   let sessionsProjectsCacheGeneration = 0;
+  let _projectsEtag = '';
   let sessionsUpdateDebounceTimer = null;
   let sessionsWatcherRetryTimer = null;
   let pendingSessionsUpdate = null;
   /** @type {Set<string>|null} Accumulated sessionIds across watcher events within debounce window */
   let pendingSessionIds = null;
   let sessionsWatcher = null;
+
+  // -----------------------------------------------------------------------
+  // Background enrichment caches (diff stats + git status)
+  // -----------------------------------------------------------------------
+
+  const _diffStatsCache = new Map();   // sessionId -> { diffStats, mtimeMs }
+  const _gitStatusCache = new Map();   // projectPath -> { gitStatus, fetchedAt }
+  const _diffStatsInFlight = new Set(); // sessionIds currently being computed
+  const _gitStatusInFlight = new Set(); // projectPaths currently being computed
+  const _sessionPathMap = new Map();    // sessionId -> fullPath (for background jobs)
+  const GIT_STATUS_TTL_MS = 30_000;
+  const ENRICHMENT_DEBOUNCE_MS = 2_000;
+  let _enrichmentTimer = null;
+  let _lastEnrichmentProjects = null;
+
+  async function runBatched(items, concurrency, fn) {
+    for (let i = 0; i < items.length; i += concurrency) {
+      await Promise.all(items.slice(i, i + concurrency).map(fn));
+    }
+  }
+
+  /**
+   * Async diff stats from tail of JSONL file.
+   * Reads last 256KB and scans for Edit/Write/MultiEdit tool_use blocks.
+   */
+  async function computeSessionDiffStatsAsync(sessionJsonlPath) {
+    if (!sessionJsonlPath) return null;
+    try {
+      const stat = await fsp.stat(sessionJsonlPath);
+      if (stat.size === 0) return null;
+
+      const tailSize = 256 * 1024;
+      const startByte = Math.max(0, stat.size - tailSize);
+      const chunk = await _readByteRange(sessionJsonlPath, startByte, stat.size);
+
+      const lines = chunk.split('\n').filter(Boolean);
+      const stats = { insertions: 0, deletions: 0 };
+
+      for (const line of lines) {
+        let entry;
+        try { entry = JSON.parse(line); } catch { continue; }
+
+        const contentBlocks = entry?.message?.content;
+        if (!Array.isArray(contentBlocks)) continue;
+
+        for (const block of contentBlocks) {
+          if (block.type !== 'tool_use') continue;
+
+          if (block.name === 'Edit' && block.input) {
+            accumulateEditStats(stats, block.input.old_string, block.input.new_string);
+          } else if (block.name === 'MultiEdit' && block.input?.edits) {
+            for (const edit of block.input.edits) {
+              accumulateEditStats(stats, edit.old_string, edit.new_string);
+            }
+          } else if (block.name === 'Write' && block.input) {
+            stats.insertions += countLines(block.input.content);
+          }
+        }
+      }
+
+      if (stats.insertions === 0 && stats.deletions === 0) return null;
+      return stats;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Async git status using execFile (non-blocking).
+   * Single command: git status --porcelain=v2 --branch
+   */
+  function getProjectGitStatusAsync(projectPath) {
+    return new Promise((resolve) => {
+      if (!projectPath) return resolve(null);
+
+      const gitDir = path.join(projectPath, '.git');
+      // Quick sync check — .git is almost always a directory, stat is fast
+      try { if (!fs.existsSync(gitDir)) return resolve(null); } catch { return resolve(null); }
+
+      execFile('git', ['status', '--porcelain=v2', '--branch'], {
+        cwd: projectPath,
+        encoding: 'utf-8',
+        timeout: 2000,
+        env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' },
+      }, (err, stdout) => {
+        if (err) return resolve(null);
+        let branch = '';
+        let uncommitted = 0;
+        for (const line of stdout.split('\n')) {
+          if (line.startsWith('# branch.head ')) {
+            branch = line.slice('# branch.head '.length);
+          } else if (line && !line.startsWith('#')) {
+            uncommitted++;
+          }
+        }
+        resolve({ branch, uncommitted });
+      });
+    });
+  }
+
+  /**
+   * Background enrichment: compute missing diff stats + git status.
+   * Runs after the initial response is sent. Results available on next poll.
+   */
+  async function _enrichProjectsInBackground(projects) {
+    // Diff stats: top 5 sessions per project that are missing/stale
+    const diffJobs = [];
+    for (const proj of projects) {
+      for (const session of proj.sessions.slice(0, 5)) {
+        const sid = session.sessionId;
+        if (_diffStatsInFlight.has(sid)) continue;
+        if (_diffStatsCache.has(sid)) continue;
+        const fullPath = _sessionPathMap.get(sid);
+        if (!fullPath) continue;
+        diffJobs.push({ sessionId: sid, fullPath });
+      }
+    }
+    await runBatched(diffJobs, 8, async (job) => {
+      if (_diffStatsInFlight.has(job.sessionId)) return;
+      _diffStatsInFlight.add(job.sessionId);
+      try {
+        const stats = await computeSessionDiffStatsAsync(job.fullPath);
+        _diffStatsCache.set(job.sessionId, { diffStats: stats });
+      } finally {
+        _diffStatsInFlight.delete(job.sessionId);
+      }
+    });
+
+    // Git status: per project, skip if fresh or in-flight
+    const gitJobs = projects
+      .map(p => p.originalPath)
+      .filter(p => p && !_gitStatusInFlight.has(p))
+      .filter(p => {
+        const cached = _gitStatusCache.get(p);
+        return !cached || (Date.now() - cached.fetchedAt) > GIT_STATUS_TTL_MS;
+      });
+    await runBatched(gitJobs, 4, async (projectPath) => {
+      if (_gitStatusInFlight.has(projectPath)) return;
+      _gitStatusInFlight.add(projectPath);
+      try {
+        const gitStatus = await getProjectGitStatusAsync(projectPath);
+        _gitStatusCache.set(projectPath, { gitStatus, fetchedAt: Date.now() });
+      } finally {
+        _gitStatusInFlight.delete(projectPath);
+      }
+    });
+  }
+
+  function _scheduleEnrichment(projects) {
+    _lastEnrichmentProjects = projects;
+    if (_enrichmentTimer) return;
+    _enrichmentTimer = setTimeout(() => {
+      _enrichmentTimer = null;
+      const toEnrich = _lastEnrichmentProjects;
+      _lastEnrichmentProjects = null;
+      if (toEnrich) {
+        _enrichProjectsInBackground(toEnrich).catch(() => {});
+      }
+    }, ENRICHMENT_DEBOUNCE_MS);
+  }
 
   function invalidateSessionsProjectsCache() {
     sessionsProjectsCacheGeneration += 1;
@@ -982,166 +1307,181 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
   /**
    * Enumerate projects with their sessions, using sessions-index.json for rich metadata.
    * Falls back to scanning .jsonl files if index is missing/malformed.
+   *
+   * Hot path: no sync file reads, no sync git subprocesses. Diff stats and git status
+   * come from caches (populated by background enrichment on previous calls).
    */
   async function enumerateProjectsWithSessions() {
     const claudeDir = path.join(os.homedir(), '.claude', 'projects');
     const projects = [];
 
+    async function processProject(projDir) {
+      const projPath = path.join(claudeDir, projDir);
+      const stat = await fsp.stat(projPath);
+      if (!stat.isDirectory()) return null;
+
+      let sessions = [];
+      let originalPath = null;
+
+      const indexPath = path.join(projPath, 'sessions-index.json');
+      try {
+        const indexContent = await fsp.readFile(indexPath, 'utf-8');
+        const index = JSON.parse(indexContent);
+        originalPath = index.originalPath || null;
+
+        if (Array.isArray(index.entries)) {
+          const STALE_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes
+          const now = Date.now();
+          sessions = await Promise.all(index.entries.map(async (entry) => {
+            const fullPath = entry.fullPath || path.join(projPath, `${entry.sessionId}.jsonl`);
+            let modified = entry.modified || '';
+            // Only stat the file if the index entry looks stale (>2min old).
+            // Claude CLI only updates sessions-index.json at session boundaries,
+            // so active terminal sessions have stale index timestamps.
+            const indexAge = modified ? now - new Date(modified).getTime() : Infinity;
+            if (indexAge > STALE_THRESHOLD_MS) {
+              try {
+                const fstat = await fsp.stat(fullPath);
+                const fileMtime = fstat.mtime.toISOString();
+                if (!modified || new Date(fileMtime) > new Date(modified)) {
+                  modified = fileMtime;
+                }
+              } catch {
+                // File may have been deleted
+              }
+            }
+            return {
+              sessionId: entry.sessionId,
+              summary: entry.summary || '',
+              firstPrompt: entry.firstPrompt || '',
+              messageCount: entry.messageCount || 0,
+              modified,
+              created: entry.created || '',
+              gitBranch: entry.gitBranch || '',
+              fullPath,
+              diffStats: null,
+            };
+          }));
+        }
+
+        const indexedIds = new Set(sessions.map((s) => s.sessionId));
+        const files = await fsp.readdir(projPath);
+        for (const file of files) {
+          if (!file.endsWith('.jsonl')) continue;
+          const sessionId = file.replace('.jsonl', '');
+          if (indexedIds.has(sessionId)) continue;
+          const filePath = path.join(projPath, file);
+          try {
+            const fstat = await fsp.stat(filePath);
+            const snippet = await readSessionSnippet(filePath);
+            sessions.push({
+              sessionId,
+              summary: '',
+              firstPrompt: snippet.firstPrompt,
+              messageCount: 0,
+              modified: fstat.mtime.toISOString(),
+              created: fstat.birthtime.toISOString(),
+              gitBranch: snippet.gitBranch,
+              fullPath: filePath,
+              diffStats: null,
+            });
+          } catch {
+            // Skip files we can't stat
+          }
+        }
+      } catch {
+        const files = await fsp.readdir(projPath);
+        for (const file of files) {
+          if (!file.endsWith('.jsonl')) continue;
+          const sessionId = file.replace('.jsonl', '');
+          const filePath = path.join(projPath, file);
+          try {
+            const fstat = await fsp.stat(filePath);
+            const snippet = await readSessionSnippet(filePath);
+            sessions.push({
+              sessionId,
+              summary: '',
+              firstPrompt: snippet.firstPrompt,
+              messageCount: 0,
+              modified: fstat.mtime.toISOString(),
+              created: fstat.birthtime.toISOString(),
+              gitBranch: snippet.gitBranch,
+              fullPath: filePath,
+              diffStats: null,
+            });
+          } catch {
+            // Skip files we can't stat
+          }
+        }
+      }
+
+      if (sessions.length === 0) return null;
+
+      sessions.sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime());
+
+      if (originalPath && !await isExistingDirectory(originalPath)) {
+        originalPath = null;
+      }
+
+      let inferredOriginalPath = null;
+      for (const session of sessions) {
+        if (!session.fullPath) continue;
+        const inferredPath = await inferProjectPathFromSessionFile(session.fullPath);
+        if (inferredPath) {
+          inferredOriginalPath = inferredPath;
+          break;
+        }
+      }
+      if (inferredOriginalPath) {
+        originalPath = inferredOriginalPath;
+      }
+
+      let decodedPath = null;
+      if (!originalPath) {
+        decodedPath = await decodeProjectDirFromFilesystem(projDir);
+      }
+      if (!decodedPath) {
+        decodedPath = '/' + projDir.replace(/-/g, '/').replace(/^\//, '');
+      }
+
+      const displayPath = originalPath || decodedPath;
+      const name = path.basename(displayPath);
+
+      // Diff stats: read from cache only (background enrichment fills it)
+      for (const session of sessions) {
+        // Populate path map for background enrichment
+        if (session.fullPath) _sessionPathMap.set(session.sessionId, session.fullPath);
+        const cached = _diffStatsCache.get(session.sessionId);
+        if (cached) session.diffStats = cached.diffStats;
+      }
+
+      const cleanedSessions = sessions.map(({ fullPath, ...rest }) => rest);
+
+      // Git status: read from cache only (background enrichment fills it)
+      const cachedGit = _gitStatusCache.get(displayPath);
+      const gitStatus = (cachedGit && (Date.now() - cachedGit.fetchedAt) < GIT_STATUS_TTL_MS)
+        ? cachedGit.gitStatus : null;
+
+      return {
+        path: projDir,
+        name,
+        originalPath: displayPath,
+        sessions: cleanedSessions,
+        gitStatus,
+      };
+    }
+
     try {
       const projectDirs = await fsp.readdir(claudeDir);
 
-      for (const projDir of projectDirs) {
-        const projPath = path.join(claudeDir, projDir);
-        const stat = await fsp.stat(projPath);
-        if (!stat.isDirectory()) continue;
-
-        let sessions = [];
-        let originalPath = null;
-
-        const indexPath = path.join(projPath, 'sessions-index.json');
-        try {
-          const indexContent = await fsp.readFile(indexPath, 'utf-8');
-          const index = JSON.parse(indexContent);
-          originalPath = index.originalPath || null;
-
-          if (Array.isArray(index.entries)) {
-            const STALE_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes
-            const now = Date.now();
-            sessions = await Promise.all(index.entries.map(async (entry) => {
-              const fullPath = entry.fullPath || path.join(projPath, `${entry.sessionId}.jsonl`);
-              let modified = entry.modified || '';
-              // Only stat the file if the index entry looks stale (>2min old).
-              // Claude CLI only updates sessions-index.json at session boundaries,
-              // so active terminal sessions have stale index timestamps.
-              const indexAge = modified ? now - new Date(modified).getTime() : Infinity;
-              if (indexAge > STALE_THRESHOLD_MS) {
-                try {
-                  const fstat = await fsp.stat(fullPath);
-                  const fileMtime = fstat.mtime.toISOString();
-                  if (!modified || new Date(fileMtime) > new Date(modified)) {
-                    modified = fileMtime;
-                  }
-                } catch {
-                  // File may have been deleted
-                }
-              }
-              return {
-                sessionId: entry.sessionId,
-                summary: entry.summary || '',
-                firstPrompt: entry.firstPrompt || '',
-                messageCount: entry.messageCount || 0,
-                modified,
-                created: entry.created || '',
-                gitBranch: entry.gitBranch || '',
-                fullPath,
-                diffStats: null,
-              };
-            }));
-          }
-
-          const indexedIds = new Set(sessions.map((s) => s.sessionId));
-          const files = await fsp.readdir(projPath);
-          for (const file of files) {
-            if (!file.endsWith('.jsonl')) continue;
-            const sessionId = file.replace('.jsonl', '');
-            if (indexedIds.has(sessionId)) continue;
-            const filePath = path.join(projPath, file);
-            try {
-              const fstat = await fsp.stat(filePath);
-              const snippet = await readSessionSnippet(filePath);
-              sessions.push({
-                sessionId,
-                summary: '',
-                firstPrompt: snippet.firstPrompt,
-                messageCount: 0,
-                modified: fstat.mtime.toISOString(),
-                created: fstat.birthtime.toISOString(),
-                gitBranch: snippet.gitBranch,
-                fullPath: filePath,
-                diffStats: null,
-              });
-            } catch {
-              // Skip files we can't stat
-            }
-          }
-        } catch {
-          const files = await fsp.readdir(projPath);
-          for (const file of files) {
-            if (!file.endsWith('.jsonl')) continue;
-            const sessionId = file.replace('.jsonl', '');
-            const filePath = path.join(projPath, file);
-            try {
-              const fstat = await fsp.stat(filePath);
-              const snippet = await readSessionSnippet(filePath);
-              sessions.push({
-                sessionId,
-                summary: '',
-                firstPrompt: snippet.firstPrompt,
-                messageCount: 0,
-                modified: fstat.mtime.toISOString(),
-                created: fstat.birthtime.toISOString(),
-                gitBranch: snippet.gitBranch,
-                fullPath: filePath,
-                diffStats: null,
-              });
-            } catch {
-              // Skip files we can't stat
-            }
-          }
+      // Process projects in parallel batches
+      const CONCURRENCY = 8;
+      for (let i = 0; i < projectDirs.length; i += CONCURRENCY) {
+        const batch = projectDirs.slice(i, i + CONCURRENCY);
+        const results = await Promise.all(batch.map(dir => processProject(dir).catch(() => null)));
+        for (const r of results) {
+          if (r) projects.push(r);
         }
-
-        if (sessions.length === 0) continue;
-
-        sessions.sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime());
-
-        if (originalPath && !await isExistingDirectory(originalPath)) {
-          originalPath = null;
-        }
-
-        let inferredOriginalPath = null;
-        for (const session of sessions) {
-          if (!session.fullPath) continue;
-          const inferredPath = await inferProjectPathFromSessionFile(session.fullPath);
-          if (inferredPath) {
-            inferredOriginalPath = inferredPath;
-            break;
-          }
-        }
-        if (inferredOriginalPath) {
-          originalPath = inferredOriginalPath;
-        }
-
-        let decodedPath = null;
-        if (!originalPath) {
-          decodedPath = await decodeProjectDirFromFilesystem(projDir);
-        }
-        if (!decodedPath) {
-          decodedPath = '/' + projDir.replace(/-/g, '/').replace(/^\//, '');
-        }
-
-        const displayPath = originalPath || decodedPath;
-        const name = path.basename(displayPath);
-
-        const recentCount = Math.min(5, sessions.length);
-        for (let i = 0; i < recentCount; i++) {
-          const session = sessions[i];
-          session.diffStats = computeSessionDiffStats(session.fullPath);
-          if (!session.diffStats) {
-            session.diffStats = computeGitDiffStats(displayPath, session.created, session.modified);
-          }
-        }
-
-        const cleanedSessions = sessions.map(({ fullPath, ...rest }) => rest);
-
-        const gitStatus = getProjectGitStatus(displayPath);
-
-        projects.push({
-          path: projDir,
-          name,
-          originalPath: displayPath,
-          sessions: cleanedSessions,
-          gitStatus,
-        });
       }
     } catch {
       // ~/.claude/projects/ may not exist
@@ -1273,7 +1613,10 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
         if (generationAtStart === sessionsProjectsCacheGeneration) {
           sessionsProjectsCache.value = projects;
           sessionsProjectsCache.fetchedAt = Date.now();
+          _projectsEtag = `"${sessionsProjectsCacheGeneration.toString(36)}-${sessionsProjectsCache.fetchedAt.toString(36)}"`;
         }
+        // Kick off background enrichment (diff stats + git status)
+        _scheduleEnrichment(projects);
         return projects;
       })
       .finally(() => {
@@ -1299,7 +1642,17 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
     if (req.method === 'GET' && url.pathname === '/sessions/projects') {
       try {
         const projects = await getProjectsWithSessionsCached();
-        json(res, { projects });
+        if (_projectsEtag && req.headers['if-none-match'] === _projectsEtag) {
+          res.writeHead(304, { 'Access-Control-Allow-Origin': '*' });
+          res.end();
+          return true;
+        }
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'ETag': _projectsEtag,
+        });
+        res.end(JSON.stringify({ projects }));
       } catch (err) {
         json(res, { projects: [], error: err.message });
       }
@@ -1889,6 +2242,11 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
       clearInterval(tailFallbackTimer);
       tailFallbackTimer = null;
     }
+    if (_enrichmentTimer) {
+      clearTimeout(_enrichmentTimer);
+      _enrichmentTimer = null;
+    }
+    _lastEnrichmentProjects = null;
   }
 
   return {
