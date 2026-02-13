@@ -807,7 +807,7 @@ const sessionsModule = createSessionsModule({
   log, broadcast, json, error, readBody, getProjectGitStatus,
   resolveDb: sessionsResolveDb,
 });
-const { handleSessions, startSessionsWatcher, queueSessionsUpdated, handleWsMessage: handleSessionsWsMessage, handleWsDisconnect: handleSessionsWsDisconnect, cleanup: cleanupSessions } = sessionsModule;
+const { handleSessions, startSessionsWatcher, queueSessionsUpdated, handleWsMessage: handleSessionsWsMessage, handleWsDisconnect: handleSessionsWsDisconnect, cleanup: cleanupSessions, reconcileSessionsToDb, startPeriodicReconcile, enableDbSpine } = sessionsModule;
 
 const MAX_CONCURRENT = parseInt(process.env.RUDI_MAX_AGENT_PROCESSES || '10', 10) || 10;
 const IDLE_TIMEOUT_MS = parseInt(process.env.RUDI_IDLE_TIMEOUT_MS || String(10 * 60 * 1000), 10) || 10 * 60 * 1000;
@@ -1192,6 +1192,15 @@ export async function cmdServe(args, flags) {
     }
   } catch (err) {
     console.warn('[serve] Failed to sweep stale sessions:', err.message);
+  }
+
+  // DB-as-spine: reconcile filesystem sessions into DB at boot
+  try {
+    await reconcileSessionsToDb();
+    enableDbSpine();
+    startPeriodicReconcile();
+  } catch (err) {
+    console.warn('[serve] Session reconciliation failed, falling back to filesystem:', err.message);
   }
 
   // Kill orphaned Claude CLI processes from previous sidecar runs.

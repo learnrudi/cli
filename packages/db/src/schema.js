@@ -4,7 +4,7 @@
 
 import { getDb } from './index.js';
 
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 
 export const SCHEMA_SQL = `
 -- Schema version tracking
@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 
   -- Context
   cwd TEXT,
+  project_path TEXT,
   dir_scope TEXT DEFAULT 'project' CHECK (dir_scope IN ('project', 'home')),
   git_branch TEXT,
   native_storage_path TEXT,
@@ -103,6 +104,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_provider_session_unique
   ON sessions(provider, provider_session_id)
   WHERE provider_session_id IS NOT NULL AND status != 'deleted';
 CREATE INDEX IF NOT EXISTS idx_sessions_cwd ON sessions(cwd);
+CREATE INDEX IF NOT EXISTS idx_sessions_project_path ON sessions(project_path);
+CREATE INDEX IF NOT EXISTS idx_sessions_project_active ON sessions(project_path, last_active_at DESC) WHERE status != 'deleted';
 CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_session_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_agent ON sessions(agent_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_type ON sessions(session_type);
@@ -607,6 +610,8 @@ export function applySchemaUpdates(db) {
     ensureColumn(db, 'sessions', 'exit_code', 'ALTER TABLE sessions ADD COLUMN exit_code INTEGER');
     ensureColumn(db, 'sessions', 'error_code', 'ALTER TABLE sessions ADD COLUMN error_code TEXT');
     ensureColumn(db, 'sessions', 'error_message', 'ALTER TABLE sessions ADD COLUMN error_message TEXT');
+    // v10: project_path for DB-as-spine sidebar queries
+    ensureColumn(db, 'sessions', 'project_path', 'ALTER TABLE sessions ADD COLUMN project_path TEXT');
 
     if (columnExists(db, 'sessions', 'session_type')) {
       db.exec("UPDATE sessions SET session_type = 'main' WHERE session_type = 'task'");
@@ -615,6 +620,8 @@ export function applySchemaUpdates(db) {
     ensureIndex(db, 'idx_sessions_parent', 'CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_session_id)');
     ensureIndex(db, 'idx_sessions_agent', 'CREATE INDEX IF NOT EXISTS idx_sessions_agent ON sessions(agent_id)');
     ensureIndex(db, 'idx_sessions_type', 'CREATE INDEX IF NOT EXISTS idx_sessions_type ON sessions(session_type)');
+    ensureIndex(db, 'idx_sessions_project_path', 'CREATE INDEX IF NOT EXISTS idx_sessions_project_path ON sessions(project_path)');
+    ensureIndex(db, 'idx_sessions_project_active', "CREATE INDEX IF NOT EXISTS idx_sessions_project_active ON sessions(project_path, last_active_at DESC) WHERE status != 'deleted'");
 
     if (!indexExists(db, 'idx_sessions_provider_session_unique')) {
       dedupeProviderSessions(db);
@@ -1267,6 +1274,13 @@ function runMigrations(db, from, to) {
     // Version 9: Add child session lifecycle columns to sessions
     9: (db) => {
       applySchemaUpdates(db);
+    },
+
+    // Version 10: Add project_path column for DB-as-spine sidebar queries
+    10: (db) => {
+      applySchemaUpdates(db);
+      // Backfill project_path from cwd for existing rows
+      db.exec(`UPDATE sessions SET project_path = cwd WHERE project_path IS NULL AND cwd IS NOT NULL`);
     }
   };
 

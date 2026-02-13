@@ -367,10 +367,10 @@ export function buildStartRoute(ctx) {
 
             db.prepare(`
               INSERT OR IGNORE INTO sessions
-                (id, provider, provider_session_id, origin, cwd, model, status, created_at, last_active_at,
+                (id, provider, provider_session_id, origin, cwd, project_path, model, status, created_at, last_active_at,
                  turn_count, total_cost, total_input_tokens, total_output_tokens)
-              VALUES (?, 'claude', ?, 'rudi', ?, ?, 'active', ?, ?, 0, 0, 0, 0)
-            `).run(providerSid, providerSid, workingDir, turnModel, now, now);
+              VALUES (?, 'claude', ?, 'rudi', ?, ?, ?, 'active', ?, ?, 0, 0, 0, 0)
+            `).run(providerSid, providerSid, workingDir, workingDir, turnModel, now, now);
 
             const turnId = crypto.randomUUID();
             db.prepare(`

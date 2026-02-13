@@ -1032,6 +1032,469 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
   let sessionsWatcher = null;
 
   // -----------------------------------------------------------------------
+  // DB-as-spine: reconciliation + DB-backed sidebar query
+  // -----------------------------------------------------------------------
+
+  let useDbSpine = false; // flip to true when stable
+  let _reconcileInterval = null;
+  let _lastReconcileIndexMtimes = new Map(); // projDir -> mtimeMs of sessions-index.json
+  /** @type {Map<string, number>} sessionId -> last DB upsert timestamp (debounce watcher writes) */
+  const _watcherDbDebounce = new Map();
+  const WATCHER_DB_DEBOUNCE_MS = 10_000;
+  const RECONCILE_INTERVAL_MS = 60_000;
+
+  /**
+   * Full reconciliation: walk ~/.claude/projects/, collect all sessions,
+   * upsert into DB with project_path. Runs at boot.
+   */
+  async function reconcileSessionsToDb() {
+    const db = resolveDb ? resolveDb() : null;
+    if (!db) return;
+
+    const start = Date.now();
+    const claudeDir = path.join(os.homedir(), '.claude', 'projects');
+    let added = 0, updated = 0, pruned = 0, fsCount = 0;
+
+    const fsSessionIds = new Set();
+
+    try {
+      const projectDirs = await fsp.readdir(claudeDir);
+
+      for (const projDir of projectDirs) {
+        const projPath = path.join(claudeDir, projDir);
+        let stat;
+        try { stat = await fsp.stat(projPath); } catch { continue; }
+        if (!stat.isDirectory()) continue;
+
+        // Determine project_path
+        let projectPath = null;
+        const indexPath = path.join(projPath, 'sessions-index.json');
+        let indexEntries = null;
+        try {
+          const indexContent = await fsp.readFile(indexPath, 'utf-8');
+          const index = JSON.parse(indexContent);
+          if (index.originalPath) projectPath = index.originalPath;
+          if (Array.isArray(index.entries)) indexEntries = index.entries;
+          const istat = await fsp.stat(indexPath);
+          _lastReconcileIndexMtimes.set(projDir, istat.mtimeMs);
+        } catch {
+          // No index or malformed
+        }
+
+        if (!projectPath) {
+          projectPath = await decodeProjectDirFromFilesystem(projDir);
+        }
+        if (!projectPath) {
+          projectPath = '/' + projDir.replace(/-/g, '/').replace(/^\//, '');
+        }
+
+        // Build session map from index
+        const indexMap = new Map();
+        if (indexEntries) {
+          for (const e of indexEntries) {
+            indexMap.set(e.sessionId, e);
+          }
+        }
+
+        // Walk JSONL files
+        let files;
+        try { files = await fsp.readdir(projPath); } catch { continue; }
+
+        for (const file of files) {
+          if (!file.endsWith('.jsonl')) continue;
+          const sessionId = file.slice(0, -6);
+          fsSessionIds.add(sessionId);
+          fsCount++;
+
+          const fullPath = path.join(projPath, file);
+          let fstat;
+          try { fstat = await fsp.stat(fullPath); } catch { continue; }
+
+          const indexEntry = indexMap.get(sessionId);
+          const title = indexEntry?.summary || null;
+          const firstPrompt = indexEntry?.firstPrompt || null;
+          const gitBranch = indexEntry?.gitBranch || null;
+          const messageCount = indexEntry?.messageCount || 0;
+          const created = indexEntry?.created || fstat.birthtime.toISOString();
+          const modified = indexEntry?.modified || fstat.mtime.toISOString();
+          // Use more recent of index modified vs file mtime
+          const fileMtime = fstat.mtime.toISOString();
+          const lastActive = new Date(modified) > new Date(fileMtime) ? modified : fileMtime;
+
+          // Read snippet for sessions not in index
+          let snippet = firstPrompt;
+          let snippetBranch = gitBranch;
+          if (!snippet) {
+            try {
+              const s = await readSessionSnippet(fullPath);
+              snippet = s.firstPrompt || null;
+              if (!snippetBranch) snippetBranch = s.gitBranch || null;
+            } catch {
+              // ignore
+            }
+          }
+
+          const existed = db.prepare('SELECT 1 FROM sessions WHERE id = ?').get(sessionId);
+
+          db.prepare(`
+            INSERT INTO sessions
+              (id, provider, provider_session_id, origin, origin_native_file,
+               title, snippet, cwd, project_path, git_branch,
+               status, created_at, last_active_at, turn_count)
+            VALUES (?, 'claude', ?, 'provider-import', ?,
+                    ?, ?, ?, ?, ?,
+                    'active', ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              project_path = COALESCE(excluded.project_path, sessions.project_path),
+              title = COALESCE(sessions.title, excluded.title),
+              snippet = COALESCE(sessions.snippet, excluded.snippet),
+              git_branch = COALESCE(excluded.git_branch, sessions.git_branch),
+              origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
+              last_active_at = MAX(sessions.last_active_at, excluded.last_active_at)
+          `).run(
+            sessionId, sessionId, fullPath,
+            title, snippet, projectPath, projectPath, snippetBranch,
+            created, lastActive, messageCount,
+          );
+
+          if (existed) updated++;
+          else added++;
+        }
+      }
+    } catch {
+      // ~/.claude/projects/ may not exist
+    }
+
+    // Prune: mark DB rows whose sessionId wasn't found on filesystem
+    // Safety guard: skip if walk found 0 sessions but DB has rows
+    if (fsSessionIds.size > 0) {
+      try {
+        const dbRows = db.prepare(
+          `SELECT id FROM sessions WHERE provider = 'claude' AND status != 'deleted'`
+        ).all();
+        const toDelete = dbRows.filter(r => !fsSessionIds.has(r.id));
+        if (toDelete.length > 0) {
+          const deleteStmt = db.prepare(
+            `UPDATE sessions SET status = 'deleted', deleted_at = ? WHERE id = ?`
+          );
+          const now = new Date().toISOString();
+          for (const row of toDelete) {
+            deleteStmt.run(now, row.id);
+            pruned++;
+          }
+        }
+      } catch {
+        // non-fatal
+      }
+    }
+
+    const duration = Date.now() - start;
+    const dbCount = db.prepare(
+      `SELECT COUNT(*) as c FROM sessions WHERE provider = 'claude' AND status != 'deleted'`
+    ).get().c;
+    log('sessions', 'info',
+      `[reconcile] DB=${dbCount} fs=${fsCount} added=${added} pruned=${pruned} updated=${updated} duration=${duration}ms`);
+  }
+
+  /**
+   * Lightweight periodic reconciliation (every 60s).
+   * Only detects new files + re-reads changed sessions-index.json for title updates.
+   */
+  async function periodicReconcile() {
+    const db = resolveDb ? resolveDb() : null;
+    if (!db) return;
+
+    const claudeDir = path.join(os.homedir(), '.claude', 'projects');
+
+    try {
+      const projectDirs = await fsp.readdir(claudeDir);
+      const dbIds = new Set(
+        db.prepare(`SELECT id FROM sessions WHERE provider = 'claude' AND status != 'deleted'`)
+          .all().map(r => r.id)
+      );
+
+      for (const projDir of projectDirs) {
+        const projPath = path.join(claudeDir, projDir);
+        let stat;
+        try { stat = await fsp.stat(projPath); } catch { continue; }
+        if (!stat.isDirectory()) continue;
+
+        let files;
+        try { files = await fsp.readdir(projPath); } catch { continue; }
+
+        // Determine project_path (quick: check index first)
+        let projectPath = null;
+        const indexPath = path.join(projPath, 'sessions-index.json');
+        let indexEntries = null;
+        let indexChanged = false;
+        try {
+          const istat = await fsp.stat(indexPath);
+          const prevMtime = _lastReconcileIndexMtimes.get(projDir);
+          if (!prevMtime || istat.mtimeMs > prevMtime) {
+            indexChanged = true;
+            _lastReconcileIndexMtimes.set(projDir, istat.mtimeMs);
+          }
+          if (indexChanged || !projectPath) {
+            const indexContent = await fsp.readFile(indexPath, 'utf-8');
+            const index = JSON.parse(indexContent);
+            if (index.originalPath) projectPath = index.originalPath;
+            if (Array.isArray(index.entries)) indexEntries = index.entries;
+          }
+        } catch {
+          // No index
+        }
+
+        if (!projectPath) {
+          projectPath = '/' + projDir.replace(/-/g, '/').replace(/^\//, '');
+        }
+
+        // Update titles from changed index
+        if (indexChanged && indexEntries) {
+          const titleStmt = db.prepare(
+            `UPDATE sessions SET title = ?, project_path = COALESCE(project_path, ?)
+             WHERE id = ? AND title_override IS NULL`
+          );
+          for (const e of indexEntries) {
+            if (e.summary && e.sessionId) {
+              titleStmt.run(e.summary, projectPath, e.sessionId);
+            }
+          }
+        }
+
+        // Detect new JSONL files
+        for (const file of files) {
+          if (!file.endsWith('.jsonl')) continue;
+          const sessionId = file.slice(0, -6);
+          if (dbIds.has(sessionId)) continue;
+
+          // New file — read snippet, stat, upsert
+          const fullPath = path.join(projPath, file);
+          let fstat;
+          try { fstat = await fsp.stat(fullPath); } catch { continue; }
+
+          let snippet = null, gitBranch = null;
+          try {
+            const s = await readSessionSnippet(fullPath);
+            snippet = s.firstPrompt || null;
+            gitBranch = s.gitBranch || null;
+          } catch {
+            // ignore
+          }
+
+          db.prepare(`
+            INSERT OR IGNORE INTO sessions
+              (id, provider, provider_session_id, origin, origin_native_file,
+               snippet, cwd, project_path, git_branch,
+               status, created_at, last_active_at)
+            VALUES (?, 'claude', ?, 'provider-import', ?,
+                    ?, ?, ?, ?,
+                    'active', ?, ?)
+          `).run(
+            sessionId, sessionId, fullPath,
+            snippet, projectPath, projectPath, gitBranch,
+            fstat.birthtime.toISOString(), fstat.mtime.toISOString(),
+          );
+          dbIds.add(sessionId);
+        }
+      }
+    } catch {
+      // ~/.claude/projects/ may not exist
+    }
+  }
+
+  /**
+   * DB-backed sidebar query: single query replaces filesystem walk.
+   * Returns same response shape as enumerateProjectsWithSessions().
+   */
+  async function getProjectsFromDb() {
+    const db = resolveDb ? resolveDb() : null;
+    if (!db) return enumerateProjectsWithSessions();
+
+    const rows = db.prepare(`
+      SELECT id, title, title_override, snippet, cwd, project_path,
+             total_cost, total_input_tokens, total_output_tokens,
+             turn_count, model, git_branch, last_active_at, created_at,
+             parent_session_id, is_sidechain, session_type, origin, status
+      FROM sessions
+      WHERE provider = 'claude' AND status != 'deleted'
+      ORDER BY last_active_at DESC
+    `).all();
+
+    // Group by project_path
+    const projectMap = new Map(); // project_path -> { sessions, ... }
+    for (const row of rows) {
+      const pp = row.project_path || row.cwd || 'unknown';
+      if (!projectMap.has(pp)) {
+        projectMap.set(pp, {
+          path: pp.replace(/\//g, '-').replace(/^-/, ''),
+          name: path.basename(pp),
+          originalPath: pp,
+          sessions: [],
+          gitStatus: null,
+        });
+      }
+      const proj = projectMap.get(pp);
+      const display = row.title_override || row.title;
+      const session = {
+        sessionId: row.id,
+        summary: display || '',
+        firstPrompt: row.snippet || '',
+        messageCount: 0,
+        modified: row.last_active_at || '',
+        created: row.created_at || '',
+        gitBranch: row.git_branch || '',
+        diffStats: null,
+      };
+      if (display) session.dbTitle = display;
+      if (row.total_cost > 0) session.totalCost = row.total_cost;
+      if (row.total_input_tokens > 0) session.totalInputTokens = row.total_input_tokens;
+      if (row.total_output_tokens > 0) session.totalOutputTokens = row.total_output_tokens;
+      if (row.turn_count > 0) session.turnCount = row.turn_count;
+      if (row.parent_session_id) session.parentSessionId = row.parent_session_id;
+      if (row.is_sidechain) session.isSidechain = true;
+      if (row.session_type && row.session_type !== 'main') session.sessionType = row.session_type;
+
+      // Diff stats from cache
+      const cached = _diffStatsCache.get(row.id);
+      if (cached) session.diffStats = cached.diffStats;
+
+      proj.sessions.push(session);
+    }
+
+    let projects = [...projectMap.values()];
+
+    // Merge worktree projects into their parent
+    const worktreeMarker = '/.rudi/worktrees/';
+    const mergedProjects = [];
+    const parentMap = new Map();
+
+    for (const proj of projects) {
+      const op = proj.originalPath || '';
+      const wtIdx = op.indexOf(worktreeMarker);
+      if (wtIdx !== -1) {
+        const realRoot = op.slice(0, wtIdx);
+        if (parentMap.has(realRoot)) {
+          mergedProjects[parentMap.get(realRoot)].sessions.push(...proj.sessions);
+        } else {
+          parentMap.set(realRoot, mergedProjects.length);
+          mergedProjects.push({
+            ...proj,
+            name: path.basename(realRoot),
+            originalPath: realRoot,
+          });
+        }
+      } else {
+        if (parentMap.has(op)) {
+          const existing = mergedProjects[parentMap.get(op)];
+          existing.sessions.push(...proj.sessions);
+          existing.path = proj.path;
+          existing.gitStatus = proj.gitStatus;
+        } else {
+          parentMap.set(op, mergedProjects.length);
+          mergedProjects.push(proj);
+        }
+      }
+    }
+
+    // Re-sort sessions within each project
+    for (const proj of mergedProjects) {
+      proj.sessions.sort((a, b) =>
+        new Date(b.modified).getTime() - new Date(a.modified).getTime()
+      );
+    }
+
+    // Git status from cache
+    for (const proj of mergedProjects) {
+      const cachedGit = _gitStatusCache.get(proj.originalPath);
+      if (cachedGit && (Date.now() - cachedGit.fetchedAt) < GIT_STATUS_TTL_MS) {
+        proj.gitStatus = cachedGit.gitStatus;
+      }
+    }
+
+    mergedProjects.sort((a, b) => {
+      const aTime = a.sessions[0]?.modified || '';
+      const bTime = b.sessions[0]?.modified || '';
+      return new Date(bTime).getTime() - new Date(aTime).getTime();
+    });
+
+    // Schedule background enrichment
+    _scheduleEnrichment(mergedProjects);
+
+    return mergedProjects;
+  }
+
+  /**
+   * Upsert a session to DB from watcher event (new or changed JSONL).
+   * Debounced: at most one last_active_at update per 10s per session.
+   */
+  async function watcherDbUpsert(sessionId, fullPath, projDir) {
+    const db = resolveDb ? resolveDb() : null;
+    if (!db) return;
+
+    const now = Date.now();
+    const lastWrite = _watcherDbDebounce.get(sessionId);
+    if (lastWrite && (now - lastWrite) < WATCHER_DB_DEBOUNCE_MS) return;
+    _watcherDbDebounce.set(sessionId, now);
+
+    try {
+      // Check if session exists in DB
+      const existing = db.prepare('SELECT id FROM sessions WHERE id = ?').get(sessionId);
+
+      if (!existing) {
+        // New file — read snippet + stat, derive project_path
+        let fstat;
+        try { fstat = await fsp.stat(fullPath); } catch { return; }
+
+        let projectPath = null;
+        if (projDir) {
+          const indexPath = path.join(CLAUDE_PROJECTS_DIR, projDir, 'sessions-index.json');
+          try {
+            const indexContent = await fsp.readFile(indexPath, 'utf-8');
+            const index = JSON.parse(indexContent);
+            if (index.originalPath) projectPath = index.originalPath;
+          } catch {
+            // no index
+          }
+          if (!projectPath) {
+            projectPath = '/' + projDir.replace(/-/g, '/').replace(/^\//, '');
+          }
+        }
+
+        let snippet = null, gitBranch = null;
+        try {
+          const s = await readSessionSnippet(fullPath);
+          snippet = s.firstPrompt || null;
+          gitBranch = s.gitBranch || null;
+        } catch {
+          // ignore
+        }
+
+        db.prepare(`
+          INSERT OR IGNORE INTO sessions
+            (id, provider, provider_session_id, origin, origin_native_file,
+             snippet, cwd, project_path, git_branch,
+             status, created_at, last_active_at)
+          VALUES (?, 'claude', ?, 'provider-import', ?,
+                  ?, ?, ?, ?,
+                  'active', ?, ?)
+        `).run(
+          sessionId, sessionId, fullPath,
+          snippet, projectPath, projectPath, gitBranch,
+          fstat.birthtime.toISOString(), fstat.mtime.toISOString(),
+        );
+      } else {
+        // Existing — monotonic last_active_at update
+        const nowIso = new Date().toISOString();
+        db.prepare(`
+          UPDATE sessions SET last_active_at = MAX(last_active_at, ?) WHERE id = ?
+        `).run(nowIso, sessionId);
+      }
+    } catch (err) {
+      log('sessions', 'warn', `watcher DB upsert failed for ${sessionId}: ${err.message}`);
+    }
+  }
+
+  // -----------------------------------------------------------------------
   // Background enrichment caches (diff stats + git status)
   // -----------------------------------------------------------------------
 
@@ -1286,6 +1749,14 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
             if (fname && fname.endsWith('.jsonl')) {
               updateData.sessionId = fname.slice(0, -6); // strip '.jsonl'
             }
+          }
+          // DB upsert: keep sessions table fresh from watcher events
+          if (updateData.sessionId) {
+            watcherDbUpsert(
+              updateData.sessionId,
+              path.join(watchRoot, relPath),
+              updateData.projectDir,
+            ).catch(() => {}); // fire-and-forget
           }
         }
         queueSessionsUpdated(updateData);
@@ -1641,7 +2112,11 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
     // GET /sessions/projects
     if (req.method === 'GET' && url.pathname === '/sessions/projects') {
       try {
-        const projects = await getProjectsWithSessionsCached();
+        // Feature flag: use DB spine unless ?source=fs forces filesystem path
+        const forceFs = url.searchParams.get('source') === 'fs';
+        const projects = (useDbSpine && !forceFs)
+          ? await getProjectsFromDb()
+          : await getProjectsWithSessionsCached();
         if (_projectsEtag && req.headers['if-none-match'] === _projectsEtag) {
           res.writeHead(304, { 'Access-Control-Allow-Origin': '*' });
           res.end();
@@ -1722,14 +2197,14 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
                 db.prepare(`
                   INSERT OR IGNORE INTO sessions
                     (id, provider, provider_session_id, origin, origin_native_file,
-                     model, cwd, status, created_at, last_active_at,
+                     model, cwd, project_path, status, created_at, last_active_at,
                      turn_count, total_cost, total_input_tokens, total_output_tokens)
                   VALUES (?, 'claude', ?, 'provider-import', ?,
-                     ?, ?, 'active', ?, ?,
+                     ?, ?, ?, 'active', ?, ?,
                      ?, ?, ?, ?)
                 `).run(
                   sessionId, sessionId, filePath,
-                  usage.model, usage.cwd,
+                  usage.model, usage.cwd, usage.cwd,
                   usage.createdAt || now, usage.lastActiveAt || now,
                   usage.turnCount, usage.totalCostUsd || 0,
                   usage.totalInputTokens, usage.totalOutputTokens,
@@ -2247,6 +2722,31 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
       _enrichmentTimer = null;
     }
     _lastEnrichmentProjects = null;
+    if (_reconcileInterval) {
+      clearInterval(_reconcileInterval);
+      _reconcileInterval = null;
+    }
+  }
+
+  /**
+   * Start periodic reconciliation (60s interval).
+   * Boot reconciliation should be called separately first.
+   */
+  function startPeriodicReconcile() {
+    if (_reconcileInterval) return;
+    _reconcileInterval = setInterval(() => {
+      periodicReconcile().catch(err => {
+        log('sessions', 'warn', `periodic reconcile failed: ${err.message}`);
+      });
+    }, RECONCILE_INTERVAL_MS);
+  }
+
+  /**
+   * Enable DB-as-spine for sidebar queries.
+   */
+  function enableDbSpine() {
+    useDbSpine = true;
+    log('sessions', 'info', 'DB-as-spine enabled for sidebar queries');
   }
 
   return {
@@ -2258,5 +2758,9 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
     handleWsMessage,
     handleWsDisconnect,
     cleanup,
+    // DB-as-spine
+    reconcileSessionsToDb,
+    startPeriodicReconcile,
+    enableDbSpine,
   };
 }
