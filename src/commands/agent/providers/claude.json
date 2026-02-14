@@ -66,7 +66,16 @@
         { "if": "disableSlashCommands", "args": ["--disable-slash-commands"] },
         { "if": "permissionPromptTool", "args": ["--permission-prompt-tool", "{{permissionPromptTool}}"] },
         { "if": "teammateMode", "args": ["--teammate-mode", "{{teammateMode}}"] },
-        { "if": "file", "args": ["--file", "{{file|join: }}"] }
+        { "if": "file", "args": ["--file", "{{file|join: }}"] },
+        { "if": "fromPr", "args": ["--from-pr", "{{fromPr}}"] },
+        { "if": "remote", "args": ["--remote", "{{remote}}"] },
+        { "if": "teleport", "args": ["--teleport"] },
+        { "if": "ide", "args": ["--ide"] },
+        { "if": "init", "args": ["--init"] },
+        { "if": "initOnly", "args": ["--init-only"] },
+        { "if": "maintenance", "args": ["--maintenance"] },
+        { "if": "allowDangerouslySkipPermissions", "args": ["--allow-dangerously-skip-permissions"] },
+        { "if": "outputFormat", "args": ["--output-format", "{{outputFormat}}"] }
       ]
     },
 
@@ -228,32 +237,57 @@
     "default": "claude-sonnet-4-5-20250929",
     "available": [
       {
-        "id": "claude-haiku-4-5-20251001",
-        "alias": "haiku",
-        "name": "Haiku 4.5",
-        "description": "Fast and efficient",
-        "tier": "free",
-        "pricing": { "inputPerMTok": 1.00, "outputPerMTok": 5.00, "cachedInputPerMTok": 0.10 },
-        "contextWindow": 200000
+        "id": "claude-opus-4-6",
+        "alias": "opus",
+        "name": "Opus 4.6",
+        "description": "Most intelligent model for agents and coding",
+        "tier": "pro",
+        "pricing": { "inputPerMTok": 5.00, "outputPerMTok": 25.00, "cachedReadPerMTok": 0.50, "cachedWritePerMTok": 6.25 },
+        "contextWindow": 200000,
+        "contextWindowExtended": 1000000,
+        "maxOutputTokens": 128000,
+        "knowledgeCutoff": "2025-05",
+        "trainingCutoff": "2025-08",
+        "adaptiveThinking": true
       },
       {
         "id": "claude-sonnet-4-5-20250929",
         "alias": "sonnet",
         "name": "Sonnet 4.5",
-        "description": "Balanced performance",
+        "description": "Best combination of speed and intelligence",
         "tier": "pro",
         "default": true,
-        "pricing": { "inputPerMTok": 3.00, "outputPerMTok": 15.00, "cachedInputPerMTok": 0.30 },
-        "contextWindow": 200000
+        "pricing": { "inputPerMTok": 3.00, "outputPerMTok": 15.00, "cachedReadPerMTok": 0.30, "cachedWritePerMTok": 3.75 },
+        "contextWindow": 200000,
+        "contextWindowExtended": 1000000,
+        "maxOutputTokens": 64000,
+        "knowledgeCutoff": "2025-01",
+        "trainingCutoff": "2025-07"
+      },
+      {
+        "id": "claude-haiku-4-5-20251001",
+        "alias": "haiku",
+        "name": "Haiku 4.5",
+        "description": "Fastest model with near-frontier intelligence",
+        "tier": "free",
+        "pricing": { "inputPerMTok": 1.00, "outputPerMTok": 5.00, "cachedReadPerMTok": 0.10, "cachedWritePerMTok": 1.25 },
+        "contextWindow": 200000,
+        "maxOutputTokens": 64000,
+        "knowledgeCutoff": "2025-02",
+        "trainingCutoff": "2025-07"
       },
       {
         "id": "claude-opus-4-5-20251101",
-        "alias": "opus",
+        "alias": "opus4.5",
         "name": "Opus 4.5",
-        "description": "Most capable",
+        "description": "Legacy — succeeded by Opus 4.6",
         "tier": "pro",
-        "pricing": { "inputPerMTok": 5.00, "outputPerMTok": 25.00, "cachedInputPerMTok": 0.50 },
-        "contextWindow": 200000
+        "legacy": true,
+        "pricing": { "inputPerMTok": 5.00, "outputPerMTok": 25.00, "cachedReadPerMTok": 0.50, "cachedWritePerMTok": 6.25 },
+        "contextWindow": 200000,
+        "maxOutputTokens": 64000,
+        "knowledgeCutoff": "2025-05",
+        "trainingCutoff": "2025-08"
       }
     ]
   },
@@ -263,16 +297,19 @@
     "partialStreaming": true,
     "tools": true,
     "thinking": true,
+    "adaptiveThinking": true,
     "systemPrompt": { "append": true, "replace": true, "fromFile": true },
     "sessionResume": true,
     "sessionContinue": true,
     "forkSession": true,
     "conversationHistory": "server",
     "contextLimitTokens": 200000,
+    "contextLimitExtended": 1000000,
     "structuredOutput": true,
     "subagents": true,
     "chrome": true,
     "planMode": true,
+    "opusPlan": true,
     "maxTurns": true,
     "maxBudget": true,
     "permissionPromptTool": true,
@@ -281,9 +318,12 @@
     "pluginDirs": true,
     "mcpConfig": true,
     "settingsOverride": true,
-    "imageInput": false,
+    "imageInput": true,
     "webSearch": false,
     "codeReview": false,
-    "sandbox": false
+    "sandbox": false,
+    "effortLevel": true,
+    "remote": true,
+    "teleport": true
   }
 }
