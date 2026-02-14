@@ -1,0 +1,372 @@
+{
+  "$schema": "https://learnrudi.com/schemas/headless-agent-v1.json",
+  "id": "codex",
+  "name": "Codex",
+  "description": "OpenAI Codex CLI — headless mode",
+  "version": "1.0.0",
+
+  "binary": {
+    "name": "codex",
+    "resolvePaths": [
+      "~/.rudi/agents/codex/node_modules/.bin/codex",
+      "~/.rudi/runtimes/node/{arch}/bin/codex",
+      "~/.rudi/runtimes/node/bin/codex"
+    ],
+    "fallback": "which",
+    "checkCommand": ["codex", "--version"],
+    "loginCommand": ["codex", "login"],
+    "authCheck": ["codex", "login", "status"]
+  },
+
+  "headless": {
+    "command": "codex",
+    "subcommand": "exec",
+    "promptDelivery": "arg",
+    "stdinPrompt": "-",
+
+    "args": {
+      "base": [
+        "exec",
+        "{{prompt}}",
+        "--json",
+        "--skip-git-repo-check",
+        "--color", "never"
+      ],
+      "conditionals": [
+        { "if": "cwd", "args": ["-C", "{{cwd}}"] },
+        { "if": "model", "args": ["-m", "{{model}}"] },
+        { "if": "model ~= 'gpt-5.1'", "args": ["-c", "model_reasoning_effort=high"] },
+        { "if": "config", "args": ["-c", "{{config}}"] },
+        { "if": "image", "args": ["-i", "{{image|join:,}}"] },
+        { "if": "profile", "args": ["-p", "{{profile}}"] },
+        { "if": "outputSchema", "args": ["--output-schema", "{{outputSchema}}"] },
+        { "if": "outputLastMessage", "args": ["-o", "{{outputLastMessage}}"] },
+        { "if": "addDir", "args": ["--add-dir", "{{addDir}}"] },
+        { "if": "ephemeral", "args": ["--ephemeral"] },
+        { "if": "search", "args": ["--search"] },
+        { "if": "enableFeature", "args": ["--enable", "{{enableFeature}}"] },
+        { "if": "disableFeature", "args": ["--disable", "{{disableFeature}}"] },
+        { "if": "oss", "args": ["--oss"] },
+        { "if": "localProvider", "args": ["--local-provider", "{{localProvider}}"] }
+      ]
+    },
+
+    "permissionModes": {
+      "agent": ["--full-auto"],
+      "dangerous": ["--dangerously-bypass-approvals-and-sandbox"],
+      "approve": ["-s", "workspace-write"],
+      "readonly": ["-s", "read-only"],
+      "fullAccess": ["-s", "danger-full-access"]
+    },
+
+    "approvalModes": {
+      "untrusted": ["-a", "untrusted"],
+      "onFailure": ["-a", "on-failure"],
+      "onRequest": ["-a", "on-request"],
+      "never": ["-a", "never"]
+    },
+
+    "subcommands": {
+      "resume": {
+        "args": ["exec", "resume"],
+        "conditionals": [
+          { "if": "sessionId", "args": ["{{sessionId}}"] },
+          { "if": "last", "args": ["--last"] },
+          { "if": "all", "args": ["--all"] },
+          { "if": "prompt", "args": ["{{prompt}}"] },
+          { "if": "image", "args": ["-i", "{{image}}"] }
+        ]
+      },
+      "review": {
+        "args": ["exec", "review"],
+        "conditionals": [
+          { "if": "uncommitted", "args": ["--uncommitted"] },
+          { "if": "base", "args": ["--base", "{{base}}"] },
+          { "if": "commit", "args": ["--commit", "{{commit}}"] },
+          { "if": "title", "args": ["--title", "{{title}}"] },
+          { "if": "prompt", "args": ["{{prompt}}"] }
+        ]
+      }
+    },
+
+    "env": {
+      "TERM": "xterm-256color",
+      "CI": "true"
+    },
+
+    "authEnvVars": [
+      "CODEX_API_KEY",
+      "OPENAI_API_KEY"
+    ],
+
+    "stdin": "pipe",
+
+    "timeouts": {
+      "startupMs": 120000,
+      "runtimeMs": 900000,
+      "shutdownGraceMs": 5000
+    }
+  },
+
+  "eventStream": {
+    "format": "json-lines",
+    "sessionIdExtractor": {
+      "path": "$.thread_id",
+      "fromEventTypes": ["thread.started"]
+    },
+
+    "events": {
+      "thread.started": {
+        "condition": "$.type === 'thread.started'",
+        "fields": {
+          "threadId": "$.thread_id"
+        }
+      },
+
+      "turn.started": {
+        "condition": "$.type === 'turn.started'",
+        "fields": {}
+      },
+
+      "turn.completed": {
+        "condition": "$.type === 'turn.completed'",
+        "fields": {
+          "usage": {
+            "inputTokens": "$.usage.input_tokens",
+            "cachedInputTokens": "$.usage.cached_input_tokens",
+            "outputTokens": "$.usage.output_tokens"
+          }
+        }
+      },
+
+      "turn.failed": {
+        "condition": "$.type === 'turn.failed'",
+        "fields": {
+          "errorMessage": "$.error.message"
+        }
+      },
+
+      "error": {
+        "condition": "$.type === 'error'",
+        "fields": {
+          "message": "$.message"
+        }
+      },
+
+      "item.started": {
+        "condition": "$.type === 'item.started'",
+        "fields": {
+          "itemId": "$.item.id",
+          "itemType": "$.item.type",
+          "status": "$.item.status"
+        }
+      },
+
+      "item.updated": {
+        "condition": "$.type === 'item.updated'",
+        "fields": {
+          "itemId": "$.item.id",
+          "itemType": "$.item.type",
+          "status": "$.item.status"
+        }
+      },
+
+      "item.completed": {
+        "condition": "$.type === 'item.completed'",
+        "fields": {
+          "itemId": "$.item.id",
+          "itemType": "$.item.type",
+          "status": "$.item.status"
+        }
+      }
+    },
+
+    "itemTypes": {
+      "agent_message": {
+        "lifecycle": ["completed"],
+        "fields": {
+          "text": "$.item.text"
+        }
+      },
+      "reasoning": {
+        "lifecycle": ["completed"],
+        "fields": {
+          "text": "$.item.text"
+        }
+      },
+      "command_execution": {
+        "lifecycle": ["started", "completed"],
+        "fields": {
+          "command": "$.item.command",
+          "output": "$.item.output",
+          "exitCode": "$.item.exit_code",
+          "status": "$.item.status"
+        },
+        "notes": "output max 64 KiB"
+      },
+      "file_change": {
+        "lifecycle": ["completed"],
+        "fields": {
+          "changes": "$.item.changes[*]",
+          "changePath": "$.item.changes[*].path",
+          "changeKind": "$.item.changes[*].kind",
+          "status": "$.item.status"
+        },
+        "changeKinds": ["add", "delete", "update"]
+      },
+      "mcp_tool_call": {
+        "lifecycle": ["started", "completed"],
+        "fields": {
+          "server": "$.item.server",
+          "tool": "$.item.tool",
+          "arguments": "$.item.arguments",
+          "resultContent": "$.item.result.content[*]",
+          "resultStructured": "$.item.result.structured_content",
+          "resultError": "$.item.result.error",
+          "status": "$.item.status"
+        },
+        "mcpContentTypes": ["text", "image", "audio", "resource_link", "embedded_resource"]
+      },
+      "web_search": {
+        "lifecycle": ["completed"],
+        "fields": {
+          "query": "$.item.query"
+        }
+      },
+      "todo_list": {
+        "lifecycle": ["started", "updated", "completed"],
+        "fields": {
+          "items": "$.item.items[*]",
+          "itemText": "$.item.items[*].text",
+          "itemCompleted": "$.item.items[*].completed"
+        }
+      },
+      "error": {
+        "lifecycle": ["completed"],
+        "fields": {
+          "message": "$.item.message"
+        },
+        "notes": "Non-fatal item-level error"
+      }
+    },
+
+    "sessionFileEvents": {
+      "note": "Events from ~/.codex/sessions/ JSONL files (different schema from exec --json)",
+      "types": {
+        "session_meta": {
+          "fields": {
+            "id": "$.payload.id",
+            "timestamp": "$.payload.timestamp",
+            "cwd": "$.payload.cwd",
+            "originator": "$.payload.originator",
+            "cliVersion": "$.payload.cli_version",
+            "instructions": "$.payload.instructions",
+            "source": "$.payload.source",
+            "modelProvider": "$.payload.model_provider"
+          }
+        },
+        "response_item": {
+          "fields": {
+            "type": "$.payload.type",
+            "role": "$.payload.role",
+            "content": "$.payload.content[*]",
+            "summary": "$.payload.summary[*]",
+            "encryptedContent": "$.payload.encrypted_content"
+          },
+          "payloadTypes": ["message", "reasoning"]
+        },
+        "event_msg": {
+          "fields": {
+            "type": "$.payload.type",
+            "message": "$.payload.message",
+            "text": "$.payload.text",
+            "images": "$.payload.images[*]",
+            "totalTokenUsage": "$.payload.info.total_token_usage",
+            "lastTokenUsage": "$.payload.info.last_token_usage",
+            "modelContextWindow": "$.payload.info.model_context_window"
+          },
+          "payloadTypes": ["user_message", "agent_message", "agent_reasoning", "token_count"],
+          "tokenUsageFields": ["input_tokens", "cached_input_tokens", "output_tokens", "reasoning_output_tokens", "total_tokens"]
+        },
+        "turn_context": {
+          "fields": {
+            "cwd": "$.payload.cwd",
+            "approvalPolicy": "$.payload.approval_policy",
+            "sandboxPolicy": "$.payload.sandbox_policy",
+            "model": "$.payload.model",
+            "effort": "$.payload.effort",
+            "summary": "$.payload.summary"
+          }
+        }
+      }
+    }
+  },
+
+  "models": {
+    "default": "gpt-5.1-codex-max",
+    "available": [
+      {
+        "id": "gpt-5.1-codex-max",
+        "alias": "max",
+        "name": "GPT-5.1 Codex Max",
+        "description": "Latest Codex-optimized flagship",
+        "default": true,
+        "pricing": { "inputPerMTok": 1.25, "outputPerMTok": 10.00, "cachedInputPerMTok": 0.125 },
+        "contextWindow": 128000
+      },
+      {
+        "id": "gpt-5.1-codex",
+        "alias": "codex",
+        "name": "GPT-5.1 Codex",
+        "description": "Optimized for code",
+        "pricing": { "inputPerMTok": 1.25, "outputPerMTok": 10.00, "cachedInputPerMTok": 0.125 },
+        "contextWindow": 128000
+      },
+      {
+        "id": "gpt-5.1-codex-mini",
+        "alias": "mini",
+        "name": "GPT-5.1 Codex Mini",
+        "description": "Cheaper, faster, less capable",
+        "pricing": { "inputPerMTok": 0.25, "outputPerMTok": 2.00, "cachedInputPerMTok": 0.025 },
+        "contextWindow": 128000
+      },
+      {
+        "id": "gpt-5.1",
+        "alias": "gpt",
+        "name": "GPT-5.1",
+        "description": "Broad world knowledge",
+        "pricing": { "inputPerMTok": 1.25, "outputPerMTok": 10.00, "cachedInputPerMTok": 0.125 },
+        "contextWindow": 128000
+      }
+    ]
+  },
+
+  "capabilities": {
+    "streaming": true,
+    "partialStreaming": false,
+    "tools": true,
+    "thinking": true,
+    "systemPrompt": false,
+    "sessionResume": true,
+    "sessionContinue": false,
+    "forkSession": false,
+    "conversationHistory": "client",
+    "contextLimitTokens": 128000,
+    "structuredOutput": true,
+    "subagents": false,
+    "chrome": false,
+    "planMode": false,
+    "maxTurns": false,
+    "maxBudget": false,
+    "permissionPromptTool": false,
+    "inputStreaming": false,
+    "addDirs": true,
+    "pluginDirs": false,
+    "mcpConfig": true,
+    "settingsOverride": true,
+    "imageInput": true,
+    "webSearch": true,
+    "codeReview": true,
+    "sandbox": true
+  }
+}

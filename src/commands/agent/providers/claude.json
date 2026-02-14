@@ -1,0 +1,289 @@
+{
+  "$schema": "https://learnrudi.com/schemas/headless-agent-v1.json",
+  "id": "claude",
+  "name": "Claude Code",
+  "description": "Anthropic Claude Code CLI — headless mode",
+  "version": "1.0.0",
+
+  "binary": {
+    "name": "claude",
+    "resolvePaths": [
+      "~/.local/bin/claude",
+      "~/.rudi/runtimes/node/{arch}/bin/claude",
+      "~/.rudi/runtimes/node/bin/claude",
+      "~/.rudi/agents/claude/node_modules/.bin/claude"
+    ],
+    "fallback": "which",
+    "checkCommand": ["claude", "--version"],
+    "loginCommand": ["claude", "login"],
+    "authCheck": ["claude", "doctor"]
+  },
+
+  "headless": {
+    "command": "claude",
+    "promptDelivery": "arg",
+
+    "args": {
+      "base": [
+        "-p", "{{prompt}}",
+        "--output-format", "stream-json",
+        "--verbose"
+      ],
+      "conditionals": [
+        { "if": "model", "args": ["--model", "{{model}}"] },
+        { "if": "fallbackModel", "args": ["--fallback-model", "{{fallbackModel}}"] },
+        { "if": "systemPrompt", "args": ["--append-system-prompt", "{{systemPrompt}}"] },
+        { "if": "systemPromptFile", "args": ["--append-system-prompt-file", "{{systemPromptFile}}"] },
+        { "if": "replaceSystemPrompt", "args": ["--system-prompt", "{{replaceSystemPrompt}}"] },
+        { "if": "replaceSystemPromptFile", "args": ["--system-prompt-file", "{{replaceSystemPromptFile}}"] },
+        { "if": "allowedTools", "args": ["--allowedTools", "{{allowedTools|join: }}"] },
+        { "if": "disallowedTools", "args": ["--disallowedTools", "{{disallowedTools|join: }}"] },
+        { "if": "tools", "args": ["--tools", "{{tools|join:,}}"] },
+        { "if": "mcpConfig", "args": ["--mcp-config", "{{mcpConfig}}"] },
+        { "if": "strictMcpConfig", "args": ["--strict-mcp-config"] },
+        { "if": "resumeSessionId", "args": ["--resume", "{{resumeSessionId}}"] },
+        { "if": "continueSession", "args": ["--continue"] },
+        { "if": "sessionId", "args": ["--session-id", "{{sessionId}}"] },
+        { "if": "forkSession", "args": ["--fork-session"] },
+        { "if": "jsonSchema", "args": ["--json-schema", "{{jsonSchema}}"] },
+        { "if": "maxTurns", "args": ["--max-turns", "{{maxTurns}}"] },
+        { "if": "maxBudgetUsd", "args": ["--max-budget-usd", "{{maxBudgetUsd}}"] },
+        { "if": "noSessionPersistence", "args": ["--no-session-persistence"] },
+        { "if": "addDirs", "args": ["--add-dir", "{{addDirs|join: }}"] },
+        { "if": "agents", "args": ["--agents", "{{agents}}"] },
+        { "if": "agent", "args": ["--agent", "{{agent}}"] },
+        { "if": "includePartialMessages", "args": ["--include-partial-messages"] },
+        { "if": "inputFormat", "args": ["--input-format", "{{inputFormat}}"] },
+        { "if": "replayUserMessages", "args": ["--replay-user-messages"] },
+        { "if": "chrome", "args": ["--chrome"] },
+        { "if": "noChrome", "args": ["--no-chrome"] },
+        { "if": "debug", "args": ["--debug", "{{debug}}"] },
+        { "if": "debugFile", "args": ["--debug-file", "{{debugFile}}"] },
+        { "if": "betas", "args": ["--betas", "{{betas|join: }}"] },
+        { "if": "settings", "args": ["--settings", "{{settings}}"] },
+        { "if": "settingSources", "args": ["--setting-sources", "{{settingSources}}"] },
+        { "if": "pluginDir", "args": ["--plugin-dir", "{{pluginDir}}"] },
+        { "if": "disableSlashCommands", "args": ["--disable-slash-commands"] },
+        { "if": "permissionPromptTool", "args": ["--permission-prompt-tool", "{{permissionPromptTool}}"] },
+        { "if": "teammateMode", "args": ["--teammate-mode", "{{teammateMode}}"] },
+        { "if": "file", "args": ["--file", "{{file|join: }}"] }
+      ]
+    },
+
+    "permissionModes": {
+      "agent": ["--dangerously-skip-permissions"],
+      "plan": ["--permission-mode", "plan"],
+      "acceptEdits": ["--permission-mode", "acceptEdits"],
+      "delegate": ["--permission-mode", "delegate"],
+      "dontAsk": ["--permission-mode", "dontAsk"],
+      "bypassPermissions": ["--permission-mode", "bypassPermissions"],
+      "default": ["--permission-mode", "default"]
+    },
+
+    "env": {
+      "TERM": "xterm-256color",
+      "CI": "true",
+      "CLAUDE_NO_UPDATE_CHECK": "true",
+      "DISABLE_AUTOUPDATE": "1",
+      "NO_COLOR": "1"
+    },
+
+    "authEnvVars": [
+      "ANTHROPIC_API_KEY",
+      "CLAUDE_CODE_OAUTH_TOKEN"
+    ],
+
+    "stdin": "close",
+
+    "timeouts": {
+      "startupMs": 120000,
+      "runtimeMs": 900000,
+      "shutdownGraceMs": 5000
+    }
+  },
+
+  "eventStream": {
+    "format": "json-lines",
+    "sessionIdExtractor": {
+      "path": "$.session_id",
+      "fromEventTypes": ["assistant", "result"]
+    },
+
+    "events": {
+      "system": {
+        "condition": "$.type === 'system'",
+        "fields": {
+          "subtype": "$.subtype",
+          "message": "$.message",
+          "content": "$.message.content[*]",
+          "compactMetadata": "$.compactMetadata"
+        },
+        "subtypes": ["init", "compact_boundary"]
+      },
+
+      "assistant": {
+        "condition": "$.type === 'assistant'",
+        "fields": {
+          "messageId": "$.message.id",
+          "role": "$.message.role",
+          "model": "$.message.model",
+          "stopReason": "$.message.stop_reason",
+          "content": "$.message.content[*]",
+          "usage": {
+            "inputTokens": "$.message.usage.input_tokens",
+            "outputTokens": "$.message.usage.output_tokens",
+            "cacheReadTokens": "$.message.usage.cache_read_input_tokens",
+            "cacheCreationTokens": "$.message.usage.cache_creation_input_tokens"
+          }
+        },
+        "contentBlockTypes": {
+          "text": {
+            "condition": "block.type === 'text'",
+            "fields": { "text": "block.text" }
+          },
+          "tool_use": {
+            "condition": "block.type === 'tool_use'",
+            "fields": {
+              "id": "block.id",
+              "name": "block.name",
+              "input": "block.input"
+            }
+          },
+          "tool_result": {
+            "condition": "block.type === 'tool_result'",
+            "fields": {
+              "id": "block.id",
+              "content": "block.content"
+            }
+          },
+          "thinking": {
+            "condition": "block.type === 'thinking'",
+            "fields": { "thinking": "block.thinking" }
+          }
+        }
+      },
+
+      "result": {
+        "condition": "$.type === 'result'",
+        "fields": {
+          "sessionId": "$.session_id",
+          "result": "$.result",
+          "structuredOutput": "$.structured_output",
+          "totalCostUsd": "$.total_cost_usd",
+          "durationMs": "$.duration_ms",
+          "numTurns": "$.num_turns",
+          "usage": {
+            "inputTokens": "$.usage.input_tokens",
+            "outputTokens": "$.usage.output_tokens",
+            "cacheReadTokens": "$.usage.cache_read_input_tokens",
+            "cacheCreationTokens": "$.usage.cache_creation_input_tokens"
+          }
+        }
+      },
+
+      "error": {
+        "condition": "$.type === 'error'",
+        "fields": {
+          "message": "$.result",
+          "errorCode": "$.error_code"
+        }
+      },
+
+      "stream_event": {
+        "condition": "$.type === 'stream_event'",
+        "note": "Only emitted with --include-partial-messages",
+        "fields": {
+          "eventType": "$.event.type",
+          "event": "$.event"
+        },
+        "innerEventTypes": {
+          "message_start": {},
+          "content_block_start": {
+            "fields": {
+              "blockType": "$.event.content_block.type",
+              "blockId": "$.event.content_block.id",
+              "toolName": "$.event.content_block.name"
+            }
+          },
+          "content_block_delta": {
+            "deltaTypes": {
+              "text_delta": { "fields": { "text": "$.event.delta.text" } },
+              "input_json_delta": { "fields": { "partialJson": "$.event.delta.partial_json" } }
+            }
+          },
+          "content_block_stop": {},
+          "message_delta": {
+            "fields": {
+              "stopReason": "$.event.delta.stop_reason",
+              "usage": "$.event.usage"
+            }
+          },
+          "message_stop": {}
+        }
+      }
+    }
+  },
+
+  "models": {
+    "default": "claude-sonnet-4-5-20250929",
+    "available": [
+      {
+        "id": "claude-haiku-4-5-20251001",
+        "alias": "haiku",
+        "name": "Haiku 4.5",
+        "description": "Fast and efficient",
+        "tier": "free",
+        "pricing": { "inputPerMTok": 1.00, "outputPerMTok": 5.00, "cachedInputPerMTok": 0.10 },
+        "contextWindow": 200000
+      },
+      {
+        "id": "claude-sonnet-4-5-20250929",
+        "alias": "sonnet",
+        "name": "Sonnet 4.5",
+        "description": "Balanced performance",
+        "tier": "pro",
+        "default": true,
+        "pricing": { "inputPerMTok": 3.00, "outputPerMTok": 15.00, "cachedInputPerMTok": 0.30 },
+        "contextWindow": 200000
+      },
+      {
+        "id": "claude-opus-4-5-20251101",
+        "alias": "opus",
+        "name": "Opus 4.5",
+        "description": "Most capable",
+        "tier": "pro",
+        "pricing": { "inputPerMTok": 5.00, "outputPerMTok": 25.00, "cachedInputPerMTok": 0.50 },
+        "contextWindow": 200000
+      }
+    ]
+  },
+
+  "capabilities": {
+    "streaming": true,
+    "partialStreaming": true,
+    "tools": true,
+    "thinking": true,
+    "systemPrompt": { "append": true, "replace": true, "fromFile": true },
+    "sessionResume": true,
+    "sessionContinue": true,
+    "forkSession": true,
+    "conversationHistory": "server",
+    "contextLimitTokens": 200000,
+    "structuredOutput": true,
+    "subagents": true,
+    "chrome": true,
+    "planMode": true,
+    "maxTurns": true,
+    "maxBudget": true,
+    "permissionPromptTool": true,
+    "inputStreaming": true,
+    "addDirs": true,
+    "pluginDirs": true,
+    "mcpConfig": true,
+    "settingsOverride": true,
+    "imageInput": false,
+    "webSearch": false,
+    "codeReview": false,
+    "sandbox": false
+  }
+}
