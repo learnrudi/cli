@@ -1890,10 +1890,7 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
 
       sessions.sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime());
 
-      if (originalPath && !await isExistingDirectory(originalPath)) {
-        originalPath = null;
-      }
-
+      // Try to infer a better path from session JSONL files
       let inferredOriginalPath = null;
       for (const session of sessions) {
         if (!session.fullPath) continue;
@@ -1907,6 +1904,9 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
         originalPath = inferredOriginalPath;
       }
 
+      // Keep originalPath from index even if directory no longer exists —
+      // a stale-but-correct path is better than a mangled naive decode.
+      // Only fall back to decoding if we have no originalPath at all.
       let decodedPath = null;
       if (!originalPath) {
         decodedPath = await decodeProjectDirFromFilesystem(projDir);
