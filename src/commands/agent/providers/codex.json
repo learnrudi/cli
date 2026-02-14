@@ -47,7 +47,8 @@
         { "if": "enableFeature", "args": ["--enable", "{{enableFeature}}"] },
         { "if": "disableFeature", "args": ["--disable", "{{disableFeature}}"] },
         { "if": "oss", "args": ["--oss"] },
-        { "if": "localProvider", "args": ["--local-provider", "{{localProvider}}"] }
+        { "if": "localProvider", "args": ["--local-provider", "{{localProvider}}"] },
+        { "if": "noAltScreen", "args": ["--no-alt-screen"] }
       ]
     },
 
@@ -85,6 +86,37 @@
           { "if": "commit", "args": ["--commit", "{{commit}}"] },
           { "if": "title", "args": ["--title", "{{title}}"] },
           { "if": "prompt", "args": ["{{prompt}}"] }
+        ]
+      },
+      "fork": {
+        "args": ["fork"],
+        "conditionals": [
+          { "if": "sessionId", "args": ["{{sessionId}}"] },
+          { "if": "last", "args": ["--last"] },
+          { "if": "all", "args": ["--all"] }
+        ]
+      },
+      "cloud": {
+        "args": ["cloud", "exec"],
+        "conditionals": [
+          { "if": "prompt", "args": ["{{prompt}}"] },
+          { "if": "env", "args": ["--env", "{{env}}"] },
+          { "if": "attempts", "args": ["--attempts", "{{attempts}}"] }
+        ]
+      },
+      "cloudList": {
+        "args": ["cloud", "list"],
+        "conditionals": [
+          { "if": "env", "args": ["--env", "{{env}}"] },
+          { "if": "limit", "args": ["--limit", "{{limit}}"] },
+          { "if": "cursor", "args": ["--cursor", "{{cursor}}"] },
+          { "if": "json", "args": ["--json"] }
+        ]
+      },
+      "apply": {
+        "args": ["apply"],
+        "conditionals": [
+          { "if": "taskId", "args": ["{{taskId}}"] }
         ]
       }
     },
