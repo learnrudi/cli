@@ -303,40 +303,49 @@
   },
 
   "models": {
-    "default": "gpt-5.1-codex-max",
+    "default": "gpt-5.3-codex",
     "available": [
       {
-        "id": "gpt-5.1-codex-max",
-        "alias": "max",
-        "name": "GPT-5.1 Codex Max",
-        "description": "Latest Codex-optimized flagship",
+        "id": "gpt-5.3-codex",
+        "alias": "codex",
+        "name": "GPT-5.3 Codex",
+        "description": "Most capable agentic coding model",
         "default": true,
-        "pricing": { "inputPerMTok": 1.25, "outputPerMTok": 10.00, "cachedInputPerMTok": 0.125 },
-        "contextWindow": 128000
+        "released": "2026-02-05",
+        "pricing": { "inputPerMTok": 1.75, "outputPerMTok": 14.00, "cachedInputPerMTok": 0.175 },
+        "contextWindow": 400000,
+        "maxOutputTokens": 128000
+      },
+      {
+        "id": "gpt-5.3-codex-spark",
+        "alias": "spark",
+        "name": "GPT-5.3 Codex Spark",
+        "description": "Near-instant real-time coding, text-only research preview",
+        "released": "2026-02-12",
+        "tier": "pro",
+        "pricing": { "inputPerMTok": null, "outputPerMTok": null, "cachedInputPerMTok": null },
+        "contextWindow": 128000,
+        "maxOutputTokens": 128000,
+        "notes": "Pricing TBD — currently available to ChatGPT Pro users"
+      },
+      {
+        "id": "gpt-5.2-codex",
+        "alias": "5.2",
+        "name": "GPT-5.2 Codex",
+        "description": "Advanced coding model, succeeded by GPT-5.3 Codex",
+        "released": "2026-01-14",
+        "pricing": { "inputPerMTok": 1.75, "outputPerMTok": 14.00, "cachedInputPerMTok": 0.175 },
+        "contextWindow": 400000,
+        "maxOutputTokens": 128000
       },
       {
         "id": "gpt-5.1-codex",
-        "alias": "codex",
+        "alias": "5.1",
         "name": "GPT-5.1 Codex",
-        "description": "Optimized for code",
+        "description": "Previous generation coding model",
         "pricing": { "inputPerMTok": 1.25, "outputPerMTok": 10.00, "cachedInputPerMTok": 0.125 },
-        "contextWindow": 128000
-      },
-      {
-        "id": "gpt-5.1-codex-mini",
-        "alias": "mini",
-        "name": "GPT-5.1 Codex Mini",
-        "description": "Cheaper, faster, less capable",
-        "pricing": { "inputPerMTok": 0.25, "outputPerMTok": 2.00, "cachedInputPerMTok": 0.025 },
-        "contextWindow": 128000
-      },
-      {
-        "id": "gpt-5.1",
-        "alias": "gpt",
-        "name": "GPT-5.1",
-        "description": "Broad world knowledge",
-        "pricing": { "inputPerMTok": 1.25, "outputPerMTok": 10.00, "cachedInputPerMTok": 0.125 },
-        "contextWindow": 128000
+        "contextWindow": 400000,
+        "maxOutputTokens": 128000
       }
     ]
   },
@@ -351,7 +360,7 @@
     "sessionContinue": false,
     "forkSession": false,
     "conversationHistory": "client",
-    "contextLimitTokens": 128000,
+    "contextLimitTokens": 400000,
     "structuredOutput": true,
     "subagents": false,
     "chrome": false,
