@@ -373,6 +373,101 @@ test('parseSessionMessagesFromJsonl leaves interrupted tools as pending', () => 
   assert.strictEqual(parsed[0].toolCalls[0].result, undefined);
 });
 
+test('parseSessionMessagesFromJsonl supports codex custom tool call outputs', () => {
+  const lines = [
+    JSON.stringify({
+      type: 'event_msg',
+      timestamp: '2026-02-06T01:41:00.000Z',
+      payload: { type: 'user_message', message: 'run command' },
+    }),
+    JSON.stringify({
+      type: 'response_item',
+      timestamp: '2026-02-06T01:41:01.000Z',
+      payload: {
+        type: 'custom_tool_call',
+        id: 'custom-1',
+        name: 'exec_command',
+        input: 'ls -la',
+      },
+    }),
+    JSON.stringify({
+      type: 'response_item',
+      timestamp: '2026-02-06T01:41:02.000Z',
+      payload: {
+        type: 'custom_tool_call_output',
+        call_id: 'custom-1',
+        output: JSON.stringify({
+          output: 'permission denied',
+          metadata: { exit_code: 1 },
+        }),
+      },
+    }),
+    JSON.stringify({
+      type: 'response_item',
+      timestamp: '2026-02-06T01:41:03.000Z',
+      payload: {
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'output_text', text: 'done' }],
+      },
+    }),
+  ];
+
+  const parsed = parseSessionMessagesFromJsonl(lines.join('\n'), 'codex');
+  assert.strictEqual(parsed.length, 2);
+  assert.strictEqual(parsed[0].role, 'user');
+  assert.strictEqual(parsed[0].content, 'run command');
+  assert.strictEqual(parsed[1].role, 'assistant');
+  assert.strictEqual(parsed[1].content, 'done');
+  assert.strictEqual(parsed[1].toolCalls.length, 1);
+  assert.deepStrictEqual(parsed[1].toolCalls[0].input, { exec_command: 'ls -la' });
+  assert.strictEqual(parsed[1].toolCalls[0].result, 'permission denied');
+  assert.strictEqual(parsed[1].toolCalls[0].status, 'error');
+});
+
+test('parseSessionMessagesFromJsonl strips codex function_call_output wrapper headers', () => {
+  const lines = [
+    JSON.stringify({
+      type: 'event_msg',
+      timestamp: '2026-02-06T01:42:00.000Z',
+      payload: { type: 'user_message', message: 'run command' },
+    }),
+    JSON.stringify({
+      type: 'response_item',
+      timestamp: '2026-02-06T01:42:01.000Z',
+      payload: {
+        type: 'function_call',
+        call_id: 'call-1',
+        name: 'exec_command',
+        arguments: JSON.stringify({ cmd: 'echo hi' }),
+      },
+    }),
+    JSON.stringify({
+      type: 'response_item',
+      timestamp: '2026-02-06T01:42:02.000Z',
+      payload: {
+        type: 'function_call_output',
+        call_id: 'call-1',
+        output: 'Chunk ID: abc\nWall time: 0.1 seconds\nProcess exited with code 0\nOriginal token count: 1\nOutput:\nhi\n',
+      },
+    }),
+    JSON.stringify({
+      type: 'response_item',
+      timestamp: '2026-02-06T01:42:03.000Z',
+      payload: {
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'output_text', text: 'done' }],
+      },
+    }),
+  ];
+
+  const parsed = parseSessionMessagesFromJsonl(lines.join('\n'), 'codex');
+  assert.strictEqual(parsed.length, 2);
+  assert.strictEqual(parsed[1].toolCalls[0].result, 'hi');
+  assert.strictEqual(parsed[1].toolCalls[0].status, 'complete');
+});
+
 test('extractSessionCwdFromJsonlChunk returns cwd from Claude session entries', () => {
   const lines = [
     JSON.stringify({ type: 'queue-operation', operation: 'dequeue' }),

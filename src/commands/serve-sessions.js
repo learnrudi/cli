@@ -11,116 +11,62 @@ import path from 'path';
 import os from 'os';
 import { execSync, execFile } from 'child_process';
 import { createInterface } from 'readline';
+import {
+  extractContent,
+  extractToolResultText,
+  getSessionEntryRole,
+  isToolResultOnly,
+  safeParseJsonObject,
+  stripSystemXml,
+} from './sessions/providers/common.js';
+import { parseSessionMessagesFromJsonl as parseSessionMessagesFromProviderRegistry } from './sessions/providers/registry.js';
+
+// Phase 2 extracted modules
+import {
+  CLAUDE_ROOT_DIR,
+  CLAUDE_PROJECTS_DIR,
+  CODEX_ROOT_DIR,
+  CODEX_SESSIONS_DIR,
+} from './sessions/constants.js';
+import { cacheSessionFileHint } from './sessions/file-hints.js';
+import {
+  deriveCodexSessionIdFromFilename,
+  readCodexSessionMeta,
+} from './sessions/providers/codex/discovery.js';
+import {
+  collectJsonlFiles,
+  extractSessionCwdFromJsonlChunk,
+  inferProjectPathFromSessionFile,
+  decodeProjectDirFromFilesystem,
+  readSessionSnippet,
+  findSessionFileEntry,
+} from './sessions/discovery.js';
+import { createSessionsDbModule } from './sessions/db.js';
+import { createSessionsTailModule } from './sessions/tail.js';
 
 // ---------------------------------------------------------------------------
-// Constants
+// Constants (local — not extracted)
 // ---------------------------------------------------------------------------
 
-const CLAUDE_ROOT_DIR = path.join(os.homedir(), '.claude');
-const CLAUDE_PROJECTS_DIR = path.join(CLAUDE_ROOT_DIR, 'projects');
 const SESSIONS_UPDATE_DEBOUNCE_MS = 350;
 const SESSIONS_WATCH_RETRY_MS = 10000;
 const SESSIONS_PROJECTS_CACHE_TTL_MS = 8000;
-const SESSION_CWD_SCAN_BYTES = 2 * 1024 * 1024;
-const SESSION_CWD_SCAN_LINES = 400;
 
 // ---------------------------------------------------------------------------
 // Pure functions — parsing, diff stats, path decoding
 // ---------------------------------------------------------------------------
 
-/**
- * Strip known system XML tags injected by Claude CLI from text content.
- * Removes <system-reminder>, <task-notification>, <bash-notification>, etc.
- */
-export function stripSystemXml(text) {
-  if (!text || typeof text !== 'string') return text;
-  return text
-    .replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '')
-    .replace(/<task-notification>[\s\S]*?<\/task-notification>/g, '')
-    .replace(/<bash-notification>[\s\S]*?<\/bash-notification>/g, '')
-    .trim();
-}
+export {
+  extractContent,
+  extractToolResultText,
+  getSessionEntryRole,
+  isToolResultOnly,
+  stripSystemXml,
+};
 
-export function extractContent(entry) {
-  if (typeof entry.message === 'string') return stripSystemXml(entry.message);
-
-  const content = entry?.message?.content;
-  if (typeof content === 'string') return stripSystemXml(content);
-
-  if (Array.isArray(content)) {
-    const parts = [];
-    for (const block of content) {
-      if (!block || typeof block !== 'object') continue;
-
-      if ((block.type === 'text' || block.type === 'input_text') && typeof block.text === 'string') {
-        const text = block.text.trim();
-        if (text) parts.push(text);
-        continue;
-      }
-
-      if (block.type === 'document') {
-        const label = typeof block.title === 'string'
-          ? block.title
-          : (typeof block.filename === 'string' ? block.filename : '');
-        parts.push(label ? `[Document: ${label}]` : '[Document attached]');
-        continue;
-      }
-
-      if (block.type === 'image') {
-        parts.push('[Image attached]');
-      }
-    }
-    return parts.join('\n').trim();
-  }
-
-  return '';
-}
-
-export function getSessionEntryRole(entry) {
-  const messageRole = entry?.message?.role;
-  if (messageRole === 'user' || messageRole === 'assistant') {
-    return messageRole;
-  }
-
-  const type = String(entry?.type || '').toLowerCase();
-  if (type === 'user' || type === 'user_turn' || type === 'human' || type === 'human_turn') {
-    return 'user';
-  }
-  if (type === 'assistant' || type === 'assistant_turn') {
-    return 'assistant';
-  }
-  return null;
-}
-
-/**
- * Returns true if a user entry's content array contains ONLY tool_result blocks.
- */
-export function isToolResultOnly(content) {
-  if (!Array.isArray(content)) return false;
-  if (content.length === 0) return false;
-  return content.every(
-    (block) => block && typeof block === 'object' && block.type === 'tool_result'
-  );
-}
-
-/**
- * Extract text from a tool_result content field.
- * Handles both string content and [{type:"text",text:"..."}] arrays.
- */
-export function extractToolResultText(resultContent) {
-  let text;
-  if (typeof resultContent === 'string') {
-    text = resultContent;
-  } else if (Array.isArray(resultContent)) {
-    text = resultContent
-      .filter((b) => b && b.type === 'text' && typeof b.text === 'string')
-      .map((b) => b.text)
-      .join('\n');
-  } else {
-    return '';
-  }
-  return stripSystemXml(text);
-}
+// Re-exports from Phase 2 extracted modules (backward compatibility)
+export { extractSessionCwdFromJsonlChunk } from './sessions/discovery.js';
+export { cacheSessionFileHint } from './sessions/file-hints.js';
 
 /**
  * Count lines in a string, handling empty string correctly.
@@ -254,236 +200,21 @@ export function computeSessionDiffStats(sessionJsonlPath) {
   }
 }
 
-/**
- * Extract the first absolute cwd value from Claude JSONL content.
- * Exported for unit tests.
- */
-export function extractSessionCwdFromJsonlChunk(content) {
-  if (!content || typeof content !== 'string') return null;
-
-  const lines = content.split('\n').filter(Boolean).slice(0, SESSION_CWD_SCAN_LINES);
-  for (const line of lines) {
-    try {
-      const entry = JSON.parse(line);
-      if (typeof entry?.cwd === 'string' && path.isAbsolute(entry.cwd)) {
-        return entry.cwd;
-      }
-    } catch {
-      // Skip malformed lines
-    }
-  }
-
-  return null;
-}
-
-/**
- * Infer project path from session JSONL metadata when sessions-index.json
- * is missing or incomplete.
- */
-async function inferProjectPathFromSessionFile(filePath) {
-  if (!filePath) return null;
-
-  let fileHandle;
-  try {
-    fileHandle = await fsp.open(filePath, 'r');
-    const buffer = Buffer.alloc(SESSION_CWD_SCAN_BYTES);
-    const { bytesRead } = await fileHandle.read(buffer, 0, buffer.length, 0);
-    if (!bytesRead) return null;
-
-    const chunk = buffer.toString('utf-8', 0, bytesRead);
-    return extractSessionCwdFromJsonlChunk(chunk);
-  } catch {
-    return null;
-  } finally {
-    try {
-      await fileHandle?.close();
-    } catch {
-      // ignore close errors
-    }
-  }
-}
-
-async function isExistingDirectory(dirPath) {
-  if (!dirPath || typeof dirPath !== 'string') return false;
-  try {
-    const stat = await fsp.stat(dirPath);
-    return stat.isDirectory();
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Best-effort decode of Claude's encoded project directory name (hyphen-delimited)
- * using the live filesystem. This preserves real folder names containing dashes.
- */
-async function decodeProjectDirFromFilesystem(projDir) {
-  if (!projDir || typeof projDir !== 'string') return null;
-  const tokens = projDir.split('-').filter(Boolean);
-  if (tokens.length < 2) return null;
-
-  const dirEntriesCache = new Map();
-  async function getEntries(dirPath) {
-    if (dirEntriesCache.has(dirPath)) return dirEntriesCache.get(dirPath);
-    try {
-      const names = await fsp.readdir(dirPath);
-      const set = new Set(names);
-      dirEntriesCache.set(dirPath, set);
-      return set;
-    } catch {
-      return null;
-    }
-  }
-
-  let cursor = path.join(path.sep, tokens[0]);
-  if (!await isExistingDirectory(cursor)) {
-    if (/^[A-Za-z]:$/.test(tokens[0])) {
-      cursor = `${tokens[0]}\\`;
-      if (!await isExistingDirectory(cursor)) return null;
-    } else {
-      return null;
-    }
-  }
-
-  let index = 1;
-  while (index < tokens.length) {
-    const entries = await getEntries(cursor);
-    if (!entries) return null;
-
-    let matchedName = null;
-    let matchedEnd = -1;
-    for (let end = tokens.length; end > index; end -= 1) {
-      const candidate = tokens.slice(index, end).join('-');
-      if (entries.has(candidate)) {
-        matchedName = candidate;
-        matchedEnd = end;
-        break;
-      }
-    }
-
-    if (!matchedName) {
-      const single = tokens[index];
-      if (!entries.has(single)) return null;
-      matchedName = single;
-      matchedEnd = index + 1;
-    }
-
-    cursor = path.join(cursor, matchedName);
-    index = matchedEnd;
-
-    if (index < tokens.length && !await isExistingDirectory(cursor)) {
-      return null;
-    }
-  }
-
-  return cursor;
-}
-
-/**
- * Read the first real user prompt and git branch from a session JSONL file.
- * Reads only the first ~64KB to stay fast.
- */
-async function readSessionSnippet(filePath) {
-  let firstPrompt = '';
-  let gitBranch = '';
-  try {
-    const fd = await fsp.open(filePath, 'r');
-    const stream = fd.createReadStream({ encoding: 'utf-8', start: 0, end: 65536 });
-    let buf = '';
-    for await (const chunk of stream) {
-      buf += chunk;
-    }
-    await fd.close();
-    const lines = buf.split('\n');
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      let obj;
-      try { obj = JSON.parse(line); } catch { continue; }
-      if (obj.gitBranch && !gitBranch) {
-        gitBranch = obj.gitBranch;
-      }
-      if (obj.type === 'user' && !firstPrompt) {
-        const msg = obj.message;
-        let text = '';
-        if (typeof msg === 'string') {
-          text = msg;
-        } else if (msg && typeof msg === 'object') {
-          const content = msg.content;
-          if (typeof content === 'string') {
-            text = content;
-          } else if (Array.isArray(content)) {
-            for (const block of content) {
-              if (block && block.type === 'text' && block.text) {
-                text = block.text;
-                break;
-              }
-            }
-          }
-        }
-        if (text && !text.startsWith('[Request interrupted') && text.trim().length > 0) {
-          firstPrompt = text.slice(0, 200);
-        }
-      }
-      if (firstPrompt && gitBranch) break;
-    }
-  } catch {
-    // Ignore read errors
-  }
-  return { firstPrompt, gitBranch };
-}
-
-/**
- * Find the JSONL file path for a session ID.
- * First checks sessions-index.json for fullPath, then falls back to direct file lookup.
- */
-async function findSessionFile(sessionId) {
-  const claudeDir = path.join(os.homedir(), '.claude', 'projects');
-  const projectDirs = await fsp.readdir(claudeDir);
-
-  for (const projDir of projectDirs) {
-    const indexPath = path.join(claudeDir, projDir, 'sessions-index.json');
-    try {
-      const indexContent = await fsp.readFile(indexPath, 'utf-8');
-      const index = JSON.parse(indexContent);
-      if (Array.isArray(index.entries)) {
-        const entry = index.entries.find(e => e.sessionId === sessionId);
-        if (entry?.fullPath) {
-          await fsp.access(entry.fullPath);
-          return entry.fullPath;
-        }
-      }
-    } catch {
-      // Index doesn't exist or is malformed, continue
-    }
-  }
-
-  for (const projDir of projectDirs) {
-    const filePath = path.join(claudeDir, projDir, `${sessionId}.jsonl`);
-    try {
-      await fsp.access(filePath);
-      return filePath;
-    } catch {
-      continue;
-    }
-  }
-
-  return null;
-}
-
-async function readSessionMessages(sessionId) {
-  const filePath = await findSessionFile(sessionId);
-  if (!filePath) {
+async function readSessionMessages(sessionId, lookup = {}) {
+  const found = await findSessionFileEntry(sessionId, lookup);
+  if (!found?.filePath) {
     throw new Error(`Session not found: ${sessionId}`);
   }
+  const { provider, filePath } = found;
 
   const content = await fsp.readFile(filePath, 'utf-8');
-  const messages = parseSessionMessagesFromJsonl(content);
+  const messages = parseSessionMessagesFromJsonl(content, provider);
   const byteOffset = Buffer.byteLength(content, 'utf-8');
 
   // Extract usage stats from raw JSONL lines
-  const usage = extractUsageFromJsonl(content);
+  const usage = extractUsageFromJsonl(content, provider);
 
-  return { messages, byteOffset, usage, filePath };
+  return { messages, byteOffset, usage, filePath, provider };
 }
 
 // ---------------------------------------------------------------------------
@@ -501,7 +232,7 @@ const _sessionFileInfoCache = new Map();
  * Line index: fast byte scan (no string allocation) — blocks the response.
  * Usage: streamed in the background — available on subsequent requests.
  */
-async function getSessionFileInfo(filePath) {
+async function getSessionFileInfo(filePath, provider = 'claude') {
   const stat = await fsp.stat(filePath);
   const cached = _sessionFileInfoCache.get(filePath);
   if (cached && cached.mtimeMs === stat.mtimeMs) return cached;
@@ -532,7 +263,7 @@ async function getSessionFileInfo(filePath) {
 
   // Extract usage in background — don't block the response.
   // Available on subsequent cached requests or if the response handler awaits it.
-  result._usagePromise = _extractUsageStreaming(filePath).then(usage => {
+  result._usagePromise = _extractUsageStreaming(filePath, provider).then(usage => {
     result.usage = usage;
     return usage;
   }).catch(() => null);
@@ -569,7 +300,7 @@ async function _buildLineOffsets(filePath, fileSize) {
  * Extract usage stats by streaming through the file line-by-line.
  * Uses readline so only one line is in memory at a time.
  */
-async function _extractUsageStreaming(filePath) {
+async function _extractUsageStreaming(filePath, provider = 'claude') {
   const rl = createInterface({
     input: fs.createReadStream(filePath, { encoding: 'utf-8', highWaterMark: 256 * 1024 }),
     crlfDelay: Infinity,
@@ -589,13 +320,33 @@ async function _extractUsageStreaming(filePath) {
     let entry;
     try { entry = JSON.parse(line); } catch { continue; }
 
-    const role = getSessionEntryRole(entry);
-    const usage = entry?.message?.usage;
-
     if (!createdAt && entry.timestamp) createdAt = entry.timestamp;
     if (entry.timestamp) lastActiveAt = entry.timestamp;
+    if (!cwd && typeof entry?.cwd === 'string') cwd = entry.cwd;
+    if (!cwd && typeof entry?.payload?.cwd === 'string') cwd = entry.payload.cwd;
+
+    if (provider === 'codex') {
+      if (!model && typeof entry?.payload?.model === 'string') model = entry.payload.model;
+      if (entry?.type === 'event_msg' && entry?.payload?.type === 'token_count' && entry?.payload?.info) {
+        const usage = entry.payload.info.last_token_usage || entry.payload.info.total_token_usage || null;
+        if (usage) {
+          const output = (usage.output_tokens || 0) + (usage.reasoning_output_tokens || 0);
+          const input = (usage.input_tokens || 0) + (usage.cached_input_tokens || 0);
+          totalOutputTokens += output;
+          totalInputTokens += input;
+          totalCacheReadTokens += usage.cached_input_tokens || 0;
+        }
+      }
+      const role = getSessionEntryRole(entry, provider);
+      if (role === 'assistant' && lastRole === 'user') turnCount++;
+      if (role) lastRole = role;
+      continue;
+    }
+
+    const role = getSessionEntryRole(entry, provider);
+    const usage = entry?.message?.usage;
+
     if (!model && entry.message?.model) model = entry.message.model;
-    if (!cwd && entry.cwd) cwd = entry.cwd;
 
     if (usage) {
       totalOutputTokens += usage.output_tokens || 0;
@@ -613,7 +364,7 @@ async function _extractUsageStreaming(filePath) {
     if (role) lastRole = role;
   }
 
-  if (totalInputTokens === 0 && totalOutputTokens === 0) return null;
+  if (totalInputTokens === 0 && totalOutputTokens === 0 && !cwd && !model) return null;
   return {
     totalInputTokens, totalOutputTokens, totalCacheReadTokens, turnCount,
     totalCostUsd: totalCostUsd || undefined,
@@ -642,24 +393,25 @@ async function _readByteRange(filePath, startByte, endByte) {
  * Uses a cached line-offset index so pagination only reads the needed bytes
  * instead of the entire JSONL file.
  */
-async function readSessionMessagesPaginated(sessionId, { tail, before } = {}) {
-  const filePath = await findSessionFile(sessionId);
-  if (!filePath) {
+async function readSessionMessagesPaginated(sessionId, { tail, before } = {}, lookup = {}) {
+  const found = await findSessionFileEntry(sessionId, lookup);
+  if (!found?.filePath) {
     throw new Error(`Session not found: ${sessionId}`);
   }
+  const { provider, filePath } = found;
 
   // No pagination params: full load (backward compat)
   if (!tail && before === undefined) {
     const content = await fsp.readFile(filePath, 'utf-8');
-    const messages = parseSessionMessagesFromJsonl(content);
-    const usage = extractUsageFromJsonl(content);
+    const messages = parseSessionMessagesFromJsonl(content, provider);
+    const usage = extractUsageFromJsonl(content, provider);
     const byteOffset = Buffer.byteLength(content, 'utf-8');
     const totalCount = content.split('\n').filter(Boolean).length;
-    return { messages, byteOffset, usage, filePath, totalCount };
+    return { messages, byteOffset, usage, filePath, totalCount, provider };
   }
 
   // Build (or use cached) line index + usage
-  const info = await getSessionFileInfo(filePath);
+  const info = await getSessionFileInfo(filePath, provider);
   const { lineOffsets, fileSize, lineCount } = info;
 
   // Determine line range
@@ -671,7 +423,7 @@ async function readSessionMessagesPaginated(sessionId, { tail, before } = {}) {
   const startByte = lineOffsets[startLine] ?? 0;
   const endByte = endLine < lineOffsets.length ? lineOffsets[endLine] : fileSize;
   const content = await _readByteRange(filePath, startByte, endByte);
-  const messages = parseSessionMessagesFromJsonl(content);
+  const messages = parseSessionMessagesFromJsonl(content, provider);
 
   const hasMore = startLine > 0;
 
@@ -694,6 +446,7 @@ async function readSessionMessagesPaginated(sessionId, { tail, before } = {}) {
     byteOffset: fileSize,
     usage,
     filePath,
+    provider,
     before: startLine,
     hasMore,
     totalCount: lineCount,
@@ -704,7 +457,7 @@ async function readSessionMessagesPaginated(sessionId, { tail, before } = {}) {
  * Walk raw JSONL lines and sum token usage from message.usage fields.
  * Also counts turns (user→assistant transitions).
  */
-function extractUsageFromJsonl(content) {
+function extractUsageFromJsonl(content, provider = 'claude') {
   if (!content || typeof content !== 'string') return null;
   const lines = content.trim().split('\n').filter(Boolean);
   let totalInputTokens = 0;
@@ -722,14 +475,36 @@ function extractUsageFromJsonl(content) {
     let entry;
     try { entry = JSON.parse(line); } catch { continue; }
 
-    const role = getSessionEntryRole(entry);
-    const usage = entry?.message?.usage;
-
     // Capture metadata from first entries
     if (!createdAt && entry.timestamp) createdAt = entry.timestamp;
     if (entry.timestamp) lastActiveAt = entry.timestamp;
-    if (!model && entry.message?.model) model = entry.message.model;
     if (!cwd && entry.cwd) cwd = entry.cwd;
+    if (!cwd && typeof entry?.payload?.cwd === 'string') cwd = entry.payload.cwd;
+
+    if (provider === 'codex') {
+      if (!model && typeof entry?.payload?.model === 'string') model = entry.payload.model;
+      if (entry?.type === 'event_msg' && entry?.payload?.type === 'token_count' && entry?.payload?.info) {
+        const usage = entry.payload.info.last_token_usage || entry.payload.info.total_token_usage || null;
+        if (usage) {
+          const output = (usage.output_tokens || 0) + (usage.reasoning_output_tokens || 0);
+          const input = (usage.input_tokens || 0) + (usage.cached_input_tokens || 0);
+          totalOutputTokens += output;
+          totalInputTokens += input;
+          totalCacheReadTokens += usage.cached_input_tokens || 0;
+        }
+      }
+      const role = getSessionEntryRole(entry, provider);
+      if (role === 'assistant' && lastRole === 'user') {
+        turnCount++;
+      }
+      if (role) lastRole = role;
+      continue;
+    }
+
+    const role = getSessionEntryRole(entry, provider);
+    const usage = entry?.message?.usage;
+
+    if (!model && entry.message?.model) model = entry.message.model;
 
     if (usage) {
       totalOutputTokens += usage.output_tokens || 0;
@@ -750,7 +525,7 @@ function extractUsageFromJsonl(content) {
     if (role) lastRole = role;
   }
 
-  if (totalInputTokens === 0 && totalOutputTokens === 0) return null;
+  if (totalInputTokens === 0 && totalOutputTokens === 0 && !cwd && !model) return null;
   return {
     totalInputTokens, totalOutputTokens, totalCacheReadTokens, turnCount,
     totalCostUsd: totalCostUsd || undefined,
@@ -759,156 +534,26 @@ function extractUsageFromJsonl(content) {
 }
 
 /**
- * Parse Claude JSONL session content into chat messages with full fidelity.
- * Merges consecutive assistant entries into a single turn, attaches tool
- * results from intervening user tool_result entries, and preserves thinking.
+ * Parse session JSONL content into chat messages.
  * Exported for unit tests.
  */
-export function parseSessionMessagesFromJsonl(content) {
-  if (!content || typeof content !== 'string') return [];
-
-  const lines = content.trim().split('\n').filter(Boolean);
-  const messages = [];
-
-  let currentAssistant = null;
-
-  function flushAssistant() {
-    if (!currentAssistant) return;
-    const msg = {
-      role: 'assistant',
-      content: currentAssistant.content.trim(),
-      timestamp: currentAssistant.timestamp,
-    };
-    if (currentAssistant.thinking) {
-      msg.thinking = currentAssistant.thinking.trim();
-    }
-    if (currentAssistant.toolCalls.length > 0) {
-      msg.toolCalls = currentAssistant.toolCalls;
-    }
-    if (currentAssistant.contentBlocks.length > 0) {
-      msg.contentBlocks = currentAssistant.contentBlocks;
-    }
-    if (msg.content || msg.thinking || (msg.toolCalls && msg.toolCalls.length > 0)) {
-      messages.push(msg);
-    }
-    currentAssistant = null;
-  }
-
-  for (const line of lines) {
-    let entry;
-    try {
-      entry = JSON.parse(line);
-    } catch {
-      continue;
-    }
-
-    const role = getSessionEntryRole(entry);
-    if (!role) continue;
-
-    const contentBlocks = entry?.message?.content;
-
-    if (role === 'assistant') {
-      if (!currentAssistant) {
-        currentAssistant = {
-          content: '',
-          thinking: '',
-          toolCalls: [],
-          contentBlocks: [],
-          pendingToolIds: new Map(),
-          timestamp: entry.timestamp,
-        };
-      }
-
-      if (Array.isArray(contentBlocks)) {
-        for (const block of contentBlocks) {
-          if (!block || typeof block !== 'object') continue;
-
-          if (block.type === 'text' && typeof block.text === 'string') {
-            const text = stripSystemXml(block.text);
-            if (text) {
-              if (currentAssistant.content) currentAssistant.content += '\n';
-              currentAssistant.content += text;
-              // Merge consecutive text blocks
-              const lastBlock = currentAssistant.contentBlocks[currentAssistant.contentBlocks.length - 1];
-              if (lastBlock && lastBlock.type === 'text') {
-                lastBlock.text += '\n' + text;
-              } else {
-                currentAssistant.contentBlocks.push({ type: 'text', text });
-              }
-            }
-          } else if (block.type === 'thinking' && typeof block.thinking === 'string') {
-            const thinking = block.thinking.trim();
-            if (thinking) {
-              if (currentAssistant.thinking) currentAssistant.thinking += '\n\n';
-              currentAssistant.thinking += thinking;
-            }
-          } else if (block.type === 'tool_use' && block.id && block.name) {
-            const toolCall = {
-              id: block.id,
-              name: block.name,
-              input: block.input || {},
-              status: 'pending',
-            };
-            const idx = currentAssistant.toolCalls.length;
-            currentAssistant.pendingToolIds.set(block.id, idx);
-            currentAssistant.toolCalls.push(toolCall);
-            currentAssistant.contentBlocks.push({ type: 'tool', toolIndex: idx });
-          }
-        }
-      } else {
-        const text = extractContent(entry);
-        if (text) {
-          if (currentAssistant.content) currentAssistant.content += '\n';
-          currentAssistant.content += text;
-          const lastBlock = currentAssistant.contentBlocks[currentAssistant.contentBlocks.length - 1];
-          if (lastBlock && lastBlock.type === 'text') {
-            lastBlock.text += '\n' + text;
-          } else {
-            currentAssistant.contentBlocks.push({ type: 'text', text });
-          }
-        }
-      }
-    } else if (role === 'user') {
-      if (Array.isArray(contentBlocks) && isToolResultOnly(contentBlocks)) {
-        if (currentAssistant) {
-          for (const block of contentBlocks) {
-            const idx = currentAssistant.pendingToolIds.get(block.tool_use_id);
-            if (idx !== undefined) {
-              currentAssistant.toolCalls[idx].result = extractToolResultText(block.content);
-              currentAssistant.toolCalls[idx].status = block.is_error ? 'error' : 'complete';
-              currentAssistant.pendingToolIds.delete(block.tool_use_id);
-            }
-          }
-        }
-        continue;
-      }
-
-      flushAssistant();
-
-      const extracted = extractContent(entry);
-      if (extracted) {
-        messages.push({
-          role: 'user',
-          content: extracted,
-          timestamp: entry.timestamp,
-        });
-      }
-    }
-  }
-
-  flushAssistant();
-
-  return messages;
+export function parseSessionMessagesFromJsonl(content, provider = 'claude') {
+  return parseSessionMessagesFromProviderRegistry(content, provider);
 }
 
 /**
  * Read file diffs from a session's Edit/Write/MultiEdit tool calls.
  * Returns array of { filePath, type, oldContent, newContent }
  */
-async function readSessionDiffs(sessionId) {
-  const filePath = await findSessionFile(sessionId);
-  if (!filePath) {
+async function readSessionDiffs(sessionId, lookup = {}) {
+  const found = await findSessionFileEntry(sessionId, lookup);
+  if (!found?.filePath) {
     throw new Error(`Session not found: ${sessionId}`);
+  }
+  const { provider, filePath } = found;
+
+  if (provider !== 'claude') {
+    return [];
   }
 
   const content = await fsp.readFile(filePath, 'utf-8');
@@ -958,13 +603,12 @@ async function readSessionDiffs(sessionId) {
 }
 
 async function enumerateSessions() {
-  const claudeDir = path.join(os.homedir(), '.claude', 'projects');
   const sessions = [];
 
   try {
-    const projectDirs = await fsp.readdir(claudeDir);
+    const projectDirs = await fsp.readdir(CLAUDE_PROJECTS_DIR);
     for (const projDir of projectDirs) {
-      const projPath = path.join(claudeDir, projDir);
+      const projPath = path.join(CLAUDE_PROJECTS_DIR, projDir);
       const stat = await fsp.stat(projPath);
       if (!stat.isDirectory()) continue;
 
@@ -974,6 +618,7 @@ async function enumerateSessions() {
         const sessionId = file.replace('.jsonl', '');
         const filePath = path.join(projPath, file);
         const fstat = await fsp.stat(filePath);
+        cacheSessionFileHint(sessionId, 'claude', filePath);
 
         sessions.push({
           id: sessionId,
@@ -989,6 +634,32 @@ async function enumerateSessions() {
     // ~/.claude/projects/ may not exist
   }
 
+  try {
+    const codexFiles = await collectJsonlFiles(CODEX_SESSIONS_DIR, 6);
+    for (const filePath of codexFiles) {
+      const meta = await readCodexSessionMeta(filePath, 60);
+      const sessionId = meta.sessionId || deriveCodexSessionIdFromFilename(filePath);
+      if (!sessionId) continue;
+      let fstat;
+      try {
+        fstat = await fsp.stat(filePath);
+      } catch {
+        continue;
+      }
+      cacheSessionFileHint(sessionId, 'codex', filePath);
+      sessions.push({
+        id: sessionId,
+        provider: 'codex',
+        projectPath: meta.cwd || path.dirname(filePath),
+        messageCount: 0,
+        createdAt: fstat.birthtime.toISOString(),
+        updatedAt: fstat.mtime.toISOString(),
+      });
+    }
+  } catch {
+    // ~/.codex/sessions/ may not exist
+  }
+
   sessions.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   return sessions;
 }
@@ -997,9 +668,22 @@ export function shouldBroadcastSessionUpdate(watchRoot, relPath) {
   const normalized = String(relPath || '').replace(/\\/g, '/');
   if (!normalized) return false;
 
-  const inProjects = watchRoot === CLAUDE_PROJECTS_DIR
+  const root = String(watchRoot || '').replace(/\\/g, '/');
+  const isClaudeProjectsRoot = root === CLAUDE_PROJECTS_DIR.replace(/\\/g, '/');
+  const isClaudeRoot = root === CLAUDE_ROOT_DIR.replace(/\\/g, '/');
+  const isCodexSessionsRoot = root === CODEX_SESSIONS_DIR.replace(/\\/g, '/');
+  const isCodexRoot = root === CODEX_ROOT_DIR.replace(/\\/g, '/');
+
+  if (isCodexSessionsRoot) {
+    return normalized.endsWith('.jsonl') || normalized === '.' || normalized.includes('/');
+  }
+  if (isCodexRoot) {
+    return normalized === 'sessions' || normalized.startsWith('sessions/');
+  }
+
+  const inProjects = isClaudeProjectsRoot
     ? true
-    : normalized === 'projects' || normalized.startsWith('projects/');
+    : (isClaudeRoot && (normalized === 'projects' || normalized.startsWith('projects/')));
 
   if (!inProjects) return false;
 
@@ -1030,469 +714,6 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
   /** @type {Set<string>|null} Accumulated sessionIds across watcher events within debounce window */
   let pendingSessionIds = null;
   let sessionsWatcher = null;
-
-  // -----------------------------------------------------------------------
-  // DB-as-spine: reconciliation + DB-backed sidebar query
-  // -----------------------------------------------------------------------
-
-  let useDbSpine = false; // flip to true when stable
-  let _reconcileInterval = null;
-  let _lastReconcileIndexMtimes = new Map(); // projDir -> mtimeMs of sessions-index.json
-  /** @type {Map<string, number>} sessionId -> last DB upsert timestamp (debounce watcher writes) */
-  const _watcherDbDebounce = new Map();
-  const WATCHER_DB_DEBOUNCE_MS = 10_000;
-  const RECONCILE_INTERVAL_MS = 60_000;
-
-  /**
-   * Full reconciliation: walk ~/.claude/projects/, collect all sessions,
-   * upsert into DB with project_path. Runs at boot.
-   */
-  async function reconcileSessionsToDb() {
-    const db = resolveDb ? resolveDb() : null;
-    if (!db) return;
-
-    const start = Date.now();
-    const claudeDir = path.join(os.homedir(), '.claude', 'projects');
-    let added = 0, updated = 0, pruned = 0, fsCount = 0;
-
-    const fsSessionIds = new Set();
-
-    try {
-      const projectDirs = await fsp.readdir(claudeDir);
-
-      for (const projDir of projectDirs) {
-        const projPath = path.join(claudeDir, projDir);
-        let stat;
-        try { stat = await fsp.stat(projPath); } catch { continue; }
-        if (!stat.isDirectory()) continue;
-
-        // Determine project_path
-        let projectPath = null;
-        const indexPath = path.join(projPath, 'sessions-index.json');
-        let indexEntries = null;
-        try {
-          const indexContent = await fsp.readFile(indexPath, 'utf-8');
-          const index = JSON.parse(indexContent);
-          if (index.originalPath) projectPath = index.originalPath;
-          if (Array.isArray(index.entries)) indexEntries = index.entries;
-          const istat = await fsp.stat(indexPath);
-          _lastReconcileIndexMtimes.set(projDir, istat.mtimeMs);
-        } catch {
-          // No index or malformed
-        }
-
-        if (!projectPath) {
-          projectPath = await decodeProjectDirFromFilesystem(projDir);
-        }
-        if (!projectPath) {
-          projectPath = '/' + projDir.replace(/-/g, '/').replace(/^\//, '');
-        }
-
-        // Build session map from index
-        const indexMap = new Map();
-        if (indexEntries) {
-          for (const e of indexEntries) {
-            indexMap.set(e.sessionId, e);
-          }
-        }
-
-        // Walk JSONL files
-        let files;
-        try { files = await fsp.readdir(projPath); } catch { continue; }
-
-        for (const file of files) {
-          if (!file.endsWith('.jsonl')) continue;
-          const sessionId = file.slice(0, -6);
-          fsSessionIds.add(sessionId);
-          fsCount++;
-
-          const fullPath = path.join(projPath, file);
-          let fstat;
-          try { fstat = await fsp.stat(fullPath); } catch { continue; }
-
-          const indexEntry = indexMap.get(sessionId);
-          const title = indexEntry?.summary || null;
-          const firstPrompt = indexEntry?.firstPrompt || null;
-          const gitBranch = indexEntry?.gitBranch || null;
-          const messageCount = indexEntry?.messageCount || 0;
-          const created = indexEntry?.created || fstat.birthtime.toISOString();
-          const modified = indexEntry?.modified || fstat.mtime.toISOString();
-          // Use more recent of index modified vs file mtime
-          const fileMtime = fstat.mtime.toISOString();
-          const lastActive = new Date(modified) > new Date(fileMtime) ? modified : fileMtime;
-
-          // Read snippet for sessions not in index
-          let snippet = firstPrompt;
-          let snippetBranch = gitBranch;
-          if (!snippet) {
-            try {
-              const s = await readSessionSnippet(fullPath);
-              snippet = s.firstPrompt || null;
-              if (!snippetBranch) snippetBranch = s.gitBranch || null;
-            } catch {
-              // ignore
-            }
-          }
-
-          const existed = db.prepare('SELECT 1 FROM sessions WHERE id = ?').get(sessionId);
-
-          db.prepare(`
-            INSERT INTO sessions
-              (id, provider, provider_session_id, origin, origin_native_file,
-               title, snippet, cwd, project_path, git_branch,
-               status, created_at, last_active_at, turn_count)
-            VALUES (?, 'claude', ?, 'provider-import', ?,
-                    ?, ?, ?, ?, ?,
-                    'active', ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-              project_path = COALESCE(excluded.project_path, sessions.project_path),
-              title = COALESCE(sessions.title, excluded.title),
-              snippet = COALESCE(sessions.snippet, excluded.snippet),
-              git_branch = COALESCE(excluded.git_branch, sessions.git_branch),
-              origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
-              last_active_at = MAX(sessions.last_active_at, excluded.last_active_at)
-          `).run(
-            sessionId, sessionId, fullPath,
-            title, snippet, projectPath, projectPath, snippetBranch,
-            created, lastActive, messageCount,
-          );
-
-          if (existed) updated++;
-          else added++;
-        }
-      }
-    } catch {
-      // ~/.claude/projects/ may not exist
-    }
-
-    // Prune: mark DB rows whose sessionId wasn't found on filesystem
-    // Safety guard: skip if walk found 0 sessions but DB has rows
-    if (fsSessionIds.size > 0) {
-      try {
-        const dbRows = db.prepare(
-          `SELECT id FROM sessions WHERE provider = 'claude' AND status != 'deleted'`
-        ).all();
-        const toDelete = dbRows.filter(r => !fsSessionIds.has(r.id));
-        if (toDelete.length > 0) {
-          const deleteStmt = db.prepare(
-            `UPDATE sessions SET status = 'deleted', deleted_at = ? WHERE id = ?`
-          );
-          const now = new Date().toISOString();
-          for (const row of toDelete) {
-            deleteStmt.run(now, row.id);
-            pruned++;
-          }
-        }
-      } catch {
-        // non-fatal
-      }
-    }
-
-    const duration = Date.now() - start;
-    const dbCount = db.prepare(
-      `SELECT COUNT(*) as c FROM sessions WHERE provider = 'claude' AND status != 'deleted'`
-    ).get().c;
-    log('sessions', 'info',
-      `[reconcile] DB=${dbCount} fs=${fsCount} added=${added} pruned=${pruned} updated=${updated} duration=${duration}ms`);
-  }
-
-  /**
-   * Lightweight periodic reconciliation (every 60s).
-   * Only detects new files + re-reads changed sessions-index.json for title updates.
-   */
-  async function periodicReconcile() {
-    const db = resolveDb ? resolveDb() : null;
-    if (!db) return;
-
-    const claudeDir = path.join(os.homedir(), '.claude', 'projects');
-
-    try {
-      const projectDirs = await fsp.readdir(claudeDir);
-      const dbIds = new Set(
-        db.prepare(`SELECT id FROM sessions WHERE provider = 'claude' AND status != 'deleted'`)
-          .all().map(r => r.id)
-      );
-
-      for (const projDir of projectDirs) {
-        const projPath = path.join(claudeDir, projDir);
-        let stat;
-        try { stat = await fsp.stat(projPath); } catch { continue; }
-        if (!stat.isDirectory()) continue;
-
-        let files;
-        try { files = await fsp.readdir(projPath); } catch { continue; }
-
-        // Determine project_path (quick: check index first)
-        let projectPath = null;
-        const indexPath = path.join(projPath, 'sessions-index.json');
-        let indexEntries = null;
-        let indexChanged = false;
-        try {
-          const istat = await fsp.stat(indexPath);
-          const prevMtime = _lastReconcileIndexMtimes.get(projDir);
-          if (!prevMtime || istat.mtimeMs > prevMtime) {
-            indexChanged = true;
-            _lastReconcileIndexMtimes.set(projDir, istat.mtimeMs);
-          }
-          if (indexChanged || !projectPath) {
-            const indexContent = await fsp.readFile(indexPath, 'utf-8');
-            const index = JSON.parse(indexContent);
-            if (index.originalPath) projectPath = index.originalPath;
-            if (Array.isArray(index.entries)) indexEntries = index.entries;
-          }
-        } catch {
-          // No index
-        }
-
-        if (!projectPath) {
-          projectPath = '/' + projDir.replace(/-/g, '/').replace(/^\//, '');
-        }
-
-        // Update titles from changed index
-        if (indexChanged && indexEntries) {
-          const titleStmt = db.prepare(
-            `UPDATE sessions SET title = ?, project_path = COALESCE(project_path, ?)
-             WHERE id = ? AND title_override IS NULL`
-          );
-          for (const e of indexEntries) {
-            if (e.summary && e.sessionId) {
-              titleStmt.run(e.summary, projectPath, e.sessionId);
-            }
-          }
-        }
-
-        // Detect new JSONL files
-        for (const file of files) {
-          if (!file.endsWith('.jsonl')) continue;
-          const sessionId = file.slice(0, -6);
-          if (dbIds.has(sessionId)) continue;
-
-          // New file — read snippet, stat, upsert
-          const fullPath = path.join(projPath, file);
-          let fstat;
-          try { fstat = await fsp.stat(fullPath); } catch { continue; }
-
-          let snippet = null, gitBranch = null;
-          try {
-            const s = await readSessionSnippet(fullPath);
-            snippet = s.firstPrompt || null;
-            gitBranch = s.gitBranch || null;
-          } catch {
-            // ignore
-          }
-
-          db.prepare(`
-            INSERT OR IGNORE INTO sessions
-              (id, provider, provider_session_id, origin, origin_native_file,
-               snippet, cwd, project_path, git_branch,
-               status, created_at, last_active_at)
-            VALUES (?, 'claude', ?, 'provider-import', ?,
-                    ?, ?, ?, ?,
-                    'active', ?, ?)
-          `).run(
-            sessionId, sessionId, fullPath,
-            snippet, projectPath, projectPath, gitBranch,
-            fstat.birthtime.toISOString(), fstat.mtime.toISOString(),
-          );
-          dbIds.add(sessionId);
-        }
-      }
-    } catch {
-      // ~/.claude/projects/ may not exist
-    }
-  }
-
-  /**
-   * DB-backed sidebar query: single query replaces filesystem walk.
-   * Returns same response shape as enumerateProjectsWithSessions().
-   */
-  async function getProjectsFromDb() {
-    const db = resolveDb ? resolveDb() : null;
-    if (!db) return enumerateProjectsWithSessions();
-
-    const rows = db.prepare(`
-      SELECT id, title, title_override, snippet, cwd, project_path,
-             total_cost, total_input_tokens, total_output_tokens,
-             turn_count, model, git_branch, last_active_at, created_at,
-             parent_session_id, is_sidechain, session_type, origin, status
-      FROM sessions
-      WHERE provider = 'claude' AND status != 'deleted'
-      ORDER BY last_active_at DESC
-    `).all();
-
-    // Group by project_path
-    const projectMap = new Map(); // project_path -> { sessions, ... }
-    for (const row of rows) {
-      const pp = row.project_path || row.cwd || 'unknown';
-      if (!projectMap.has(pp)) {
-        projectMap.set(pp, {
-          path: pp.replace(/\//g, '-').replace(/^-/, ''),
-          name: path.basename(pp),
-          originalPath: pp,
-          sessions: [],
-          gitStatus: null,
-        });
-      }
-      const proj = projectMap.get(pp);
-      const display = row.title_override || row.title;
-      const session = {
-        sessionId: row.id,
-        summary: display || '',
-        firstPrompt: row.snippet || '',
-        messageCount: 0,
-        modified: row.last_active_at || '',
-        created: row.created_at || '',
-        gitBranch: row.git_branch || '',
-        diffStats: null,
-      };
-      if (display) session.dbTitle = display;
-      if (row.total_cost > 0) session.totalCost = row.total_cost;
-      if (row.total_input_tokens > 0) session.totalInputTokens = row.total_input_tokens;
-      if (row.total_output_tokens > 0) session.totalOutputTokens = row.total_output_tokens;
-      if (row.turn_count > 0) session.turnCount = row.turn_count;
-      if (row.parent_session_id) session.parentSessionId = row.parent_session_id;
-      if (row.is_sidechain) session.isSidechain = true;
-      if (row.session_type && row.session_type !== 'main') session.sessionType = row.session_type;
-
-      // Diff stats from cache
-      const cached = _diffStatsCache.get(row.id);
-      if (cached) session.diffStats = cached.diffStats;
-
-      proj.sessions.push(session);
-    }
-
-    let projects = [...projectMap.values()];
-
-    // Merge worktree projects into their parent
-    const worktreeMarker = '/.rudi/worktrees/';
-    const mergedProjects = [];
-    const parentMap = new Map();
-
-    for (const proj of projects) {
-      const op = proj.originalPath || '';
-      const wtIdx = op.indexOf(worktreeMarker);
-      if (wtIdx !== -1) {
-        const realRoot = op.slice(0, wtIdx);
-        if (parentMap.has(realRoot)) {
-          mergedProjects[parentMap.get(realRoot)].sessions.push(...proj.sessions);
-        } else {
-          parentMap.set(realRoot, mergedProjects.length);
-          mergedProjects.push({
-            ...proj,
-            name: path.basename(realRoot),
-            originalPath: realRoot,
-          });
-        }
-      } else {
-        if (parentMap.has(op)) {
-          const existing = mergedProjects[parentMap.get(op)];
-          existing.sessions.push(...proj.sessions);
-          existing.path = proj.path;
-          existing.gitStatus = proj.gitStatus;
-        } else {
-          parentMap.set(op, mergedProjects.length);
-          mergedProjects.push(proj);
-        }
-      }
-    }
-
-    // Re-sort sessions within each project
-    for (const proj of mergedProjects) {
-      proj.sessions.sort((a, b) =>
-        new Date(b.modified).getTime() - new Date(a.modified).getTime()
-      );
-    }
-
-    // Git status from cache
-    for (const proj of mergedProjects) {
-      const cachedGit = _gitStatusCache.get(proj.originalPath);
-      if (cachedGit && (Date.now() - cachedGit.fetchedAt) < GIT_STATUS_TTL_MS) {
-        proj.gitStatus = cachedGit.gitStatus;
-      }
-    }
-
-    mergedProjects.sort((a, b) => {
-      const aTime = a.sessions[0]?.modified || '';
-      const bTime = b.sessions[0]?.modified || '';
-      return new Date(bTime).getTime() - new Date(aTime).getTime();
-    });
-
-    // Schedule background enrichment
-    _scheduleEnrichment(mergedProjects);
-
-    return mergedProjects;
-  }
-
-  /**
-   * Upsert a session to DB from watcher event (new or changed JSONL).
-   * Debounced: at most one last_active_at update per 10s per session.
-   */
-  async function watcherDbUpsert(sessionId, fullPath, projDir) {
-    const db = resolveDb ? resolveDb() : null;
-    if (!db) return;
-
-    const now = Date.now();
-    const lastWrite = _watcherDbDebounce.get(sessionId);
-    if (lastWrite && (now - lastWrite) < WATCHER_DB_DEBOUNCE_MS) return;
-    _watcherDbDebounce.set(sessionId, now);
-
-    try {
-      // Check if session exists in DB
-      const existing = db.prepare('SELECT id FROM sessions WHERE id = ?').get(sessionId);
-
-      if (!existing) {
-        // New file — read snippet + stat, derive project_path
-        let fstat;
-        try { fstat = await fsp.stat(fullPath); } catch { return; }
-
-        let projectPath = null;
-        if (projDir) {
-          const indexPath = path.join(CLAUDE_PROJECTS_DIR, projDir, 'sessions-index.json');
-          try {
-            const indexContent = await fsp.readFile(indexPath, 'utf-8');
-            const index = JSON.parse(indexContent);
-            if (index.originalPath) projectPath = index.originalPath;
-          } catch {
-            // no index
-          }
-          if (!projectPath) {
-            projectPath = '/' + projDir.replace(/-/g, '/').replace(/^\//, '');
-          }
-        }
-
-        let snippet = null, gitBranch = null;
-        try {
-          const s = await readSessionSnippet(fullPath);
-          snippet = s.firstPrompt || null;
-          gitBranch = s.gitBranch || null;
-        } catch {
-          // ignore
-        }
-
-        db.prepare(`
-          INSERT OR IGNORE INTO sessions
-            (id, provider, provider_session_id, origin, origin_native_file,
-             snippet, cwd, project_path, git_branch,
-             status, created_at, last_active_at)
-          VALUES (?, 'claude', ?, 'provider-import', ?,
-                  ?, ?, ?, ?,
-                  'active', ?, ?)
-        `).run(
-          sessionId, sessionId, fullPath,
-          snippet, projectPath, projectPath, gitBranch,
-          fstat.birthtime.toISOString(), fstat.mtime.toISOString(),
-        );
-      } else {
-        // Existing — monotonic last_active_at update
-        const nowIso = new Date().toISOString();
-        db.prepare(`
-          UPDATE sessions SET last_active_at = MAX(last_active_at, ?) WHERE id = ?
-        `).run(nowIso, sessionId);
-      }
-    } catch (err) {
-      log('sessions', 'warn', `watcher DB upsert failed for ${sessionId}: ${err.message}`);
-    }
-  }
 
   // -----------------------------------------------------------------------
   // Background enrichment caches (diff stats + git status)
@@ -1654,6 +875,36 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
     }, ENRICHMENT_DEBOUNCE_MS);
   }
 
+  // -----------------------------------------------------------------------
+  // DB-as-spine: delegated to sessions/db.js factory
+  // -----------------------------------------------------------------------
+
+  const dbModule = createSessionsDbModule({
+    log,
+    resolveDb,
+    caches: { diffStatsCache: _diffStatsCache, gitStatusCache: _gitStatusCache, sessionPathMap: _sessionPathMap, GIT_STATUS_TTL_MS },
+    onProjectsReady: _scheduleEnrichment,
+  });
+
+  const {
+    reconcileSessionsToDb,
+    watcherDbUpsert,
+    startPeriodicReconcile,
+    enableDbSpine,
+    getProjectsFromDb,
+    isDbSpineEnabled,
+  } = dbModule;
+
+  // -----------------------------------------------------------------------
+  // Live tail: delegated to sessions/tail.js factory
+  // -----------------------------------------------------------------------
+
+  const tailModule = createSessionsTailModule({
+    log,
+    broadcast,
+    findSessionFile: (sid) => findSessionFileEntry(sid, { resolveDb }),
+  });
+
   function invalidateSessionsProjectsCache() {
     sessionsProjectsCacheGeneration += 1;
     sessionsProjectsCache.value = null;
@@ -1699,12 +950,20 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
   function startSessionsWatcher() {
     if (sessionsWatcher) return;
 
-    const watchRoot = fs.existsSync(CLAUDE_PROJECTS_DIR)
-      ? CLAUDE_PROJECTS_DIR
-      : (fs.existsSync(CLAUDE_ROOT_DIR) ? CLAUDE_ROOT_DIR : null);
+    const watcherSpecs = [];
+    if (fs.existsSync(CLAUDE_PROJECTS_DIR)) {
+      watcherSpecs.push({ provider: 'claude', rootPath: CLAUDE_PROJECTS_DIR });
+    } else if (fs.existsSync(CLAUDE_ROOT_DIR)) {
+      watcherSpecs.push({ provider: 'claude', rootPath: CLAUDE_ROOT_DIR });
+    }
+    if (fs.existsSync(CODEX_SESSIONS_DIR)) {
+      watcherSpecs.push({ provider: 'codex', rootPath: CODEX_SESSIONS_DIR });
+    } else if (fs.existsSync(CODEX_ROOT_DIR)) {
+      watcherSpecs.push({ provider: 'codex', rootPath: CODEX_ROOT_DIR });
+    }
 
-    if (!watchRoot) {
-      log('sessions', 'debug', 'sessions watcher skipped (Claude directory not found)');
+    if (watcherSpecs.length === 0) {
+      log('sessions', 'debug', 'sessions watcher skipped (no provider session directories found)');
       if (!sessionsWatcherRetryTimer) {
         sessionsWatcherRetryTimer = setTimeout(() => {
           sessionsWatcherRetryTimer = null;
@@ -1714,65 +973,77 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
       return;
     }
 
-    try {
-      const watcher = fs.watch(watchRoot, { recursive: true }, (eventType, filename) => {
-        const relPath = typeof filename === 'string' ? filename : '';
-        if (!relPath) {
-          queueSessionsUpdated({
-            source: 'watcher',
-            event: eventType,
-            path: watchRoot,
-            missingFilename: true,
-          });
-          return;
-        }
-        if (!shouldBroadcastSessionUpdate(watchRoot, relPath)) return;
+    const watchers = [];
+    for (const spec of watcherSpecs) {
+      const { provider, rootPath } = spec;
+      try {
+        const watcher = fs.watch(rootPath, { recursive: true }, (eventType, filename) => {
+          const relPath = typeof filename === 'string' ? filename : '';
+          if (!relPath) {
+            queueSessionsUpdated({
+              source: 'watcher',
+              provider,
+              event: eventType,
+              path: rootPath,
+              missingFilename: true,
+            });
+            return;
+          }
+          if (!shouldBroadcastSessionUpdate(rootPath, relPath)) return;
 
-        // Parse sessionId and projectDir from JSONL file paths
-        // relPath is relative to watchRoot. When watchRoot === CLAUDE_PROJECTS_DIR,
-        // relPath looks like "<projectDir>/<sessionId>.jsonl"
-        const updateData = {
-          source: 'watcher',
-          event: eventType,
-          path: path.join(watchRoot, relPath),
-        };
-        const normalized = relPath.replace(/\\/g, '/');
-        if (normalized.endsWith('.jsonl')) {
-          const parts = normalized.split('/');
-          // When watching CLAUDE_PROJECTS_DIR: parts = [projectDir, sessionId.jsonl]
-          // When watching CLAUDE_ROOT_DIR: parts = [projects, projectDir, sessionId.jsonl]
-          const inProjects = watchRoot === CLAUDE_PROJECTS_DIR;
-          const projIdx = inProjects ? 0 : 1; // skip 'projects/' prefix
-          if (parts.length > projIdx + 1) {
-            updateData.projectDir = parts[projIdx] || null;
-            const fname = parts[projIdx + 1];
-            if (fname && fname.endsWith('.jsonl')) {
-              updateData.sessionId = fname.slice(0, -6); // strip '.jsonl'
+          const fullPath = path.join(rootPath, relPath);
+          const updateData = {
+            source: 'watcher',
+            provider,
+            event: eventType,
+            path: fullPath,
+          };
+          const normalized = relPath.replace(/\\/g, '/');
+          if (normalized.endsWith('.jsonl')) {
+            const parts = normalized.split('/');
+            if (provider === 'claude') {
+              const inProjects = rootPath === CLAUDE_PROJECTS_DIR;
+              const projIdx = inProjects ? 0 : 1; // skip 'projects/' prefix when watching ~/.claude
+              if (parts.length > projIdx + 1) {
+                updateData.projectDir = parts[projIdx] || null;
+                const fname = parts[projIdx + 1];
+                if (fname && fname.endsWith('.jsonl')) {
+                  updateData.sessionId = fname.slice(0, -6);
+                }
+              }
+            } else {
+              const fname = parts[parts.length - 1];
+              if (fname && fname.endsWith('.jsonl')) {
+                updateData.sessionId = deriveCodexSessionIdFromFilename(fname);
+              }
+            }
+            if (updateData.sessionId) {
+              cacheSessionFileHint(updateData.sessionId, provider, fullPath);
+              watcherDbUpsert(updateData.sessionId, fullPath, {
+                provider,
+                projectDir: updateData.projectDir || null,
+              }).catch(() => {}); // fire-and-forget
             }
           }
-          // DB upsert: keep sessions table fresh from watcher events
-          if (updateData.sessionId) {
-            watcherDbUpsert(
-              updateData.sessionId,
-              path.join(watchRoot, relPath),
-              updateData.projectDir,
-            ).catch(() => {}); // fire-and-forget
-          }
-        }
-        queueSessionsUpdated(updateData);
-      });
+          queueSessionsUpdated(updateData);
+        });
+        watchers.push({ watcher, rootPath, provider });
+        log('sessions', 'info', `watching ${rootPath} for ${provider} session updates`);
+      } catch (err) {
+        log('sessions', 'warn', `failed to watch sessions path: ${err.message}`, { rootPath, provider });
+      }
+    }
 
-      sessionsWatcher = { watcher, rootPath: watchRoot };
-      log('sessions', 'info', `watching ${watchRoot} for session updates`);
-    } catch (err) {
-      log('sessions', 'warn', `failed to watch sessions path: ${err.message}`, { watchRoot });
+    if (watchers.length === 0) {
       if (!sessionsWatcherRetryTimer) {
         sessionsWatcherRetryTimer = setTimeout(() => {
           sessionsWatcherRetryTimer = null;
           startSessionsWatcher();
         }, SESSIONS_WATCH_RETRY_MS);
       }
+      return;
     }
+    sessionsWatcher = { watchers };
   }
 
   /**
@@ -1803,7 +1074,7 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
         if (Array.isArray(index.entries)) {
           const STALE_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes
           const now = Date.now();
-          sessions = await Promise.all(index.entries.map(async (entry) => {
+          sessions = (await Promise.all(index.entries.map(async (entry) => {
             const fullPath = entry.fullPath || path.join(projPath, `${entry.sessionId}.jsonl`);
             let modified = entry.modified || '';
             // Only stat the file if the index entry looks stale (>2min old).
@@ -1818,21 +1089,23 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
                   modified = fileMtime;
                 }
               } catch {
-                // File may have been deleted
+                return null; // JSONL file deleted — skip phantom index entry
               }
             }
             return {
               sessionId: entry.sessionId,
+              provider: 'claude',
               summary: entry.summary || '',
               firstPrompt: entry.firstPrompt || '',
               messageCount: entry.messageCount || 0,
               modified,
               created: entry.created || '',
               gitBranch: entry.gitBranch || '',
+              originNativeFile: fullPath,
               fullPath,
               diffStats: null,
             };
-          }));
+          }))).filter(Boolean);
         }
 
         const indexedIds = new Set(sessions.map((s) => s.sessionId));
@@ -1847,12 +1120,14 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
             const snippet = await readSessionSnippet(filePath);
             sessions.push({
               sessionId,
+              provider: 'claude',
               summary: '',
               firstPrompt: snippet.firstPrompt,
               messageCount: 0,
               modified: fstat.mtime.toISOString(),
               created: fstat.birthtime.toISOString(),
               gitBranch: snippet.gitBranch,
+              originNativeFile: filePath,
               fullPath: filePath,
               diffStats: null,
             });
@@ -1871,12 +1146,14 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
             const snippet = await readSessionSnippet(filePath);
             sessions.push({
               sessionId,
+              provider: 'claude',
               summary: '',
               firstPrompt: snippet.firstPrompt,
               messageCount: 0,
               modified: fstat.mtime.toISOString(),
               created: fstat.birthtime.toISOString(),
               gitBranch: snippet.gitBranch,
+              originNativeFile: filePath,
               fullPath: filePath,
               diffStats: null,
             });
@@ -1921,7 +1198,10 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
       // Diff stats: read from cache only (background enrichment fills it)
       for (const session of sessions) {
         // Populate path map for background enrichment
-        if (session.fullPath) _sessionPathMap.set(session.sessionId, session.fullPath);
+        if (session.fullPath) {
+          _sessionPathMap.set(session.sessionId, session.fullPath);
+          cacheSessionFileHint(session.sessionId, session.provider || 'claude', session.fullPath);
+        }
         const cached = _diffStatsCache.get(session.sessionId);
         if (cached) session.diffStats = cached.diffStats;
       }
@@ -1958,6 +1238,73 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
       // ~/.claude/projects/ may not exist
     }
 
+    // Codex sessions: ~/ .codex/sessions/YYYY/MM/DD/*.jsonl, grouped by cwd.
+    try {
+      const codexFiles = await collectJsonlFiles(CODEX_SESSIONS_DIR, 6);
+      const codexSessions = [];
+      const CONCURRENCY = 16;
+      for (let i = 0; i < codexFiles.length; i += CONCURRENCY) {
+        const batch = codexFiles.slice(i, i + CONCURRENCY);
+        const batchRows = await Promise.all(batch.map(async (filePath) => {
+          let fstat;
+          try {
+            fstat = await fsp.stat(filePath);
+          } catch {
+            return null;
+          }
+          const meta = await readCodexSessionMeta(filePath, 60);
+          const sessionId = meta.sessionId || deriveCodexSessionIdFromFilename(filePath);
+          if (!sessionId) return null;
+          const snippet = await readSessionSnippet(filePath, 'codex');
+          const projectPath = meta.cwd || snippet.cwd || await inferProjectPathFromSessionFile(filePath) || os.homedir();
+          cacheSessionFileHint(sessionId, 'codex', filePath);
+          _sessionPathMap.set(sessionId, filePath);
+          return {
+            sessionId,
+            provider: 'codex',
+            summary: '',
+            firstPrompt: snippet.firstPrompt || '',
+            messageCount: 0,
+            modified: fstat.mtime.toISOString(),
+            created: fstat.birthtime.toISOString(),
+            gitBranch: '',
+            originNativeFile: filePath,
+            diffStats: null,
+            projectPath,
+          };
+        }));
+        codexSessions.push(...batchRows.filter(Boolean));
+      }
+
+      const codexProjectMap = new Map();
+      for (const session of codexSessions) {
+        const projectPath = session.projectPath;
+        if (!codexProjectMap.has(projectPath)) {
+          const encoded = projectPath.replace(/^\//, '').replace(/\//g, '-') || '-';
+          codexProjectMap.set(projectPath, {
+            path: encoded,
+            name: path.basename(projectPath) || projectPath,
+            originalPath: projectPath,
+            sessions: [],
+            gitStatus: null,
+          });
+        }
+        const { projectPath: _projectPath, ...sessionMeta } = session;
+        codexProjectMap.get(projectPath).sessions.push(sessionMeta);
+      }
+
+      for (const proj of codexProjectMap.values()) {
+        proj.sessions.sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime());
+        const cachedGit = _gitStatusCache.get(proj.originalPath);
+        if (cachedGit && (Date.now() - cachedGit.fetchedAt) < GIT_STATUS_TTL_MS) {
+          proj.gitStatus = cachedGit.gitStatus;
+        }
+        projects.push(proj);
+      }
+    } catch {
+      // ~/.codex/sessions/ may not exist
+    }
+
     // Merge DB titles into session entries
     const db = resolveDb ? resolveDb() : null;
     if (db) {
@@ -1970,24 +1317,29 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
           }
         }
         if (allSessionIds.length > 0) {
-          // Batch query in chunks of 500 to avoid SQLite variable limit
+          // Batch query in chunks (x2 placeholders) to avoid SQLite variable limit
           const dbMap = new Map();
-          for (let i = 0; i < allSessionIds.length; i += 500) {
-            const chunk = allSessionIds.slice(i, i + 500);
+          for (let i = 0; i < allSessionIds.length; i += 400) {
+            const chunk = allSessionIds.slice(i, i + 400);
             const placeholders = chunk.map(() => '?').join(',');
             const rows = db.prepare(`
-              SELECT id, title, title_override, total_cost, total_input_tokens, total_output_tokens, turn_count,
-                     parent_session_id, is_sidechain, session_type
-              FROM sessions WHERE id IN (${placeholders}) AND provider = 'claude'
-            `).all(...chunk);
+              SELECT id, provider, provider_session_id, title, title_override, total_cost, total_input_tokens, total_output_tokens, turn_count,
+                     parent_session_id, is_sidechain, session_type, origin_native_file
+              FROM sessions
+              WHERE status != 'deleted'
+                AND (id IN (${placeholders}) OR provider_session_id IN (${placeholders}))
+            `).all(...chunk, ...chunk);
             for (const row of rows) {
-              dbMap.set(row.id, row);
+              dbMap.set(`${row.provider}:${row.id}`, row);
+              if (row.provider_session_id) {
+                dbMap.set(`${row.provider}:${row.provider_session_id}`, row);
+              }
             }
           }
           // Attach DB fields to each session entry
           for (const proj of projects) {
             for (const s of proj.sessions) {
-              const row = dbMap.get(s.sessionId);
+              const row = dbMap.get(`${s.provider || 'claude'}:${s.sessionId}`);
               if (!row) continue;
               const display = row.title_override || row.title;
               if (display) s.dbTitle = display;
@@ -1998,6 +1350,7 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
               if (row.parent_session_id) s.parentSessionId = row.parent_session_id;
               if (row.is_sidechain) s.isSidechain = true;
               if (row.session_type && row.session_type !== 'main') s.sessionType = row.session_type;
+              if (!s.originNativeFile && row.origin_native_file) s.originNativeFile = row.origin_native_file;
             }
           }
         }
@@ -2039,9 +1392,9 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
           // Already have an entry from a worktree — merge into it
           const existing = mergedProjects[parentMap.get(op)];
           existing.sessions.push(...proj.sessions);
-          // Prefer the real project's metadata
-          existing.path = proj.path;
-          existing.gitStatus = proj.gitStatus;
+          // Keep the first stable path key; fill missing metadata only.
+          if (!existing.path) existing.path = proj.path;
+          if (!existing.gitStatus && proj.gitStatus) existing.gitStatus = proj.gitStatus;
         } else {
           parentMap.set(op, mergedProjects.length);
           mergedProjects.push(proj);
@@ -2112,10 +1465,11 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
     // GET /sessions/projects
     if (req.method === 'GET' && url.pathname === '/sessions/projects') {
       try {
-        // Feature flag: use DB spine unless ?source=fs forces filesystem path
-        const forceFs = url.searchParams.get('source') === 'fs';
-        const projects = (useDbSpine && !forceFs)
-          ? await getProjectsFromDb()
+        // Filesystem is the source of truth for live/pre-turn visibility.
+        const source = url.searchParams.get('source');
+        const useDb = source === 'db' && isDbSpineEnabled();
+        const projects = useDb
+          ? await getProjectsFromDb(enumerateProjectsWithSessions)
           : await getProjectsWithSessionsCached();
         if (_projectsEtag && req.headers['if-none-match'] === _projectsEtag) {
           res.writeHead(304, { 'Access-Control-Allow-Origin': '*' });
@@ -2144,8 +1498,9 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
       if (tailParam) paginationOpts.tail = parseInt(tailParam, 10);
       if (beforeParam) paginationOpts.before = parseInt(beforeParam, 10);
       try {
-        const result = await readSessionMessagesPaginated(sessionId, paginationOpts);
+        const result = await readSessionMessagesPaginated(sessionId, paginationOpts, { resolveDb });
         const { messages, byteOffset, filePath } = result;
+        const provider = result.provider || 'claude';
         const usage = result.usage;
 
         // Calculate cost from model pricing if no result-event cost
@@ -2156,12 +1511,12 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
               const pricing = db.prepare(`
                 SELECT input_cost_per_mtok, output_cost_per_mtok, cache_read_cost_per_mtok
                 FROM model_pricing
-                WHERE provider = 'claude'
+                WHERE provider = ?
                   AND (model_pattern = ? OR ? LIKE model_pattern)
                   AND (effective_until IS NULL OR effective_until > datetime('now'))
                 ORDER BY CASE WHEN model_pattern = ? THEN 0 ELSE 1 END,
                   LENGTH(model_pattern) DESC LIMIT 1
-              `).get(usage.model, usage.model, usage.model);
+              `).get(provider, usage.model, usage.model, usage.model);
               if (pricing) {
                 const cost =
                   (usage.totalInputTokens * pricing.input_cost_per_mtok +
@@ -2190,8 +1545,8 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
             const db = resolveDb ? resolveDb() : null;
             if (db) {
               const existing = db.prepare(
-                'SELECT id FROM sessions WHERE provider_session_id = ?'
-              ).get(sessionId);
+                'SELECT id FROM sessions WHERE provider = ? AND (provider_session_id = ? OR id = ?)'
+              ).get(provider, sessionId, sessionId);
               if (!existing) {
                 const now = new Date().toISOString();
                 db.prepare(`
@@ -2199,11 +1554,11 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
                     (id, provider, provider_session_id, origin, origin_native_file,
                      model, cwd, project_path, status, created_at, last_active_at,
                      turn_count, total_cost, total_input_tokens, total_output_tokens)
-                  VALUES (?, 'claude', ?, 'provider-import', ?,
+                  VALUES (?, ?, ?, 'provider-import', ?,
                      ?, ?, ?, 'active', ?, ?,
                      ?, ?, ?, ?)
                 `).run(
-                  sessionId, sessionId, filePath,
+                  sessionId, provider, sessionId, filePath,
                   usage.model, usage.cwd, usage.cwd,
                   usage.createdAt || now, usage.lastActiveAt || now,
                   usage.turnCount, usage.totalCostUsd || 0,
@@ -2228,7 +1583,7 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
     if (req.method === 'GET' && diffMatch) {
       const sessionId = decodeURIComponent(diffMatch[1]);
       try {
-        const diffs = await readSessionDiffs(sessionId);
+        const diffs = await readSessionDiffs(sessionId, { resolveDb });
         json(res, { diffs });
       } catch (err) {
         error(res, err.message, 404);
@@ -2253,16 +1608,26 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
 
       try {
         const now = new Date().toISOString();
+        const found = await findSessionFileEntry(sessionId, { resolveDb });
+        const provider = found?.provider || 'claude';
+        const existing = db.prepare(
+          `SELECT id FROM sessions
+           WHERE provider = ?
+             AND status != 'deleted'
+             AND (id = ? OR provider_session_id = ?)
+           LIMIT 1`
+        ).get(provider, sessionId, sessionId);
+        const targetSessionId = existing?.id || sessionId;
         // Ensure session row exists (may be a terminal-originated session with no DB row)
         db.prepare(`
           INSERT OR IGNORE INTO sessions
             (id, provider, provider_session_id, origin, status, created_at, last_active_at)
-          VALUES (?, 'claude', ?, 'provider-import', 'active', ?, ?)
-        `).run(sessionId, sessionId, now, now);
+          VALUES (?, ?, ?, 'provider-import', 'active', ?, ?)
+        `).run(targetSessionId, provider, sessionId, now, now);
 
         db.prepare(`
           UPDATE sessions SET title_override = ? WHERE id = ?
-        `).run(title, sessionId);
+        `).run(title, targetSessionId);
 
         json(res, { ok: true, title });
       } catch (err) {
@@ -2275,425 +1640,6 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
     return false;
   }
 
-  // -------------------------------------------------------------------------
-  // Live tail — follow/unfollow infrastructure
-  // -------------------------------------------------------------------------
-
-  const MAX_FOLLOWED_SESSIONS = 10;
-  const TAIL_FALLBACK_INTERVAL_MS = 5000;
-  const TAIL_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes no growth → auto-cleanup
-
-  // sessionId → { filePath, byteOffset, partialLine, parserState, subscriberCount, watcher, lastGrowth, tailQueued }
-  const followedSessions = new Map();
-  // ws → Set<sessionId>
-  const clientFollows = new WeakMap();
-  let tailFallbackTimer = null;
-
-  function createParserState() {
-    return {
-      lastAssistantMsg: null,    // for merging consecutive assistant blocks
-      pendingToolUses: new Map(), // toolUseId → index in toolCalls array
-      // After flushing, we keep a reference to the emitted toolCalls array
-      // so tool_results arriving in the next chunk can still update statuses.
-      flushedToolCalls: null,
-    };
-  }
-
-  /**
-   * Parse JSONL lines using per-session stateful parser.
-   * Mirrors parseSessionMessagesFromJsonl logic but uses persistent state
-   * for cross-line assistant merging and tool_result linking.
-   */
-  function parseJsonlLinesStateful(lines, state) {
-    const messages = [];
-    const toolUpdates = []; // tool_results that updated already-flushed messages
-
-    function flushAssistant() {
-      if (!state.lastAssistantMsg) return;
-      const msg = {
-        role: 'assistant',
-        content: state.lastAssistantMsg.content.trim(),
-        timestamp: state.lastAssistantMsg.timestamp,
-      };
-      if (state.lastAssistantMsg.thinking) {
-        msg.thinking = state.lastAssistantMsg.thinking.trim();
-      }
-      if (state.lastAssistantMsg.toolCalls.length > 0) {
-        msg.toolCalls = state.lastAssistantMsg.toolCalls;
-        // Keep reference so tool_results in the next chunk can update statuses
-        state.flushedToolCalls = state.lastAssistantMsg.toolCalls;
-      } else {
-        state.flushedToolCalls = null;
-      }
-      if (state.lastAssistantMsg.contentBlocks && state.lastAssistantMsg.contentBlocks.length > 0) {
-        msg.contentBlocks = state.lastAssistantMsg.contentBlocks;
-      }
-      if (msg.content || msg.thinking || (msg.toolCalls && msg.toolCalls.length > 0)) {
-        messages.push(msg);
-      }
-      state.lastAssistantMsg = null;
-      // Don't clear pendingToolUses — tool_results may arrive in the next chunk
-    }
-
-    for (const line of lines) {
-      let entry;
-      try {
-        entry = JSON.parse(line);
-      } catch {
-        continue;
-      }
-
-      const role = getSessionEntryRole(entry);
-      if (!role) continue;
-
-      const contentBlocks = entry?.message?.content;
-
-      if (role === 'assistant') {
-        if (!state.lastAssistantMsg) {
-          state.lastAssistantMsg = {
-            content: '',
-            thinking: '',
-            toolCalls: [],
-            contentBlocks: [],
-            timestamp: entry.timestamp,
-          };
-        }
-
-        if (Array.isArray(contentBlocks)) {
-          for (const block of contentBlocks) {
-            if (!block || typeof block !== 'object') continue;
-
-            if (block.type === 'text' && typeof block.text === 'string') {
-              const text = stripSystemXml(block.text);
-              if (text) {
-                if (state.lastAssistantMsg.content) state.lastAssistantMsg.content += '\n';
-                state.lastAssistantMsg.content += text;
-                const lastCB = state.lastAssistantMsg.contentBlocks[state.lastAssistantMsg.contentBlocks.length - 1];
-                if (lastCB && lastCB.type === 'text') {
-                  lastCB.text += '\n' + text;
-                } else {
-                  state.lastAssistantMsg.contentBlocks.push({ type: 'text', text });
-                }
-              }
-            } else if (block.type === 'thinking' && typeof block.thinking === 'string') {
-              const thinking = block.thinking.trim();
-              if (thinking) {
-                if (state.lastAssistantMsg.thinking) state.lastAssistantMsg.thinking += '\n\n';
-                state.lastAssistantMsg.thinking += thinking;
-              }
-            } else if (block.type === 'tool_use' && block.id && block.name) {
-              const toolCall = {
-                id: block.id,
-                name: block.name,
-                input: block.input || {},
-                status: 'pending',
-              };
-              const idx = state.lastAssistantMsg.toolCalls.length;
-              state.pendingToolUses.set(block.id, idx);
-              state.lastAssistantMsg.toolCalls.push(toolCall);
-              state.lastAssistantMsg.contentBlocks.push({ type: 'tool', toolIndex: idx });
-            }
-          }
-        } else {
-          const text = extractContent(entry);
-          if (text) {
-            if (state.lastAssistantMsg.content) state.lastAssistantMsg.content += '\n';
-            state.lastAssistantMsg.content += text;
-            const lastCB = state.lastAssistantMsg.contentBlocks[state.lastAssistantMsg.contentBlocks.length - 1];
-            if (lastCB && lastCB.type === 'text') {
-              lastCB.text += '\n' + text;
-            } else {
-              state.lastAssistantMsg.contentBlocks.push({ type: 'text', text });
-            }
-          }
-        }
-      } else if (role === 'user') {
-        if (Array.isArray(contentBlocks) && isToolResultOnly(contentBlocks)) {
-          // Update tool call statuses — either on the current assistant message
-          // or on an already-flushed one (tool_result arrived in a later chunk).
-          const isFlushed = !state.lastAssistantMsg && !!state.flushedToolCalls;
-          const toolCalls = state.lastAssistantMsg?.toolCalls || state.flushedToolCalls;
-          if (toolCalls) {
-            for (const block of contentBlocks) {
-              const idx = state.pendingToolUses.get(block.tool_use_id);
-              if (idx !== undefined) {
-                const result = extractToolResultText(block.content);
-                const status = block.is_error ? 'error' : 'complete';
-                toolCalls[idx].result = result;
-                toolCalls[idx].status = status;
-                state.pendingToolUses.delete(block.tool_use_id);
-                // If updating an already-broadcast message, track the update
-                if (isFlushed) {
-                  toolUpdates.push({
-                    toolUseId: block.tool_use_id,
-                    status,
-                    result,
-                  });
-                }
-              }
-            }
-          }
-          continue;
-        }
-
-        flushAssistant();
-        // Real user message — no more tool_results for previous assistant
-        state.flushedToolCalls = null;
-        state.pendingToolUses.clear();
-
-        const extracted = extractContent(entry);
-        if (extracted) {
-          messages.push({
-            role: 'user',
-            content: extracted,
-            timestamp: entry.timestamp,
-          });
-        }
-      }
-    }
-
-    // Flush remaining assistant message
-    flushAssistant();
-
-    return { messages, toolUpdates };
-  }
-
-  async function tailSession(entry) {
-    if (entry.tailQueued) return;
-    entry.tailQueued = true;
-
-    try {
-      let stat;
-      try {
-        stat = await fsp.stat(entry.filePath);
-      } catch {
-        return;
-      }
-      if (stat.size <= entry.byteOffset) return;
-
-      const fd = await fsp.open(entry.filePath, 'r');
-      try {
-        const readLen = stat.size - entry.byteOffset;
-        const buf = Buffer.alloc(readLen);
-        await fd.read(buf, 0, buf.length, entry.byteOffset);
-
-        const text = entry.partialLine + buf.toString('utf-8');
-        const lines = text.split('\n');
-        entry.partialLine = lines.pop() || '';
-        entry.byteOffset = stat.size - Buffer.byteLength(entry.partialLine, 'utf-8');
-        entry.lastGrowth = Date.now();
-
-        const validLines = lines.filter(l => l.trim());
-        if (validLines.length > 0) {
-          const { messages: newMessages, toolUpdates } = parseJsonlLinesStateful(validLines, entry.parserState);
-          if (newMessages.length > 0) {
-            broadcast('session:lines-added', {
-              sessionId: entry.sessionId,
-              messages: newMessages,
-            });
-          }
-          if (toolUpdates.length > 0) {
-            broadcast('session:tool-updated', {
-              sessionId: entry.sessionId,
-              updates: toolUpdates,
-            });
-          }
-        }
-      } finally {
-        await fd.close();
-      }
-    } catch (err) {
-      log('sessions', 'warn', `tail error for ${entry.sessionId}: ${err.message}`);
-    } finally {
-      entry.tailQueued = false;
-    }
-  }
-
-  function startFileWatcher(entry) {
-    try {
-      entry.watcher = fs.watch(entry.filePath, () => {
-        setImmediate(() => tailSession(entry));
-      });
-      entry.watcher.on('error', () => {
-        // File may have been deleted
-        if (entry.watcher) {
-          try { entry.watcher.close(); } catch {}
-          entry.watcher = null;
-        }
-      });
-    } catch (err) {
-      log('sessions', 'warn', `failed to watch ${entry.filePath}: ${err.message}`);
-    }
-  }
-
-  function stopFollowEntry(sessionId) {
-    const entry = followedSessions.get(sessionId);
-    if (!entry) return;
-    if (entry.watcher) {
-      try { entry.watcher.close(); } catch {}
-    }
-    followedSessions.delete(sessionId);
-  }
-
-  async function handleSessionFollow(ws, data) {
-    const { sessionId, fromOffset } = data || {};
-    if (!sessionId || typeof sessionId !== 'string') return;
-
-    // Enforce limit
-    if (!followedSessions.has(sessionId) && followedSessions.size >= MAX_FOLLOWED_SESSIONS) {
-      log('sessions', 'warn', `follow limit reached (${MAX_FOLLOWED_SESSIONS}), rejecting ${sessionId}`);
-      try {
-        ws.send(JSON.stringify({
-          type: 'session:follow-error',
-          data: { sessionId, error: 'max_followed_sessions' },
-        }));
-      } catch {}
-      return;
-    }
-
-    // Track client's follows
-    if (!clientFollows.has(ws)) {
-      clientFollows.set(ws, new Set());
-    }
-    const clientSet = clientFollows.get(ws);
-
-    if (followedSessions.has(sessionId)) {
-      // Already followed — increment subscriber count
-      const entry = followedSessions.get(sessionId);
-      if (!clientSet.has(sessionId)) {
-        entry.subscriberCount++;
-        clientSet.add(sessionId);
-      }
-      log('sessions', 'debug', `follow: existing ${sessionId} (subscribers: ${entry.subscriberCount})`);
-      return;
-    }
-
-    // New follow — find the JSONL file
-    const filePath = await findSessionFile(sessionId);
-    if (!filePath) {
-      log('sessions', 'warn', `follow: session file not found for ${sessionId}`);
-      try {
-        ws.send(JSON.stringify({
-          type: 'session:follow-error',
-          data: { sessionId, error: 'not_found' },
-        }));
-      } catch {}
-      return;
-    }
-
-    const entry = {
-      sessionId,
-      filePath,
-      byteOffset: typeof fromOffset === 'number' && fromOffset > 0 ? fromOffset : 0,
-      partialLine: '',
-      parserState: createParserState(),
-      subscriberCount: 1,
-      watcher: null,
-      lastGrowth: Date.now(),
-      tailQueued: false,
-    };
-
-    followedSessions.set(sessionId, entry);
-    clientSet.add(sessionId);
-
-    // Start file watcher
-    startFileWatcher(entry);
-
-    // Ensure fallback timer is running
-    if (!tailFallbackTimer) {
-      tailFallbackTimer = setInterval(tailFallbackTick, TAIL_FALLBACK_INTERVAL_MS);
-    }
-
-    // Initial tail to catch anything between history load and follow
-    setImmediate(() => tailSession(entry));
-
-    log('sessions', 'info', `follow: started ${sessionId} from offset ${entry.byteOffset}`);
-  }
-
-  function handleSessionUnfollow(ws, data) {
-    const { sessionId } = data || {};
-    if (!sessionId || typeof sessionId !== 'string') return;
-
-    const clientSet = clientFollows.get(ws);
-    if (!clientSet || !clientSet.has(sessionId)) return;
-    clientSet.delete(sessionId);
-
-    const entry = followedSessions.get(sessionId);
-    if (!entry) return;
-
-    entry.subscriberCount--;
-    if (entry.subscriberCount <= 0) {
-      stopFollowEntry(sessionId);
-      log('sessions', 'info', `unfollow: stopped ${sessionId} (no subscribers)`);
-    } else {
-      log('sessions', 'debug', `unfollow: ${sessionId} (subscribers: ${entry.subscriberCount})`);
-    }
-
-    // Stop fallback timer if no more followed sessions
-    if (followedSessions.size === 0 && tailFallbackTimer) {
-      clearInterval(tailFallbackTimer);
-      tailFallbackTimer = null;
-    }
-  }
-
-  function handleWsDisconnect(ws) {
-    const clientSet = clientFollows.get(ws);
-    if (!clientSet) return;
-
-    for (const sessionId of clientSet) {
-      const entry = followedSessions.get(sessionId);
-      if (!entry) continue;
-      entry.subscriberCount--;
-      if (entry.subscriberCount <= 0) {
-        stopFollowEntry(sessionId);
-        log('sessions', 'debug', `ws disconnect: stopped following ${sessionId}`);
-      }
-    }
-    // WeakMap will GC the entry when ws is GC'd
-
-    if (followedSessions.size === 0 && tailFallbackTimer) {
-      clearInterval(tailFallbackTimer);
-      tailFallbackTimer = null;
-    }
-  }
-
-  function tailFallbackTick() {
-    const now = Date.now();
-    for (const [sessionId, entry] of followedSessions) {
-      // Auto-cleanup idle sessions
-      if (now - entry.lastGrowth > TAIL_IDLE_TIMEOUT_MS) {
-        log('sessions', 'info', `idle cleanup: ${sessionId} (no growth for ${TAIL_IDLE_TIMEOUT_MS / 1000}s)`);
-        broadcast('session:follow-ended', { sessionId, reason: 'idle' });
-        stopFollowEntry(sessionId);
-        continue;
-      }
-      // Fallback tail for missed fs.watch events
-      setImmediate(() => tailSession(entry));
-    }
-
-    if (followedSessions.size === 0 && tailFallbackTimer) {
-      clearInterval(tailFallbackTimer);
-      tailFallbackTimer = null;
-    }
-  }
-
-  /**
-   * Handle incoming WS messages for session follow/unfollow.
-   * Called from the WS connection handler in serve.js.
-   */
-  function handleWsMessage(ws, msg) {
-    if (!msg || typeof msg !== 'object') return false;
-    if (msg.type === 'session:follow') {
-      handleSessionFollow(ws, msg);
-      return true;
-    }
-    if (msg.type === 'session:unfollow') {
-      handleSessionUnfollow(ws, msg);
-      return true;
-    }
-    return false;
-  }
-
   function cleanup() {
     clearTimeout(sessionsUpdateDebounceTimer);
     clearTimeout(sessionsWatcherRetryTimer);
@@ -2702,51 +1648,22 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
     pendingSessionsUpdate = null;
     if (sessionsWatcher) {
       try {
-        sessionsWatcher.watcher.close();
+        const watcherList = Array.isArray(sessionsWatcher.watchers)
+          ? sessionsWatcher.watchers
+          : [sessionsWatcher];
+        for (const entry of watcherList) {
+          try { entry?.watcher?.close(); } catch {}
+        }
       } catch {}
       sessionsWatcher = null;
     }
-    // Clean up tail infrastructure
-    for (const [, entry] of followedSessions) {
-      if (entry.watcher) {
-        try { entry.watcher.close(); } catch {}
-      }
-    }
-    followedSessions.clear();
-    if (tailFallbackTimer) {
-      clearInterval(tailFallbackTimer);
-      tailFallbackTimer = null;
-    }
+    tailModule.cleanup();
     if (_enrichmentTimer) {
       clearTimeout(_enrichmentTimer);
       _enrichmentTimer = null;
     }
     _lastEnrichmentProjects = null;
-    if (_reconcileInterval) {
-      clearInterval(_reconcileInterval);
-      _reconcileInterval = null;
-    }
-  }
-
-  /**
-   * Start periodic reconciliation (60s interval).
-   * Boot reconciliation should be called separately first.
-   */
-  function startPeriodicReconcile() {
-    if (_reconcileInterval) return;
-    _reconcileInterval = setInterval(() => {
-      periodicReconcile().catch(err => {
-        log('sessions', 'warn', `periodic reconcile failed: ${err.message}`);
-      });
-    }, RECONCILE_INTERVAL_MS);
-  }
-
-  /**
-   * Enable DB-as-spine for sidebar queries.
-   */
-  function enableDbSpine() {
-    useDbSpine = true;
-    log('sessions', 'info', 'DB-as-spine enabled for sidebar queries');
+    dbModule.cleanup();
   }
 
   return {
@@ -2755,8 +1672,8 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
     startSessionsWatcher,
     queueSessionsUpdated,
     invalidateSessionsProjectsCache,
-    handleWsMessage,
-    handleWsDisconnect,
+    handleWsMessage: tailModule.handleWsMessage,
+    handleWsDisconnect: tailModule.handleWsDisconnect,
     cleanup,
     // DB-as-spine
     reconcileSessionsToDb,

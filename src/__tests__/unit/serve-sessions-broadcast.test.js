@@ -11,6 +11,8 @@ import { shouldBroadcastSessionUpdate } from '../../commands/serve-sessions.js';
 
 const CLAUDE_ROOT_DIR = path.join(os.homedir(), '.claude');
 const CLAUDE_PROJECTS_DIR = path.join(CLAUDE_ROOT_DIR, 'projects');
+const CODEX_ROOT_DIR = path.join(os.homedir(), '.codex');
+const CODEX_SESSIONS_DIR = path.join(CODEX_ROOT_DIR, 'sessions');
 
 // --- shouldBroadcastSessionUpdate tests (existing + new) ---
 
@@ -37,6 +39,18 @@ describe('shouldBroadcastSessionUpdate', () => {
 
   test('rejects non-projects path from parent dir', () => {
     assert.ok(!shouldBroadcastSessionUpdate(CLAUDE_ROOT_DIR, 'config.json'));
+  });
+
+  test('accepts Codex JSONL files in sessions dir', () => {
+    assert.ok(shouldBroadcastSessionUpdate(CODEX_SESSIONS_DIR, '2026/02/14/rollout-abc.jsonl'));
+  });
+
+  test('accepts Codex sessions path from parent .codex dir', () => {
+    assert.ok(shouldBroadcastSessionUpdate(CODEX_ROOT_DIR, 'sessions/2026/02/14/rollout-abc.jsonl'));
+  });
+
+  test('rejects non-sessions path from parent .codex dir', () => {
+    assert.ok(!shouldBroadcastSessionUpdate(CODEX_ROOT_DIR, 'config.json'));
   });
 });
 
