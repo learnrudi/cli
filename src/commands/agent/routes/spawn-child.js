@@ -1,6 +1,7 @@
 /**
  * POST /agent/spawn-child — spawn a child session in its own worktree.
  * GET /agent/children/:parentSessionId — list child sessions.
+ * Provider-agnostic: uses declarative configs from providers/*.json.
  */
 
 import os from 'os';
@@ -10,7 +11,7 @@ import crypto from 'crypto';
 import { spawn, execFileSync } from 'child_process';
 import { PATHS } from '@learnrudi/env';
 import { getDb } from '@learnrudi/db';
-import { resolveClaudeBinary } from '../auth.js';
+import { loadProviderConfig, resolveProviderBinary, buildArgs, getPermissionArgs, buildEnv, hasCapability, expandConditional } from '../providers/index.js';
 import { buildSystemPrompt } from '../prompts.js';
 import { dbWrite } from '../db.js';
 import { countAlive, broadcastProcessCount, normalizeHeader } from '../helpers.js';
@@ -38,6 +39,14 @@ export function buildSpawnChildRoutes(ctx) {
       const callerSession = normalizeHeader(req.headers['x-rudi-caller-session']);
       const provider = childProvider || 'claude';
       const origin = childOrigin || 'unknown';
+
+      // Load provider config — fail fast if unknown
+      let providerConfig;
+      try {
+        providerConfig = loadProviderConfig(provider);
+      } catch (configErr) {
+        return error(res, configErr.message, 400);
+      }
 
       // --- Validation ---
       if (!childPrompt || typeof childPrompt !== 'string' || !childPrompt.trim()) {
@@ -182,9 +191,9 @@ export function buildSpawnChildRoutes(ctx) {
         .slice(0, 32) || 'child';
 
       // --- Binary ---
-      const binaryPath = resolveClaudeBinary();
+      const binaryPath = resolveProviderBinary(providerConfig);
       if (!binaryPath) {
-        return error(res, 'Claude CLI not found', 500);
+        return error(res, `${providerConfig.name} CLI not found. Run: rudi install agent:${provider}`, 500);
       }
 
       const childSessionId = crypto.randomUUID();
@@ -224,33 +233,37 @@ export function buildSpawnChildRoutes(ctx) {
                worktreePath, worktreeBranch, parentRepoRoot, parentBaseBranch, 1);
       });
 
-      // --- Build args ---
-      const childArgs = [
-        '--output-format', 'stream-json',
-        '--verbose',
-        '-p', childPrompt,
-      ];
-      if (childModel) childArgs.push('--model', childModel);
-
+      // --- Build args from provider config ---
       const childSystemPrompt = buildSystemPrompt(null, { canSpawnChildren: false });
-      if (childSystemPrompt) childArgs.push('--append-system-prompt', childSystemPrompt);
-
-      childArgs.push('--dangerously-skip-permissions');
-
-      const emptyMcpPath = path.join(os.tmpdir(), 'rudi-empty-mcp.json');
-      if (!fs.existsSync(emptyMcpPath)) {
-        fs.writeFileSync(emptyMcpPath, '{"mcpServers":{}}', { mode: 0o600 });
+      const argOptions = { prompt: childPrompt, model: childModel || undefined };
+      if (hasCapability(providerConfig, 'systemPrompt') && childSystemPrompt) {
+        argOptions.systemPrompt = childSystemPrompt;
       }
-      childArgs.push('--mcp-config', emptyMcpPath, '--strict-mcp-config');
 
-      // --- Build env ---
+      const childArgs = buildArgs(providerConfig, argOptions);
+
+      // Permission: children run fully autonomous
+      const modes = providerConfig.headless.permissionModes;
+      const autoKey = modes.agent ? 'agent' : Object.keys(modes)[0];
+      if (autoKey) childArgs.push(...getPermissionArgs(providerConfig, autoKey));
+
+      // Isolate MCP: no servers for children (only for providers that support MCP)
+      if (hasCapability(providerConfig, 'mcpConfig')) {
+        const emptyMcpPath = path.join(os.tmpdir(), 'rudi-empty-mcp.json');
+        if (!fs.existsSync(emptyMcpPath)) {
+          fs.writeFileSync(emptyMcpPath, '{"mcpServers":{}}', { mode: 0o600 });
+        }
+        childArgs.push(
+          ...expandConditional(providerConfig, 'mcpConfig', emptyMcpPath),
+          ...expandConditional(providerConfig, 'strictMcpConfig', true),
+        );
+      }
+
+      // --- Build env from provider config ---
+      const configEnv = buildEnv(providerConfig, process.env);
       const childEnv = {
         ...process.env,
-        TERM: 'xterm-256color',
-        CLAUDE_NO_UPDATE_CHECK: 'true',
-        DISABLE_AUTOUPDATE: '1',
-        NO_COLOR: '1',
-        CI: 'true',
+        ...configEnv,
       };
       const port = getSidecarPort();
       if (port > 0) {
@@ -268,11 +281,16 @@ export function buildSpawnChildRoutes(ctx) {
           stdio: ['pipe', 'pipe', 'pipe'],
         });
 
-        proc.stdin.end();
+        // Close stdin based on provider config
+        const stdinMode = providerConfig.headless.stdin;
+        if (stdinMode === 'close' || !hasCapability(providerConfig, 'inputStreaming')) {
+          proc.stdin.end();
+        }
 
         const entry = {
           proc,
           provider,
+          providerConfig,
           providerSessionId: null,
           resumeSessionId: null,
           parentSessionId,
@@ -361,7 +379,10 @@ export function buildSpawnChildRoutes(ctx) {
           },
           onResult: (event) => {
             entry.turnActive = false;
-            const costUsd = typeof event.total_cost_usd === 'number' ? event.total_cost_usd : null;
+            const costUsd =
+              typeof event.costUsd === 'number'
+                ? event.costUsd
+                : (typeof event.total_cost_usd === 'number' ? event.total_cost_usd : null);
             const providerSid = entry.providerSessionId;
             dbWrite((db) => {
               const now = new Date().toISOString();

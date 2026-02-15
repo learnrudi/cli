@@ -25,6 +25,7 @@ import { getDb, isDatabaseInitialized, initSchema } from '@learnrudi/db';
 import { WebSocketServer } from 'ws';
 import { createGitHandler, getProjectGitStatus } from './serve-git.js';
 import { createAgentHandler, createIdleReaper, resolveClaudeBinary, checkProviderAuth } from './serve-agent.js';
+import { listProviders, loadProviderConfig } from './agent/providers/index.js';
 import { createSessionsModule } from './serve-sessions.js';
 
 // Re-exports for test compatibility
@@ -831,6 +832,36 @@ const handleAgent = createAgentHandler({
 });
 
 // ---------------------------------------------------------------------------
+// Route: Agent Providers
+// ---------------------------------------------------------------------------
+
+async function handleProviders(req, res, url) {
+  if (req.method !== 'GET' || url.pathname !== '/agent/providers') return false;
+  try {
+    const providerIds = listProviders();
+    const providers = providerIds.map((id) => {
+      const config = loadProviderConfig(id);
+      return {
+        id,
+        name: config.name,
+        models: (config.models.available || [])
+          .filter((m) => !m.legacy)
+          .map((m) => ({ id: m.id, name: m.name, default: !!m.default })),
+        capabilities: {
+          planMode: !!config.capabilities?.planMode,
+          askPermission: !!config.capabilities?.permissionPromptTool,
+        },
+      };
+    });
+    json(res, { providers });
+  } catch (err) {
+    log('agent', 'error', `Failed to load providers: ${err.message}`);
+    error(res, `Failed to load providers: ${err.message}`, 500);
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // Suggestion chips — headless Haiku call
 // ---------------------------------------------------------------------------
 
@@ -1317,6 +1348,7 @@ export async function cmdServe(args, flags) {
         if (await handleGit(req, res, url)) return;
       }
       if (url.pathname.startsWith('/agent/')) {
+        if (await handleProviders(req, res, url)) return;
         if (await handleSuggest(req, res, url)) return;
         if (await handleNameSession(req, res, url)) return;
         if (await handleGenerateBranchName(req, res, url)) return;

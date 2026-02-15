@@ -174,6 +174,19 @@ export function hasCapability(config, name) {
 }
 
 /**
+ * Expand a single conditional from the provider config.
+ * Returns the expanded args array, or [] if the conditional doesn't exist.
+ * Use this instead of hardcoding CLI flags (e.g. '--mcp-config') that vary per provider.
+ */
+export function expandConditional(config, key, value) {
+  const conditionals = config.headless.args.conditionals || [];
+  const cond = conditionals.find(c => c.if === key);
+  if (!cond) return [];
+  const options = { [key]: value };
+  return cond.args.map(arg => expandTemplate(arg, options));
+}
+
+/**
  * Expand a template string like "{{model}}" or "{{tools|join:,}}" with values from options.
  */
 function expandTemplate(str, options) {

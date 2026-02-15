@@ -1,14 +1,15 @@
 /**
- * Shared stdout/stderr event parsing for Claude agent processes.
- * Consolidates the duplicated ~200-line parsing logic from /agent/start and /agent/spawn-child.
+ * Shared stdout/stderr event parsing for agent processes.
+ * Provider-agnostic: uses normalizers to map events to canonical format.
  */
 
 import { dbWrite } from './db.js';
+import { normalizeEvent, createNormalizer } from './normalizers/index.js';
 
 /**
- * Attach a stdout handler to a Claude agent process.
+ * Attach a stdout handler to an agent process.
  *
- * Common logic: buffer management, JSON line splitting, session_id capture,
+ * Common logic: buffer management, JSON line splitting, provider session capture,
  * token accumulation, tool tracking, and broadcasting.
  *
  * @param {object} ctx       - Route context (broadcast, log, resumeSessionIndex)
@@ -21,7 +22,13 @@ import { dbWrite } from './db.js';
  */
 export function attachStdoutHandler(ctx, sessionId, entry, options = {}) {
   const { onResult, onFirstData, setRunningOnCapture = true } = options;
+  const provider = entry.provider || 'claude';
   let totalBytes = 0;
+
+  // Initialize per-session stateful normalizer (null for Claude = stateless)
+  if (!entry._normalizer) {
+    entry._normalizer = createNormalizer(provider);
+  }
 
   entry.proc.stdout.on('data', (chunk) => {
     totalBytes += chunk.length;
@@ -35,12 +42,13 @@ export function attachStdoutHandler(ctx, sessionId, entry, options = {}) {
     for (const line of lines) {
       if (!line.trim()) continue;
       try {
-        const event = JSON.parse(line);
+        const rawEvent = JSON.parse(line);
 
-        // Session ID capture
-        if (event.session_id && entry.providerSessionId !== event.session_id) {
-          entry.providerSessionId = event.session_id;
-          ctx.resumeSessionIndex.set(event.session_id, sessionId);
+        // Session ID capture from raw event (before normalization buffers it)
+        const rawSid = rawEvent.session_id || rawEvent.thread_id;
+        if (rawSid && entry.providerSessionId !== rawSid) {
+          entry.providerSessionId = rawSid;
+          ctx.resumeSessionIndex.set(rawSid, sessionId);
           dbWrite((db) => {
             const now = new Date().toISOString();
             if (setRunningOnCapture) {
@@ -48,46 +56,72 @@ export function attachStdoutHandler(ctx, sessionId, entry, options = {}) {
                 UPDATE session_runtime_state
                 SET status = 'running', provider_session_id = ?, updated_at = ?
                 WHERE session_id = ?
-              `).run(event.session_id, now, sessionId);
+              `).run(rawSid, now, sessionId);
             } else {
               db.prepare(`
                 UPDATE session_runtime_state
                 SET provider_session_id = ?, updated_at = ?
                 WHERE session_id = ?
-              `).run(event.session_id, now, sessionId);
+              `).run(rawSid, now, sessionId);
             }
           });
         }
 
-        // Token accumulation
-        if (event.type === 'assistant' && event.message?.usage) {
-          const u = event.message.usage;
-          entry._turnInputTokens += u.input_tokens || 0;
-          entry._turnOutputTokens += u.output_tokens || 0;
-          entry._turnCacheReadTokens += u.cache_read_input_tokens || 0;
-          entry._turnCacheCreationTokens += u.cache_creation_input_tokens || 0;
-          if (event.message.model) entry._turnModel = event.message.model;
-        }
+        // Normalize event — returns array (0+ results for stateful, 1 for stateless)
+        const results = normalizeEvent(provider, rawEvent, entry._normalizer);
 
-        // Tool tracking
-        if (event.type === 'assistant' && Array.isArray(event.message?.content)) {
-          for (const block of event.message.content) {
-            if (block.type === 'tool_use' && block.name) {
-              entry._turnToolsUsed.push(block.name);
+        for (const { normalized, raw } of results) {
+          if (!normalized) continue;
+          const event = normalized;
+
+          // Token accumulation (normalized events have usage at top level)
+          if (event.type === 'assistant' && event.usage) {
+            const u = event.usage;
+            entry._turnInputTokens += u.inputTokens || 0;
+            entry._turnOutputTokens += u.outputTokens || 0;
+            entry._turnCacheReadTokens += u.cacheReadTokens || 0;
+            entry._turnCacheCreationTokens += u.cacheCreationTokens || 0;
+            if (event.model) entry._turnModel = event.model;
+          }
+
+          // Also capture usage from result events (Codex puts usage on turn.completed)
+          if (event.type === 'result' && event.usage) {
+            const u = event.usage;
+            entry._turnInputTokens += u.inputTokens || 0;
+            entry._turnOutputTokens += u.outputTokens || 0;
+            entry._turnCacheReadTokens += u.cacheReadTokens || 0;
+            entry._turnCacheCreationTokens += u.cacheCreationTokens || 0;
+            if (event.model) entry._turnModel = event.model;
+          }
+
+          // Tool tracking (normalized events have tool_use blocks)
+          if (event.type === 'assistant' && Array.isArray(event.content)) {
+            for (const block of event.content) {
+              if (block.type === 'tool_use' && block.name) {
+                entry._turnToolsUsed.push(block.name);
+              }
             }
           }
-        }
 
-        ctx.log('agent', 'debug', `stdout event: ${event.type}`, { sessionId: sessionId.slice(0, 8) });
-        ctx.broadcast('agent:event', { sessionId, event });
+          ctx.log('agent', 'debug', `stdout event: ${event.type}`, { sessionId: sessionId.slice(0, 8), provider });
 
-        if (event.type === 'result' && onResult) {
-          onResult(event);
+          // Broadcast A+ hybrid: normalized (for UI) + raw (for fidelity)
+          ctx.broadcast('agent:event', {
+            sessionId,
+            provider,
+            event,           // normalized (RudiEvent, Lite consumes this)
+            rawEvent: raw,   // provider-native (for debugging + future upgrades)
+          });
+
+          if (event.type === 'result' && onResult) {
+            onResult(event);
+          }
         }
       } catch {
         ctx.log('agent', 'debug', `stdout non-json: ${line.slice(0, 120)}`, { sessionId: sessionId.slice(0, 8) });
         ctx.broadcast('agent:event', {
           sessionId,
+          provider,
           event: { type: 'system', message: line },
         });
       }
@@ -96,7 +130,7 @@ export function attachStdoutHandler(ctx, sessionId, entry, options = {}) {
 }
 
 /**
- * Attach a stderr handler to a Claude agent process.
+ * Attach a stderr handler to an agent process.
  *
  * @param {object} ctx       - Route context (log, broadcast)
  * @param {string} sessionId - RUDI session ID
@@ -131,19 +165,34 @@ export function attachStderrHandler(ctx, sessionId, entry, options = {}) {
 export function flushStdoutBuffer(ctx, sessionId, entry) {
   if (!entry.stdoutBuffer.trim()) return;
   try {
-    const event = JSON.parse(entry.stdoutBuffer);
-    if (event.session_id && entry.providerSessionId !== event.session_id) {
-      entry.providerSessionId = event.session_id;
-      ctx.resumeSessionIndex.set(event.session_id, sessionId);
+    const rawEvent = JSON.parse(entry.stdoutBuffer);
+    const rawSid = rawEvent.providerSessionId || rawEvent.session_id || rawEvent.thread_id;
+    if (rawSid && entry.providerSessionId !== rawSid) {
+      entry.providerSessionId = rawSid;
+      ctx.resumeSessionIndex.set(rawSid, sessionId);
       dbWrite((db) => {
         db.prepare(`
           UPDATE session_runtime_state
           SET provider_session_id = ?, updated_at = ?
           WHERE session_id = ?
-        `).run(event.session_id, new Date().toISOString(), sessionId);
+        `).run(rawSid, new Date().toISOString(), sessionId);
       });
     }
-    ctx.broadcast('agent:event', { sessionId, event });
+
+    const provider = entry.provider || 'claude';
+    const results = [...normalizeEvent(provider, rawEvent, entry._normalizer)];
+    if (entry._normalizer && typeof entry._normalizer.flush === 'function') {
+      results.push(...entry._normalizer.flush());
+    }
+    for (const { normalized, raw } of results) {
+      if (!normalized) continue;
+      ctx.broadcast('agent:event', {
+        sessionId,
+        provider,
+        event: normalized,
+        rawEvent: raw,
+      });
+    }
   } catch {
     // ignore
   }

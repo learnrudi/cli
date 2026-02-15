@@ -1,5 +1,6 @@
 /**
- * POST /agent/start — spawn a persistent Claude agent process with streaming stdin/stdout.
+ * POST /agent/start — spawn a persistent agent process with streaming stdin/stdout.
+ * Provider-agnostic: uses declarative configs from providers/*.json.
  */
 
 import os from 'os';
@@ -8,9 +9,9 @@ import path from 'path';
 import crypto from 'crypto';
 import { spawn, execSync } from 'child_process';
 import { PATHS } from '@learnrudi/env';
-import { resolveClaudeBinary } from '../auth.js';
+import { loadProviderConfig, resolveProviderBinary, buildArgs, getPermissionArgs, buildEnv, hasCapability, expandConditional } from '../providers/index.js';
 import { buildSystemPrompt } from '../prompts.js';
-import { dbWrite } from '../db.js';
+import { dbWrite, resolveDb } from '../db.js';
 import { autoNameSession } from '../db.js';
 import { resolveReusableEntry, countAlive, broadcastProcessCount, dropResumeMappingsForSession, buildUserContent } from '../helpers.js';
 import { getRepoRoot, createSessionWorktree, restoreSessionWorktree } from '../worktree.js';
@@ -31,6 +32,7 @@ export function buildStartRoute(ctx) {
     log('agent', 'info', 'received /agent/start request', { bodyKeys: Object.keys(body), resumeSessionId: body.resumeSessionId || null });
     const {
       prompt,
+      provider: requestedProvider,
       model,
       systemPrompt,
       resumeSessionId,
@@ -41,7 +43,16 @@ export function buildStartRoute(ctx) {
       useWorktree,
       parentSessionId,
     } = body;
+    const provider = requestedProvider || 'claude';
     const isChildSession = Boolean(parentSessionId);
+
+    // Load provider config — fail fast if unknown
+    let providerConfig;
+    try {
+      providerConfig = loadProviderConfig(provider);
+    } catch (configErr) {
+      return error(res, configErr.message, 400);
+    }
     let shouldUseWorktree = useWorktree !== false;
     // Belt-and-suspenders: child sessions are always isolated.
     if (isChildSession) shouldUseWorktree = true;
@@ -65,6 +76,7 @@ export function buildStartRoute(ctx) {
         entry._turnCacheReadTokens = 0;
         entry._turnCacheCreationTokens = 0;
         entry._turnToolsUsed = [];
+        if (entry._normalizer) entry._normalizer.reset();
         // 4j. Reuse — touch updated_at
         dbWrite((db) => {
           db.prepare(`
@@ -97,10 +109,10 @@ export function buildStartRoute(ctx) {
       return true;
     }
 
-    const binaryPath = resolveClaudeBinary();
+    const binaryPath = resolveProviderBinary(providerConfig);
     if (!binaryPath) {
-      log('agent', 'error', 'Claude CLI not found');
-      return error(res, 'Claude CLI not found. Run: rudi install agent:claude', 500);
+      log('agent', 'error', `${providerConfig.name} CLI not found`);
+      return error(res, `${providerConfig.name} CLI not found. Run: rudi install agent:${provider}`, 500);
     }
 
     const sessionId = crypto.randomUUID();
@@ -109,38 +121,103 @@ export function buildStartRoute(ctx) {
       resumeSessionIndex.set(resumeSessionId, sessionId);
     }
 
-    const args = [
-      '--print',
-      '--output-format', 'stream-json',
-      '--input-format', 'stream-json',
-      '--verbose',
-    ];
-    if (model) args.push('--model', model);
-
-    // Build system prompt
+    // --- Build args from provider config ---
     const canSpawnChildren = getSidecarPort() > 0;
     const fullSystemPrompt = buildSystemPrompt(systemPrompt, { canSpawnChildren });
-    if (fullSystemPrompt) args.push('--append-system-prompt', fullSystemPrompt);
-    if (resumeSessionId) args.push('--resume', resumeSessionId);
-    if (planMode) {
-      args.push('--permission-mode', 'plan');
-    } else if (permissionMode === 'dangerouslySkipPermissions') {
-      args.push('--dangerously-skip-permissions');
-    } else {
-      args.push('--permission-mode', permissionMode || 'bypassPermissions');
+
+    // Resolve resume provider session ID from DB
+    let resolvedResumeSid = null;
+    if (resumeSessionId && hasCapability(providerConfig, 'sessionResume')) {
+      const db = resolveDb();
+      if (db) {
+        try {
+          const row = db.prepare(`
+            SELECT provider_session_id FROM session_runtime_state
+            WHERE session_id = ? OR resume_session_id = ? OR provider_session_id = ?
+          `).get(resumeSessionId, resumeSessionId, resumeSessionId);
+          resolvedResumeSid = row?.provider_session_id || null;
+        } catch (err) {
+          log('agent', 'warn', `Failed to look up provider session ID: ${err.message}`, { resumeSessionId: resumeSessionId.slice(0, 8) });
+        }
+      }
+      if (!resolvedResumeSid && resumeSessionId.length > 20) {
+        resolvedResumeSid = resumeSessionId;
+      }
+      if (resolvedResumeSid) {
+        log('agent', 'info', `resuming with provider session: ${resolvedResumeSid.slice(0, 8)}`, { resumeSessionId: resumeSessionId.slice(0, 8) });
+      } else {
+        log('agent', 'warn', `No provider session ID found for resume, starting fresh session`, { resumeSessionId: resumeSessionId.slice(0, 8) });
+      }
     }
 
-    // Pre-allow spawn tools for headless sessions
-    if (canSpawnChildren) {
+    // Resolve permission mode to config key
+    let permissionModeKey = null;
+    if (planMode && hasCapability(providerConfig, 'planMode')) {
+      permissionModeKey = 'plan';
+    } else if (permissionMode === 'dangerouslySkipPermissions') {
+      permissionModeKey = 'agent';
+    } else {
+      // Map sidecar permission modes to provider config keys
+      const modeMap = {
+        bypassPermissions: 'bypassPermissions',
+        plan: 'plan',
+        acceptEdits: 'acceptEdits',
+        delegate: 'delegate',
+        dontAsk: 'dontAsk',
+        default: 'default',
+        // Codex equivalents
+        fullAuto: 'agent',
+        dangerous: 'dangerous',
+        approve: 'approve',
+        readonly: 'readonly',
+        fullAccess: 'fullAccess',
+      };
+      const requested = permissionMode || 'bypassPermissions';
+      permissionModeKey = modeMap[requested] || requested;
+    }
+
+    // Build args using provider config
+    const argOptions = { prompt, model };
+
+    // Provider-specific arg options (Claude)
+    if (hasCapability(providerConfig, 'systemPrompt') && fullSystemPrompt) {
+      argOptions.systemPrompt = fullSystemPrompt;
+    }
+    if (resolvedResumeSid) {
+      argOptions.resumeSessionId = resolvedResumeSid;
+    }
+    if (hasCapability(providerConfig, 'inputStreaming')) {
+      argOptions.inputFormat = 'stream-json';
+    }
+
+    const args = buildArgs(providerConfig, argOptions);
+
+    // Permission mode args
+    if (permissionModeKey) {
+      const modes = providerConfig.headless.permissionModes;
+      if (modes[permissionModeKey]) {
+        args.push(...getPermissionArgs(providerConfig, permissionModeKey));
+      } else {
+        // Fall back: use most permissive mode available for this provider
+        const fallbackKey = modes.agent ? 'agent' : Object.keys(modes)[0];
+        if (fallbackKey) {
+          args.push(...getPermissionArgs(providerConfig, fallbackKey));
+          log('agent', 'info', `permission mode '${permissionModeKey}' not available for ${provider}, using '${fallbackKey}'`);
+        }
+      }
+    }
+
+    // Pre-allow spawn tools for headless sessions (Claude-specific capability)
+    if (canSpawnChildren && hasCapability(providerConfig, 'subagents')) {
       args.push(
         '--allowed-tools',
         'mcp__rudi-spawn__spawn_child,mcp__rudi-spawn__list_children'
       );
     }
 
-    // MCP config injection
+    // MCP config injection (only for providers that support it)
     let mcpConfigPath = null;
-    if (canSpawnChildren) {
+    if (canSpawnChildren && hasCapability(providerConfig, 'mcpConfig')) {
       const spawnShimPath = path.join(PATHS.home, 'bins', 'rudi-spawn');
       if (fs.existsSync(spawnShimPath)) {
         try {
@@ -165,7 +242,10 @@ export function buildStartRoute(ctx) {
           mcpConfigPath = path.join(tmpDir, `spawn-mcp-${shortId}.json`);
           fs.writeFileSync(mcpConfigPath, JSON.stringify(mergedConfig, null, 2), { mode: 0o600 });
 
-          args.push('--mcp-config', mcpConfigPath, '--strict-mcp-config');
+          args.push(
+            ...expandConditional(providerConfig, 'mcpConfig', mcpConfigPath),
+            ...expandConditional(providerConfig, 'strictMcpConfig', true),
+          );
 
           log('agent', 'info', `injected spawn MCP config: ${mcpConfigPath}`, { sessionId: shortId, serverCount: Object.keys(mergedConfig.mcpServers).length });
         } catch (mcpErr) {
@@ -174,16 +254,12 @@ export function buildStartRoute(ctx) {
       }
     }
 
+    // Build env from provider config (merges headless.env + auth env vars)
+    const configEnv = buildEnv(providerConfig, process.env);
     const env = {
       ...process.env,
-      TERM: 'xterm-256color',
-      CLAUDE_NO_UPDATE_CHECK: 'true',
-      DISABLE_AUTOUPDATE: '1',
-      NO_COLOR: '1',
+      ...configEnv,
     };
-    if (permissionMode && permissionMode !== 'default') {
-      env.CI = 'true';
-    }
     const port = getSidecarPort();
     if (port > 0) {
       env.RUDI_SIDECAR_URL = `http://127.0.0.1:${port}`;
@@ -265,8 +341,9 @@ export function buildStartRoute(ctx) {
       }
     }
 
-    log('agent', 'info', 'spawning persistent agent', {
+    log('agent', 'info', `spawning ${provider} agent`, {
       sessionId: shortId,
+      provider,
       binary: binaryPath,
       cwd: spawnCwd,
       worktreeBranch,
@@ -281,8 +358,8 @@ export function buildStartRoute(ctx) {
         INSERT INTO session_runtime_state
           (session_id, status, provider, resume_session_id, cwd, started_at, updated_at,
            worktree_path, worktree_branch, project_root, base_branch, use_worktree)
-        VALUES (?, 'starting', 'claude', ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(sessionId, resumeSessionId || null, effectiveCwd, now, now,
+        VALUES (?, 'starting', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(sessionId, provider, resumeSessionId || null, effectiveCwd, now, now,
              worktreePath, worktreeBranch, repoRoot, baseBranch, resolvedUseWorktree ? 1 : 0);
     });
 
@@ -295,7 +372,8 @@ export function buildStartRoute(ctx) {
 
       const entry = {
         proc,
-        provider: 'claude',
+        provider,
+        providerConfig,
         providerSessionId: null,
         resumeSessionId: resumeSessionId || null,
         parentSessionId: null,
@@ -322,16 +400,31 @@ export function buildStartRoute(ctx) {
 
       log('agent', 'info', `process spawned pid=${proc.pid}`, { sessionId: shortId });
 
-      const inputMsg = JSON.stringify({ type: 'user', message: { role: 'user', content: buildUserContent(prompt, images, effectiveCwd, log) } }) + '\n';
-      proc.stdin.write(inputMsg);
-      log('agent', 'debug', 'wrote first prompt to stdin', { sessionId: shortId });
+      // Deliver initial prompt via stdin based on provider config
+      const stdinMode = providerConfig.headless.stdin;
+      if (stdinMode === 'pipe' && hasCapability(providerConfig, 'inputStreaming')) {
+        // Claude: multi-turn via stream-json on stdin
+        const inputMsg = JSON.stringify({ type: 'user', message: { role: 'user', content: buildUserContent(prompt, images, effectiveCwd, log) } }) + '\n';
+        proc.stdin.write(inputMsg);
+        log('agent', 'debug', 'wrote first prompt to stdin (stream-json)', { sessionId: shortId });
+      } else if (stdinMode === 'close') {
+        // Provider that takes prompt via arg and expects stdin closed
+        proc.stdin.end();
+        log('agent', 'debug', 'closed stdin (prompt delivered via args)', { sessionId: shortId });
+      } else if (stdinMode === 'pipe') {
+        // Codex: prompt delivered via arg, stdin stays open for potential input
+        log('agent', 'debug', 'stdin pipe open (prompt delivered via args)', { sessionId: shortId });
+      }
 
       // --- stdout handler (uses shared process-io) ---
       attachStdoutHandler(ctx, sessionId, entry, {
         setRunningOnCapture: true,
         onResult: (event) => {
           entry.turnActive = false;
-          const costUsd = typeof event.total_cost_usd === 'number' ? event.total_cost_usd : null;
+          const costUsd =
+            typeof event.costUsd === 'number'
+              ? event.costUsd
+              : (typeof event.total_cost_usd === 'number' ? event.total_cost_usd : null);
           const turnNumber = entry._turnNumber;
           const turnPrompt = entry._turnPrompt || '';
           const turnModel = entry._turnModel || null;
@@ -369,8 +462,8 @@ export function buildStartRoute(ctx) {
               INSERT OR IGNORE INTO sessions
                 (id, provider, provider_session_id, origin, cwd, project_path, model, status, created_at, last_active_at,
                  turn_count, total_cost, total_input_tokens, total_output_tokens)
-              VALUES (?, 'claude', ?, 'rudi', ?, ?, ?, 'active', ?, ?, 0, 0, 0, 0)
-            `).run(providerSid, providerSid, workingDir, workingDir, turnModel, now, now);
+              VALUES (?, ?, ?, 'rudi', ?, ?, ?, 'active', ?, ?, 0, 0, 0, 0)
+            `).run(providerSid, provider, providerSid, workingDir, workingDir, turnModel, now, now);
 
             const turnId = crypto.randomUUID();
             db.prepare(`
@@ -378,9 +471,9 @@ export function buildStartRoute(ctx) {
                 (id, session_id, provider, provider_session_id, turn_number,
                  user_message, model, cost, input_tokens, output_tokens,
                  cache_read_tokens, cache_creation_tokens, tools_used, ts, ts_ms)
-              VALUES (?, ?, 'claude', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).run(
-              turnId, providerSid, providerSid, turnNumber,
+              turnId, providerSid, provider, providerSid, turnNumber,
               turnPrompt, turnModel, costUsd,
               turnInputTokens, turnOutputTokens,
               turnCacheRead, turnCacheCreation,
@@ -412,6 +505,7 @@ export function buildStartRoute(ctx) {
           entry._turnCacheReadTokens = 0;
           entry._turnCacheCreationTokens = 0;
           entry._turnToolsUsed = [];
+          if (entry._normalizer) entry._normalizer.reset();
 
           broadcast('agent:done', { sessionId, exitCode: 0, providerSessionId: entry.providerSessionId });
           queueSessionsUpdated({
@@ -486,7 +580,7 @@ export function buildStartRoute(ctx) {
 
       json(res, {
         sessionId,
-        provider: 'claude',
+        provider,
         cwd: effectiveCwd,
         currentBranch,
         repoRoot,

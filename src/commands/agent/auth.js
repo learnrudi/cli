@@ -1,5 +1,6 @@
 /**
- * Binary resolution + credential checking for Claude CLI.
+ * Provider-agnostic auth dispatcher.
+ * Routes to provider-specific auth modules (claude.js, codex.js, etc).
  */
 
 import os from 'os';
@@ -7,12 +8,25 @@ import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
 import { PATHS } from '@learnrudi/env';
+import { loadProviderConfig, resolveProviderBinary } from './providers/index.js';
+
+// Provider-specific auth modules
+import * as claudeAuth from './auth/claude.js';
+import * as codexAuth from './auth/codex.js';
+
+// Registry of provider-specific auth checkers
+const AUTH_MODULES = {
+  claude: claudeAuth,
+  codex: codexAuth,
+};
+
+// --- Legacy Claude-specific exports (for backward compat) ---
 
 let _cachedClaudeBinary = null;
 
 /**
- * Resolve the Claude binary path.
- * Returns the path or null if not found.
+ * @deprecated Use resolveProviderBinary(loadProviderConfig('claude')) instead.
+ * Kept for backward compatibility with existing code.
  */
 export function resolveClaudeBinary() {
   if (_cachedClaudeBinary) return _cachedClaudeBinary;
@@ -50,87 +64,77 @@ export function resolveClaudeBinary() {
 }
 
 /**
- * Check if Claude credentials exist (macOS keychain or API key).
+ * @deprecated Use checkProviderAuth('claude') instead.
  */
 export function checkClaudeCredential() {
-  if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
-    return { authenticated: true, method: 'oauth-token' };
-  }
-  if (process.env.ANTHROPIC_API_KEY) {
-    return { authenticated: true, method: 'api-key' };
-  }
-
-  try {
-    const envPath = path.join(PATHS.home, '.env');
-    if (fs.existsSync(envPath)) {
-      const content = fs.readFileSync(envPath, 'utf-8');
-      const oauthMatch = content.match(/^CLAUDE_CODE_OAUTH_TOKEN=(.+)$/m);
-      if (oauthMatch && oauthMatch[1].trim()) {
-        process.env.CLAUDE_CODE_OAUTH_TOKEN = oauthMatch[1].trim();
-        return { authenticated: true, method: 'oauth-token' };
-      }
-      const apiMatch = content.match(/^ANTHROPIC_API_KEY=(.+)$/m);
-      if (apiMatch && apiMatch[1].trim()) {
-        process.env.ANTHROPIC_API_KEY = apiMatch[1].trim();
-        return { authenticated: true, method: 'api-key' };
-      }
-    }
-  } catch {
-    // ignore read errors
-  }
-
-  if (os.platform() === 'darwin') {
-    try {
-      execSync('security find-generic-password -s "Claude Code-credentials"', { stdio: 'pipe' });
-      return { authenticated: true, method: 'keychain' };
-    } catch {
-      // not in keychain
-    }
-  }
-
-  const credPaths = [
-    path.join(os.homedir(), '.claude', 'credentials.json'),
-    path.join(os.homedir(), '.claude', '.credentials.json'),
-  ];
-  for (const p of credPaths) {
-    if (fs.existsSync(p)) {
-      return { authenticated: true, method: 'file' };
-    }
-  }
-
-  return { authenticated: false, method: 'none' };
+  return claudeAuth.checkClaudeCredential();
 }
 
+// --- Generic provider auth ---
+
+/**
+ * Check auth status for any provider.
+ * Routes to provider-specific auth module if available,
+ * otherwise returns generic env-var-based check.
+ */
 export async function checkProviderAuth(provider) {
-  if (provider !== 'claude') {
+  // Load provider config
+  let providerConfig;
+  try {
+    providerConfig = loadProviderConfig(provider);
+  } catch (err) {
     return {
       provider,
       ready: false,
       runtime: { installed: false },
       credential: { authenticated: false, method: 'none' },
-      action: { type: 'install', message: `Provider '${provider}' not supported yet` },
+      action: { type: 'error', message: err.message },
     };
   }
 
-  const binaryPath = resolveClaudeBinary();
+  // Resolve binary
+  const binaryPath = resolveProviderBinary(providerConfig);
+
+  // Route to provider-specific auth module if available
+  const authModule = AUTH_MODULES[provider];
+  if (authModule && typeof authModule.checkAuth === 'function') {
+    return authModule.checkAuth(providerConfig, binaryPath);
+  }
+
+  // Generic fallback: check if required env vars are present
   const runtime = { installed: !!binaryPath, path: binaryPath || undefined };
-  const credential = checkClaudeCredential();
+  const requiredEnvVars = providerConfig.headless.authEnvVars || [];
+  const missingVars = requiredEnvVars.filter(v => !process.env[v]);
+  const authenticated = missingVars.length === 0;
+
+  const credential = {
+    authenticated,
+    method: authenticated ? 'env' : 'none',
+    missing: missingVars.length > 0 ? missingVars : undefined,
+  };
+
   const ready = runtime.installed && credential.authenticated;
 
   let action = { type: 'none', message: 'Ready' };
   if (!runtime.installed) {
     action = {
       type: 'install',
-      message: 'Claude CLI not found. Install it with: rudi install agent:claude',
-      command: 'rudi install agent:claude',
+      message: `${providerConfig.name} CLI not found. Install it with: rudi install agent:${provider}`,
+      command: `rudi install agent:${provider}`,
     };
   } else if (!credential.authenticated) {
     action = {
       type: 'login',
-      message: 'Not authenticated. Run: claude login',
-      command: 'claude login',
+      message: `Missing environment variables: ${missingVars.join(', ')}`,
+      command: missingVars.map(v => `export ${v}=...`).join('\n'),
     };
   }
 
-  return { provider: 'claude', ready, runtime, credential, action };
+  return {
+    provider,
+    ready,
+    runtime,
+    credential,
+    action,
+  };
 }
