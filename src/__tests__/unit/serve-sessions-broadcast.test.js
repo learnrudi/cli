@@ -7,7 +7,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import path from 'path';
 import os from 'os';
-import { shouldBroadcastSessionUpdate } from '../../commands/serve-sessions.js';
+import { shouldBroadcastSessionUpdate } from '../../commands/serve/sessions.js';
 
 const CLAUDE_ROOT_DIR = path.join(os.homedir(), '.claude');
 const CLAUDE_PROJECTS_DIR = path.join(CLAUDE_ROOT_DIR, 'projects');

@@ -5,6 +5,6 @@
  * from this file. We re-export from the modular agent/ directory.
  */
 
-export { createAgentHandler } from './agent/index.js';
-export { createIdleReaper } from './agent/idle-reaper.js';
-export { resolveClaudeBinary, checkProviderAuth } from './agent/auth.js';
+export { createAgentHandler } from '../agent/index.js';
+export { createIdleReaper } from '../agent/idle-reaper.js';
+export { resolveClaudeBinary, checkProviderAuth } from '../agent/auth.js';

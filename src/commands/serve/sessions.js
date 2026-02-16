@@ -18,8 +18,8 @@ import {
   isToolResultOnly,
   safeParseJsonObject,
   stripSystemXml,
-} from './sessions/providers/common.js';
-import { parseSessionMessagesFromJsonl as parseSessionMessagesFromProviderRegistry } from './sessions/providers/registry.js';
+} from '../sessions/providers/common.js';
+import { parseSessionMessagesFromJsonl as parseSessionMessagesFromProviderRegistry } from '../sessions/providers/registry.js';
 
 // Phase 2 extracted modules
 import {
@@ -27,12 +27,12 @@ import {
   CLAUDE_PROJECTS_DIR,
   CODEX_ROOT_DIR,
   CODEX_SESSIONS_DIR,
-} from './sessions/constants.js';
-import { cacheSessionFileHint } from './sessions/file-hints.js';
+} from '../sessions/constants.js';
+import { cacheSessionFileHint } from '../sessions/file-hints.js';
 import {
   deriveCodexSessionIdFromFilename,
   readCodexSessionMeta,
-} from './sessions/providers/codex/discovery.js';
+} from '../sessions/providers/codex/discovery.js';
 import {
   collectJsonlFiles,
   extractSessionCwdFromJsonlChunk,
@@ -40,9 +40,9 @@ import {
   decodeProjectDirFromFilesystem,
   readSessionSnippet,
   findSessionFileEntry,
-} from './sessions/discovery.js';
-import { createSessionsDbModule } from './sessions/db.js';
-import { createSessionsTailModule } from './sessions/tail.js';
+} from '../sessions/discovery.js';
+import { createSessionsDbModule } from '../sessions/db.js';
+import { createSessionsTailModule } from '../sessions/tail.js';
 
 // ---------------------------------------------------------------------------
 // Constants (local — not extracted)
@@ -65,8 +65,8 @@ export {
 };
 
 // Re-exports from Phase 2 extracted modules (backward compatibility)
-export { extractSessionCwdFromJsonlChunk } from './sessions/discovery.js';
-export { cacheSessionFileHint } from './sessions/file-hints.js';
+export { extractSessionCwdFromJsonlChunk } from '../sessions/discovery.js';
+export { cacheSessionFileHint } from '../sessions/file-hints.js';
 
 /**
  * Count lines in a string, handling empty string correctly.

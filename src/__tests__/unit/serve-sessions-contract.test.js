@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { createSessionsModule } from '../../commands/serve-sessions.js';
+import { createSessionsModule } from '../../commands/serve/sessions.js';
 
 function createMockDb(rows) {
   return {

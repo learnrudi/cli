@@ -1,30 +1,35 @@
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { execSync } from 'node:child_process';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+// Static provider configs — inlined for compatibility with bundled/compiled builds
+// where import.meta.url and filesystem scanning are unavailable.
+import claudeConfig from './claude.json' with { type: 'json' };
+import codexConfig from './codex.json' with { type: 'json' };
+
+const PROVIDER_CONFIGS = {
+  claude: claudeConfig,
+  codex: codexConfig,
+};
 
 /**
- * List available provider IDs by scanning *.json files in the providers directory.
+ * List available provider IDs.
  */
 export function listProviders() {
-  return readdirSync(__dirname)
-    .filter(f => f.endsWith('.json'))
-    .map(f => basename(f, '.json'));
+  return Object.keys(PROVIDER_CONFIGS);
 }
 
 /**
  * Load and parse a provider config by ID.
  */
 export function loadProviderConfig(providerId) {
-  const configPath = join(__dirname, `${providerId}.json`);
-  if (!existsSync(configPath)) {
+  const config = PROVIDER_CONFIGS[providerId];
+  if (!config) {
     const available = listProviders().join(', ');
     throw new Error(`Unknown agent provider: ${providerId}. Available: ${available}`);
   }
-  return JSON.parse(readFileSync(configPath, 'utf-8'));
+  return config;
 }
 
 /**

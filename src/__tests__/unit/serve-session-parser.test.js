@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { extractSessionCwdFromJsonlChunk, parseSessionMessagesFromJsonl } from '../../commands/serve-sessions.js';
+import { extractSessionCwdFromJsonlChunk, parseSessionMessagesFromJsonl } from '../../commands/serve/sessions.js';
 
 test('parseSessionMessagesFromJsonl includes user and assistant messages', () => {
   const lines = [

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { parseWorktreeList } from '../../commands/serve-git.js';
+import { parseWorktreeList } from '../../commands/serve/git.js';
 
 test('parseWorktreeList parses single worktree', () => {
   const output = [
