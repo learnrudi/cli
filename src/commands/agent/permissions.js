@@ -414,22 +414,14 @@ export function buildPermissionRoutes(ctx) {
         return true;
       }
 
-      // Legacy fallback: stdin-based (kept for backwards compat but unlikely to fire)
-      if (!sessionId) return error(res, 'sessionId or requestId required');
-      const agentEntry = agentProcesses.get(sessionId);
-      if (!agentEntry || !agentEntry.proc || agentEntry.proc.killed) {
-        return error(res, 'No active process for this session', 400);
+      // Legacy stdin fallback removed — writing raw "y"/"n" to a process using
+      // --input-format stream-json causes a fatal JSON parse error and process crash.
+      // All permission responses must go through the hook-based requestId flow.
+      if (!requestId) {
+        log('agent', 'warn', 'permission response missing requestId — legacy stdin path removed', { sessionId: sessionId?.slice(0, 8), response });
+        return error(res, 'requestId required (legacy stdin path removed)', 400);
       }
-
-      log('agent', 'info', 'sending permission response (legacy stdin)', { sessionId: sessionId.slice(0, 8), response });
-      try {
-        agentEntry.lastActivityAt = Date.now();
-        agentEntry.proc.stdin.write(response + '\n');
-        json(res, { ok: true });
-      } catch (err) {
-        error(res, `Failed to send permission response: ${err.message}`, 500);
-      }
-      return true;
+      return error(res, 'sessionId or requestId required');
     }
 
     // GET /agent/permissions?sessionId=... — pending permission state for UI resync

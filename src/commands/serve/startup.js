@@ -10,15 +10,13 @@ import { execSync } from 'child_process';
 import { getDb, initSchema } from '@learnrudi/db';
 
 /**
- * Run all startup tasks. Call before server.listen().
+ * Run synchronous startup tasks. Call before server.listen().
+ * Heavy async work (session reconciliation) should be deferred to after listen.
  *
  * @param {object} opts
  * @param {Function} opts.log - log(source, level, message, data)
- * @param {Function} opts.reconcileSessionsToDb - async reconcile fn from sessions module
- * @param {Function} opts.enableDbSpine - enable DB-as-spine mode
- * @param {Function} opts.startPeriodicReconcile - start periodic reconcile
  */
-export async function runStartupTasks({ log, reconcileSessionsToDb, enableDbSpine, startPeriodicReconcile }) {
+export function runStartupTasks({ log }) {
   // 1. Schema init
   try {
     initSchema();
@@ -35,22 +33,13 @@ export async function runStartupTasks({ log, reconcileSessionsToDb, enableDbSpin
       WHERE status IN ('starting', 'running')
     `).run(new Date().toISOString());
     if (stale.changes > 0) {
-      console.log(`[serve] Marked ${stale.changes} stale session(s) as crashed`);
+      log('serve', 'info', `Marked ${stale.changes} stale session(s) as crashed`);
     }
   } catch (err) {
     console.warn('[serve] Failed to sweep stale sessions:', err.message);
   }
 
-  // 3. DB-as-spine: reconcile filesystem sessions into DB
-  try {
-    await reconcileSessionsToDb();
-    enableDbSpine();
-    startPeriodicReconcile();
-  } catch (err) {
-    console.warn('[serve] Session reconciliation failed, falling back to filesystem:', err.message);
-  }
-
-  // 4. Kill orphaned Claude CLI processes
+  // 3. Kill orphaned Claude CLI processes
   try {
     const psOutput = execSync('ps -axo pid=,ppid=,command=', {
       encoding: 'utf-8',
@@ -101,7 +90,7 @@ export async function runStartupTasks({ log, reconcileSessionsToDb, enableDbSpin
     // best effort only
   }
 
-  // 5. Conservative orphan worktree cleanup
+  // 4. Conservative orphan worktree cleanup
   try {
     const db = getDb();
     const orphans = db.prepare(`

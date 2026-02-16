@@ -178,6 +178,7 @@ export function buildStartRoute(ctx) {
 
     // Build args using provider config
     const argOptions = { prompt, model };
+    const stdinMode = providerConfig.headless.stdin;
 
     // Provider-specific arg options (Claude)
     if (hasCapability(providerConfig, 'systemPrompt') && fullSystemPrompt) {
@@ -186,8 +187,10 @@ export function buildStartRoute(ctx) {
     if (resolvedResumeSid) {
       argOptions.resumeSessionId = resolvedResumeSid;
     }
-    if (hasCapability(providerConfig, 'inputStreaming')) {
+    if (stdinMode === 'pipe' && hasCapability(providerConfig, 'inputStreaming')) {
       argOptions.inputFormat = 'stream-json';
+      // Prompt delivered via stdin, not -p arg
+      delete argOptions.prompt;
     }
 
     const args = buildArgs(providerConfig, argOptions);
@@ -401,7 +404,6 @@ export function buildStartRoute(ctx) {
       log('agent', 'info', `process spawned pid=${proc.pid}`, { sessionId: shortId });
 
       // Deliver initial prompt via stdin based on provider config
-      const stdinMode = providerConfig.headless.stdin;
       if (stdinMode === 'pipe' && hasCapability(providerConfig, 'inputStreaming')) {
         // Claude: multi-turn via stream-json on stdin
         const inputMsg = JSON.stringify({ type: 'user', message: { role: 'user', content: buildUserContent(prompt, images, effectiveCwd, log) } }) + '\n';

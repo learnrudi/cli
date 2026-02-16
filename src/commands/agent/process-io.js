@@ -150,10 +150,11 @@ export function attachStderrHandler(ctx, sessionId, entry, options = {}) {
 
     const text = chunk.toString().trim();
     if (text) {
+      // Log stderr server-side for debugging but don't broadcast to frontend.
+      // Most CLI stderr is informational noise (e.g. Codex "state db missing
+      // rollout path"). Real failures are signaled by process exit code — the
+      // close handler emits the appropriate error/done events.
       ctx.log('agent', 'warn', `stderr: ${text.slice(0, logSlice)}`, { sessionId: sessionId.slice(0, 8) });
-      if (entry.turnActive) {
-        ctx.broadcast('agent:error', { sessionId, error: text });
-      }
     }
   });
 }

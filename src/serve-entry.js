@@ -19,4 +19,7 @@ for (let i = 2; i < process.argv.length; i++) {
   // "serve" arg from Tauri sidecar is harmless — we always start the server
 }
 
-cmdServe([], flags);
+cmdServe([], flags).catch(err => {
+  console.error('[entry] cmdServe FAILED:', err);
+  process.exit(1);
+});

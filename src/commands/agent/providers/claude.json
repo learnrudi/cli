@@ -25,11 +25,11 @@
 
     "args": {
       "base": [
-        "-p", "{{prompt}}",
         "--output-format", "stream-json",
         "--verbose"
       ],
       "conditionals": [
+        { "if": "prompt", "args": ["-p", "{{prompt}}"] },
         { "if": "model", "args": ["--model", "{{model}}"] },
         { "if": "fallbackModel", "args": ["--fallback-model", "{{fallbackModel}}"] },
         { "if": "systemPrompt", "args": ["--append-system-prompt", "{{systemPrompt}}"] },
@@ -102,7 +102,7 @@
       "CLAUDE_CODE_OAUTH_TOKEN"
     ],
 
-    "stdin": "close",
+    "stdin": "pipe",
 
     "timeouts": {
       "startupMs": 120000,

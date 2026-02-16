@@ -49,6 +49,21 @@ const PORT_FILE = path.join(PATHS.home, '.rudi-lite-port');
 const TOKEN_FILE = path.join(PATHS.home, '.rudi-lite-token');
 const MAX_CONCURRENT = parseInt(process.env.RUDI_MAX_AGENT_PROCESSES || '10', 10) || 10;
 const IDLE_TIMEOUT_MS = parseInt(process.env.RUDI_IDLE_TIMEOUT_MS || String(10 * 60 * 1000), 10) || 10 * 60 * 1000;
+const WS_TOKEN_PROTOCOL_PREFIX = 'rudi-token.';
+
+function readWsTokenFromProtocolHeader(headerValue) {
+  if (!headerValue) return null;
+  const raw = Array.isArray(headerValue) ? headerValue.join(',') : headerValue;
+  const protocols = raw.split(',').map((p) => p.trim()).filter(Boolean);
+  for (const protocol of protocols) {
+    // Some clients/libraries may quote protocol values; strip optional quotes.
+    const normalized = protocol.replace(/^"+|"+$/g, '');
+    if (normalized.startsWith(WS_TOKEN_PROTOCOL_PREFIX)) {
+      return normalized.slice(WS_TOKEN_PROTOCOL_PREFIX.length);
+    }
+  }
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // Main server
@@ -87,8 +102,8 @@ export async function cmdServe(args, flags) {
     reconcileSessionsToDb, startPeriodicReconcile, enableDbSpine,
   } = sessionsModule;
 
-  // 5. Run startup tasks (schema, stale sweep, orphan cleanup)
-  await runStartupTasks({ log, reconcileSessionsToDb, enableDbSpine, startPeriodicReconcile });
+  // 5. Run fast synchronous startup tasks (schema, stale sweep, orphan cleanup)
+  runStartupTasks({ log });
 
   // 6. Sidecar port/token — resolved after listen()
   let sidecarPort = 0;
@@ -205,12 +220,35 @@ export async function cmdServe(args, flags) {
   });
 
   // 10. WebSocket server
-  const wss = new WebSocketServer({ noServer: true });
+  const wss = new WebSocketServer({
+    noServer: true,
+    // Avoid extension negotiation edge-cases across runtimes/webviews.
+    perMessageDeflate: false,
+    handleProtocols: (protocols) => {
+      for (const offered of protocols) {
+        const normalized = offered.replace(/^"+|"+$/g, '');
+        if (normalized.startsWith(WS_TOKEN_PROTOCOL_PREFIX)) {
+          return normalized;
+        }
+      }
+      // Allow connections that authenticate via query token and don't send
+      // Sec-WebSocket-Protocol.
+      return protocols.size === 0 ? undefined : false;
+    },
+  });
   setWss(wss);
 
   server.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url, `http://localhost`);
-    if (url.searchParams.get('token') !== token) {
+    const protocolToken = readWsTokenFromProtocolHeader(req.headers['sec-websocket-protocol']);
+    const queryToken = url.searchParams.get('token');
+    const presentedToken = protocolToken ?? queryToken;
+    if (presentedToken !== token) {
+      log('ws', 'warn', 'upgrade auth failed', {
+        path: url.pathname,
+        hasProtocolToken: !!protocolToken,
+        hasQueryToken: !!queryToken,
+      });
       socket.destroy();
       return;
     }
@@ -220,8 +258,7 @@ export async function cmdServe(args, flags) {
   });
 
   wss.on('connection', (ws) => {
-    log('ws', 'info', `client connected (total: ${wss.clients.size})`);
-    ws.send(JSON.stringify({ type: 'connected', data: { version: '0.1.0' } }));
+    log('ws', 'info', `client connected (total: ${wss.clients.size})`, { protocol: ws.protocol || null });
 
     ws.on('message', (raw) => {
       try {
@@ -269,6 +306,19 @@ export async function cmdServe(args, flags) {
     console.log(`  Token file: ${TOKEN_FILE}`);
     console.log('═'.repeat(50));
     console.log('');
+
+    // Deferred: reconcile sessions into DB (heavy async I/O, must not block startup)
+    const RECONCILE_TIMEOUT_MS = 30_000;
+    Promise.race([
+      reconcileSessionsToDb(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), RECONCILE_TIMEOUT_MS)),
+    ]).then(() => {
+      enableDbSpine();
+      startPeriodicReconcile();
+      log('sessions', 'info', 'DB-as-spine enabled after deferred reconciliation');
+    }).catch(err => {
+      log('sessions', 'warn', `Deferred reconciliation failed (${err.message}), using filesystem fallback`);
+    });
   });
 
   // 13. Cleanup on exit
