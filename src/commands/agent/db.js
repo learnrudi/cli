@@ -87,8 +87,9 @@ export function autoNameSession(entry, providerSessionId, firstMessage, cwd, bro
       // Write to DB: sessions.title (not title_override — that's for user renames)
       dbWrite((db) => {
         db.prepare(`
-          UPDATE sessions SET title = ? WHERE id = ? AND title_override IS NULL
-        `).run(title, providerSessionId);
+          UPDATE sessions SET title = ?, title_source = 'llm', title_generated_at = ?
+          WHERE id = ? AND title_override IS NULL
+        `).run(title, new Date().toISOString(), providerSessionId);
       });
 
       // Broadcast so frontends can refresh

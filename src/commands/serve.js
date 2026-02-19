@@ -51,6 +51,17 @@ const MAX_CONCURRENT = parseInt(process.env.RUDI_MAX_AGENT_PROCESSES || '10', 10
 const IDLE_TIMEOUT_MS = parseInt(process.env.RUDI_IDLE_TIMEOUT_MS || String(10 * 60 * 1000), 10) || 10 * 60 * 1000;
 const WS_TOKEN_PROTOCOL_PREFIX = 'rudi-token.';
 
+export function shouldRunInitialTurnBackfill(db) {
+  if (!db || typeof db.prepare !== 'function') return false;
+  try {
+    const turnsCount = Number(db.prepare('SELECT COUNT(*) as c FROM turns').get()?.c || 0);
+    const sessionsCount = Number(db.prepare(`SELECT COUNT(*) as c FROM sessions WHERE status != 'deleted'`).get()?.c || 0);
+    return turnsCount === 0 && sessionsCount > 0;
+  } catch {
+    return false;
+  }
+}
+
 function readWsTokenFromProtocolHeader(headerValue) {
   if (!headerValue) return null;
   const raw = Array.isArray(headerValue) ? headerValue.join(',') : headerValue;
@@ -99,7 +110,11 @@ export async function cmdServe(args, flags) {
     handleWsMessage: handleSessionsWsMessage,
     handleWsDisconnect: handleSessionsWsDisconnect,
     cleanup: cleanupSessions,
-    reconcileSessionsToDb, startPeriodicReconcile, enableDbSpine,
+    reconcileSessionsToDb, reconcileSessionTurnsToDb, backfillSessionTurnsToDb,
+    repairNoTextSessionTurnsToDb,
+    startPeriodicReconcile, startTurnIngestReconcile,
+    enableDbSpine, isDbSpineEnabled, getTurnIngestStats,
+    backfillSessionTitles, getTitleBackfillStats,
   } = sessionsModule;
 
   // 5. Run fast synchronous startup tasks (schema, stale sweep, orphan cleanup)
@@ -205,6 +220,87 @@ export async function cmdServe(args, flags) {
       if (url.pathname.startsWith('/terminal/')) {
         if (await terminalRoutes.handle(req, res, url)) return;
       }
+      if (url.pathname === '/admin/ingester' && req.method === 'GET') {
+        const stats = getTurnIngestStats();
+        json(res, { status: stats.errors.length > 0 ? 'degraded' : 'healthy', ...stats });
+        return;
+      }
+      if (url.pathname === '/admin/backfill' && req.method === 'POST') {
+        const stats = getTurnIngestStats();
+        if (!stats.backfillRunning) {
+          backfillSessionTurnsToDb()
+            .then((result) => log('sessions', 'info', 'Manual backfill complete', result))
+            .catch((err) => log('sessions', 'warn', `Manual backfill failed: ${err.message}`));
+          const next = getTurnIngestStats();
+          json(res, {
+            status: 'started',
+            backfillRunning: next.backfillRunning,
+            progress: {
+              filesDone: next.backfillFilesDone || 0,
+              filesTotal: next.backfillFilesTotal || 0,
+            },
+          });
+        } else {
+          json(res, {
+            status: 'running',
+            backfillRunning: true,
+            progress: {
+              filesDone: stats.backfillFilesDone || 0,
+              filesTotal: stats.backfillFilesTotal || 0,
+            },
+          });
+        }
+        return;
+      }
+      if (url.pathname === '/admin/repair-no-text' && req.method === 'POST') {
+        const stats = getTurnIngestStats();
+        if (!stats.repairRunning) {
+          const limitRaw = url.searchParams.get('limit');
+          const limit = limitRaw ? Number.parseInt(limitRaw, 10) : 0;
+          repairNoTextSessionTurnsToDb({ limit: Number.isFinite(limit) ? limit : 0 })
+            .then((result) => log('sessions', 'info', 'Manual no-text repair complete', result))
+            .catch((err) => log('sessions', 'warn', `Manual no-text repair failed: ${err.message}`));
+          const next = getTurnIngestStats();
+          json(res, {
+            status: 'started',
+            repairRunning: next.repairRunning,
+            progress: {
+              sessionsDone: next.repairSessionsDone || 0,
+              sessionsTotal: next.repairSessionsTotal || 0,
+            },
+          });
+        } else {
+          json(res, {
+            status: 'running',
+            repairRunning: true,
+            progress: {
+              sessionsDone: stats.repairSessionsDone || 0,
+              sessionsTotal: stats.repairSessionsTotal || 0,
+            },
+          });
+        }
+        return;
+      }
+      if (url.pathname === '/admin/title-backfill' && req.method === 'GET') {
+        json(res, getTitleBackfillStats());
+        return;
+      }
+      if (url.pathname === '/admin/title-backfill' && req.method === 'POST') {
+        const stats = getTitleBackfillStats();
+        if (!stats.running) {
+          const useLlm = url.searchParams.get('llm') !== 'false';
+          const minTurnsRaw = url.searchParams.get('minTurns');
+          const parsedMinTurns = minTurnsRaw == null ? 1 : Number.parseInt(minTurnsRaw, 10);
+          const minTurns = Number.isFinite(parsedMinTurns) && parsedMinTurns >= 0 ? parsedMinTurns : 1;
+          backfillSessionTitles({ llm: useLlm, minTurns })
+            .then((result) => log('sessions', 'info', 'Manual title backfill complete', result))
+            .catch((err) => log('sessions', 'warn', `Manual title backfill failed: ${err.message}`));
+          json(res, { status: 'started', ...getTitleBackfillStats() });
+        } else {
+          json(res, { status: 'running', ...stats });
+        }
+        return;
+      }
 
       log('http', 'warn', `404 ${req.method} ${url.pathname}`);
       error(res, 'Not found', 404);
@@ -307,17 +403,47 @@ export async function cmdServe(args, flags) {
     console.log('═'.repeat(50));
     console.log('');
 
-    // Deferred: reconcile sessions into DB (heavy async I/O, must not block startup)
-    const RECONCILE_TIMEOUT_MS = 30_000;
-    Promise.race([
-      reconcileSessionsToDb(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), RECONCILE_TIMEOUT_MS)),
-    ]).then(() => {
-      enableDbSpine();
-      startPeriodicReconcile();
-      log('sessions', 'info', 'DB-as-spine enabled after deferred reconciliation');
+    // DB spine: enable immediately if DB has rows from a prior boot, then reconcile in background
+    const db = sessionsResolveDb();
+    if (db) {
+      try {
+        const { c } = db.prepare(`SELECT COUNT(*) as c FROM sessions WHERE status != 'deleted'`).get();
+        if (c > 0) {
+          enableDbSpine();
+          log('sessions', 'info', `DB-as-spine enabled immediately (${c} existing rows)`);
+        }
+      } catch {
+        // DB not ready — will enable after reconciliation
+      }
+    }
+
+    reconcileSessionsToDb().then(async () => {
+      if (!isDbSpineEnabled()) {
+        enableDbSpine();
+        log('sessions', 'info', 'DB-as-spine enabled after reconciliation');
+      }
+      try {
+        const db = sessionsResolveDb();
+        const shouldBackfill = shouldRunInitialTurnBackfill(db);
+        if (shouldBackfill) {
+          await backfillSessionTurnsToDb();
+        } else {
+          await reconcileSessionTurnsToDb();
+        }
+      } catch (ingestErr) {
+        log('sessions', 'warn', `Turn ingest reconcile failed: ${ingestErr.message}`);
+      }
+      // Title backfill runs after turn ingest (needs turn data for first-message lookup)
+      try {
+        await backfillSessionTitles({ llm: true, minTurns: 1 });
+      } catch (titleErr) {
+        log('sessions', 'warn', `Title backfill failed: ${titleErr.message}`);
+      }
     }).catch(err => {
-      log('sessions', 'warn', `Deferred reconciliation failed (${err.message}), using filesystem fallback`);
+      log('sessions', 'warn', `Reconciliation failed: ${err.message}`);
+    }).finally(() => {
+      startPeriodicReconcile();
+      startTurnIngestReconcile();
     });
   });
 

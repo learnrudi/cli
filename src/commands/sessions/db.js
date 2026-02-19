@@ -50,13 +50,25 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
     const claudeFsIds = new Set();
     const codexFsIds = new Set();
 
+    // Batch-fetch existing snippets from DB to avoid redundant disk reads on subsequent boots
+    const existingSnippets = new Map();
+    try {
+      const rows = db.prepare('SELECT id, snippet, git_branch FROM sessions WHERE snippet IS NOT NULL').all();
+      for (const row of rows) existingSnippets.set(row.id, row);
+    } catch {
+      // non-fatal — fall back to disk reads
+    }
+
     try {
       const projectDirs = await fsp.readdir(claudeDir);
 
       for (const projDir of projectDirs) {
         const projPath = path.join(claudeDir, projDir);
         let stat;
-        try { stat = await fsp.stat(projPath); } catch { continue; }
+        try { stat = await fsp.stat(projPath); } catch (err) {
+          log('sessions', 'warn', `[reconcile] stat failed for ${projPath}: ${err.message}`);
+          continue;
+        }
         if (!stat.isDirectory()) continue;
 
         // Determine project_path
@@ -91,7 +103,10 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
 
         // Walk JSONL files
         let files;
-        try { files = await fsp.readdir(projPath); } catch { continue; }
+        try { files = await fsp.readdir(projPath); } catch (err) {
+          log('sessions', 'warn', `[reconcile] readdir failed for ${projPath}: ${err.message}`);
+          continue;
+        }
 
         for (const file of files) {
           if (!file.endsWith('.jsonl')) continue;
@@ -117,12 +132,19 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
           let snippet = firstPrompt;
           let snippetBranch = gitBranch;
           if (!snippet) {
-            try {
-              const s = await readSessionSnippet(fullPath);
-              snippet = s.firstPrompt || null;
-              if (!snippetBranch) snippetBranch = s.gitBranch || null;
-            } catch {
-              // ignore
+            // Use cached DB snippet to avoid disk read on subsequent boots
+            const cached = existingSnippets.get(sessionId);
+            if (cached?.snippet) {
+              snippet = cached.snippet;
+              if (!snippetBranch) snippetBranch = cached.git_branch || null;
+            } else {
+              try {
+                const s = await readSessionSnippet(fullPath);
+                snippet = s.firstPrompt || null;
+                if (!snippetBranch) snippetBranch = s.gitBranch || null;
+              } catch {
+                // ignore
+              }
             }
           }
 
@@ -142,7 +164,9 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
               snippet = COALESCE(sessions.snippet, excluded.snippet),
               git_branch = COALESCE(excluded.git_branch, sessions.git_branch),
               origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
-              last_active_at = MAX(sessions.last_active_at, excluded.last_active_at)
+              last_active_at = MAX(sessions.last_active_at, excluded.last_active_at),
+              status = 'active',
+              deleted_at = NULL
           `).run(
             sessionId, sessionId, fullPath,
             title, snippet, projectPath, projectPath, snippetBranch,
@@ -177,12 +201,19 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
           let snippet = firstPrompt;
           let snippetBranch = gitBranch;
           if (!snippet) {
-            try {
-              const s = await readSessionSnippet(extPath);
-              snippet = s.firstPrompt || null;
-              if (!snippetBranch) snippetBranch = s.gitBranch || null;
-            } catch {
-              // ignore
+            // Use cached DB snippet to avoid disk read on subsequent boots
+            const cached = existingSnippets.get(sessionId);
+            if (cached?.snippet) {
+              snippet = cached.snippet;
+              if (!snippetBranch) snippetBranch = cached.git_branch || null;
+            } else {
+              try {
+                const s = await readSessionSnippet(extPath);
+                snippet = s.firstPrompt || null;
+                if (!snippetBranch) snippetBranch = s.gitBranch || null;
+              } catch {
+                // ignore
+              }
             }
           }
 
@@ -202,7 +233,9 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
               snippet = COALESCE(sessions.snippet, excluded.snippet),
               git_branch = COALESCE(excluded.git_branch, sessions.git_branch),
               origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
-              last_active_at = MAX(sessions.last_active_at, excluded.last_active_at)
+              last_active_at = MAX(sessions.last_active_at, excluded.last_active_at),
+              status = 'active',
+              deleted_at = NULL
           `).run(
             sessionId, sessionId, extPath,
             title, snippet, projectPath, projectPath, snippetBranch,
@@ -233,12 +266,18 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
 
         let snippet = null;
         let cwd = meta.cwd || null;
-        try {
-          const s = await readSessionSnippet(filePath, 'codex');
-          snippet = s.firstPrompt || null;
-          if (!cwd) cwd = s.cwd || null;
-        } catch {
-          // ignore
+        // Use cached DB snippet for codex sessions too
+        const cachedCodex = existingSnippets.get(sessionId);
+        if (cachedCodex?.snippet) {
+          snippet = cachedCodex.snippet;
+        } else {
+          try {
+            const s = await readSessionSnippet(filePath, 'codex');
+            snippet = s.firstPrompt || null;
+            if (!cwd) cwd = s.cwd || null;
+          } catch {
+            // ignore
+          }
         }
         const projectPath = cwd || await inferProjectPathFromSessionFile(filePath) || os.homedir();
 
@@ -260,7 +299,9 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
             project_path = COALESCE(excluded.project_path, sessions.project_path),
             snippet = COALESCE(sessions.snippet, excluded.snippet),
             origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
-            last_active_at = MAX(sessions.last_active_at, excluded.last_active_at)
+            last_active_at = MAX(sessions.last_active_at, excluded.last_active_at),
+            status = 'active',
+            deleted_at = NULL
         `).run(
           sessionId, sessionId, filePath,
           snippet, cwd || projectPath, projectPath,
@@ -274,10 +315,14 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
       // ~/.codex/sessions/ may not exist
     }
 
-    // Prune: mark DB rows whose sessionId wasn't found on filesystem.
+    // Prune: for DB rows not confirmed by the walk, stat the file before deleting.
+    // The walk can be partial (readdir failures are silently caught), so set-difference
+    // alone would over-delete. Only mark deleted when the file is truly gone (ENOENT).
     const deleteStmt = db.prepare(
       `UPDATE sessions SET status = 'deleted', deleted_at = ? WHERE id = ?`
     );
+    const deleteTurnsStmt = db.prepare(`DELETE FROM turns WHERE session_id = ?`);
+    const deleteFilePosStmt = db.prepare(`DELETE FROM file_positions WHERE file_path = ?`);
     const pruneNow = new Date().toISOString();
     const providerPrunes = [
       { provider: 'claude', fsIds: claudeFsIds },
@@ -287,16 +332,39 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
       if (fsIds.size === 0) continue;
       try {
         const dbRows = db.prepare(
-          `SELECT id FROM sessions WHERE provider = ? AND status != 'deleted'`
+          `SELECT id, origin_native_file FROM sessions WHERE provider = ? AND status != 'deleted'`
         ).all(prov);
-        const toDelete = dbRows.filter(r => !fsIds.has(r.id));
-        for (const row of toDelete) {
-          deleteStmt.run(pruneNow, row.id);
-          pruned++;
+        const unconfirmed = dbRows.filter(r => !fsIds.has(r.id));
+        for (const row of unconfirmed) {
+          if (!row.origin_native_file) continue; // no file path — can't verify, leave alone
+          try {
+            await fsp.access(row.origin_native_file);
+            // File still exists — walk missed it (partial readdir), don't prune
+          } catch (err) {
+            if (err.code === 'ENOENT') {
+              deleteStmt.run(pruneNow, row.id);
+              deleteTurnsStmt.run(row.id);
+              if (row.origin_native_file) {
+                deleteFilePosStmt.run(row.origin_native_file);
+              }
+              pruned++;
+            }
+            // Other errors (EPERM, EIO, etc.) — leave the row alone
+          }
         }
       } catch {
         // non-fatal
       }
+    }
+
+    // One-time catch-up cleanup for previously deleted sessions that still have
+    // residual turn rows from older versions.
+    const purgedDeletedTurns = db.prepare(`
+      DELETE FROM turns
+      WHERE session_id IN (SELECT id FROM sessions WHERE status = 'deleted')
+    `).run().changes;
+    if (purgedDeletedTurns > 0) {
+      log('sessions', 'info', `[reconcile] purged ${purgedDeletedTurns} turns from deleted sessions`);
     }
 
     const duration = Date.now() - start;
@@ -358,13 +426,16 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
         }
 
         if (indexChanged && indexEntries) {
+          const titleGeneratedAt = new Date().toISOString();
           const titleStmt = db.prepare(
-            `UPDATE sessions SET title = ?, project_path = COALESCE(project_path, ?)
+            `UPDATE sessions SET title = ?, title_source = COALESCE(title_source, 'cli'),
+             title_generated_at = COALESCE(title_generated_at, ?),
+             project_path = COALESCE(project_path, ?)
              WHERE id = ? AND title_override IS NULL`
           );
           for (const e of indexEntries) {
             if (e.summary && e.sessionId) {
-              titleStmt.run(e.summary, projectPath, e.sessionId);
+              titleStmt.run(e.summary, titleGeneratedAt, projectPath, e.sessionId);
             }
           }
         }
@@ -425,14 +496,17 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
             db.prepare(`
               INSERT OR IGNORE INTO sessions
                 (id, provider, provider_session_id, origin, origin_native_file,
-                 title, snippet, cwd, project_path, git_branch,
+                 title, title_source, title_generated_at, snippet, cwd, project_path, git_branch,
                  status, created_at, last_active_at)
               VALUES (?, 'claude', ?, 'provider-import', ?,
-                      ?, ?, ?, ?, ?,
+                      ?, ?, ?, ?, ?, ?, ?,
                       'active', ?, ?)
             `).run(
               sessionId, sessionId, extPath,
-              entry.summary || null, snippet, projectPath, projectPath, gitBranch,
+              entry.summary || null,
+              entry.summary ? 'cli' : null,
+              entry.summary ? (entry.created || fstat.birthtime.toISOString()) : null,
+              snippet, projectPath, projectPath, gitBranch,
               entry.created || fstat.birthtime.toISOString(), fstat.mtime.toISOString(),
             );
             dbIds.add(sessionId);
@@ -701,6 +775,17 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
           snippet, cwd || projectPath, projectPath, gitBranch,
           fstat.birthtime.toISOString(), fstat.mtime.toISOString(),
         );
+
+        return {
+          isNew: true,
+          sessionId: resolvedSessionId,
+          provider,
+          snippet,
+          gitBranch,
+          projectPath,
+          modified: fstat.mtime.toISOString(),
+          created: fstat.birthtime.toISOString(),
+        };
       } else {
         const nowIso = new Date().toISOString();
         db.prepare(`

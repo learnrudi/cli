@@ -10,7 +10,7 @@ import fsp from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import { execSync, execFile } from 'child_process';
-import { createInterface } from 'readline';
+
 import {
   extractContent,
   extractToolResultText,
@@ -43,6 +43,9 @@ import {
 } from '../sessions/discovery.js';
 import { createSessionsDbModule } from '../sessions/db.js';
 import { createSessionsTailModule } from '../sessions/tail.js';
+import { readByteRange } from '../sessions/turn-index.js';
+import { createSessionsIngesterModule } from '../sessions/ingester.js';
+import { createTitleBackfillModule } from '../sessions/title-backfill.js';
 
 // ---------------------------------------------------------------------------
 // Constants (local — not extracted)
@@ -217,239 +220,229 @@ async function readSessionMessages(sessionId, lookup = {}) {
   return { messages, byteOffset, usage, filePath, provider };
 }
 
-// ---------------------------------------------------------------------------
-// Line-index cache — avoids reading entire JSONL for paginated loads
-// ---------------------------------------------------------------------------
-
 /**
- * Cache of session JSONL file info: line byte-offsets + usage.
- * Keyed by filePath, invalidated by mtime.
+ * Legacy JSONL pagination path (kept behind RUDI_DB_MESSAGES=0).
+ * Uses the unified count/cursor contract for compatibility.
  */
-const _sessionFileInfoCache = new Map();
-
-/**
- * Build (or return cached) line-offset index + usage for a JSONL file.
- * Line index: fast byte scan (no string allocation) — blocks the response.
- * Usage: streamed in the background — available on subsequent requests.
- */
-async function getSessionFileInfo(filePath, provider = 'claude') {
-  const stat = await fsp.stat(filePath);
-  const cached = _sessionFileInfoCache.get(filePath);
-  if (cached && cached.mtimeMs === stat.mtimeMs) return cached;
-
-  const { size } = stat;
-  if (size === 0) {
-    const empty = { lineOffsets: [], fileSize: 0, lineCount: 0, mtimeMs: stat.mtimeMs, usage: null };
-    _sessionFileInfoCache.set(filePath, empty);
-    return empty;
+async function readSessionMessagesPaginated(sessionId, { tail, before, count, cursor } = {}, lookup = {}) {
+  if (before !== undefined && count === undefined && cursor === undefined) {
+    throw new Error("The 'before' parameter is no longer supported. Use count/cursor pagination instead.");
   }
 
-  // Byte scan for line offsets — fast, no string conversion, blocks the response
-  const lineOffsets = await _buildLineOffsets(filePath, size);
-
-  // Drop trailing offset past EOF (from trailing newline)
-  if (lineOffsets.length > 0 && lineOffsets[lineOffsets.length - 1] >= size) {
-    lineOffsets.pop();
+  // Legacy translation: tail -> count
+  let normalizedCount = count;
+  if (tail !== undefined && count === undefined) {
+    const tailNum = Number(tail);
+    normalizedCount = Number.isFinite(tailNum) ? Math.min(Math.max(Math.trunc(tailNum), 1), 200) : undefined;
   }
 
-  const result = {
-    lineOffsets,
-    fileSize: size,
-    lineCount: lineOffsets.length,
-    mtimeMs: stat.mtimeMs,
-    usage: null,
-  };
-  _sessionFileInfoCache.set(filePath, result);
+  const result = await readSessionMessages(sessionId, lookup);
+  const totalTurns = result.messages.length;
+  const pageSize = (Number.isFinite(normalizedCount) && normalizedCount > 0)
+    ? normalizedCount
+    : totalTurns;
 
-  // Extract usage in background — don't block the response.
-  // Available on subsequent cached requests or if the response handler awaits it.
-  result._usagePromise = _extractUsageStreaming(filePath, provider).then(usage => {
-    result.usage = usage;
-    return usage;
-  }).catch(() => null);
-
-  return result;
-}
-
-/**
- * Byte scan for newline positions. Returns array of line-start offsets.
- * No string allocation — just reads raw bytes looking for 0x0a.
- */
-async function _buildLineOffsets(filePath, fileSize) {
-  const lineOffsets = [0]; // line 0 starts at byte 0
-  const fd = await fsp.open(filePath, 'r');
-  try {
-    const CHUNK = 1024 * 1024; // 1MB chunks — fewer async round-trips for large files
-    const buf = Buffer.alloc(CHUNK);
-    let pos = 0;
-    let bytesRead;
-    do {
-      ({ bytesRead } = await fd.read(buf, 0, CHUNK, pos));
-      for (let i = 0; i < bytesRead; i++) {
-        if (buf[i] === 0x0a) lineOffsets.push(pos + i + 1);
-      }
-      pos += bytesRead;
-    } while (bytesRead === CHUNK);
-  } finally {
-    await fd.close();
+  let endTurn = totalTurns;
+  if (cursor) {
+    endTurn = Math.min(decodeCursor(cursor), totalTurns);
   }
-  return lineOffsets;
-}
+  const startTurn = Math.max(0, endTurn - pageSize);
 
-/**
- * Extract usage stats by streaming through the file line-by-line.
- * Uses readline so only one line is in memory at a time.
- */
-async function _extractUsageStreaming(filePath, provider = 'claude') {
-  const rl = createInterface({
-    input: fs.createReadStream(filePath, { encoding: 'utf-8', highWaterMark: 256 * 1024 }),
-    crlfDelay: Infinity,
-  });
-
-  let totalInputTokens = 0, totalOutputTokens = 0, totalCacheReadTokens = 0;
-  let totalCostUsd = 0, turnCount = 0;
-  let lastRole = null, model = null, createdAt = null, lastActiveAt = null, cwd = null;
-
-  for await (const line of rl) {
-    if (!line) continue;
-    // Skip JSON-parsing huge lines (tool_result payloads) that can't contain usage data.
-    // Lines with usage/result fields are small assistant responses or result events.
-    if (line.length > 50_000 && !line.includes('"usage"') && !line.includes('"result"')) {
-      continue;
-    }
-    let entry;
-    try { entry = JSON.parse(line); } catch { continue; }
-
-    if (!createdAt && entry.timestamp) createdAt = entry.timestamp;
-    if (entry.timestamp) lastActiveAt = entry.timestamp;
-    if (!cwd && typeof entry?.cwd === 'string') cwd = entry.cwd;
-    if (!cwd && typeof entry?.payload?.cwd === 'string') cwd = entry.payload.cwd;
-
-    if (provider === 'codex') {
-      if (!model && typeof entry?.payload?.model === 'string') model = entry.payload.model;
-      if (entry?.type === 'event_msg' && entry?.payload?.type === 'token_count' && entry?.payload?.info) {
-        const usage = entry.payload.info.last_token_usage || entry.payload.info.total_token_usage || null;
-        if (usage) {
-          const output = (usage.output_tokens || 0) + (usage.reasoning_output_tokens || 0);
-          const input = (usage.input_tokens || 0) + (usage.cached_input_tokens || 0);
-          totalOutputTokens += output;
-          totalInputTokens += input;
-          totalCacheReadTokens += usage.cached_input_tokens || 0;
-        }
-      }
-      const role = getSessionEntryRole(entry, provider);
-      if (role === 'assistant' && lastRole === 'user') turnCount++;
-      if (role) lastRole = role;
-      continue;
-    }
-
-    const role = getSessionEntryRole(entry, provider);
-    const usage = entry?.message?.usage;
-
-    if (!model && entry.message?.model) model = entry.message.model;
-
-    if (usage) {
-      totalOutputTokens += usage.output_tokens || 0;
-      totalInputTokens += (usage.input_tokens || 0)
-        + (usage.cache_read_input_tokens || 0)
-        + (usage.cache_creation_input_tokens || 0);
-      totalCacheReadTokens += usage.cache_read_input_tokens || 0;
-    }
-
-    if (entry?.type === 'result' && typeof entry.total_cost_usd === 'number') {
-      totalCostUsd = entry.total_cost_usd;
-    }
-
-    if (role === 'assistant' && lastRole === 'user') turnCount++;
-    if (role) lastRole = role;
-  }
-
-  if (totalInputTokens === 0 && totalOutputTokens === 0 && !cwd && !model) return null;
   return {
-    totalInputTokens, totalOutputTokens, totalCacheReadTokens, turnCount,
-    totalCostUsd: totalCostUsd || undefined,
-    model, createdAt, lastActiveAt, cwd,
+    ...result,
+    messages: result.messages.slice(startTurn, endTurn),
+    hasMore: startTurn > 0,
+    nextCursor: startTurn > 0 ? encodeCursor(startTurn) : null,
+    totalTurns,
   };
 }
 
-/**
- * Read a byte range from a file and return as UTF-8 string.
- */
-async function _readByteRange(filePath, startByte, endByte) {
-  const len = endByte - startByte;
-  if (len <= 0) return '';
-  const fd = await fsp.open(filePath, 'r');
+/** Local alias for readByteRange — used by computeSessionDiffStatsAsync */
+const _readByteRange = readByteRange;
+
+// ---------------------------------------------------------------------------
+// Opaque cursor encoding for turn-based pagination
+// ---------------------------------------------------------------------------
+
+function encodeCursor(turnNumber) {
+  return Buffer.from(JSON.stringify({ t: turnNumber, v: 1 })).toString('base64url');
+}
+
+function decodeCursor(token) {
   try {
-    const buf = Buffer.alloc(len);
-    await fd.read(buf, 0, len, startByte);
-    return buf.toString('utf-8');
-  } finally {
-    await fd.close();
+    const obj = JSON.parse(Buffer.from(token, 'base64url').toString());
+    if (obj.v !== 1) throw new Error('Unknown cursor version');
+    if (!Number.isInteger(obj.t) || obj.t < 0) throw new Error('Invalid cursor position');
+    return obj.t;
+  } catch {
+    throw new Error('Invalid cursor');
   }
 }
 
+// ---------------------------------------------------------------------------
+// DB-backed messages read (primary path)
+// ---------------------------------------------------------------------------
+
 /**
- * Read session messages with pagination support.
- * Uses a cached line-offset index so pagination only reads the needed bytes
- * instead of the entire JSONL file.
+ * Map a DB turn row into the same two-message format as the JSONL parser.
+ * 1 turn → [userMessage, assistantMessage]
  */
-async function readSessionMessagesPaginated(sessionId, { tail, before } = {}, lookup = {}) {
-  const found = await findSessionFileEntry(sessionId, lookup);
-  if (!found?.filePath) {
-    throw new Error(`Session not found: ${sessionId}`);
+function _toNumberOrUndefined(value) {
+  return Number.isFinite(value) ? Number(value) : undefined;
+}
+
+function _parseJsonObjectOrUndefined(raw) {
+  if (typeof raw !== 'string' || !raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : undefined;
+  } catch {
+    return undefined;
   }
-  const { provider, filePath } = found;
+}
 
-  // No pagination params: full load (backward compat)
-  if (!tail && before === undefined) {
-    const content = await fsp.readFile(filePath, 'utf-8');
-    const messages = parseSessionMessagesFromJsonl(content, provider);
-    const usage = extractUsageFromJsonl(content, provider);
-    const byteOffset = Buffer.byteLength(content, 'utf-8');
-    const totalCount = content.split('\n').filter(Boolean).length;
-    return { messages, byteOffset, usage, filePath, totalCount, provider };
+function _turnToMessages(turn) {
+  const msgs = [];
+  const baseMeta = {
+    turnNumber: Number.isInteger(turn.turn_number) ? turn.turn_number : undefined,
+    providerTurnId: typeof turn.provider_turn_id === 'string' ? turn.provider_turn_id : undefined,
+    uuid: typeof turn.uuid === 'string' ? turn.uuid : undefined,
+    permissionMode: typeof turn.permission_mode === 'string' ? turn.permission_mode : undefined,
+  };
+
+  if (turn.user_message) {
+    msgs.push({
+      role: 'user',
+      content: turn.user_message,
+      timestamp: turn.ts || undefined,
+      ...baseMeta,
+    });
   }
 
-  // Build (or use cached) line index + usage
-  const info = await getSessionFileInfo(filePath, provider);
-  const { lineOffsets, fileSize, lineCount } = info;
-
-  // Determine line range
-  const endLine = before !== undefined ? Math.min(before, lineCount) : lineCount;
-  const pageSize = tail || 50;
-  const startLine = Math.max(0, endLine - pageSize);
-
-  // Read only the needed byte range
-  const startByte = lineOffsets[startLine] ?? 0;
-  const endByte = endLine < lineOffsets.length ? lineOffsets[endLine] : fileSize;
-  const content = await _readByteRange(filePath, startByte, endByte);
-  const messages = parseSessionMessagesFromJsonl(content, provider);
-
-  const hasMore = startLine > 0;
-
-  // Usage: use cached value if ready, otherwise wait briefly (200ms max).
-  // For large files, usage extraction runs in background and will be cached
-  // for subsequent requests. Frontend falls back to DB meta if null.
-  let usage = null;
-  if (before === undefined) {
-    usage = info.usage;
-    if (!usage && info._usagePromise) {
-      usage = await Promise.race([
-        info._usagePromise,
-        new Promise(resolve => setTimeout(resolve, 200, null)),
-      ]);
+  if (turn.assistant_response || turn.thinking || turn.tool_results) {
+    const assistantMsg = {
+      role: 'assistant',
+      content: turn.assistant_response || '',
+      timestamp: turn.ts || undefined,
+      ...baseMeta,
+      model: typeof turn.model === 'string' ? turn.model : undefined,
+      inputTokens: _toNumberOrUndefined(turn.input_tokens),
+      outputTokens: _toNumberOrUndefined(turn.output_tokens),
+      cacheReadTokens: _toNumberOrUndefined(turn.cache_read_tokens),
+      cacheCreationTokens: _toNumberOrUndefined(turn.cache_creation_tokens),
+      contextTokens: _toNumberOrUndefined(turn.context_tokens),
+      costUsd: _toNumberOrUndefined(turn.cost),
+      durationMs: _toNumberOrUndefined(turn.duration_ms),
+      finishReason: typeof turn.finish_reason === 'string' ? turn.finish_reason : undefined,
+      compactMetadata: _parseJsonObjectOrUndefined(turn.compact_metadata),
+    };
+    if (turn.thinking) {
+      assistantMsg.thinking = turn.thinking;
     }
+    if (turn.tool_results) {
+      try {
+        assistantMsg.toolCalls = JSON.parse(turn.tool_results);
+      } catch {
+        // leave toolCalls absent
+      }
+    }
+    msgs.push(assistantMsg);
+  }
+
+  return msgs;
+}
+
+/**
+ * Read session messages from DB turns table with cursor pagination.
+ *
+ * Response shape:
+ *   { messages, byteOffset, usage, hasMore, nextCursor, totalTurns, filePath, provider }
+ */
+async function readSessionMessagesFromDb(sessionId, { count, cursor } = {}, lookup = {}) {
+  const db = lookup.resolveDb ? lookup.resolveDb() : null;
+  if (!db) {
+    throw new Error('Database not available');
+  }
+
+  // Resolve session to get provider + filePath for byteOffset compat
+  const found = await findSessionFileEntry(sessionId, lookup);
+  const filePath = found?.filePath || null;
+  const provider = found?.provider || 'claude';
+
+  const pageSize = (Number.isFinite(count) && count > 0) ? count : 30;
+  let beforeTurnNumber;
+  if (cursor) {
+    beforeTurnNumber = decodeCursor(cursor);
+  }
+
+  // Paginated query — turns come back in ASC order
+  const limit = pageSize + 1; // one extra to detect hasMore
+  let rows;
+  if (beforeTurnNumber !== undefined) {
+    rows = db.prepare(`
+      SELECT * FROM turns
+      WHERE session_id = ? AND turn_number < ?
+      ORDER BY turn_number DESC
+      LIMIT ?
+    `).all(sessionId, beforeTurnNumber, limit);
+  } else {
+    rows = db.prepare(`
+      SELECT * FROM turns
+      WHERE session_id = ?
+      ORDER BY turn_number DESC
+      LIMIT ?
+    `).all(sessionId, limit);
+  }
+
+  const hasMore = rows.length > pageSize;
+  if (hasMore) rows = rows.slice(0, pageSize);
+  rows.reverse(); // ASC order
+
+  // Map turns → messages (1 turn = 2 messages)
+  const messages = [];
+  for (const row of rows) {
+    const turnMsgs = _turnToMessages(row);
+    messages.push(...turnMsgs);
+  }
+
+  // Build cursor from oldest turn in this page
+  const nextCursor = hasMore && rows.length > 0
+    ? encodeCursor(rows[0].turn_number)
+    : null;
+
+  // Total turns from session aggregate (fast, no COUNT(*))
+  const sessionRow = db.prepare('SELECT turn_count FROM sessions WHERE id = ?').get(sessionId);
+  const totalTurns = sessionRow?.turn_count || 0;
+
+  // Usage from session aggregates
+  const aggRow = db.prepare(`
+    SELECT total_input_tokens, total_output_tokens, total_cost, turn_count
+    FROM sessions WHERE id = ?
+  `).get(sessionId);
+  const usage = aggRow ? {
+    totalInputTokens: aggRow.total_input_tokens || 0,
+    totalOutputTokens: aggRow.total_output_tokens || 0,
+    totalCacheReadTokens: 0,
+    turnCount: aggRow.turn_count || 0,
+    totalCostUsd: aggRow.total_cost || undefined,
+  } : null;
+
+  // byteOffset from file_positions for live-tail handoff
+  let byteOffset = 0;
+  if (filePath) {
+    const fp = db.prepare('SELECT byte_offset FROM file_positions WHERE file_path = ?').get(filePath);
+    byteOffset = fp?.byte_offset || 0;
   }
 
   return {
     messages,
-    byteOffset: fileSize,
+    byteOffset,
     usage,
     filePath,
     provider,
-    before: startLine,
+    nextCursor,
     hasMore,
-    totalCount: lineCount,
+    totalTurns,
   };
 }
 
@@ -896,6 +889,37 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
   } = dbModule;
 
   // -----------------------------------------------------------------------
+  // JSONL -> DB ingester (turn-level)
+  // -----------------------------------------------------------------------
+
+  const ingesterModule = createSessionsIngesterModule({
+    log,
+    resolveDb,
+  });
+  const {
+    ingestFile: ingestSessionFile,
+    reconcileAll: reconcileSessionTurnsToDb,
+    backfillAll: backfillSessionTurnsToDb,
+    repairNoTextTurns: repairNoTextSessionTurnsToDb,
+    startPeriodicReconcile: startTurnIngestReconcile,
+    getStats: getTurnIngestStats,
+  } = ingesterModule;
+
+  // -----------------------------------------------------------------------
+  // Title backfill (heuristic + LLM)
+  // -----------------------------------------------------------------------
+
+  const titleBackfillModule = createTitleBackfillModule({
+    log,
+    resolveDb,
+    broadcast,
+  });
+  const {
+    backfillTitles: backfillSessionTitles,
+    getStats: getTitleBackfillStats,
+  } = titleBackfillModule;
+
+  // -----------------------------------------------------------------------
   // Live tail: delegated to sessions/tail.js factory
   // -----------------------------------------------------------------------
 
@@ -1019,9 +1043,30 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
             }
             if (updateData.sessionId) {
               cacheSessionFileHint(updateData.sessionId, provider, fullPath);
+              ingestSessionFile(fullPath, {
+                provider,
+                sessionId: updateData.sessionId,
+              }).catch(() => {}); // fire-and-forget
               watcherDbUpsert(updateData.sessionId, fullPath, {
                 provider,
                 projectDir: updateData.projectDir || null,
+              }).then((result) => {
+                if (result?.isNew) {
+                  // Queue a separate update with new session metadata
+                  queueSessionsUpdated({
+                    source: 'watcher-new',
+                    sessionId: result.sessionId,
+                    newSession: {
+                      sessionId: result.sessionId,
+                      provider: result.provider,
+                      firstPrompt: result.snippet,
+                      modified: result.modified,
+                      created: result.created,
+                      projectPath: result.projectPath,
+                      gitBranch: result.gitBranch,
+                    },
+                  });
+                }
               }).catch(() => {}); // fire-and-forget
             }
           }
@@ -1074,38 +1119,45 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
         if (Array.isArray(index.entries)) {
           const STALE_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes
           const now = Date.now();
-          sessions = (await Promise.all(index.entries.map(async (entry) => {
-            const fullPath = entry.fullPath || path.join(projPath, `${entry.sessionId}.jsonl`);
-            let modified = entry.modified || '';
-            // Only stat the file if the index entry looks stale (>2min old).
-            // Claude CLI only updates sessions-index.json at session boundaries,
-            // so active terminal sessions have stale index timestamps.
-            const indexAge = modified ? now - new Date(modified).getTime() : Infinity;
-            if (indexAge > STALE_THRESHOLD_MS) {
-              try {
-                const fstat = await fsp.stat(fullPath);
-                const fileMtime = fstat.mtime.toISOString();
-                if (!modified || new Date(fileMtime) > new Date(modified)) {
-                  modified = fileMtime;
+          const ENTRY_BATCH = 50;
+          for (let ei = 0; ei < index.entries.length; ei += ENTRY_BATCH) {
+            const batch = index.entries.slice(ei, ei + ENTRY_BATCH);
+            const results = await Promise.all(batch.map(async (entry) => {
+              const fullPath = entry.fullPath || path.join(projPath, `${entry.sessionId}.jsonl`);
+              let modified = entry.modified || '';
+              // Only stat the file if the index entry looks stale (>2min old).
+              // Claude CLI only updates sessions-index.json at session boundaries,
+              // so active terminal sessions have stale index timestamps.
+              const indexAge = modified ? now - new Date(modified).getTime() : Infinity;
+              if (indexAge > STALE_THRESHOLD_MS) {
+                try {
+                  const fstat = await fsp.stat(fullPath);
+                  const fileMtime = fstat.mtime.toISOString();
+                  if (!modified || new Date(fileMtime) > new Date(modified)) {
+                    modified = fileMtime;
+                  }
+                } catch {
+                  return null; // JSONL file deleted — skip phantom index entry
                 }
-              } catch {
-                return null; // JSONL file deleted — skip phantom index entry
               }
+              return {
+                sessionId: entry.sessionId,
+                provider: 'claude',
+                summary: entry.summary || '',
+                firstPrompt: entry.firstPrompt || '',
+                messageCount: entry.messageCount || 0,
+                modified,
+                created: entry.created || '',
+                gitBranch: entry.gitBranch || '',
+                originNativeFile: fullPath,
+                fullPath,
+                diffStats: null,
+              };
+            }));
+            for (const r of results) {
+              if (r) sessions.push(r);
             }
-            return {
-              sessionId: entry.sessionId,
-              provider: 'claude',
-              summary: entry.summary || '',
-              firstPrompt: entry.firstPrompt || '',
-              messageCount: entry.messageCount || 0,
-              modified,
-              created: entry.created || '',
-              gitBranch: entry.gitBranch || '',
-              originNativeFile: fullPath,
-              fullPath,
-              diffStats: null,
-            };
-          }))).filter(Boolean);
+          }
         }
 
         const indexedIds = new Set(sessions.map((s) => s.sessionId));
@@ -1488,17 +1540,49 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
       return true;
     }
 
-    // GET /sessions/:id/messages?tail=N&before=lineIndex
+    // GET /sessions/:id/messages?count=N&cursor=X (turn-based). Legacy tail is translated; before is rejected.
     const msgMatch = url.pathname.match(/^\/sessions\/([^/]+)\/messages$/);
     if (req.method === 'GET' && msgMatch) {
       const sessionId = decodeURIComponent(msgMatch[1]);
       const tailParam = url.searchParams.get('tail');
       const beforeParam = url.searchParams.get('before');
+      const countParam = url.searchParams.get('count');
+      const cursorParam = url.searchParams.get('cursor');
       const paginationOpts = {};
       if (tailParam) paginationOpts.tail = parseInt(tailParam, 10);
       if (beforeParam) paginationOpts.before = parseInt(beforeParam, 10);
+      if (countParam) paginationOpts.count = parseInt(countParam, 10);
+      if (cursorParam) paginationOpts.cursor = cursorParam;
       try {
-        const result = await readSessionMessagesPaginated(sessionId, paginationOpts, { resolveDb });
+        const useDbMessages = process.env.RUDI_DB_MESSAGES !== '0';
+        let result;
+
+        if (useDbMessages) {
+          result = await readSessionMessagesFromDb(sessionId, paginationOpts, { resolveDb });
+
+          // If DB has not caught up for this session yet, run an on-demand ingest and retry once.
+          const needsWarmup = (!paginationOpts.cursor)
+            && ((result.messages?.length || 0) === 0)
+            && ((result.totalTurns || 0) === 0);
+          if (needsWarmup) {
+            const found = await findSessionFileEntry(sessionId, { resolveDb });
+            if (found?.filePath) {
+              await ingestSessionFile(found.filePath, { provider: found.provider, sessionId });
+              result = await readSessionMessagesFromDb(sessionId, paginationOpts, { resolveDb });
+            }
+          }
+          if ((!paginationOpts.cursor)
+            && ((result.messages?.length || 0) === 0)
+            && ((result.totalTurns || 0) === 0)
+          ) {
+            log('sessions', 'debug', 'DB messages empty on initial page after warmup', {
+              sessionId: sessionId.slice(0, 8),
+            });
+          }
+        } else {
+          // Emergency fallback: full-load JSONL + slice pagination
+          result = await readSessionMessagesPaginated(sessionId, paginationOpts, { resolveDb });
+        }
         const { messages, byteOffset, filePath } = result;
         const provider = result.provider || 'claude';
         const usage = result.usage;
@@ -1530,14 +1614,17 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
           }
         }
 
-        json(res, {
+        // Build response — turn-based pagination fields only
+        const response = {
           messages,
           byteOffset,
           usage,
-          before: result.before,
           hasMore: result.hasMore,
-          totalCount: result.totalCount,
-        });
+        };
+        if (result.nextCursor !== undefined) response.nextCursor = result.nextCursor;
+        if (result.totalTurns !== undefined) response.totalTurns = result.totalTurns;
+
+        json(res, response);
 
         // Lazy DB backfill: if we extracted usage and no DB row exists, create one
         if (usage) {
@@ -1573,7 +1660,11 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
           }
         }
       } catch (err) {
-        error(res, err.message, 404);
+        const message = err?.message || String(err);
+        const status = /invalid cursor|no longer supported/i.test(message)
+          ? 400
+          : (/database not available/i.test(message) ? 503 : 404);
+        error(res, message, status);
       }
       return true;
     }
@@ -1626,8 +1717,10 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
         `).run(targetSessionId, provider, sessionId, now, now);
 
         db.prepare(`
-          UPDATE sessions SET title_override = ? WHERE id = ?
-        `).run(title, targetSessionId);
+          UPDATE sessions
+          SET title = ?, title_override = ?, title_source = 'user', title_generated_at = ?
+          WHERE id = ?
+        `).run(title, title, now, targetSessionId);
 
         json(res, { ok: true, title });
       } catch (err) {
@@ -1663,6 +1756,7 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
       _enrichmentTimer = null;
     }
     _lastEnrichmentProjects = null;
+    ingesterModule.cleanup();
     dbModule.cleanup();
   }
 
@@ -1677,7 +1771,15 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
     cleanup,
     // DB-as-spine
     reconcileSessionsToDb,
+    reconcileSessionTurnsToDb,
+    backfillSessionTurnsToDb,
+    repairNoTextSessionTurnsToDb,
     startPeriodicReconcile,
+    startTurnIngestReconcile,
     enableDbSpine,
+    isDbSpineEnabled,
+    getTurnIngestStats,
+    backfillSessionTitles,
+    getTitleBackfillStats,
   };
 }

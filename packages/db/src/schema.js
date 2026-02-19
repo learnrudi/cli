@@ -4,7 +4,7 @@
 
 import { getDb } from './index.js';
 
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 13;
 
 export const SCHEMA_SQL = `
 -- Schema version tracking
@@ -139,6 +139,7 @@ CREATE TABLE IF NOT EXISTS turns (
   output_tokens INTEGER,
   cache_read_tokens INTEGER,
   cache_creation_tokens INTEGER,
+  context_tokens INTEGER,
 
   -- Completion
   finish_reason TEXT,
@@ -357,6 +358,10 @@ CREATE TABLE IF NOT EXISTS session_runtime_state (
   turn_count INTEGER NOT NULL DEFAULT 0,
   cost_total REAL NOT NULL DEFAULT 0,
   tokens_total INTEGER NOT NULL DEFAULT 0,
+  compaction_count INTEGER NOT NULL DEFAULT 0,
+  tokens_saved_total INTEGER NOT NULL DEFAULT 0,
+  last_compaction_at TEXT,
+  last_compaction_json TEXT,
   unseen_completion INTEGER NOT NULL DEFAULT 0,
   last_error TEXT,
   worktree_path TEXT,
@@ -612,6 +617,9 @@ export function applySchemaUpdates(db) {
     ensureColumn(db, 'sessions', 'error_message', 'ALTER TABLE sessions ADD COLUMN error_message TEXT');
     // v10: project_path for DB-as-spine sidebar queries
     ensureColumn(db, 'sessions', 'project_path', 'ALTER TABLE sessions ADD COLUMN project_path TEXT');
+    // v11: title provenance tracking
+    ensureColumn(db, 'sessions', 'title_source', 'ALTER TABLE sessions ADD COLUMN title_source TEXT');
+    ensureColumn(db, 'sessions', 'title_generated_at', 'ALTER TABLE sessions ADD COLUMN title_generated_at TEXT');
 
     if (columnExists(db, 'sessions', 'session_type')) {
       db.exec("UPDATE sessions SET session_type = 'main' WHERE session_type = 'task'");
@@ -650,6 +658,7 @@ export function applySchemaUpdates(db) {
     ensureColumn(db, 'turns', 'thinking_config', 'ALTER TABLE turns ADD COLUMN thinking_config TEXT');
     ensureColumn(db, 'turns', 'image_ids', 'ALTER TABLE turns ADD COLUMN image_ids TEXT');
     ensureColumn(db, 'turns', 'compact_metadata', 'ALTER TABLE turns ADD COLUMN compact_metadata TEXT');
+    ensureColumn(db, 'turns', 'context_tokens', 'ALTER TABLE turns ADD COLUMN context_tokens INTEGER');
     ensureColumn(db, 'turns', 'logical_parent_id', 'ALTER TABLE turns ADD COLUMN logical_parent_id TEXT');
     ensureColumn(db, 'turns', 'leaf_uuid', 'ALTER TABLE turns ADD COLUMN leaf_uuid TEXT');
 
@@ -862,6 +871,10 @@ export function applySchemaUpdates(db) {
       turn_count INTEGER NOT NULL DEFAULT 0,
       cost_total REAL NOT NULL DEFAULT 0,
       tokens_total INTEGER NOT NULL DEFAULT 0,
+      compaction_count INTEGER NOT NULL DEFAULT 0,
+      tokens_saved_total INTEGER NOT NULL DEFAULT 0,
+      last_compaction_at TEXT,
+      last_compaction_json TEXT,
       unseen_completion INTEGER NOT NULL DEFAULT 0,
       last_error TEXT
     )
@@ -872,6 +885,10 @@ export function applySchemaUpdates(db) {
     ensureColumn(db, 'session_runtime_state', 'turn_count', 'ALTER TABLE session_runtime_state ADD COLUMN turn_count INTEGER NOT NULL DEFAULT 0');
     ensureColumn(db, 'session_runtime_state', 'cwd', 'ALTER TABLE session_runtime_state ADD COLUMN cwd TEXT');
     ensureColumn(db, 'session_runtime_state', 'resume_session_id', 'ALTER TABLE session_runtime_state ADD COLUMN resume_session_id TEXT');
+    ensureColumn(db, 'session_runtime_state', 'compaction_count', 'ALTER TABLE session_runtime_state ADD COLUMN compaction_count INTEGER NOT NULL DEFAULT 0');
+    ensureColumn(db, 'session_runtime_state', 'tokens_saved_total', 'ALTER TABLE session_runtime_state ADD COLUMN tokens_saved_total INTEGER NOT NULL DEFAULT 0');
+    ensureColumn(db, 'session_runtime_state', 'last_compaction_at', 'ALTER TABLE session_runtime_state ADD COLUMN last_compaction_at TEXT');
+    ensureColumn(db, 'session_runtime_state', 'last_compaction_json', 'ALTER TABLE session_runtime_state ADD COLUMN last_compaction_json TEXT');
     // Worktree isolation columns (v8)
     ensureColumn(db, 'session_runtime_state', 'worktree_path', 'ALTER TABLE session_runtime_state ADD COLUMN worktree_path TEXT');
     ensureColumn(db, 'session_runtime_state', 'worktree_branch', 'ALTER TABLE session_runtime_state ADD COLUMN worktree_branch TEXT');
@@ -989,7 +1006,7 @@ export function applySchemaUpdates(db) {
         INSERT OR IGNORE INTO model_pricing
         (provider, model_pattern, display_name, input_cost_per_mtok, output_cost_per_mtok, cache_read_cost_per_mtok, cache_write_cost_per_mtok, effective_from, notes)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run('claude', 'claude-opus-4-6-%', 'Claude Opus 4.6', 15.0, 75.0, 1.5, 18.75, '2025-01-01', 'Most capable');
+      `).run('claude', 'claude-opus-4-6%', 'Claude Opus 4.6', 5.0, 25.0, 0.50, 6.25, '2025-01-01', 'Most capable');
     }
   }
 }
@@ -1248,6 +1265,10 @@ function runMigrations(db, from, to) {
             turn_count INTEGER NOT NULL DEFAULT 0,
             cost_total REAL NOT NULL DEFAULT 0,
             tokens_total INTEGER NOT NULL DEFAULT 0,
+            compaction_count INTEGER NOT NULL DEFAULT 0,
+            tokens_saved_total INTEGER NOT NULL DEFAULT 0,
+            last_compaction_at TEXT,
+            last_compaction_json TEXT,
             unseen_completion INTEGER NOT NULL DEFAULT 0,
             last_error TEXT
           );
@@ -1281,6 +1302,118 @@ function runMigrations(db, from, to) {
       applySchemaUpdates(db);
       // Backfill project_path from cwd for existing rows
       db.exec(`UPDATE sessions SET project_path = cwd WHERE project_path IS NULL AND cwd IS NOT NULL`);
+    },
+
+    // Version 11: Add context_tokens to turns and backfill approximate values
+    11: (db) => {
+      applySchemaUpdates(db);
+      db.exec(`
+        UPDATE turns
+        SET context_tokens = input_tokens
+        WHERE context_tokens IS NULL
+          AND input_tokens IS NOT NULL
+          AND input_tokens > 0
+      `);
+    },
+
+    // Version 12: Fix model pricing (correct cache rates) and recompute all costs
+    12: (db) => {
+      // Update pricing to correct Anthropic rates
+      // https://platform.claude.com/docs/en/about-claude/pricing
+      // Cache read = 0.1x input, Cache write (5min) = 1.25x input
+      const updates = [
+        ['claude-opus-4-6%', 5.0, 25.0, 0.50, 6.25],
+        ['claude-opus-4-5-%', 5.0, 25.0, 0.50, 6.25],
+        ['claude-sonnet-4-5-%', 3.0, 15.0, 0.30, 3.75],
+        ['claude-haiku-4-5-%', 1.0, 5.0, 0.10, 1.25],
+        // 3.5 models — correct cache rates
+        ['claude-3-5-haiku-%', 0.8, 4.0, 0.08, 1.0],
+        ['claude-3-5-sonnet-%', 3.0, 15.0, 0.30, 3.75],
+      ];
+      const updateStmt = db.prepare(`
+        UPDATE model_pricing
+        SET input_cost_per_mtok = ?, output_cost_per_mtok = ?,
+            cache_read_cost_per_mtok = ?, cache_write_cost_per_mtok = ?
+        WHERE model_pattern = ?
+      `);
+      for (const [pattern, inp, out, cr, cw] of updates) {
+        updateStmt.run(inp, out, cr, cw, pattern);
+      }
+
+      // Recompute all turn costs using corrected formula:
+      // base_input = input_tokens - cache_read_tokens - cache_creation_tokens
+      // cost = base_input * input_rate + output * output_rate + cache_read * cache_read_rate + cache_creation * cache_write_rate
+      //
+      // Use a join-based UPDATE to avoid correlated subquery issues with SQLite
+      const pricingRows = db.prepare('SELECT model_pattern, provider, input_cost_per_mtok, output_cost_per_mtok, cache_read_cost_per_mtok, cache_write_cost_per_mtok FROM model_pricing').all();
+      const updateCost = db.prepare('UPDATE turns SET cost = ? WHERE id = ?');
+      const allTurns = db.prepare('SELECT id, provider, model, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens FROM turns WHERE (input_tokens > 0 OR output_tokens > 0) AND model IS NOT NULL').all();
+      for (const turn of allTurns) {
+        const entry = pricingRows.find(p => {
+          if (p.provider !== turn.provider) return false;
+          const re = new RegExp('^' + p.model_pattern.replace(/%/g, '.*').replace(/_/g, '.') + '$');
+          return re.test(turn.model);
+        });
+        if (!entry) continue;
+        const baseInput = Math.max((turn.input_tokens || 0) - (turn.cache_read_tokens || 0) - (turn.cache_creation_tokens || 0), 0);
+        const cost =
+          baseInput * entry.input_cost_per_mtok / 1_000_000 +
+          (turn.output_tokens || 0) * entry.output_cost_per_mtok / 1_000_000 +
+          (turn.cache_read_tokens || 0) * entry.cache_read_cost_per_mtok / 1_000_000 +
+          (turn.cache_creation_tokens || 0) * entry.cache_write_cost_per_mtok / 1_000_000;
+        updateCost.run(cost, turn.id);
+      }
+
+      // Recompute session aggregates
+      db.exec(`
+        UPDATE sessions SET
+          total_cost = COALESCE((SELECT SUM(cost) FROM turns WHERE turns.session_id = sessions.id), 0),
+          total_input_tokens = COALESCE((SELECT SUM(input_tokens) FROM turns WHERE turns.session_id = sessions.id), 0),
+          total_output_tokens = COALESCE((SELECT SUM(output_tokens) FROM turns WHERE turns.session_id = sessions.id), 0)
+      `);
+    },
+
+    // Version 13: Fix opus-4-6 pricing pattern (was claude-opus-4-6-%, now claude-opus-4-6%)
+    // The old pattern required a trailing dash, so "claude-opus-4-6" fell through to
+    // "claude-opus-4-%" at $15/mtok instead of the correct $5/mtok
+    13: (db) => {
+      // Rename the pattern
+      db.prepare(`
+        UPDATE model_pricing SET model_pattern = 'claude-opus-4-6%'
+        WHERE model_pattern = 'claude-opus-4-6-%'
+      `).run();
+
+      // Recompute all turn costs with correct specificity-sorted pricing
+      const pricingRows = db.prepare(
+        'SELECT model_pattern, provider, input_cost_per_mtok, output_cost_per_mtok, cache_read_cost_per_mtok, cache_write_cost_per_mtok FROM model_pricing ORDER BY LENGTH(model_pattern) DESC'
+      ).all();
+      const updateCost = db.prepare('UPDATE turns SET cost = ? WHERE id = ?');
+      const allTurns = db.prepare(
+        'SELECT id, provider, model, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens FROM turns WHERE (input_tokens > 0 OR output_tokens > 0) AND model IS NOT NULL'
+      ).all();
+      for (const turn of allTurns) {
+        const entry = pricingRows.find(p => {
+          if (p.provider !== null && p.provider !== turn.provider) return false;
+          const re = new RegExp('^' + p.model_pattern.replace(/%/g, '.*').replace(/_/g, '.') + '$');
+          return re.test(turn.model);
+        });
+        if (!entry) continue;
+        const baseInput = Math.max((turn.input_tokens || 0) - (turn.cache_read_tokens || 0) - (turn.cache_creation_tokens || 0), 0);
+        const cost =
+          baseInput * entry.input_cost_per_mtok / 1_000_000 +
+          (turn.output_tokens || 0) * entry.output_cost_per_mtok / 1_000_000 +
+          (turn.cache_read_tokens || 0) * entry.cache_read_cost_per_mtok / 1_000_000 +
+          (turn.cache_creation_tokens || 0) * entry.cache_write_cost_per_mtok / 1_000_000;
+        updateCost.run(cost, turn.id);
+      }
+
+      // Recompute session aggregates
+      db.exec(`
+        UPDATE sessions SET
+          total_cost = COALESCE((SELECT SUM(cost) FROM turns WHERE turns.session_id = sessions.id), 0),
+          total_input_tokens = COALESCE((SELECT SUM(input_tokens) FROM turns WHERE turns.session_id = sessions.id), 0),
+          total_output_tokens = COALESCE((SELECT SUM(output_tokens) FROM turns WHERE turns.session_id = sessions.id), 0)
+      `);
     }
   };
 
@@ -1434,11 +1567,13 @@ export function seedModelPricing(db) {
 
   const pricingData = [
     // Claude models (Anthropic)
-    ['claude', 'claude-opus-4-6-%', 'Claude Opus 4.6', 15.0, 75.0, 1.5, 18.75, '2025-01-01', 'Most capable'],
-    ['claude', 'claude-opus-4-5-%', 'Claude Opus 4.5', 15.0, 75.0, 1.5, 18.75, '2025-01-01', 'Most capable'],
-    ['claude', 'claude-sonnet-4-5-%', 'Claude Sonnet 4.5', 3.0, 15.0, 0.3, 3.75, '2025-01-01', 'Best balance'],
-    ['claude', 'claude-haiku-4-5-%', 'Claude Haiku 4.5', 0.8, 4.0, 0.08, 1.0, '2025-01-01', 'Fastest'],
-    ['claude', 'claude-opus-4-1-%', 'Claude Opus 4.1', 15.0, 75.0, 1.5, 18.75, '2025-01-01', 'Previous gen'],
+    // Pricing from https://platform.claude.com/docs/en/about-claude/pricing
+    // Cache read = 0.1x input, Cache write (5min) = 1.25x input
+    ['claude', 'claude-opus-4-6%', 'Claude Opus 4.6', 5.0, 25.0, 0.50, 6.25, '2025-01-01', 'Most capable'],
+    ['claude', 'claude-opus-4-5-%', 'Claude Opus 4.5', 5.0, 25.0, 0.50, 6.25, '2025-01-01', 'Most capable'],
+    ['claude', 'claude-sonnet-4-5-%', 'Claude Sonnet 4.5', 3.0, 15.0, 0.30, 3.75, '2025-01-01', 'Best balance'],
+    ['claude', 'claude-haiku-4-5-%', 'Claude Haiku 4.5', 1.0, 5.0, 0.10, 1.25, '2025-01-01', 'Fastest'],
+    ['claude', 'claude-opus-4-1-%', 'Claude Opus 4.1', 15.0, 75.0, 1.50, 18.75, '2025-01-01', 'Previous gen'],
     ['claude', 'claude-3-5-haiku-%', 'Claude 3.5 Haiku', 0.8, 4.0, 0.08, 1.0, '2024-10-01', 'Legacy'],
     ['claude', 'claude-3-5-sonnet-%', 'Claude 3.5 Sonnet', 3.0, 15.0, 0.3, 3.75, '2024-06-01', 'Legacy'],
 
