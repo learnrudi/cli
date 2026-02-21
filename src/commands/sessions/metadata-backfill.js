@@ -53,6 +53,19 @@ async function _walkAgentFiles() {
     try { entries = await fsp.readdir(projPath); } catch { continue; }
 
     for (const entry of entries) {
+      // Root-level agent-*.jsonl files (older format)
+      if (entry.startsWith('agent-') && entry.endsWith('.jsonl')) {
+        results.push({
+          filePath: path.join(projPath, entry),
+          sessionId: entry.slice(0, -6),
+          parentSessionId: null,         // will be read from JSONL header
+          agentId: entry.slice(6, -6),
+          projDir,
+        });
+        continue;
+      }
+
+      // UUID session dirs with subagents/ subdirectory
       if (!entry.match(/^[0-9a-f]{8}-/)) continue;
       const subagentsDir = path.join(projPath, entry, 'subagents');
       let subFiles;
@@ -91,6 +104,8 @@ async function _enrichFromFile(filePath) {
     let gitBranch = null;
     let isSidechain = null;
     let model = null;
+    let parentSessionId = null;
+    let agentId = null;
 
     // Parse first line (user entry with header fields)
     if (lines.length > 0) {
@@ -99,6 +114,8 @@ async function _enrichFromFile(filePath) {
         if (typeof first.cwd === 'string') cwd = first.cwd;
         if (typeof first.gitBranch === 'string') gitBranch = first.gitBranch;
         if (typeof first.isSidechain === 'boolean') isSidechain = first.isSidechain ? 1 : 0;
+        if (typeof first.sessionId === 'string') parentSessionId = first.sessionId;
+        if (typeof first.agentId === 'string') agentId = first.agentId;
       } catch {
         // malformed first line
       }
@@ -124,7 +141,7 @@ async function _enrichFromFile(filePath) {
       }
     }
 
-    return { cwd, gitBranch, isSidechain, model };
+    return { cwd, gitBranch, isSidechain, model, parentSessionId, agentId };
   } catch {
     return null;
   } finally {
@@ -232,8 +249,8 @@ export function createMetadataBackfillModule({ log, resolveDb, broadcast }) {
           cwd: enriched.cwd,
           projectPath,
           gitBranch: enriched.gitBranch,
-          parentSessionId: af?.parentSessionId || null,
-          agentId: af?.agentId || null,
+          parentSessionId: af?.parentSessionId || enriched.parentSessionId || null,
+          agentId: af?.agentId || enriched.agentId || null,
           isSidechain: enriched.isSidechain,
           sessionType: 'task',
           model: enriched.model,
