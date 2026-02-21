@@ -191,45 +191,50 @@ export async function cmdSession(args, flags) {
 rudi session - Manage RUDI sessions
 
 COMMANDS
-  list [--provider] [--project] [--limit]   List sessions with filters
+  list [options]                             List sessions with filters
   show <id>                                  Show session details
   rename <id> <title>                        Rename a session
   delete <id> [--force]                      Delete a session
   tag <id> <tags>                            Add tags (comma-separated)
+  tag <id> --list                            List tags on a session
+  tag <id> --remove <tag>                    Remove a tag
   move <id> --project <name>                 Move session to project
   export <id> [-o file]                      Export session to JSON
 
-SEMANTIC SEARCH
+SEARCH
+  search <query> [--scope titles]           Search turns (default) or titles
+  search <query> --semantic                  Semantic search (requires embeddings)
   setup                                      Check/setup embedding providers
-  search <query> [--semantic] [--limit]     Search sessions (FTS or semantic)
   index [--embeddings] [--provider X]        Index sessions for semantic search
   similar <id> [--limit]                     Find similar sessions
 
-ORGANIZATION (batch operations)
+ORGANIZATION
   organize [--dry-run] [--out plan.json]     Auto-organize sessions into projects
 
-OPTIONS
+LIST OPTIONS
   --provider <name>     Filter by provider (claude, codex, gemini)
   --project <name>      Filter by project name
-  --limit <n>           Limit results (default: 10)
+  --tag <name>          Filter by tag
+  --since <date>        Sessions active since date (ISO or YYYY-MM-DD)
+  --until <date>        Sessions active until date
+  --days <n>            Sessions active in last N days
+  --limit <n>           Limit results (default: 20)
   --format <fmt>        Output format (table, json, jsonl)
-  --force               Skip confirmation prompts
+
+SEARCH OPTIONS
+  --scope <s>           Search scope: turns (default) or titles
   --semantic            Use semantic search (requires embeddings)
-  -o, --output <file>   Output file for export
+  --limit <n>           Limit results (default: 10)
 
 EXAMPLES
-  rudi session list --provider claude --limit 10
-  rudi session show 7bfa7be7-337f-42d3-90ac-3c8e48b921cb
-  rudi session rename 7bfa7be7... "New Title"
-  rudi session delete 7bfa7be7... --force
+  rudi session list --days 7
+  rudi session list --since 2026-02-01 --until 2026-02-15
+  rudi session list --provider claude --tag auth
+  rudi session search "authentication bugs"
+  rudi session search "auth refactor" --scope titles
   rudi session tag 7bfa7be7... "bug,auth,urgent"
-  rudi session move 7bfa7be7... --project resonance
-  rudi session export 7bfa7be7... -o session.json
-
-  # Semantic search
-  rudi session search "authentication bugs" --semantic
-  rudi session index --embeddings
-  rudi session similar 7bfa7be7...
+  rudi session tag 7bfa7be7... --remove bug
+  rudi session search "auth" --semantic
 `);
   }
 }
@@ -245,7 +250,13 @@ function sessionList(flags) {
   const limit = flags.limit || 20;
   const provider = flags.provider;
   const projectName = flags.project;
+  const tag = flags.tag;
   const format = flags.format || 'table';
+
+  // Date filtering
+  const since = flags.since;
+  const until = flags.until;
+  const days = flags.days;
 
   let query = `
     SELECT
@@ -274,6 +285,25 @@ function sessionList(flags) {
   if (projectName) {
     query += ` AND p.name LIKE ?`;
     params.push(`%${projectName}%`);
+  }
+
+  if (tag) {
+    query += ` AND s.id IN (SELECT st.session_id FROM session_tags st JOIN tags t ON st.tag_id = t.id WHERE t.name = ?)`;
+    params.push(tag);
+  }
+
+  if (days) {
+    query += ` AND s.last_active_at >= datetime('now', ?)`;
+    params.push(`-${parseInt(days, 10)} days`);
+  } else {
+    if (since) {
+      query += ` AND s.last_active_at >= ?`;
+      params.push(since);
+    }
+    if (until) {
+      query += ` AND s.last_active_at <= ?`;
+      params.push(until);
+    }
   }
 
   query += ` ORDER BY s.last_active_at DESC LIMIT ?`;
@@ -438,8 +468,93 @@ function sessionDelete(args, flags) {
 }
 
 function sessionTag(args, flags) {
-  console.log('Session tagging not yet implemented');
-  console.log('Coming soon: Tag sessions for better organization');
+  if (!isDatabaseInitialized()) {
+    console.log('Database not initialized.');
+    return;
+  }
+
+  const sessionId = args[0];
+  if (!sessionId) {
+    console.log('Error: Session ID required');
+    console.log('Usage: rudi session tag <id> <tags>         Add tags (comma-separated)');
+    console.log('       rudi session tag <id> --remove <tag>  Remove a tag');
+    console.log('       rudi session tag <id> --list          List tags');
+    return;
+  }
+
+  const db = getDb();
+
+  // Resolve session
+  const session = db.prepare(`
+    SELECT id, title FROM sessions
+    WHERE id = ? OR provider_session_id = ?
+  `).get(sessionId, sessionId);
+
+  if (!session) {
+    console.log(`Session not found: ${sessionId}`);
+    return;
+  }
+
+  // List tags
+  if (flags.list || (!args[1] && !flags.remove)) {
+    const tags = db.prepare(`
+      SELECT t.name FROM tags t
+      JOIN session_tags st ON st.tag_id = t.id
+      WHERE st.session_id = ?
+      ORDER BY t.name
+    `).all(session.id);
+
+    if (tags.length === 0) {
+      console.log(`No tags on session: ${session.title || session.id.substring(0, 8)}`);
+    } else {
+      console.log(`Tags for "${session.title || session.id.substring(0, 8)}":`);
+      console.log(`  ${tags.map(t => t.name).join(', ')}`);
+    }
+    return;
+  }
+
+  // Remove tag
+  if (flags.remove) {
+    const tagName = flags.remove;
+    const tag = db.prepare('SELECT id FROM tags WHERE name = ?').get(tagName);
+    if (!tag) {
+      console.log(`Tag not found: ${tagName}`);
+      return;
+    }
+    const result = db.prepare('DELETE FROM session_tags WHERE session_id = ? AND tag_id = ?').run(session.id, tag.id);
+    if (result.changes > 0) {
+      console.log(`Removed tag "${tagName}" from session`);
+    } else {
+      console.log(`Session didn't have tag "${tagName}"`);
+    }
+    return;
+  }
+
+  // Add tags
+  const tagNames = args.slice(1).join(' ').split(',').map(t => t.trim()).filter(Boolean);
+  if (tagNames.length === 0) {
+    console.log('Error: Tag name(s) required');
+    console.log('Usage: rudi session tag <id> "bug,auth,urgent"');
+    return;
+  }
+
+  const insertTag = db.prepare('INSERT OR IGNORE INTO tags (name) VALUES (?)');
+  const getTag = db.prepare('SELECT id FROM tags WHERE name = ?');
+  const linkTag = db.prepare('INSERT OR IGNORE INTO session_tags (session_id, tag_id) VALUES (?, ?)');
+
+  const added = [];
+  for (const name of tagNames) {
+    insertTag.run(name);
+    const tag = getTag.get(name);
+    const result = linkTag.run(session.id, tag.id);
+    if (result.changes > 0) added.push(name);
+  }
+
+  if (added.length > 0) {
+    console.log(`Added tag(s): ${added.join(', ')}`);
+  } else {
+    console.log(`Session already has all specified tags`);
+  }
 }
 
 function sessionMove(args, flags) {
@@ -566,6 +681,7 @@ async function sessionSearch(args, flags) {
 
   const limit = flags.limit || 10;
   const format = flags.format || 'table';
+  const scope = flags.scope || 'turns';
 
   // Semantic search with embeddings
   if (flags.semantic) {
@@ -573,7 +689,13 @@ async function sessionSearch(args, flags) {
     return;
   }
 
-  // Default: FTS search
+  // Title/session-level search
+  if (scope === 'titles' || scope === 'sessions') {
+    ftsSessionSearch(query, { limit, format });
+    return;
+  }
+
+  // Default: FTS search on turns
   ftsSearch(query, { limit, format });
 }
 
@@ -623,6 +745,81 @@ function ftsSearch(query, options) {
     const snippet = (r.user_highlight || r.assistant_highlight || '').substring(0, 200);
     if (snippet) {
       console.log(`   "${snippet.replace(/\n/g, ' ')}..."`);
+    }
+    console.log('');
+  });
+}
+
+/**
+ * Full-text search on session titles/snippets using sessions_fts
+ */
+function ftsSessionSearch(query, options) {
+  const { limit, format } = options;
+  const db = getDb();
+
+  let results;
+  try {
+    results = db.prepare(`
+      SELECT
+        sf.session_id,
+        s.title,
+        s.provider,
+        s.turn_count,
+        s.total_cost,
+        s.created_at,
+        s.last_active_at,
+        p.name as project_name,
+        highlight(sessions_fts, 1, '>>>', '<<<') as title_highlight,
+        highlight(sessions_fts, 2, '>>>', '<<<') as snippet_highlight
+      FROM sessions_fts sf
+      JOIN sessions s ON sf.session_id = s.id
+      LEFT JOIN projects p ON s.project_id = p.id
+      WHERE sessions_fts MATCH ?
+      ORDER BY rank
+      LIMIT ?
+    `).all(query, limit);
+  } catch {
+    // FTS match syntax failed, fall back to LIKE
+    results = db.prepare(`
+      SELECT
+        s.id as session_id,
+        s.title,
+        s.provider,
+        s.turn_count,
+        s.total_cost,
+        s.created_at,
+        s.last_active_at,
+        p.name as project_name,
+        s.title as title_highlight,
+        s.snippet as snippet_highlight
+      FROM sessions s
+      LEFT JOIN projects p ON s.project_id = p.id
+      WHERE s.deleted_at IS NULL AND (s.title LIKE ? OR s.snippet LIKE ?)
+      ORDER BY s.last_active_at DESC
+      LIMIT ?
+    `).all(`%${query}%`, `%${query}%`, limit);
+  }
+
+  if (format === 'json') {
+    console.log(JSON.stringify(results, null, 2));
+    return;
+  }
+
+  if (results.length === 0) {
+    console.log(`No sessions found matching: "${query}"`);
+    return;
+  }
+
+  console.log(`\nFound ${results.length} session(s) matching "${query}":\n`);
+  results.forEach((r, i) => {
+    const title = r.title_highlight || r.title || '(untitled)';
+    console.log(`${i + 1}. ${title}`);
+    console.log(`   Provider: ${r.provider} | Turns: ${r.turn_count} | Cost: $${(r.total_cost || 0).toFixed(4)}`);
+    if (r.project_name) console.log(`   Project: ${r.project_name}`);
+    console.log(`   Last active: ${new Date(r.last_active_at).toLocaleString()}`);
+    if (r.snippet_highlight) {
+      const snippet = r.snippet_highlight.substring(0, 150).replace(/\n/g, ' ');
+      console.log(`   "${snippet}..."`);
     }
     console.log('');
   });
