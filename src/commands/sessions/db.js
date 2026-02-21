@@ -700,10 +700,18 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
     for (const row of rows) {
       let pp;
       if (row.parent_session_id) {
-        pp = parentProjectPaths.get(row.parent_session_id) || row.project_path || row.cwd || 'unknown';
+        pp = parentProjectPaths.get(row.parent_session_id) || row.project_path || row.cwd || null;
       } else {
-        pp = row.project_path || row.cwd || 'unknown';
+        pp = row.project_path || row.cwd || null;
       }
+      // Derive project path from file location when DB fields are missing
+      if (!pp && row.origin_native_file) {
+        const projMatch = row.origin_native_file.match(/\.claude\/projects\/([^/]+)\//);
+        if (projMatch) {
+          pp = '/' + projMatch[1].replace(/-/g, '/').replace(/^\//, '');
+        }
+      }
+      if (!pp) pp = 'unknown';
       const sessionId = row.provider_session_id || row.id;
       if (!projectMap.has(pp)) {
         projectMap.set(pp, {
