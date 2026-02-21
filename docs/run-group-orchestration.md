@@ -225,12 +225,25 @@ Switch to Option B when:
 
 The sidecar spawns separate Claude CLI processes, each on an isolated git worktree branch. Full process isolation, git isolation, reviewable sessions.
 
+### Prerequisites
+
+1. Sidecar is running: `rudi serve`
+2. Target project is a git repo
+3. Provider is installed + authenticated (e.g., `claude`, `codex`)
+
 ### Connection
 
 ```bash
 PORT=$(cat /Users/hoff/.rudi/.rudi-lite-port)
 TOKEN=$(cat /Users/hoff/.rudi/.rudi-lite-token)
 # Auth header: x-rudi-token: $TOKEN
+```
+
+If scripts default to `~/.rudi-lite-port` instead of `~/.rudi/.rudi-lite-port`, set overrides:
+
+```bash
+export RUDI_SIDECAR_PORT_FILE="$HOME/.rudi/.rudi-lite-port"
+export RUDI_SIDECAR_TOKEN_FILE="$HOME/.rudi/.rudi-lite-token"
 ```
 
 ### Endpoints
@@ -261,6 +274,29 @@ The `/live` endpoint returns per-session `alive`, `turnCount`, `costTotal`, `las
 ```
 
 Min 2 tasks, max 10. Each gets its own worktree branch.
+
+For sequential single-agent phases, wrap as two tasks (one real, one no-op placeholder) to meet the minimum.
+
+### Deploy Script (Alternative to curl)
+
+If the target project has the deploy tooling installed:
+
+```bash
+# Validate plan and manifest
+npm run parallel:validate:plan
+npm run parallel:validate
+npm run parallel:dry-run
+
+# Live run
+node tools/parallel-agents/deploy-run-group.mjs \
+  --manifest tools/parallel-agents/manifest.example.json \
+  --plan-md docs/parallel-agents/deployment-plan-template.md \
+  --permission-mode bypassPermissions
+
+# Provider overrides
+node tools/parallel-agents/deploy-run-group.mjs ... --provider claude --model sonnet
+node tools/parallel-agents/deploy-run-group.mjs ... --provider codex --model gpt-5.1
+```
 
 ### Three-Phase Pattern
 
@@ -326,6 +362,8 @@ Then deploy the QA agent (Task tool subagent) with the review template. The QA a
 - Files modified outside the agent's scope
 - Upstream/downstream mismatches between agents
 
+**Interpreting completion:** A group marked `completed` means sessions exited normally with no runtime `failed` sessions. It does **not** guarantee changes were merged or that QA assertions are semantically correct. Always review diffs + run local verification before merging.
+
 Then merge and fix remaining issues:
 
 - Run the build, read the errors
@@ -376,6 +414,15 @@ These prevent merge/integration problems. Apply to both Task tool and run-group 
     - **Does NOT touch**: Explicit exclusion list
     This lets the orchestrator verify no overlap, sequence dependent agents, and give the QA agent a verification checklist.
 11. **Upstream/downstream context**: If an agent's output will be consumed by another agent or existing code, the prompt must say so: "The `LiveSessionCard` component you create will be imported by `LiveDashboardGrid` (built by another agent). Export it as a named export with props: `{ session: LiveSessionData, onStop, onOpen }`."
+
+---
+
+## Operational Gotchas (Run-Group)
+
+1. **Permission mode**: `default` may pause on tool approvals. Use `--permission-mode bypassPermissions` for autonomous batches.
+2. **Worktree lifecycle**: Sessions run in `.rudi/worktrees/*` with branches like `main-session-<id>`. Completed run-group != merged changes — review/merge and cleanup explicitly.
+3. **Min task count**: Sidecar requires 2-10 tasks per run-group. For single-agent sequential phases, add a no-op placeholder task.
+4. **Sidecar port paths**: Some scripts default to `~/.rudi-lite-port` but sidecar writes to `~/.rudi/.rudi-lite-port`. Use the env overrides in the Connection section.
 
 ---
 

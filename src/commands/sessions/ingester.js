@@ -340,6 +340,7 @@ function _normalizeToolData(toolCalls, provider) {
     toolResults.push({
       id: tc.id,
       name: tc.name || null,
+      input: tc.input || null,
       status: tc.status || null,
       result: tc.result || null,
     });
