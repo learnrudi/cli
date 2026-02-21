@@ -9,6 +9,7 @@ import { buildLifecycleRoutes } from './routes/lifecycle.js';
 import { buildSpawnChildRoutes } from './routes/spawn-child.js';
 import { buildWorktreeRoutes } from './routes/worktree-routes.js';
 import { buildRunGroupRoutes } from './routes/run-group.js';
+import { buildOrchestrateRoutes } from './routes/orchestrate.js';
 
 export function createAgentHandler({
   log,
@@ -55,6 +56,7 @@ export function createAgentHandler({
   const routeSpawnChild = buildSpawnChildRoutes(ctx);
   const routeWorktree = buildWorktreeRoutes(ctx);
   const routeRunGroup = buildRunGroupRoutes(ctx);
+  const routeOrchestrate = buildOrchestrateRoutes(ctx);
 
   return async function handleAgent(req, res, url) {
     return await routeStart(req, res, url)
@@ -62,6 +64,7 @@ export function createAgentHandler({
       || await routePermissions(req, res, url)
       || await routeWorktree(req, res, url)
       || await routeRunGroup(req, res, url)
+      || await routeOrchestrate(req, res, url)
       || await routeSpawnChild(req, res, url)
       || false;
   };

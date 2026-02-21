@@ -150,27 +150,106 @@ function refreshRunGroupAggregates(db, groupId) {
   return group;
 }
 
-export function buildRunGroupRoutes(ctx) {
+/**
+ * Core run-group creation logic. Shared by POST /agent/run-group and
+ * POST /agent/orchestration/:id/execute.
+ *
+ * @param {object} ctx  - Route context
+ * @param {object} body - Request body (tasks, name, provider, model, cwd, etc.)
+ * @param {object} [opts] - Optional overrides
+ * @param {function} [opts.onGroupSessionSettled] - Override settled callback
+ * @returns {{ groupId, status, sessionIds, errors } | { error, statusCode }}
+ */
+export async function createRunGroupFromRequest(ctx, body, opts = {}) {
   const {
-    json, error, readBody, log, broadcast,
+    log, broadcast,
     agentProcesses, maxConcurrent,
     getSidecarPort, getSidecarToken,
   } = ctx;
 
-  function onGroupSessionSettled(groupId, sessionId, status) {
+  const requestedProvider = typeof body.provider === 'string' ? body.provider : 'claude';
+  const requestedModel = typeof body.model === 'string' ? body.model : null;
+  const requestedPermissionMode = typeof body.permissionMode === 'string' ? body.permissionMode : null;
+  const requestedSystemPrompt = typeof body.systemPrompt === 'string' ? body.systemPrompt : null;
+  const requestedName = typeof body.name === 'string' && body.name.trim().length > 0
+    ? body.name.trim()
+    : null;
+  const useWorktree = body.useWorktree !== false;
+
+  const tasks = normalizeTasks(body).map((task) => ({
+    ...task,
+    provider: task.provider || requestedProvider,
+    model: task.model || requestedModel,
+  }));
+
+  if (tasks.length < 2 || tasks.length > 10) {
+    return { error: 'run-group requires between 2 and 10 tasks', statusCode: 400 };
+  }
+
+  if (countAlive(agentProcesses) + tasks.length > maxConcurrent) {
+    return {
+      error: 'MAX_CONCURRENT_REACHED',
+      message: `Too many active agent processes for requested group (${countAlive(agentProcesses)} + ${tasks.length} > ${maxConcurrent})`,
+      statusCode: 429,
+    };
+  }
+
+  const workingDir = body.cwd || process.env.PWD || process.cwd();
+
+  let repoRoot = null;
+  let currentBranch = null;
+  try {
+    execSync('git rev-parse --is-inside-work-tree', { cwd: workingDir, stdio: 'pipe' });
+    repoRoot = getRepoRoot(workingDir);
+    currentBranch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: workingDir, stdio: 'pipe' })
+      .toString().trim();
+  } catch {
+    return { error: 'run-group requires a git repository cwd', statusCode: 400 };
+  }
+
+  const baseBranch = typeof body.baseBranch === 'string' && body.baseBranch.trim().length > 0
+    ? body.baseBranch.trim()
+    : currentBranch;
+
+  const preparedTasks = [];
+  for (const [idx, task] of tasks.entries()) {
+    let providerConfig;
+    try {
+      providerConfig = loadProviderConfig(task.provider);
+    } catch (configErr) {
+      return { error: `task ${idx + 1}: ${configErr.message}`, statusCode: 400 };
+    }
+
+    const binaryPath = resolveProviderBinary(providerConfig);
+    if (!binaryPath) {
+      return { error: `task ${idx + 1}: ${providerConfig.name} CLI not found. Run: rudi install agent:${task.provider}`, statusCode: 500 };
+    }
+
+    preparedTasks.push({
+      ...task,
+      providerConfig,
+      binaryPath,
+    });
+  }
+
+  const groupId = crypto.randomUUID();
+  const nowIso = new Date().toISOString();
+  const db = getDb();
+
+  function onGroupSessionSettled(gId, sId, status) {
     let updated = null;
     try {
-      const db = getDb();
-      updated = refreshRunGroupAggregates(db, groupId);
+      const db2 = getDb();
+      updated = refreshRunGroupAggregates(db2, gId);
     } catch (err) {
-      log('agent', 'warn', `run-group aggregate refresh failed: ${err.message}`, { groupId });
+      log('agent', 'warn', `run-group aggregate refresh failed: ${err.message}`, { groupId: gId });
       return;
     }
 
-    broadcast('run-group:session-done', { groupId, sessionId, status });
+    broadcast('run-group:session-done', { groupId: gId, sessionId: sId, status });
     if (updated?.completed_at && ['completed', 'partial', 'failed', 'stopped'].includes(updated.status)) {
       broadcast('run-group:completed', {
-        groupId,
+        groupId: gId,
         status: updated.status,
         completedCount: Number(updated.completed_count || 0),
         failedCount: Number(updated.failed_count || 0),
@@ -178,349 +257,298 @@ export function buildRunGroupRoutes(ctx) {
     }
   }
 
+  const settledFn = opts.onGroupSessionSettled || onGroupSessionSettled;
+
+  db.prepare(`
+    INSERT INTO run_groups (
+      id, name, status, project_path, base_branch, provider, model, permission_mode,
+      session_count, completed_count, failed_count, total_cost, total_tokens,
+      config_json, created_at, started_at, completed_at, updated_at
+    ) VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, 0, 0, 0, 0, ?, ?, NULL, NULL, ?)
+  `).run(
+    groupId,
+    requestedName,
+    workingDir,
+    baseBranch,
+    requestedProvider,
+    requestedModel,
+    requestedPermissionMode,
+    preparedTasks.length,
+    JSON.stringify({
+      tasks: preparedTasks.map((task) => ({
+        name: task.name,
+        provider: task.provider,
+        model: task.model,
+        prompt: task.prompt.slice(0, 300),
+      })),
+      useWorktree,
+    }),
+    nowIso,
+    nowIso,
+  );
+
+  const sessionIds = [];
+  const spawnErrors = [];
+
+  for (const [index, task] of preparedTasks.entries()) {
+    const sessionId = crypto.randomUUID();
+    const shortId = sessionId.slice(0, 8);
+    let worktreePath = null;
+    let worktreeBranch = null;
+    let effectiveCwd = workingDir;
+    let spawnCwd = workingDir;
+    let gitignoreWarning = false;
+
+    if (useWorktree) {
+      const wt = createSessionWorktree({
+        repoRoot,
+        currentBranch: baseBranch,
+        shortId,
+        log,
+      });
+      if (wt.worktreePath) {
+        worktreePath = wt.worktreePath;
+        worktreeBranch = wt.worktreeBranch;
+        effectiveCwd = wt.worktreePath;
+        spawnCwd = wt.worktreePath;
+        gitignoreWarning = Boolean(wt.gitignoreWarning);
+      }
+    }
+
+    try {
+      const st = fs.statSync(spawnCwd);
+      if (!st.isDirectory()) throw new Error('not_a_directory');
+    } catch {
+      spawnCwd = workingDir;
+      effectiveCwd = workingDir;
+    }
+
+    const taskName = task.name || `Task ${index + 1}`;
+    const createdAt = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO sessions (
+        id, provider, provider_session_id, project_id, run_group_id,
+        origin, title, title_override, snippet, status, model,
+        cwd, project_path, git_branch,
+        created_at, last_active_at, started_at,
+        session_type, turn_count, total_cost, total_input_tokens, total_output_tokens, total_duration_ms
+      ) VALUES (
+        ?, ?, NULL, NULL, ?,
+        'rudi', ?, ?, '', 'active', ?,
+        ?, ?, ?,
+        ?, ?, ?,
+        'main', 0, 0, 0, 0, 0
+      )
+    `).run(
+      sessionId,
+      task.provider,
+      groupId,
+      taskName,
+      taskName,
+      task.model,
+      effectiveCwd,
+      workingDir,
+      worktreeBranch || baseBranch,
+      createdAt,
+      createdAt,
+      createdAt,
+    );
+
+    db.prepare(`
+      INSERT INTO session_runtime_state
+        (session_id, status, provider, cwd, started_at, updated_at,
+         worktree_path, worktree_branch, project_root, base_branch, use_worktree)
+      VALUES (?, 'starting', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      sessionId,
+      task.provider,
+      effectiveCwd,
+      createdAt,
+      createdAt,
+      worktreePath,
+      worktreeBranch,
+      repoRoot,
+      baseBranch,
+      worktreePath ? 1 : 0,
+    );
+
+    const canSpawnChildren = getSidecarPort() > 0;
+    const fullSystemPrompt = buildSystemPrompt(requestedSystemPrompt, { canSpawnChildren });
+    const argOptions = { prompt: task.prompt, model: task.model };
+
+    if (hasCapability(task.providerConfig, 'systemPrompt') && fullSystemPrompt) {
+      argOptions.systemPrompt = fullSystemPrompt;
+    }
+    // Run-group sessions run autonomously — keep prompt in args (not stdin),
+    // use output-format stream-json for observability, close stdin so process exits.
+    argOptions.outputFormat = 'stream-json';
+
+    const args = buildArgs(task.providerConfig, argOptions);
+    const permissionModeKey = resolvePermissionModeKey(requestedPermissionMode, task.providerConfig);
+    if (permissionModeKey) {
+      args.push(...getPermissionArgs(task.providerConfig, permissionModeKey));
+    }
+
+    if (canSpawnChildren && hasCapability(task.providerConfig, 'subagents')) {
+      args.push('--allowed-tools', 'mcp__rudi-spawn__spawn_child,mcp__rudi-spawn__list_children');
+    }
+
+    let mcpConfigPath = null;
+    if (canSpawnChildren && hasCapability(task.providerConfig, 'mcpConfig')) {
+      const spawnShimPath = path.join(PATHS.home, 'bins', 'rudi-spawn');
+      if (fs.existsSync(spawnShimPath)) {
+        try {
+          let existingMcpServers = {};
+          const claudeJsonPath = path.join(os.homedir(), '.claude.json');
+          try {
+            const claudeJson = JSON.parse(fs.readFileSync(claudeJsonPath, 'utf-8'));
+            existingMcpServers = claudeJson.mcpServers || {};
+          } catch {}
+
+          const mergedConfig = {
+            mcpServers: {
+              ...existingMcpServers,
+              'rudi-spawn': { command: spawnShimPath, args: [] },
+            },
+          };
+
+          const tmpDir = path.join(PATHS.home, 'tmp');
+          fs.mkdirSync(tmpDir, { recursive: true });
+          mcpConfigPath = path.join(tmpDir, `run-group-mcp-${shortId}.json`);
+          fs.writeFileSync(mcpConfigPath, JSON.stringify(mergedConfig, null, 2), { mode: 0o600 });
+
+          args.push(
+            ...expandConditional(task.providerConfig, 'mcpConfig', mcpConfigPath),
+            ...expandConditional(task.providerConfig, 'strictMcpConfig', true),
+          );
+        } catch (mcpErr) {
+          log('agent', 'warn', `run-group MCP config injection failed: ${mcpErr.message}`, {
+            groupId,
+            sessionId: shortId,
+          });
+        }
+      }
+    }
+
+    const configEnv = buildEnv(task.providerConfig, process.env);
+    const env = { ...process.env, ...configEnv };
+    if (getSidecarPort() > 0) {
+      env.RUDI_SIDECAR_URL = `http://127.0.0.1:${getSidecarPort()}`;
+      env.RUDI_SIDECAR_TOKEN = getSidecarToken();
+      env.RUDI_SESSION_ID = sessionId;
+      env.RUDI_CAN_SPAWN_CHILDREN = '1';
+    }
+
+    try {
+      spawnAgentProcess(ctx, {
+        sessionId,
+        prompt: task.prompt,
+        provider: task.provider,
+        model: task.model,
+        permissionMode: requestedPermissionMode,
+        systemPrompt: fullSystemPrompt || null,
+        providerConfig: task.providerConfig,
+        binaryPath: task.binaryPath,
+        args,
+        env,
+        spawnCwd,
+        effectiveCwd,
+        workingDir,
+        repoRoot,
+        worktreePath,
+        worktreeBranch,
+        baseBranch,
+        runGroupId: groupId,
+        mcpConfigPath,
+        stdinModeOverride: 'close', // autonomous mode: prompt via args, close stdin so process exits
+        sessionRowMode: 'existingSession',
+        existingSessionId: sessionId,
+        autoNameOnFirstTurn: false,
+        queueEvent: 'run-group-result',
+        queueCloseEvent: 'run-group-close',
+        onProcessClose: ({ finalStatus }) => {
+          settledFn(groupId, sessionId, finalStatus);
+        },
+        onProcessError: () => {
+          settledFn(groupId, sessionId, 'error');
+        },
+      });
+      sessionIds.push(sessionId);
+      if (gitignoreWarning) {
+        log('agent', 'warn', 'run-group worktree created but .rudi/ is not in .gitignore', { groupId, sessionId: shortId });
+      }
+    } catch (spawnErr) {
+      spawnErrors.push({ sessionId, message: spawnErr.message });
+      const errIso = new Date().toISOString();
+      db.prepare(`
+        UPDATE session_runtime_state
+        SET status = 'error', last_error = ?, updated_at = ?, completed_at = ?
+        WHERE session_id = ?
+      `).run(spawnErr.message, errIso, errIso, sessionId);
+      db.prepare(`
+        UPDATE sessions
+        SET error_code = 'SPAWN_FAILED', error_message = ?, ended_at = ?
+        WHERE id = ?
+      `).run(spawnErr.message, errIso, sessionId);
+      if (mcpConfigPath) {
+        try { fs.unlinkSync(mcpConfigPath); } catch {}
+      }
+    }
+  }
+
+  const startIso = new Date().toISOString();
+  const groupStatus = sessionIds.length === 0
+    ? 'failed'
+    : (spawnErrors.length > 0 ? 'partial' : 'running');
+  db.prepare(`
+    UPDATE run_groups
+    SET status = ?, session_count = ?, started_at = ?, completed_at = ?, updated_at = ?
+    WHERE id = ?
+  `).run(
+    groupStatus,
+    preparedTasks.length,
+    startIso,
+    groupStatus === 'failed' ? startIso : null,
+    startIso,
+    groupId,
+  );
+
+  const refreshed = refreshRunGroupAggregates(db, groupId);
+  if (sessionIds.length > 0) {
+    broadcast('run-group:started', { groupId, sessionIds });
+  } else {
+    broadcast('run-group:completed', {
+      groupId,
+      status: 'failed',
+      completedCount: 0,
+      failedCount: preparedTasks.length,
+    });
+  }
+
+  return {
+    groupId,
+    status: refreshed?.status || groupStatus,
+    sessionIds,
+    errors: spawnErrors,
+  };
+}
+
+export function buildRunGroupRoutes(ctx) {
+  const { json, error, readBody } = ctx;
+
   return async (req, res, url) => {
     if (req.method === 'POST' && url.pathname === '/agent/run-group') {
       const body = await readBody(req);
-      const requestedProvider = typeof body.provider === 'string' ? body.provider : 'claude';
-      const requestedModel = typeof body.model === 'string' ? body.model : null;
-      const requestedPermissionMode = typeof body.permissionMode === 'string' ? body.permissionMode : null;
-      const requestedSystemPrompt = typeof body.systemPrompt === 'string' ? body.systemPrompt : null;
-      const requestedName = typeof body.name === 'string' && body.name.trim().length > 0
-        ? body.name.trim()
-        : null;
-      const useWorktree = body.useWorktree !== false;
+      const result = await createRunGroupFromRequest(ctx, body);
 
-      const tasks = normalizeTasks(body).map((task) => ({
-        ...task,
-        provider: task.provider || requestedProvider,
-        model: task.model || requestedModel,
-      }));
-
-      if (tasks.length < 2 || tasks.length > 10) {
-        return error(res, 'run-group requires between 2 and 10 tasks', 400);
+      if (result.error) {
+        if (result.statusCode === 429) {
+          return json(res, { error: result.error, message: result.message }, 429);
+        }
+        return error(res, result.error, result.statusCode || 400);
       }
 
-      if (countAlive(agentProcesses) + tasks.length > maxConcurrent) {
-        return json(res, {
-          error: 'MAX_CONCURRENT_REACHED',
-          message: `Too many active agent processes for requested group (${countAlive(agentProcesses)} + ${tasks.length} > ${maxConcurrent})`,
-        }, 429);
-      }
-
-      const workingDir = body.cwd || process.env.PWD || process.cwd();
-
-      let repoRoot = null;
-      let currentBranch = null;
-      try {
-        execSync('git rev-parse --is-inside-work-tree', { cwd: workingDir, stdio: 'pipe' });
-        repoRoot = getRepoRoot(workingDir);
-        currentBranch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: workingDir, stdio: 'pipe' })
-          .toString().trim();
-      } catch {
-        return error(res, 'run-group requires a git repository cwd', 400);
-      }
-
-      const baseBranch = typeof body.baseBranch === 'string' && body.baseBranch.trim().length > 0
-        ? body.baseBranch.trim()
-        : currentBranch;
-
-      const preparedTasks = [];
-      for (const [idx, task] of tasks.entries()) {
-        let providerConfig;
-        try {
-          providerConfig = loadProviderConfig(task.provider);
-        } catch (configErr) {
-          return error(res, `task ${idx + 1}: ${configErr.message}`, 400);
-        }
-
-        const binaryPath = resolveProviderBinary(providerConfig);
-        if (!binaryPath) {
-          return error(res, `task ${idx + 1}: ${providerConfig.name} CLI not found. Run: rudi install agent:${task.provider}`, 500);
-        }
-
-        preparedTasks.push({
-          ...task,
-          providerConfig,
-          binaryPath,
-        });
-      }
-
-      const groupId = crypto.randomUUID();
-      const nowIso = new Date().toISOString();
-      const db = getDb();
-
-      db.prepare(`
-        INSERT INTO run_groups (
-          id, name, status, project_path, base_branch, provider, model, permission_mode,
-          session_count, completed_count, failed_count, total_cost, total_tokens,
-          config_json, created_at, started_at, completed_at, updated_at
-        ) VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, 0, 0, 0, 0, ?, ?, NULL, NULL, ?)
-      `).run(
-        groupId,
-        requestedName,
-        workingDir,
-        baseBranch,
-        requestedProvider,
-        requestedModel,
-        requestedPermissionMode,
-        preparedTasks.length,
-        JSON.stringify({
-          tasks: preparedTasks.map((task) => ({
-            name: task.name,
-            provider: task.provider,
-            model: task.model,
-            prompt: task.prompt.slice(0, 300),
-          })),
-          useWorktree,
-        }),
-        nowIso,
-        nowIso,
-      );
-
-      const sessionIds = [];
-      const spawnErrors = [];
-
-      for (const [index, task] of preparedTasks.entries()) {
-        const sessionId = crypto.randomUUID();
-        const shortId = sessionId.slice(0, 8);
-        let worktreePath = null;
-        let worktreeBranch = null;
-        let effectiveCwd = workingDir;
-        let spawnCwd = workingDir;
-        let gitignoreWarning = false;
-
-        if (useWorktree) {
-          const wt = createSessionWorktree({
-            repoRoot,
-            currentBranch: baseBranch,
-            shortId,
-            log,
-          });
-          if (wt.worktreePath) {
-            worktreePath = wt.worktreePath;
-            worktreeBranch = wt.worktreeBranch;
-            effectiveCwd = wt.worktreePath;
-            spawnCwd = wt.worktreePath;
-            gitignoreWarning = Boolean(wt.gitignoreWarning);
-          }
-        }
-
-        try {
-          const st = fs.statSync(spawnCwd);
-          if (!st.isDirectory()) throw new Error('not_a_directory');
-        } catch {
-          spawnCwd = workingDir;
-          effectiveCwd = workingDir;
-        }
-
-        const taskName = task.name || `Task ${index + 1}`;
-        const createdAt = new Date().toISOString();
-        db.prepare(`
-          INSERT INTO sessions (
-            id, provider, provider_session_id, project_id, run_group_id,
-            origin, title, title_override, snippet, status, model,
-            cwd, project_path, git_branch,
-            created_at, last_active_at, started_at,
-            session_type, turn_count, total_cost, total_input_tokens, total_output_tokens, total_duration_ms
-          ) VALUES (
-            ?, ?, NULL, NULL, ?,
-            'rudi', ?, ?, '', 'active', ?,
-            ?, ?, ?,
-            ?, ?, ?,
-            'main', 0, 0, 0, 0, 0
-          )
-        `).run(
-          sessionId,
-          task.provider,
-          groupId,
-          taskName,
-          taskName,
-          task.model,
-          effectiveCwd,
-          workingDir,
-          worktreeBranch || baseBranch,
-          createdAt,
-          createdAt,
-          createdAt,
-        );
-
-        db.prepare(`
-          INSERT INTO session_runtime_state
-            (session_id, status, provider, cwd, started_at, updated_at,
-             worktree_path, worktree_branch, project_root, base_branch, use_worktree)
-          VALUES (?, 'starting', ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          sessionId,
-          task.provider,
-          effectiveCwd,
-          createdAt,
-          createdAt,
-          worktreePath,
-          worktreeBranch,
-          repoRoot,
-          baseBranch,
-          worktreePath ? 1 : 0,
-        );
-
-        const canSpawnChildren = getSidecarPort() > 0;
-        const fullSystemPrompt = buildSystemPrompt(requestedSystemPrompt, { canSpawnChildren });
-        const argOptions = { prompt: task.prompt, model: task.model };
-
-        if (hasCapability(task.providerConfig, 'systemPrompt') && fullSystemPrompt) {
-          argOptions.systemPrompt = fullSystemPrompt;
-        }
-        // Run-group sessions run autonomously — keep prompt in args (not stdin),
-        // use output-format stream-json for observability, close stdin so process exits.
-        argOptions.outputFormat = 'stream-json';
-
-        const args = buildArgs(task.providerConfig, argOptions);
-        const permissionModeKey = resolvePermissionModeKey(requestedPermissionMode, task.providerConfig);
-        if (permissionModeKey) {
-          args.push(...getPermissionArgs(task.providerConfig, permissionModeKey));
-        }
-
-        if (canSpawnChildren && hasCapability(task.providerConfig, 'subagents')) {
-          args.push('--allowed-tools', 'mcp__rudi-spawn__spawn_child,mcp__rudi-spawn__list_children');
-        }
-
-        let mcpConfigPath = null;
-        if (canSpawnChildren && hasCapability(task.providerConfig, 'mcpConfig')) {
-          const spawnShimPath = path.join(PATHS.home, 'bins', 'rudi-spawn');
-          if (fs.existsSync(spawnShimPath)) {
-            try {
-              let existingMcpServers = {};
-              const claudeJsonPath = path.join(os.homedir(), '.claude.json');
-              try {
-                const claudeJson = JSON.parse(fs.readFileSync(claudeJsonPath, 'utf-8'));
-                existingMcpServers = claudeJson.mcpServers || {};
-              } catch {}
-
-              const mergedConfig = {
-                mcpServers: {
-                  ...existingMcpServers,
-                  'rudi-spawn': { command: spawnShimPath, args: [] },
-                },
-              };
-
-              const tmpDir = path.join(PATHS.home, 'tmp');
-              fs.mkdirSync(tmpDir, { recursive: true });
-              mcpConfigPath = path.join(tmpDir, `run-group-mcp-${shortId}.json`);
-              fs.writeFileSync(mcpConfigPath, JSON.stringify(mergedConfig, null, 2), { mode: 0o600 });
-
-              args.push(
-                ...expandConditional(task.providerConfig, 'mcpConfig', mcpConfigPath),
-                ...expandConditional(task.providerConfig, 'strictMcpConfig', true),
-              );
-            } catch (mcpErr) {
-              log('agent', 'warn', `run-group MCP config injection failed: ${mcpErr.message}`, {
-                groupId,
-                sessionId: shortId,
-              });
-            }
-          }
-        }
-
-        const configEnv = buildEnv(task.providerConfig, process.env);
-        const env = { ...process.env, ...configEnv };
-        if (getSidecarPort() > 0) {
-          env.RUDI_SIDECAR_URL = `http://127.0.0.1:${getSidecarPort()}`;
-          env.RUDI_SIDECAR_TOKEN = getSidecarToken();
-          env.RUDI_SESSION_ID = sessionId;
-          env.RUDI_CAN_SPAWN_CHILDREN = '1';
-        }
-
-        try {
-          spawnAgentProcess(ctx, {
-            sessionId,
-            prompt: task.prompt,
-            provider: task.provider,
-            model: task.model,
-            permissionMode: requestedPermissionMode,
-            systemPrompt: fullSystemPrompt || null,
-            providerConfig: task.providerConfig,
-            binaryPath: task.binaryPath,
-            args,
-            env,
-            spawnCwd,
-            effectiveCwd,
-            workingDir,
-            repoRoot,
-            worktreePath,
-            worktreeBranch,
-            baseBranch,
-            runGroupId: groupId,
-            mcpConfigPath,
-            stdinModeOverride: 'close', // autonomous mode: prompt via args, close stdin so process exits
-            sessionRowMode: 'existingSession',
-            existingSessionId: sessionId,
-            autoNameOnFirstTurn: false,
-            queueEvent: 'run-group-result',
-            queueCloseEvent: 'run-group-close',
-            onProcessClose: ({ finalStatus }) => {
-              onGroupSessionSettled(groupId, sessionId, finalStatus);
-            },
-            onProcessError: () => {
-              onGroupSessionSettled(groupId, sessionId, 'error');
-            },
-          });
-          sessionIds.push(sessionId);
-          if (gitignoreWarning) {
-            log('agent', 'warn', 'run-group worktree created but .rudi/ is not in .gitignore', { groupId, sessionId: shortId });
-          }
-        } catch (spawnErr) {
-          spawnErrors.push({ sessionId, message: spawnErr.message });
-          const errIso = new Date().toISOString();
-          db.prepare(`
-            UPDATE session_runtime_state
-            SET status = 'error', last_error = ?, updated_at = ?, completed_at = ?
-            WHERE session_id = ?
-          `).run(spawnErr.message, errIso, errIso, sessionId);
-          db.prepare(`
-            UPDATE sessions
-            SET error_code = 'SPAWN_FAILED', error_message = ?, ended_at = ?
-            WHERE id = ?
-          `).run(spawnErr.message, errIso, sessionId);
-          if (mcpConfigPath) {
-            try { fs.unlinkSync(mcpConfigPath); } catch {}
-          }
-        }
-      }
-
-      const startIso = new Date().toISOString();
-      const groupStatus = sessionIds.length === 0
-        ? 'failed'
-        : (spawnErrors.length > 0 ? 'partial' : 'running');
-      db.prepare(`
-        UPDATE run_groups
-        SET status = ?, session_count = ?, started_at = ?, completed_at = ?, updated_at = ?
-        WHERE id = ?
-      `).run(
-        groupStatus,
-        preparedTasks.length,
-        startIso,
-        groupStatus === 'failed' ? startIso : null,
-        startIso,
-        groupId,
-      );
-
-      const refreshed = refreshRunGroupAggregates(db, groupId);
-      if (sessionIds.length > 0) {
-        broadcast('run-group:started', { groupId, sessionIds });
-      } else {
-        broadcast('run-group:completed', {
-          groupId,
-          status: 'failed',
-          completedCount: 0,
-          failedCount: preparedTasks.length,
-        });
-      }
-
-      json(res, {
-        groupId,
-        status: refreshed?.status || groupStatus,
-        sessionIds,
-        errors: spawnErrors,
-      }, sessionIds.length > 0 ? 200 : 500);
+      json(res, result, result.sessionIds.length > 0 ? 200 : 500);
       return true;
     }
 

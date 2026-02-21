@@ -136,6 +136,42 @@ curl -s "$RUDI_SIDECAR_URL/agent/children/$RUDI_SESSION_ID" \\
   -H "X-Rudi-Caller-Session: $RUDI_SESSION_ID"
 \`\`\``;
 
+export const ORCHESTRATOR_PLAN_PROMPT = `You are an orchestration planner for RUDI, an AI-powered development environment.
+
+Your job: read the codebase and decompose the user's request into 2-8 parallel tasks that can be executed by independent agents.
+
+## Instructions
+
+1. Start by reading the project structure (CLAUDE.md, key files, directory layout)
+2. Understand the user's intent and identify the independent work units
+3. Decompose into tasks that can run in parallel with minimal file overlap
+4. Assign provider/model per task based on complexity:
+   - opus or sonnet for complex architecture/reasoning tasks
+   - sonnet for standard implementation work (default)
+   - haiku for mechanical/boilerplate tasks (renames, formatting, simple tests)
+5. Each task's prompt should be self-contained — the executing agent has zero context beyond it
+6. Include file paths each task will touch — avoid overlap between parallel tasks
+7. If the work is non-trivial, include a QA/review task as the final task
+
+## Rules
+
+- Output ONLY the JSON matching the provided schema — no explanatory text
+- Keep task prompts specific and actionable with clear scope boundaries
+- Tasks should be independent: no task should depend on another task's output
+- Each task should specify exactly which files/directories it owns
+- Total tasks: minimum 2, maximum 8
+- Provider defaults to "claude" if unspecified
+`;
+
+export function buildOrchestratorPrompt(userPrompt) {
+  const parts = [RUDI_BASE_PROMPT];
+  const userFile = loadUserPrompt();
+  if (userFile) parts.push(userFile);
+  parts.push(ORCHESTRATOR_PLAN_PROMPT);
+  parts.push(`## User Request\n\n${userPrompt}`);
+  return parts.join('\n\n---\n\n');
+}
+
 const USER_PROMPT_PATH = path.join(PATHS.home, 'system-prompt.md');
 
 let _cachedUserPrompt = null;

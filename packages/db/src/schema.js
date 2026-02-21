@@ -4,7 +4,7 @@
 
 import { getDb } from './index.js';
 
-export const SCHEMA_VERSION = 15;
+export const SCHEMA_VERSION = 16;
 
 export const SCHEMA_SQL = `
 -- Schema version tracking
@@ -59,6 +59,25 @@ CREATE TABLE IF NOT EXISTS run_groups (
 
 CREATE INDEX IF NOT EXISTS idx_run_groups_status ON run_groups(status);
 CREATE INDEX IF NOT EXISTS idx_run_groups_created ON run_groups(created_at DESC);
+
+-- Orchestration plans (natural language → run group decomposition)
+CREATE TABLE IF NOT EXISTS orchestration_plans (
+  id TEXT PRIMARY KEY,
+  status TEXT NOT NULL DEFAULT 'planning'
+    CHECK (status IN ('planning', 'ready', 'executing', 'completed', 'failed', 'cancelled')),
+  prompt TEXT NOT NULL,
+  provider TEXT DEFAULT 'claude',
+  model TEXT,
+  plan_json TEXT,
+  planner_session_id TEXT,
+  run_group_id TEXT REFERENCES run_groups(id) ON DELETE SET NULL,
+  project_path TEXT,
+  created_at TEXT NOT NULL,
+  completed_at TEXT,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_orchestration_plans_status ON orchestration_plans(status);
 
 -- Sessions (conversation containers)
 CREATE TABLE IF NOT EXISTS sessions (
@@ -669,6 +688,30 @@ export function applySchemaUpdates(db) {
     db,
     'idx_run_groups_created',
     "CREATE INDEX IF NOT EXISTS idx_run_groups_created ON run_groups(created_at DESC)"
+  );
+
+  // Orchestration plans
+  ensureTable(db, 'orchestration_plans', `
+    CREATE TABLE IF NOT EXISTS orchestration_plans (
+      id TEXT PRIMARY KEY,
+      status TEXT NOT NULL DEFAULT 'planning'
+        CHECK (status IN ('planning', 'ready', 'executing', 'completed', 'failed', 'cancelled')),
+      prompt TEXT NOT NULL,
+      provider TEXT DEFAULT 'claude',
+      model TEXT,
+      plan_json TEXT,
+      planner_session_id TEXT,
+      run_group_id TEXT REFERENCES run_groups(id) ON DELETE SET NULL,
+      project_path TEXT,
+      created_at TEXT NOT NULL,
+      completed_at TEXT,
+      updated_at TEXT NOT NULL
+    );
+  `);
+  ensureIndex(
+    db,
+    'idx_orchestration_plans_status',
+    "CREATE INDEX IF NOT EXISTS idx_orchestration_plans_status ON orchestration_plans(status)"
   );
 
   // Sessions
@@ -1595,6 +1638,11 @@ function runMigrations(db, from, to) {
 
     // Version 15: Add run_groups + sessions.run_group_id for parallel orchestration
     15: (db) => {
+      applySchemaUpdates(db);
+    },
+
+    // Version 16: Add orchestration_plans table for natural language decomposition
+    16: (db) => {
       applySchemaUpdates(db);
     },
   };

@@ -183,15 +183,15 @@ Phase 3: QA + Commit
 ### Example: 4-Feature Build with QA
 
 ```python
-# Phase 2: Launch 5 builder agents in parallel
-Task(subagent_type="general-purpose", prompt="[Builder] Feature 2: Create useSessionReplay.ts hook...")
-Task(subagent_type="general-purpose", prompt="[Builder] Feature 3 CLI: Add /live endpoint...")
-Task(subagent_type="general-purpose", prompt="[Builder] Feature 3 Lite: Create LiveSessionCard...")
-Task(subagent_type="general-purpose", prompt="[Builder] Feature 4 CLI: Add worktree status endpoint...")
-Task(subagent_type="general-purpose", prompt="[Builder] Feature 4 Lite: Create WorkspacePanel...")
+# Phase 2: Launch 5 builder agents in parallel (match model to complexity)
+Task(subagent_type="general-purpose", model="sonnet", prompt="[Builder] Feature 2: Create useSessionReplay.ts hook...")
+Task(subagent_type="general-purpose", model="haiku",  prompt="[Builder] Feature 3 CLI: Add /live endpoint...")
+Task(subagent_type="general-purpose", model="sonnet", prompt="[Builder] Feature 3 Lite: Create LiveSessionCard...")
+Task(subagent_type="general-purpose", model="haiku",  prompt="[Builder] Feature 4 CLI: Add worktree status endpoint...")
+Task(subagent_type="general-purpose", model="sonnet", prompt="[Builder] Feature 4 Lite: Create WorkspacePanel...")
 
-# Phase 3: After all builders finish, deploy QA
-Task(subagent_type="general-purpose", prompt="[QA] Review all changes from 5 builders. [checklist...]")
+# Phase 3: QA always uses haiku (read-only validation)
+Task(subagent_type="general-purpose", model="haiku", prompt="[QA] Review all changes from 5 builders. [checklist...]")
 
 # Phase 3 cont: Fix any issues QA found, then commit
 ```
@@ -390,6 +390,97 @@ while true; do
   sleep 10
 done
 ```
+
+---
+
+## Model Selection (Cost Control)
+
+Not every agent needs the most expensive model. Match model to task complexity:
+
+| Model | Cost | Use For | Examples |
+|-------|------|---------|----------|
+| **Haiku** | $ | Simple, scoped edits; data transforms; config changes; test scaffolding | Add a field to a form, rename a variable, write test boilerplate, update env config |
+| **Sonnet** | $$ | Moderate complexity; single-file features; refactors; bug fixes with clear scope | Implement a new component, refactor a function, fix a known bug, add API endpoint |
+| **Opus** | $$$$ | Architecture decisions; multi-file coordination; complex debugging; ambiguous requirements | Design a new subsystem, debug a race condition, implement a complex algorithm |
+
+### Decision Rules
+
+1. **Default to Sonnet** for builder agents. Most implementation work is well-scoped with clear instructions — Sonnet handles this fine.
+2. **Use Haiku** for QA agents (read-only validation), simple builders (config, boilerplate, data transforms), and any task where the prompt gives exact code to write.
+3. **Reserve Opus** for the orchestrator (you) and builders that need to make judgment calls — ambiguous requirements, complex debugging, architecture exploration.
+4. **Never use Opus for a task you could describe in < 20 lines of prompt.** If you can fully specify the work, a cheaper model can execute it.
+
+### Task Tool Model Parameter
+
+```python
+# Haiku for simple builder
+Task(subagent_type="general-purpose", model="haiku", prompt="...")
+
+# Sonnet for moderate builder (default — omit model for sonnet)
+Task(subagent_type="general-purpose", model="sonnet", prompt="...")
+
+# Opus only when complexity demands it
+Task(subagent_type="general-purpose", model="opus", prompt="...")
+
+# QA agent — always haiku (read-only, checklist-driven)
+Task(subagent_type="general-purpose", model="haiku", prompt="[QA] Review all changes...")
+```
+
+### Run-Group Model Override
+
+```bash
+# Per-group model override
+node tools/parallel-agents/deploy-run-group.mjs ... --model sonnet
+
+# Or set in task payload (if supported by sidecar)
+{ "tasks": [{ "prompt": "...", "label": "builder-a", "model": "sonnet" }] }
+```
+
+### Cost Impact
+
+At typical agent usage (10-50 turns per deployment), model selection has massive impact:
+
+| Deployment | All Opus | Sonnet Builders + Haiku QA | Savings |
+|-----------|---------|---------------------------|---------|
+| 3 agents, 30 turns | ~$45 | ~$8-12 | **~75%** |
+| 5 agents, 50 turns | ~$80 | ~$15-20 | **~75%** |
+
+### Verification (After Deployment)
+
+After launching agents, verify they're using the correct models:
+
+```bash
+# Check models used by recent subagents
+python3 << 'PYEOF'
+import sqlite3
+db = sqlite3.connect('/Users/hoff/.rudi/rudi.db')
+rows = db.execute("""
+    SELECT
+        s.id,
+        substr(s.title_override, 1, 50) as title,
+        GROUP_CONCAT(DISTINCT t.model) as models,
+        COUNT(t.id) as turns,
+        SUM(t.cost) as cost
+    FROM sessions s
+    LEFT JOIN turns t ON s.id = t.session_id
+    WHERE s.session_type IN ('task', 'child')
+    AND s.created_at >= datetime('now', '-1 hour')
+    GROUP BY s.id
+    ORDER BY s.created_at DESC
+""").fetchall()
+print(f"{'Session ID':<12}  {'Title':<50}  {'Model':<20}  {'Turns':>5}  {'Cost':>8}")
+print("-" * 100)
+for r in rows:
+    print(f"{r[0][:12]:<12}  {r[1]:<50}  {r[2]:<20}  {r[3]:>5}  ${r[4]:>7.2f}")
+PYEOF
+```
+
+**Red flags**:
+- All agents showing `claude-opus-4-6` → model parameter was omitted, wasting money
+- QA agent using opus/sonnet → should always be haiku
+- Simple builders using opus → should be haiku
+
+If you see opus where it shouldn't be, the orchestrator didn't include the `model` parameter in Task calls.
 
 ---
 
