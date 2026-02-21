@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.learnrudi.com/rudi-session/v1/turn.schema.json",
+  "title": "RUDI Turn Document v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schemaNamespace",
+    "schemaVersion",
+    "kind",
+    "id",
+    "sessionId",
+    "provider",
+    "turnNumber",
+    "ts",
+    "content",
+    "usage",
+    "tooling"
+  ],
+  "properties": {
+    "schemaNamespace": {
+      "const": "io.rudi.session.v1"
+    },
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^1\\.\\d+\\.\\d+$"
+    },
+    "kind": {
+      "const": "turn"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sessionId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "provider": {
+      "type": "string",
+      "minLength": 1
+    },
+    "providerSessionId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "providerTurnId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "turnNumber": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "ts": {
+      "type": "string",
+      "minLength": 1
+    },
+    "content": {
+      "type": "object",
+      "required": [
+        "userMessage",
+        "assistantResponse",
+        "thinking"
+      ],
+      "properties": {
+        "userMessage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "assistantResponse": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "thinking": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "usage": {
+      "type": "object",
+      "required": [
+        "inputTokens",
+        "outputTokens",
+        "cacheReadTokens",
+        "cacheCreationTokens",
+        "contextTokens",
+        "costUsd",
+        "durationMs",
+        "durationApiMs"
+      ],
+      "properties": {
+        "inputTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "outputTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cacheReadTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cacheCreationTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "contextTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "costUsd": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "durationMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "durationApiMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
+    },
+    "tooling": {
+      "type": "object",
+      "required": [
+        "toolsUsed",
+        "toolResults",
+        "todos",
+        "imageIds"
+      ],
+      "properties": {
+        "toolsUsed": {
+          "type": "array"
+        },
+        "toolResults": {
+          "type": "array"
+        },
+        "todos": {
+          "type": "array"
+        },
+        "imageIds": {
+          "type": "array"
+        },
+        "thinkingConfig": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "compaction": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

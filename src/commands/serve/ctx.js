@@ -101,6 +101,14 @@ export function createInfrastructure() {
     const headerToken = req.headers['x-rudi-token'];
     if (headerToken === _token) return true;
 
+    // Same-origin web mode: frontend served by sidecar sends 'same-origin' token
+    if (headerToken === 'same-origin') {
+      const host = req.headers.host || '';
+      if (host.startsWith('127.0.0.1') || host.startsWith('localhost')) {
+        return true;
+      }
+    }
+
     const url = new URL(req.url, `http://localhost`);
     if (url.searchParams.get('token') === _token) return true;
 

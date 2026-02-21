@@ -27,7 +27,8 @@ import * as filePositions from './file-positions'
 import * as integrity from './integrity'
 import * as systemEvents from './system-events'
 import * as logs from './logs'
-import type { DbSessionFilters, UsageStats, TurnCreateOptions, TurnUpdateOptions, SearchResult, Project, ProjectCreateOptions, ProjectUpdateData, FilePosition } from './types'
+import * as runGroups from './run-groups'
+import type { DbSessionFilters, UsageStats, TurnCreateOptions, TurnUpdateOptions, SearchResult, SessionSearchResult, Project, ProjectCreateOptions, ProjectUpdateData, FilePosition, DbRunGroup, RunGroupStatus } from './types'
 
 // ============================================================================
 // Database State Management
@@ -55,10 +56,21 @@ export type {
   ProjectUpdateData,
   ProjectSettings,
   SearchResult,
+  SessionSearchResult,
   UsageStats,
   FilePosition,
   DbFilePosition,
+  DbRunGroup,
+  RunGroupStatus,
 } from './types'
+export type { RunGroupCreateOptions, RunGroupListFilters } from './run-groups'
+export {
+  createRunGroup,
+  getRunGroup,
+  listRunGroups,
+  updateRunGroupStatus,
+  refreshRunGroupAggregates,
+} from './run-groups'
 
 // ============================================================================
 // Database Service Class
@@ -426,6 +438,34 @@ class DatabaseService {
   }
 
   // ==========================================================================
+  // Run Group Operations
+  // ==========================================================================
+
+  createRunGroup(options: runGroups.RunGroupCreateOptions = {}): DbRunGroup {
+    return runGroups.createRunGroup(this.getDb(), options)
+  }
+
+  getRunGroup(runGroupId: string): DbRunGroup | null {
+    return runGroups.getRunGroup(this.getDb(), runGroupId)
+  }
+
+  listRunGroups(filters: runGroups.RunGroupListFilters = {}): DbRunGroup[] {
+    return runGroups.listRunGroups(this.getDb(), filters)
+  }
+
+  updateRunGroupStatus(
+    runGroupId: string,
+    status: RunGroupStatus,
+    extras: { startedAt?: string | null; completedAt?: string | null } = {}
+  ): DbRunGroup | null {
+    return runGroups.updateRunGroupStatus(this.getDb(), runGroupId, status, extras)
+  }
+
+  refreshRunGroupAggregates(runGroupId: string): DbRunGroup | null {
+    return runGroups.refreshRunGroupAggregates(this.getDb(), runGroupId)
+  }
+
+  // ==========================================================================
   // Turn Operations
   // ==========================================================================
 
@@ -501,6 +541,10 @@ class DatabaseService {
 
   searchTurns(query: string, options?: { limit?: number; provider?: ProviderId }): SearchResult[] {
     return turns.searchTurns(this.getDb(), query, options)
+  }
+
+  searchSessions(query: string, options?: { limit?: number; provider?: ProviderId }): SessionSearchResult[] {
+    return turns.searchSessions(this.getDb(), query, options)
   }
 
   /**

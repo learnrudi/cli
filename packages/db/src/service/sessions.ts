@@ -114,6 +114,7 @@ function mapDbSessionToRudiSession(row: DbSession): RudiSession {
     provider,
     providerSessionId: row.provider_session_id,
     projectId: row.project_id,
+    runGroupId: row.run_group_id,
     origin: row.origin as 'rudi' | 'provider-import' | 'mixed',
     originDetail: row.origin_imported_at ? {
       type: row.origin as 'rudi' | 'provider-import' | 'mixed',
@@ -532,6 +533,7 @@ export function createSession(db: BetterSqlite3.Database, options: SessionCreate
   const stmt = db.prepare(`
     INSERT OR IGNORE INTO sessions (
       id, provider, provider_session_id, project_id,
+      run_group_id,
       origin, origin_imported_at, origin_native_file,
       title, snippet, status, model, system_prompt, inherit_project_prompt,
       cwd, git_branch, native_storage_path,
@@ -541,6 +543,7 @@ export function createSession(db: BetterSqlite3.Database, options: SessionCreate
       is_warmup
     ) VALUES (
       ?, ?, ?, ?,
+      ?,
       ?, ?, ?,
       ?, ?, ?, ?, ?, ?,
       ?, ?, ?,
@@ -556,6 +559,7 @@ export function createSession(db: BetterSqlite3.Database, options: SessionCreate
     options.provider,
     options.providerSessionId ?? null,
     options.projectId ?? null,
+    options.runGroupId ?? null,
     origin,
     options.originDetail?.importedAt ?? null,
     options.originDetail?.nativeFile ?? null,

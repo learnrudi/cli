@@ -6,6 +6,91 @@
 import { dbWrite } from './db.js';
 import { normalizeEvent, createNormalizer } from './normalizers/index.js';
 
+function _safeStringify(value) {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '{}';
+  }
+}
+
+function _toNumber(value, fallback = 0) {
+  return (typeof value === 'number' && Number.isFinite(value)) ? value : fallback;
+}
+
+function _normalizeCompaction(compaction) {
+  if (!compaction || typeof compaction !== 'object') return null;
+  const normalized = {
+    trigger: typeof compaction.trigger === 'string' ? compaction.trigger : 'unknown',
+    preTokens: _toNumber(compaction.preTokens ?? compaction.pre_tokens),
+    tokensSaved: _toNumber(compaction.tokensSaved ?? compaction.tokens_saved),
+  };
+  const compactedToolIds = compaction.compactedToolIds ?? compaction.compacted_tool_ids;
+  if (Array.isArray(compactedToolIds)) {
+    normalized.compactedToolIds = compactedToolIds.filter((id) => typeof id === 'string');
+  }
+  return normalized;
+}
+
+function _isRuntimeMilestone(event) {
+  if (!event || typeof event !== 'object') return false;
+  if (event.type === 'result' || event.type === 'error') return true;
+  if (event.type === 'system' && event.compaction && typeof event.compaction === 'object') return true;
+  return false;
+}
+
+function _persistRuntimeMilestone(sessionId, entry, event, rawEvent) {
+  if (!_isRuntimeMilestone(event)) return;
+
+  dbWrite((db) => {
+    const now = new Date().toISOString();
+    if (!Number.isFinite(entry._runtimeSeq)) {
+      const row = db.prepare('SELECT last_seq FROM session_runtime_state WHERE session_id = ?').get(sessionId);
+      entry._runtimeSeq = Number(row?.last_seq || 0);
+    }
+    const seq = entry._runtimeSeq + 1;
+    entry._runtimeSeq = seq;
+
+    const payload = {
+      ...event,
+      provider: entry.provider || null,
+      providerSessionId: entry.providerSessionId || event.providerSessionId || null,
+      rawEventType: rawEvent?.type || null,
+    };
+    db.prepare(`
+      INSERT OR REPLACE INTO session_runtime_events (session_id, seq, type, payload_json, ts)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(sessionId, seq, event.type, _safeStringify(payload), now);
+
+    const compaction = _normalizeCompaction(event.compaction);
+    if (compaction) {
+      db.prepare(`
+        UPDATE session_runtime_state
+        SET updated_at = ?, last_seq = ?,
+            compaction_count = compaction_count + 1,
+            tokens_saved_total = tokens_saved_total + ?,
+            last_compaction_at = ?,
+            last_compaction_json = ?
+        WHERE session_id = ?
+      `).run(
+        now,
+        seq,
+        compaction.tokensSaved,
+        now,
+        _safeStringify(compaction),
+        sessionId,
+      );
+      return;
+    }
+
+    db.prepare(`
+      UPDATE session_runtime_state
+      SET updated_at = ?, last_seq = ?
+      WHERE session_id = ?
+    `).run(now, seq, sessionId);
+  });
+}
+
 /**
  * Attach a stdout handler to an agent process.
  *
@@ -113,6 +198,8 @@ export function attachStdoutHandler(ctx, sessionId, entry, options = {}) {
             rawEvent: raw,   // provider-native (for debugging + future upgrades)
           });
 
+          _persistRuntimeMilestone(sessionId, entry, event, raw);
+
           if (event.type === 'result' && onResult) {
             onResult(event);
           }
@@ -187,6 +274,7 @@ export function flushStdoutBuffer(ctx, sessionId, entry) {
     }
     for (const { normalized, raw } of results) {
       if (!normalized) continue;
+      _persistRuntimeMilestone(sessionId, entry, normalized, raw);
       ctx.broadcast('agent:event', {
         sessionId,
         provider,

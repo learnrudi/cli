@@ -105,6 +105,23 @@ export function isToolResultOnly(content) {
   );
 }
 
+/**
+ * Classify a JSONL entry for turn-boundary decisions.
+ * Returns 'user-turn', 'tool-result', 'assistant', or null (skip).
+ * Used by both the turn indexer and parsers.
+ */
+export function classifyEntry(entry, provider = 'claude') {
+  const role = getSessionEntryRole(entry, provider);
+  if (!role) return null;
+  if (role === 'user') {
+    const content = entry?.message?.content;
+    // Codex user messages don't use content arrays with tool_result blocks
+    if (provider !== 'codex' && isToolResultOnly(content)) return 'tool-result';
+    return 'user-turn';
+  }
+  return 'assistant';
+}
+
 export function extractToolResultText(resultContent) {
   let text;
   if (typeof resultContent === 'string') {

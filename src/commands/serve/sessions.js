@@ -54,6 +54,172 @@ import { createTitleBackfillModule } from '../sessions/title-backfill.js';
 const SESSIONS_UPDATE_DEBOUNCE_MS = 350;
 const SESSIONS_WATCH_RETRY_MS = 10000;
 const SESSIONS_PROJECTS_CACHE_TTL_MS = 8000;
+const MAX_SESSION_SEARCH_LIMIT = 50;
+
+function prepareSessionSearchFtsQuery(query) {
+  const cleaned = String(query || '')
+    .replace(/['"]/g, '')
+    .replace(/[()]/g, '')
+    .replace(/[-]/g, ' ')
+    .replace(/[*]/g, '')
+    .trim();
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '""';
+  if (words.length === 1) return `"${words[0]}"*`;
+  return words.map((w) => `"${w}"*`).join(' ');
+}
+
+function mergeSessionSearchRows(db, titleRows, turnRows, limit) {
+  const scoreBySession = new Map();
+  const titleBySession = new Map();
+  const turnsBySession = new Map();
+
+  titleRows.forEach((row, idx) => {
+    const base = scoreBySession.get(row.sessionId) || 0;
+    scoreBySession.set(row.sessionId, base + (10_000 - idx));
+    titleBySession.set(row.sessionId, {
+      titleMatch: row.titleMatch || undefined,
+      snippetMatch: row.snippetMatch || undefined,
+    });
+  });
+
+  turnRows.forEach((row, idx) => {
+    const base = scoreBySession.get(row.sessionId) || 0;
+    scoreBySession.set(row.sessionId, base + (1_000 - idx));
+    const existing = turnsBySession.get(row.sessionId) || [];
+    if (existing.length < 3) {
+      existing.push({
+        turnNumber: row.turnNumber,
+        userHighlighted: row.userHighlighted || undefined,
+        assistantHighlighted: row.assistantHighlighted || undefined,
+      });
+      turnsBySession.set(row.sessionId, existing);
+    }
+  });
+
+  const sessionIds = [...scoreBySession.keys()];
+  if (sessionIds.length === 0) return [];
+  const placeholders = sessionIds.map(() => '?').join(', ');
+  const rows = db.prepare(`
+    SELECT
+      id as sessionId,
+      title,
+      provider,
+      cwd,
+      project_path as projectPath,
+      last_active_at as lastActiveAt,
+      COALESCE(turn_count, 0) as turnCount
+    FROM sessions
+    WHERE id IN (${placeholders}) AND status != 'deleted'
+  `).all(...sessionIds);
+  const rowById = new Map(rows.map((r) => [r.sessionId, r]));
+
+  const sortedIds = sessionIds
+    .filter((id) => rowById.has(id))
+    .sort((a, b) => {
+      const scoreDiff = (scoreBySession.get(b) || 0) - (scoreBySession.get(a) || 0);
+      if (scoreDiff !== 0) return scoreDiff;
+      const aTs = new Date(rowById.get(a)?.lastActiveAt || 0).getTime();
+      const bTs = new Date(rowById.get(b)?.lastActiveAt || 0).getTime();
+      return bTs - aTs;
+    })
+    .slice(0, limit);
+
+  return sortedIds.map((id) => {
+    const meta = rowById.get(id) || {};
+    const title = titleBySession.get(id) || {};
+    return {
+      sessionId: id,
+      title: meta.title || null,
+      provider: meta.provider || 'claude',
+      cwd: meta.cwd || null,
+      projectPath: meta.projectPath || null,
+      lastActiveAt: meta.lastActiveAt || null,
+      turnCount: meta.turnCount || 0,
+      titleMatch: title.titleMatch,
+      snippetMatch: title.snippetMatch,
+      turnMatches: turnsBySession.get(id) || [],
+    };
+  });
+}
+
+function searchSessionsInDb(db, query, { limit = 20, provider } = {}) {
+  const normalizedLimit = Math.min(Math.max(Number(limit) || 20, 1), MAX_SESSION_SEARCH_LIMIT);
+  const ftsQuery = prepareSessionSearchFtsQuery(query);
+  const providerClause = provider ? ' AND s.provider = ?' : '';
+
+  try {
+    const titleParams = provider ? [ftsQuery, provider, normalizedLimit * 4] : [ftsQuery, normalizedLimit * 4];
+    const turnParams = provider ? [ftsQuery, provider, normalizedLimit * 20] : [ftsQuery, normalizedLimit * 20];
+    const titleRows = db.prepare(`
+      SELECT
+        s.id as sessionId,
+        highlight(sessions_fts, 1, '<mark>', '</mark>') as titleMatch,
+        highlight(sessions_fts, 2, '<mark>', '</mark>') as snippetMatch,
+        bm25(sessions_fts) as rank
+      FROM sessions_fts
+      JOIN sessions s ON sessions_fts.session_id = s.id
+      WHERE sessions_fts MATCH ?
+        AND s.status != 'deleted'
+        ${providerClause}
+      ORDER BY rank
+      LIMIT ?
+    `).all(...titleParams);
+
+    const turnRows = db.prepare(`
+      SELECT
+        t.session_id as sessionId,
+        t.turn_number as turnNumber,
+        highlight(turns_fts, 0, '<mark>', '</mark>') as userHighlighted,
+        highlight(turns_fts, 1, '<mark>', '</mark>') as assistantHighlighted,
+        bm25(turns_fts) as rank
+      FROM turns_fts
+      JOIN turns t ON turns_fts.rowid = t.rowid
+      JOIN sessions s ON t.session_id = s.id
+      WHERE turns_fts MATCH ?
+        AND s.status != 'deleted'
+        ${providerClause}
+      ORDER BY rank
+      LIMIT ?
+    `).all(...turnParams);
+
+    return mergeSessionSearchRows(db, titleRows, turnRows, normalizedLimit);
+  } catch {
+    // Fallback: LIKE-based search if FTS query parsing fails
+    const like = `%${query}%`;
+    const titleParams = provider ? [like, like, provider, normalizedLimit * 4] : [like, like, normalizedLimit * 4];
+    const turnParams = provider ? [like, like, provider, normalizedLimit * 20] : [like, like, normalizedLimit * 20];
+    const titleRows = db.prepare(`
+      SELECT
+        s.id as sessionId,
+        s.title as titleMatch,
+        s.snippet as snippetMatch,
+        0 as rank
+      FROM sessions s
+      WHERE s.status != 'deleted'
+        AND (s.title LIKE ? OR s.snippet LIKE ?)
+        ${providerClause}
+      ORDER BY s.last_active_at DESC
+      LIMIT ?
+    `).all(...titleParams);
+    const turnRows = db.prepare(`
+      SELECT
+        t.session_id as sessionId,
+        t.turn_number as turnNumber,
+        t.user_message as userHighlighted,
+        t.assistant_response as assistantHighlighted,
+        0 as rank
+      FROM turns t
+      JOIN sessions s ON t.session_id = s.id
+      WHERE s.status != 'deleted'
+        AND (t.user_message LIKE ? OR t.assistant_response LIKE ?)
+        ${providerClause}
+      ORDER BY t.ts DESC
+      LIMIT ?
+    `).all(...turnParams);
+    return mergeSessionSearchRows(db, titleRows, turnRows, normalizedLimit);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Pure functions — parsing, diff stats, path decoding
@@ -1536,6 +1702,34 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
         res.end(JSON.stringify({ projects }));
       } catch (err) {
         json(res, { projects: [], error: err.message });
+      }
+      return true;
+    }
+
+    // GET /sessions/search?q=...&limit=20&provider=claude|codex
+    if (req.method === 'GET' && url.pathname === '/sessions/search') {
+      const q = (url.searchParams.get('q') || '').trim();
+      if (!q) {
+        json(res, { results: [] });
+        return true;
+      }
+
+      const limitRaw = Number.parseInt(url.searchParams.get('limit') || '20', 10);
+      const limit = Number.isFinite(limitRaw) ? limitRaw : 20;
+      const providerRaw = (url.searchParams.get('provider') || '').trim();
+      const provider = ['claude', 'codex', 'gemini', 'ollama'].includes(providerRaw) ? providerRaw : undefined;
+
+      const db = resolveDb ? resolveDb() : null;
+      if (!db) {
+        json(res, { results: [] });
+        return true;
+      }
+
+      try {
+        const results = searchSessionsInDb(db, q, { limit, provider });
+        json(res, { results });
+      } catch (err) {
+        error(res, err?.message || 'Search failed', 500);
       }
       return true;
     }

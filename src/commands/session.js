@@ -378,11 +378,12 @@ function sessionRename(args, flags) {
   }
 
   const db = getDb();
+  const now = new Date().toISOString();
   const result = db.prepare(`
     UPDATE sessions
-    SET title = ?, title_override = ?
+    SET title = ?, title_override = ?, title_source = 'user', title_generated_at = ?
     WHERE id = ? OR provider_session_id = ?
-  `).run(newTitle, newTitle, sessionId, sessionId);
+  `).run(newTitle, newTitle, now, sessionId, sessionId);
 
   if (result.changes === 0) {
     console.log(`Session not found: ${sessionId}`);

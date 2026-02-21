@@ -43,6 +43,7 @@ AGENT INTEGRATION
 
 RUN
   run <stack>           Run a stack directly
+  parallel <tasks...>   Run multiple agent tasks in parallel (grouped)
 
 SECRETS
   secrets set <name>    Set a secret
@@ -139,6 +140,27 @@ OPTIONS
 EXAMPLES
   rudi run pdf-creator
   rudi run pdf-creator --input '{"file": "doc.html"}'
+`,
+    parallel: `
+rudi parallel - Launch grouped parallel agent sessions
+
+USAGE
+  rudi parallel "<task1>" "<task2>" [more tasks] [options]
+
+OPTIONS
+  --name <name>               Group display name
+  --provider <provider>       Agent provider (default: claude)
+  --model <model>             Model override
+  --base-branch <branch>      Base branch for worktrees (default: current branch)
+  --cwd <path>                Working directory (default: current dir)
+  --permission-mode <mode>    Permission mode passed to provider
+  --system-prompt <prompt>    Additional system prompt
+  --no-worktree               Run in shared cwd instead of isolated worktrees
+
+EXAMPLES
+  rudi parallel "implement auth" "write tests" "update docs"
+  rudi parallel "fix bug A" "fix bug B" --name "Bug batch"
+  rudi parallel "task1" "task2" --provider claude --model sonnet
 `,
     list: `
 rudi list - List installed packages

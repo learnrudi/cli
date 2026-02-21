@@ -1,8 +1,7 @@
 import {
+  classifyEntry,
   extractContent,
   extractToolResultText,
-  getSessionEntryRole,
-  isToolResultOnly,
   stripSystemXml,
 } from '../common.js';
 
@@ -49,12 +48,12 @@ export function parseClaudeSessionMessagesFromJsonl(content) {
       continue;
     }
 
-    const role = getSessionEntryRole(entry, 'claude');
-    if (!role) continue;
+    const cls = classifyEntry(entry, 'claude');
+    if (!cls) continue;
 
     const contentBlocks = entry?.message?.content;
 
-    if (role === 'assistant') {
+    if (cls === 'assistant') {
       if (!currentAssistant) {
         currentAssistant = {
           content: '',
@@ -114,8 +113,8 @@ export function parseClaudeSessionMessagesFromJsonl(content) {
           }
         }
       }
-    } else if (role === 'user') {
-      if (Array.isArray(contentBlocks) && isToolResultOnly(contentBlocks)) {
+    } else if (cls === 'user-turn' || cls === 'tool-result') {
+      if (cls === 'tool-result') {
         if (currentAssistant) {
           for (const block of contentBlocks) {
             const idx = currentAssistant.pendingToolIds.get(block.tool_use_id);

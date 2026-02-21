@@ -383,17 +383,28 @@ export function buildSpawnChildRoutes(ctx) {
               typeof event.costUsd === 'number'
                 ? event.costUsd
                 : (typeof event.total_cost_usd === 'number' ? event.total_cost_usd : null);
+            const turnTokens = Math.max(
+              0,
+              Number(entry._turnInputTokens || 0)
+                + Number(entry._turnOutputTokens || 0)
+                + Number(entry._turnCacheReadTokens || 0)
+                + Number(entry._turnCacheCreationTokens || 0)
+            );
             const providerSid = entry.providerSessionId;
             dbWrite((db) => {
               const now = new Date().toISOString();
               if (costUsd !== null) {
                 db.prepare(`
-                  UPDATE session_runtime_state SET turn_count = turn_count + 1, cost_total = ?, updated_at = ? WHERE session_id = ?
-                `).run(costUsd, now, childSessionId);
+                  UPDATE session_runtime_state
+                  SET turn_count = turn_count + 1, cost_total = ?, tokens_total = tokens_total + ?, updated_at = ?
+                  WHERE session_id = ?
+                `).run(costUsd, turnTokens, now, childSessionId);
               } else {
                 db.prepare(`
-                  UPDATE session_runtime_state SET turn_count = turn_count + 1, updated_at = ? WHERE session_id = ?
-                `).run(now, childSessionId);
+                  UPDATE session_runtime_state
+                  SET turn_count = turn_count + 1, tokens_total = tokens_total + ?, updated_at = ?
+                  WHERE session_id = ?
+                `).run(turnTokens, now, childSessionId);
               }
               if (providerSid) {
                 db.prepare(`

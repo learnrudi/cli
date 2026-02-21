@@ -7,15 +7,14 @@ import os from 'os';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { spawn, execSync } from 'child_process';
+import { execSync } from 'child_process';
 import { PATHS } from '@learnrudi/env';
 import { loadProviderConfig, resolveProviderBinary, buildArgs, getPermissionArgs, buildEnv, hasCapability, expandConditional } from '../providers/index.js';
 import { buildSystemPrompt } from '../prompts.js';
 import { dbWrite, resolveDb } from '../db.js';
-import { autoNameSession } from '../db.js';
-import { resolveReusableEntry, countAlive, broadcastProcessCount, dropResumeMappingsForSession, buildUserContent } from '../helpers.js';
+import { resolveReusableEntry, countAlive, buildUserContent, dropResumeMappingsForSession } from '../helpers.js';
 import { getRepoRoot, createSessionWorktree, restoreSessionWorktree } from '../worktree.js';
-import { attachStdoutHandler, attachStderrHandler, flushStdoutBuffer } from '../process-io.js';
+import { spawnAgentProcess } from '../spawn-process.js';
 
 export function buildStartRoute(ctx) {
   const {
@@ -367,217 +366,32 @@ export function buildStartRoute(ctx) {
     });
 
     try {
-      const proc = spawn(binaryPath, args, {
-        cwd: spawnCwd,
-        env,
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
-
-      const entry = {
-        proc,
+      spawnAgentProcess(ctx, {
+        sessionId,
+        prompt,
         provider,
+        model,
+        permissionMode: permissionMode || null,
+        systemPrompt: fullSystemPrompt || null,
         providerConfig,
-        providerSessionId: null,
-        resumeSessionId: resumeSessionId || null,
-        parentSessionId: null,
-        stdoutBuffer: '',
-        turnActive: true,
-        startedAt: Date.now(),
-        lastActivityAt: Date.now(),
-        cwd: effectiveCwd,
+        binaryPath,
+        args,
+        env,
+        spawnCwd,
+        effectiveCwd,
+        workingDir,
         repoRoot,
         worktreePath,
         worktreeBranch,
         baseBranch,
-        _terminationReason: null,
-        _turnPrompt: prompt,
-        _turnNumber: 1,
-        _turnInputTokens: 0,
-        _turnOutputTokens: 0,
-        _turnCacheReadTokens: 0,
-        _turnCacheCreationTokens: 0,
-        _turnModel: model || null,
-        _turnToolsUsed: [],
-      };
-      agentProcesses.set(sessionId, entry);
-
-      log('agent', 'info', `process spawned pid=${proc.pid}`, { sessionId: shortId });
-
-      // Deliver initial prompt via stdin based on provider config
-      if (stdinMode === 'pipe' && hasCapability(providerConfig, 'inputStreaming')) {
-        // Claude: multi-turn via stream-json on stdin
-        const inputMsg = JSON.stringify({ type: 'user', message: { role: 'user', content: buildUserContent(prompt, images, effectiveCwd, log) } }) + '\n';
-        proc.stdin.write(inputMsg);
-        log('agent', 'debug', 'wrote first prompt to stdin (stream-json)', { sessionId: shortId });
-      } else if (stdinMode === 'close') {
-        // Provider that takes prompt via arg and expects stdin closed
-        proc.stdin.end();
-        log('agent', 'debug', 'closed stdin (prompt delivered via args)', { sessionId: shortId });
-      } else if (stdinMode === 'pipe') {
-        // Codex: prompt delivered via arg, stdin stays open for potential input
-        log('agent', 'debug', 'stdin pipe open (prompt delivered via args)', { sessionId: shortId });
-      }
-
-      // --- stdout handler (uses shared process-io) ---
-      attachStdoutHandler(ctx, sessionId, entry, {
+        resumeSessionId: resumeSessionId || null,
+        images,
+        mcpConfigPath,
+        sessionRowMode: 'providerSessionId',
+        autoNameOnFirstTurn: true,
         setRunningOnCapture: true,
-        onResult: (event) => {
-          entry.turnActive = false;
-          const costUsd =
-            typeof event.costUsd === 'number'
-              ? event.costUsd
-              : (typeof event.total_cost_usd === 'number' ? event.total_cost_usd : null);
-          const turnNumber = entry._turnNumber;
-          const turnPrompt = entry._turnPrompt || '';
-          const turnModel = entry._turnModel || null;
-          const turnInputTokens = entry._turnInputTokens;
-          const turnOutputTokens = entry._turnOutputTokens;
-          const turnCacheRead = entry._turnCacheReadTokens;
-          const turnCacheCreation = entry._turnCacheCreationTokens;
-          const turnToolsUsed = entry._turnToolsUsed.length > 0
-            ? JSON.stringify([...new Set(entry._turnToolsUsed)])
-            : null;
-          const providerSid = entry.providerSessionId;
-
-          // 4c. Turn complete — runtime state + sessions/turns DB write
-          dbWrite((db) => {
-            const now = new Date().toISOString();
-            const nowMs = Date.now();
-
-            if (costUsd !== null) {
-              db.prepare(`
-                UPDATE session_runtime_state
-                SET turn_count = turn_count + 1, cost_total = ?, updated_at = ?
-                WHERE session_id = ?
-              `).run(costUsd, now, sessionId);
-            } else {
-              db.prepare(`
-                UPDATE session_runtime_state
-                SET turn_count = turn_count + 1, updated_at = ?
-                WHERE session_id = ?
-              `).run(now, sessionId);
-            }
-
-            if (!providerSid) return;
-
-            db.prepare(`
-              INSERT OR IGNORE INTO sessions
-                (id, provider, provider_session_id, origin, cwd, project_path, model, status, created_at, last_active_at,
-                 turn_count, total_cost, total_input_tokens, total_output_tokens)
-              VALUES (?, ?, ?, 'rudi', ?, ?, ?, 'active', ?, ?, 0, 0, 0, 0)
-            `).run(providerSid, provider, providerSid, workingDir, workingDir, turnModel, now, now);
-
-            const turnId = crypto.randomUUID();
-            db.prepare(`
-              INSERT INTO turns
-                (id, session_id, provider, provider_session_id, turn_number,
-                 user_message, model, cost, input_tokens, output_tokens,
-                 cache_read_tokens, cache_creation_tokens, tools_used, ts, ts_ms)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `).run(
-              turnId, providerSid, provider, providerSid, turnNumber,
-              turnPrompt, turnModel, costUsd,
-              turnInputTokens, turnOutputTokens,
-              turnCacheRead, turnCacheCreation,
-              turnToolsUsed, now, nowMs,
-            );
-
-            const turnCost = costUsd !== null ? costUsd : 0;
-            db.prepare(`
-              UPDATE sessions
-              SET turn_count = turn_count + 1,
-                  total_cost = total_cost + ?,
-                  total_input_tokens = total_input_tokens + ?,
-                  total_output_tokens = total_output_tokens + ?,
-                  last_active_at = ?
-              WHERE id = ?
-            `).run(turnCost, turnInputTokens, turnOutputTokens, now, providerSid);
-          });
-
-          // Auto-name after first turn completes
-          if (turnNumber === 1 && providerSid) {
-            autoNameSession(entry, providerSid, turnPrompt, workingDir, broadcast, log);
-          }
-
-          // Advance turn counter & reset accumulators
-          entry._turnNumber++;
-          entry._turnPrompt = '';
-          entry._turnInputTokens = 0;
-          entry._turnOutputTokens = 0;
-          entry._turnCacheReadTokens = 0;
-          entry._turnCacheCreationTokens = 0;
-          entry._turnToolsUsed = [];
-          if (entry._normalizer) entry._normalizer.reset();
-
-          broadcast('agent:done', { sessionId, exitCode: 0, providerSessionId: entry.providerSessionId });
-          queueSessionsUpdated({
-            source: 'agent',
-            event: 'result',
-            sessionId: entry.providerSessionId || null,
-          });
-        },
-      });
-
-      // --- stderr handler ---
-      attachStderrHandler(ctx, sessionId, entry);
-
-      // --- process close ---
-      proc.on('close', (exitCode) => {
-        log('agent', 'info', `process exited code=${exitCode}`, { sessionId: shortId });
-        flushStdoutBuffer(ctx, sessionId, entry);
-        // 4d. Process close — finalize status
-        dbWrite((db) => {
-          const now = new Date().toISOString();
-          const finalStatus = entry._terminationReason || (exitCode === 0 ? 'completed' : 'error');
-          db.prepare(`
-            UPDATE session_runtime_state
-            SET status = ?, completed_at = ?, updated_at = ?
-            WHERE session_id = ?
-          `).run(finalStatus, now, now, sessionId);
-        });
-        if (entry.turnActive) {
-          broadcast('agent:done', { sessionId, exitCode, providerSessionId: entry.providerSessionId });
-          queueSessionsUpdated({
-            source: 'agent',
-            event: 'process-close',
-            sessionId: entry.providerSessionId || null,
-          });
-        }
-        dropResumeMappingsForSession(sessionId, resumeSessionIndex);
-        // Resolve any pending permission requests for this session with deny
-        for (const [reqId, pending] of pendingPermissions) {
-          if (pending.rudiSessionId === sessionId) {
-            const denyDecision = { permissionDecision: 'deny', reason: 'Session ended' };
-            if (pending.resolve) pending.resolve(denyDecision);
-            else pending.decision = denyDecision;
-            if (pending.timer) clearTimeout(pending.timer);
-            pendingPermissions.delete(reqId);
-          }
-        }
-        sessionAlwaysAllowed.delete(sessionId);
-        agentProcesses.delete(sessionId);
-        broadcastProcessCount(ctx);
-        if (mcpConfigPath) { try { fs.unlinkSync(mcpConfigPath); } catch {} }
-      });
-
-      proc.on('exit', () => {
-        if (mcpConfigPath) { try { fs.unlinkSync(mcpConfigPath); } catch {} }
-      });
-
-      proc.on('error', (err) => {
-        log('agent', 'error', `spawn error: ${err.message}`, { sessionId: shortId });
-        broadcast('agent:error', { sessionId, error: err.message });
-        // 4e. Spawn error
-        dbWrite((db) => {
-          db.prepare(`
-            UPDATE session_runtime_state
-            SET status = 'error', last_error = ?, updated_at = ?
-            WHERE session_id = ?
-          `).run(err.message, new Date().toISOString(), sessionId);
-        });
-        dropResumeMappingsForSession(sessionId, resumeSessionIndex);
-        agentProcesses.delete(sessionId);
-        if (mcpConfigPath) { try { fs.unlinkSync(mcpConfigPath); } catch {} }
+        queueEvent: 'result',
+        queueCloseEvent: 'process-close',
       });
 
       json(res, {
@@ -592,7 +406,6 @@ export function buildStartRoute(ctx) {
         gitignoreWarning: gitignoreWarning || undefined,
         useWorktree: resolvedUseWorktree,
       });
-      broadcastProcessCount(ctx);
     } catch (err) {
       dropResumeMappingsForSession(sessionId, resumeSessionIndex);
       // 4f. Spawn catch

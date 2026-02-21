@@ -8,6 +8,7 @@ import { buildStartRoute } from './routes/start.js';
 import { buildLifecycleRoutes } from './routes/lifecycle.js';
 import { buildSpawnChildRoutes } from './routes/spawn-child.js';
 import { buildWorktreeRoutes } from './routes/worktree-routes.js';
+import { buildRunGroupRoutes } from './routes/run-group.js';
 
 export function createAgentHandler({
   log,
@@ -31,13 +32,14 @@ export function createAgentHandler({
   // Permission state (shared across all routes)
   const pendingPermissions = new Map();
   const sessionAlwaysAllowed = new Map();
+  const groupAlwaysAllowed = new Map(); // Map<groupId, Set<toolName>>
 
   // Shared context object passed to all route builders
   const ctx = {
     log, broadcast, json, error, readBody,
     agentProcesses, queueSessionsUpdated, resumeSessionIndex,
     maxConcurrent, getSidecarPort, getSidecarToken,
-    pendingPermissions, sessionAlwaysAllowed,
+    pendingPermissions, sessionAlwaysAllowed, groupAlwaysAllowed,
     spawnRateMap, MAX_SPAWNS_PER_WINDOW, SPAWN_RATE_WINDOW_MS, MAX_CHILDREN_PER_PARENT,
   };
 
@@ -52,12 +54,14 @@ export function createAgentHandler({
   const routePermissions = buildPermissionRoutes(ctx);
   const routeSpawnChild = buildSpawnChildRoutes(ctx);
   const routeWorktree = buildWorktreeRoutes(ctx);
+  const routeRunGroup = buildRunGroupRoutes(ctx);
 
   return async function handleAgent(req, res, url) {
     return await routeStart(req, res, url)
       || await routeLifecycle(req, res, url)
       || await routePermissions(req, res, url)
       || await routeWorktree(req, res, url)
+      || await routeRunGroup(req, res, url)
       || await routeSpawnChild(req, res, url)
       || false;
   };

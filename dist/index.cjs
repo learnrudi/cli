@@ -1314,17 +1314,17 @@ var require_visit = __commonJS({
     visit.BREAK = BREAK;
     visit.SKIP = SKIP;
     visit.REMOVE = REMOVE;
-    function visit_(key, node, visitor, path60) {
-      const ctrl = callVisitor(key, node, visitor, path60);
+    function visit_(key, node, visitor, path61) {
+      const ctrl = callVisitor(key, node, visitor, path61);
       if (identity.isNode(ctrl) || identity.isPair(ctrl)) {
-        replaceNode(key, path60, ctrl);
-        return visit_(key, ctrl, visitor, path60);
+        replaceNode(key, path61, ctrl);
+        return visit_(key, ctrl, visitor, path61);
       }
       if (typeof ctrl !== "symbol") {
         if (identity.isCollection(node)) {
-          path60 = Object.freeze(path60.concat(node));
+          path61 = Object.freeze(path61.concat(node));
           for (let i2 = 0; i2 < node.items.length; ++i2) {
-            const ci = visit_(i2, node.items[i2], visitor, path60);
+            const ci = visit_(i2, node.items[i2], visitor, path61);
             if (typeof ci === "number")
               i2 = ci - 1;
             else if (ci === BREAK)
@@ -1335,13 +1335,13 @@ var require_visit = __commonJS({
             }
           }
         } else if (identity.isPair(node)) {
-          path60 = Object.freeze(path60.concat(node));
-          const ck = visit_("key", node.key, visitor, path60);
+          path61 = Object.freeze(path61.concat(node));
+          const ck = visit_("key", node.key, visitor, path61);
           if (ck === BREAK)
             return BREAK;
           else if (ck === REMOVE)
             node.key = null;
-          const cv = visit_("value", node.value, visitor, path60);
+          const cv = visit_("value", node.value, visitor, path61);
           if (cv === BREAK)
             return BREAK;
           else if (cv === REMOVE)
@@ -1362,17 +1362,17 @@ var require_visit = __commonJS({
     visitAsync.BREAK = BREAK;
     visitAsync.SKIP = SKIP;
     visitAsync.REMOVE = REMOVE;
-    async function visitAsync_(key, node, visitor, path60) {
-      const ctrl = await callVisitor(key, node, visitor, path60);
+    async function visitAsync_(key, node, visitor, path61) {
+      const ctrl = await callVisitor(key, node, visitor, path61);
       if (identity.isNode(ctrl) || identity.isPair(ctrl)) {
-        replaceNode(key, path60, ctrl);
-        return visitAsync_(key, ctrl, visitor, path60);
+        replaceNode(key, path61, ctrl);
+        return visitAsync_(key, ctrl, visitor, path61);
       }
       if (typeof ctrl !== "symbol") {
         if (identity.isCollection(node)) {
-          path60 = Object.freeze(path60.concat(node));
+          path61 = Object.freeze(path61.concat(node));
           for (let i2 = 0; i2 < node.items.length; ++i2) {
-            const ci = await visitAsync_(i2, node.items[i2], visitor, path60);
+            const ci = await visitAsync_(i2, node.items[i2], visitor, path61);
             if (typeof ci === "number")
               i2 = ci - 1;
             else if (ci === BREAK)
@@ -1383,13 +1383,13 @@ var require_visit = __commonJS({
             }
           }
         } else if (identity.isPair(node)) {
-          path60 = Object.freeze(path60.concat(node));
-          const ck = await visitAsync_("key", node.key, visitor, path60);
+          path61 = Object.freeze(path61.concat(node));
+          const ck = await visitAsync_("key", node.key, visitor, path61);
           if (ck === BREAK)
             return BREAK;
           else if (ck === REMOVE)
             node.key = null;
-          const cv = await visitAsync_("value", node.value, visitor, path60);
+          const cv = await visitAsync_("value", node.value, visitor, path61);
           if (cv === BREAK)
             return BREAK;
           else if (cv === REMOVE)
@@ -1416,23 +1416,23 @@ var require_visit = __commonJS({
       }
       return visitor;
     }
-    function callVisitor(key, node, visitor, path60) {
+    function callVisitor(key, node, visitor, path61) {
       if (typeof visitor === "function")
-        return visitor(key, node, path60);
+        return visitor(key, node, path61);
       if (identity.isMap(node))
-        return visitor.Map?.(key, node, path60);
+        return visitor.Map?.(key, node, path61);
       if (identity.isSeq(node))
-        return visitor.Seq?.(key, node, path60);
+        return visitor.Seq?.(key, node, path61);
       if (identity.isPair(node))
-        return visitor.Pair?.(key, node, path60);
+        return visitor.Pair?.(key, node, path61);
       if (identity.isScalar(node))
-        return visitor.Scalar?.(key, node, path60);
+        return visitor.Scalar?.(key, node, path61);
       if (identity.isAlias(node))
-        return visitor.Alias?.(key, node, path60);
+        return visitor.Alias?.(key, node, path61);
       return void 0;
     }
-    function replaceNode(key, path60, node) {
-      const parent = path60[path60.length - 1];
+    function replaceNode(key, path61, node) {
+      const parent = path61[path61.length - 1];
       if (identity.isCollection(parent)) {
         parent.items[key] = node;
       } else if (identity.isPair(parent)) {
@@ -2040,10 +2040,10 @@ var require_Collection = __commonJS({
     var createNode = require_createNode();
     var identity = require_identity();
     var Node = require_Node();
-    function collectionFromPath(schema, path60, value) {
+    function collectionFromPath(schema, path61, value) {
       let v2 = value;
-      for (let i2 = path60.length - 1; i2 >= 0; --i2) {
-        const k2 = path60[i2];
+      for (let i2 = path61.length - 1; i2 >= 0; --i2) {
+        const k2 = path61[i2];
         if (typeof k2 === "number" && Number.isInteger(k2) && k2 >= 0) {
           const a2 = [];
           a2[k2] = v2;
@@ -2062,7 +2062,7 @@ var require_Collection = __commonJS({
         sourceObjects: /* @__PURE__ */ new Map()
       });
     }
-    var isEmptyPath = (path60) => path60 == null || typeof path60 === "object" && !!path60[Symbol.iterator]().next().done;
+    var isEmptyPath = (path61) => path61 == null || typeof path61 === "object" && !!path61[Symbol.iterator]().next().done;
     var Collection = class extends Node.NodeBase {
       constructor(type, schema) {
         super(type);
@@ -2092,11 +2092,11 @@ var require_Collection = __commonJS({
        * be a Pair instance or a `{ key, value }` object, which may not have a key
        * that already exists in the map.
        */
-      addIn(path60, value) {
-        if (isEmptyPath(path60))
+      addIn(path61, value) {
+        if (isEmptyPath(path61))
           this.add(value);
         else {
-          const [key, ...rest] = path60;
+          const [key, ...rest] = path61;
           const node = this.get(key, true);
           if (identity.isCollection(node))
             node.addIn(rest, value);
@@ -2110,8 +2110,8 @@ var require_Collection = __commonJS({
        * Removes a value from the collection.
        * @returns `true` if the item was found and removed.
        */
-      deleteIn(path60) {
-        const [key, ...rest] = path60;
+      deleteIn(path61) {
+        const [key, ...rest] = path61;
         if (rest.length === 0)
           return this.delete(key);
         const node = this.get(key, true);
@@ -2125,8 +2125,8 @@ var require_Collection = __commonJS({
        * scalar values from their surrounding node; to disable set `keepScalar` to
        * `true` (collections are always returned intact).
        */
-      getIn(path60, keepScalar) {
-        const [key, ...rest] = path60;
+      getIn(path61, keepScalar) {
+        const [key, ...rest] = path61;
         const node = this.get(key, true);
         if (rest.length === 0)
           return !keepScalar && identity.isScalar(node) ? node.value : node;
@@ -2144,8 +2144,8 @@ var require_Collection = __commonJS({
       /**
        * Checks if the collection includes a value with the key `key`.
        */
-      hasIn(path60) {
-        const [key, ...rest] = path60;
+      hasIn(path61) {
+        const [key, ...rest] = path61;
         if (rest.length === 0)
           return this.has(key);
         const node = this.get(key, true);
@@ -2155,8 +2155,8 @@ var require_Collection = __commonJS({
        * Sets a value in this collection. For `!!set`, `value` needs to be a
        * boolean to add/remove the item from the set.
        */
-      setIn(path60, value) {
-        const [key, ...rest] = path60;
+      setIn(path61, value) {
+        const [key, ...rest] = path61;
         if (rest.length === 0) {
           this.set(key, value);
         } else {
@@ -4660,9 +4660,9 @@ var require_Document = __commonJS({
           this.contents.add(value);
       }
       /** Adds a value to the document. */
-      addIn(path60, value) {
+      addIn(path61, value) {
         if (assertCollection(this.contents))
-          this.contents.addIn(path60, value);
+          this.contents.addIn(path61, value);
       }
       /**
        * Create a new `Alias` node, ensuring that the target `node` has the required anchor.
@@ -4737,14 +4737,14 @@ var require_Document = __commonJS({
        * Removes a value from the document.
        * @returns `true` if the item was found and removed.
        */
-      deleteIn(path60) {
-        if (Collection.isEmptyPath(path60)) {
+      deleteIn(path61) {
+        if (Collection.isEmptyPath(path61)) {
           if (this.contents == null)
             return false;
           this.contents = null;
           return true;
         }
-        return assertCollection(this.contents) ? this.contents.deleteIn(path60) : false;
+        return assertCollection(this.contents) ? this.contents.deleteIn(path61) : false;
       }
       /**
        * Returns item at `key`, or `undefined` if not found. By default unwraps
@@ -4759,10 +4759,10 @@ var require_Document = __commonJS({
        * scalar values from their surrounding node; to disable set `keepScalar` to
        * `true` (collections are always returned intact).
        */
-      getIn(path60, keepScalar) {
-        if (Collection.isEmptyPath(path60))
+      getIn(path61, keepScalar) {
+        if (Collection.isEmptyPath(path61))
           return !keepScalar && identity.isScalar(this.contents) ? this.contents.value : this.contents;
-        return identity.isCollection(this.contents) ? this.contents.getIn(path60, keepScalar) : void 0;
+        return identity.isCollection(this.contents) ? this.contents.getIn(path61, keepScalar) : void 0;
       }
       /**
        * Checks if the document includes a value with the key `key`.
@@ -4773,10 +4773,10 @@ var require_Document = __commonJS({
       /**
        * Checks if the document includes a value at `path`.
        */
-      hasIn(path60) {
-        if (Collection.isEmptyPath(path60))
+      hasIn(path61) {
+        if (Collection.isEmptyPath(path61))
           return this.contents !== void 0;
-        return identity.isCollection(this.contents) ? this.contents.hasIn(path60) : false;
+        return identity.isCollection(this.contents) ? this.contents.hasIn(path61) : false;
       }
       /**
        * Sets a value in this document. For `!!set`, `value` needs to be a
@@ -4793,13 +4793,13 @@ var require_Document = __commonJS({
        * Sets a value in this document. For `!!set`, `value` needs to be a
        * boolean to add/remove the item from the set.
        */
-      setIn(path60, value) {
-        if (Collection.isEmptyPath(path60)) {
+      setIn(path61, value) {
+        if (Collection.isEmptyPath(path61)) {
           this.contents = value;
         } else if (this.contents == null) {
-          this.contents = Collection.collectionFromPath(this.schema, Array.from(path60), value);
+          this.contents = Collection.collectionFromPath(this.schema, Array.from(path61), value);
         } else if (assertCollection(this.contents)) {
-          this.contents.setIn(path60, value);
+          this.contents.setIn(path61, value);
         }
       }
       /**
@@ -6751,9 +6751,9 @@ var require_cst_visit = __commonJS({
     visit.BREAK = BREAK;
     visit.SKIP = SKIP;
     visit.REMOVE = REMOVE;
-    visit.itemAtPath = (cst, path60) => {
+    visit.itemAtPath = (cst, path61) => {
       let item = cst;
-      for (const [field, index] of path60) {
+      for (const [field, index] of path61) {
         const tok = item?.[field];
         if (tok && "items" in tok) {
           item = tok.items[index];
@@ -6762,23 +6762,23 @@ var require_cst_visit = __commonJS({
       }
       return item;
     };
-    visit.parentCollection = (cst, path60) => {
-      const parent = visit.itemAtPath(cst, path60.slice(0, -1));
-      const field = path60[path60.length - 1][0];
+    visit.parentCollection = (cst, path61) => {
+      const parent = visit.itemAtPath(cst, path61.slice(0, -1));
+      const field = path61[path61.length - 1][0];
       const coll = parent?.[field];
       if (coll && "items" in coll)
         return coll;
       throw new Error("Parent collection not found");
     };
-    function _visit(path60, item, visitor) {
-      let ctrl = visitor(item, path60);
+    function _visit(path61, item, visitor) {
+      let ctrl = visitor(item, path61);
       if (typeof ctrl === "symbol")
         return ctrl;
       for (const field of ["key", "value"]) {
         const token = item[field];
         if (token && "items" in token) {
           for (let i2 = 0; i2 < token.items.length; ++i2) {
-            const ci = _visit(Object.freeze(path60.concat([[field, i2]])), token.items[i2], visitor);
+            const ci = _visit(Object.freeze(path61.concat([[field, i2]])), token.items[i2], visitor);
             if (typeof ci === "number")
               i2 = ci - 1;
             else if (ci === BREAK)
@@ -6789,10 +6789,10 @@ var require_cst_visit = __commonJS({
             }
           }
           if (typeof ctrl === "function" && field === "key")
-            ctrl = ctrl(item, path60);
+            ctrl = ctrl(item, path61);
         }
       }
-      return typeof ctrl === "function" ? ctrl(item, path60) : ctrl;
+      return typeof ctrl === "function" ? ctrl(item, path61) : ctrl;
     }
     exports2.visit = visit;
   }
@@ -8077,14 +8077,14 @@ var require_parser = __commonJS({
             case "scalar":
             case "single-quoted-scalar":
             case "double-quoted-scalar": {
-              const fs53 = this.flowScalar(this.type);
+              const fs54 = this.flowScalar(this.type);
               if (atNextItem || it2.value) {
-                map.items.push({ start, key: fs53, sep: [] });
+                map.items.push({ start, key: fs54, sep: [] });
                 this.onKeyLine = true;
               } else if (it2.sep) {
-                this.stack.push(fs53);
+                this.stack.push(fs54);
               } else {
-                Object.assign(it2, { key: fs53, sep: [] });
+                Object.assign(it2, { key: fs54, sep: [] });
                 this.onKeyLine = true;
               }
               return;
@@ -8212,13 +8212,13 @@ var require_parser = __commonJS({
             case "scalar":
             case "single-quoted-scalar":
             case "double-quoted-scalar": {
-              const fs53 = this.flowScalar(this.type);
+              const fs54 = this.flowScalar(this.type);
               if (!it2 || it2.value)
-                fc.items.push({ start: [], key: fs53, sep: [] });
+                fc.items.push({ start: [], key: fs54, sep: [] });
               else if (it2.sep)
-                this.stack.push(fs53);
+                this.stack.push(fs54);
               else
-                Object.assign(it2, { key: fs53, sep: [] });
+                Object.assign(it2, { key: fs54, sep: [] });
               return;
             }
             case "flow-map-end":
@@ -8595,13 +8595,13 @@ async function verifyLockfile(id) {
   };
 }
 async function computeChecksum(pkg) {
-  const crypto8 = await import("crypto");
+  const crypto9 = await import("crypto");
   const data = JSON.stringify({
     id: pkg.id,
     version: pkg.version,
     name: pkg.name
   });
-  return crypto8.createHash("sha256").update(data).digest("hex").slice(0, 16);
+  return crypto9.createHash("sha256").update(data).digest("hex").slice(0, 16);
 }
 function getAllLockfiles() {
   const lockfiles = [];
@@ -13899,8 +13899,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path60) {
-      let input = path60;
+    function removeDotSegments(path61) {
+      let input = path61;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -14099,8 +14099,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path60, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path60 && path60 !== "/" ? path60 : void 0;
+        const [path61, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path61 && path61 !== "/" ? path61 : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -17453,12 +17453,12 @@ var require_dist2 = __commonJS({
         throw new Error(`Unknown format "${name}"`);
       return f2;
     };
-    function addFormats2(ajv2, list, fs53, exportName) {
+    function addFormats2(ajv2, list, fs54, exportName) {
       var _a2;
       var _b;
       (_a2 = (_b = ajv2.opts.code).formats) !== null && _a2 !== void 0 ? _a2 : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
       for (const f2 of list)
-        ajv2.addFormat(f2, fs53[f2]);
+        ajv2.addFormat(f2, fs54[f2]);
     }
     module2.exports = exports2 = formatsPlugin;
     Object.defineProperty(exports2, "__esModule", { value: true });
@@ -19158,14 +19158,14 @@ var require_url_state_machine = __commonJS({
       return url.replace(/\u0009|\u000A|\u000D/g, "");
     }
     function shortenPath(url) {
-      const path60 = url.path;
-      if (path60.length === 0) {
+      const path61 = url.path;
+      if (path61.length === 0) {
         return;
       }
-      if (url.scheme === "file" && path60.length === 1 && isNormalizedWindowsDriveLetter(path60[0])) {
+      if (url.scheme === "file" && path61.length === 1 && isNormalizedWindowsDriveLetter(path61[0])) {
         return;
       }
-      path60.pop();
+      path61.pop();
     }
     function includesCredentials(url) {
       return url.username !== "" || url.password !== "";
@@ -25149,14 +25149,14 @@ __export(fileFromPath_exports, {
   fileFromPathSync: () => fileFromPathSync,
   isFile: () => isFile
 });
-function createFileFromPath(path60, { mtimeMs, size }, filenameOrOptions, options = {}) {
+function createFileFromPath(path61, { mtimeMs, size }, filenameOrOptions, options = {}) {
   let filename;
   if (isPlainObject_default2(filenameOrOptions)) {
     [options, filename] = [filenameOrOptions, void 0];
   } else {
     filename = filenameOrOptions;
   }
-  const file = new FileFromPath({ path: path60, size, lastModified: mtimeMs });
+  const file = new FileFromPath({ path: path61, size, lastModified: mtimeMs });
   if (!filename) {
     filename = file.name;
   }
@@ -25165,13 +25165,13 @@ function createFileFromPath(path60, { mtimeMs, size }, filenameOrOptions, option
     lastModified: file.lastModified
   });
 }
-function fileFromPathSync(path60, filenameOrOptions, options = {}) {
-  const stats = (0, import_fs16.statSync)(path60);
-  return createFileFromPath(path60, stats, filenameOrOptions, options);
+function fileFromPathSync(path61, filenameOrOptions, options = {}) {
+  const stats = (0, import_fs16.statSync)(path61);
+  return createFileFromPath(path61, stats, filenameOrOptions, options);
 }
-async function fileFromPath2(path60, filenameOrOptions, options) {
-  const stats = await import_fs16.promises.stat(path60);
-  return createFileFromPath(path60, stats, filenameOrOptions, options);
+async function fileFromPath2(path61, filenameOrOptions, options) {
+  const stats = await import_fs16.promises.stat(path61);
+  return createFileFromPath(path61, stats, filenameOrOptions, options);
 }
 var import_fs16, import_path18, import_node_domexception, __classPrivateFieldSet4, __classPrivateFieldGet5, _FileFromPath_path, _FileFromPath_start, MESSAGE, FileFromPath;
 var init_fileFromPath = __esm({
@@ -25232,13 +25232,13 @@ var init_fileFromPath = __esm({
 });
 
 // node_modules/.pnpm/openai@4.104.0_ws@8.19.0/node_modules/openai/_shims/node-runtime.mjs
-async function fileFromPath3(path60, ...args) {
+async function fileFromPath3(path61, ...args) {
   const { fileFromPath: _fileFromPath } = await Promise.resolve().then(() => (init_fileFromPath(), fileFromPath_exports));
   if (!fileFromPathWarned) {
-    console.warn(`fileFromPath is deprecated; use fs.createReadStream(${JSON.stringify(path60)}) instead`);
+    console.warn(`fileFromPath is deprecated; use fs.createReadStream(${JSON.stringify(path61)}) instead`);
     fileFromPathWarned = true;
   }
-  return await _fileFromPath(path60, ...args);
+  return await _fileFromPath(path61, ...args);
 }
 async function getMultipartRequestOptions2(form, opts) {
   const encoder = new FormDataEncoder(form);
@@ -26171,29 +26171,29 @@ var init_core = __esm({
       defaultIdempotencyKey() {
         return `stainless-node-retry-${uuid4()}`;
       }
-      get(path60, opts) {
-        return this.methodRequest("get", path60, opts);
+      get(path61, opts) {
+        return this.methodRequest("get", path61, opts);
       }
-      post(path60, opts) {
-        return this.methodRequest("post", path60, opts);
+      post(path61, opts) {
+        return this.methodRequest("post", path61, opts);
       }
-      patch(path60, opts) {
-        return this.methodRequest("patch", path60, opts);
+      patch(path61, opts) {
+        return this.methodRequest("patch", path61, opts);
       }
-      put(path60, opts) {
-        return this.methodRequest("put", path60, opts);
+      put(path61, opts) {
+        return this.methodRequest("put", path61, opts);
       }
-      delete(path60, opts) {
-        return this.methodRequest("delete", path60, opts);
+      delete(path61, opts) {
+        return this.methodRequest("delete", path61, opts);
       }
-      methodRequest(method, path60, opts) {
+      methodRequest(method, path61, opts) {
         return this.request(Promise.resolve(opts).then(async (opts2) => {
           const body = opts2 && isBlobLike(opts2?.body) ? new DataView(await opts2.body.arrayBuffer()) : opts2?.body instanceof DataView ? opts2.body : opts2?.body instanceof ArrayBuffer ? new DataView(opts2.body) : opts2 && ArrayBuffer.isView(opts2?.body) ? new DataView(opts2.body.buffer) : opts2?.body;
-          return { method, path: path60, ...opts2, body };
+          return { method, path: path61, ...opts2, body };
         }));
       }
-      getAPIList(path60, Page2, opts) {
-        return this.requestAPIList(Page2, { method: "get", path: path60, ...opts });
+      getAPIList(path61, Page2, opts) {
+        return this.requestAPIList(Page2, { method: "get", path: path61, ...opts });
       }
       calculateContentLength(body) {
         if (typeof body === "string") {
@@ -26212,10 +26212,10 @@ var init_core = __esm({
       }
       buildRequest(inputOptions, { retryCount = 0 } = {}) {
         const options = { ...inputOptions };
-        const { method, path: path60, query, headers = {} } = options;
+        const { method, path: path61, query, headers = {} } = options;
         const body = ArrayBuffer.isView(options.body) || options.__binaryRequest && typeof options.body === "string" ? options.body : isMultipartBody(options.body) ? options.body.body : options.body ? JSON.stringify(options.body, null, 2) : null;
         const contentLength = this.calculateContentLength(body);
-        const url = this.buildURL(path60, query);
+        const url = this.buildURL(path61, query);
         if ("timeout" in options)
           validatePositiveInteger("timeout", options.timeout);
         options.timeout = options.timeout ?? this.timeout;
@@ -26331,8 +26331,8 @@ var init_core = __esm({
         const request = this.makeRequest(options, null);
         return new PagePromise(this, request, Page2);
       }
-      buildURL(path60, query) {
-        const url = isAbsoluteURL(path60) ? new URL(path60) : new URL(this.baseURL + (this.baseURL.endsWith("/") && path60.startsWith("/") ? path60.slice(1) : path60));
+      buildURL(path61, query) {
+        const url = isAbsoluteURL(path61) ? new URL(path61) : new URL(this.baseURL + (this.baseURL.endsWith("/") && path61.startsWith("/") ? path61.slice(1) : path61));
         const defaultQuery = this.defaultQuery();
         if (!isEmptyObj(defaultQuery)) {
           query = { ...defaultQuery, ...query };
@@ -37303,11 +37303,11 @@ async function runStack(id, options = {}) {
   const startTime = Date.now();
   const packagePath = getPackagePath2(id);
   const manifestPath = import_path12.default.join(packagePath, "manifest.json");
-  const { default: fs53 } = await import("fs");
-  if (!fs53.existsSync(manifestPath)) {
+  const { default: fs54 } = await import("fs");
+  if (!fs54.existsSync(manifestPath)) {
     throw new Error(`Stack manifest not found: ${id}`);
   }
-  const manifest = JSON.parse(fs53.readFileSync(manifestPath, "utf-8"));
+  const manifest = JSON.parse(fs54.readFileSync(manifestPath, "utf-8"));
   const { command, args } = resolveCommandFromManifest(manifest, packagePath);
   const secrets = await getSecrets(manifest.requires?.secrets || []);
   const runEnv = {
@@ -40816,9 +40816,9 @@ async function sessionExport(args, flags) {
   };
   const json = JSON.stringify(exportData, null, 2);
   if (flags.output || flags.o) {
-    const fs53 = await import("fs");
+    const fs54 = await import("fs");
     const outputFile = flags.output || flags.o;
-    fs53.writeFileSync(outputFile, json);
+    fs54.writeFileSync(outputFile, json);
     console.log(`\u2713 Exported session to: ${outputFile}`);
   } else {
     console.log(json);
@@ -45668,8 +45668,8 @@ async function cmdStudio(args, flags) {
 
 // src/commands/serve.js
 var import_http = __toESM(require("http"), 1);
-var import_fs48 = __toESM(require("fs"), 1);
-var import_path52 = __toESM(require("path"), 1);
+var import_fs49 = __toESM(require("fs"), 1);
+var import_path53 = __toESM(require("path"), 1);
 var import_os24 = __toESM(require("os"), 1);
 var import_url2 = require("url");
 init_src();
@@ -46381,20 +46381,11 @@ function buildPermissionRoutes(ctx) {
         json(res, { ok: true });
         return true;
       }
-      if (!sessionId) return error(res, "sessionId or requestId required");
-      const agentEntry = agentProcesses.get(sessionId);
-      if (!agentEntry || !agentEntry.proc || agentEntry.proc.killed) {
-        return error(res, "No active process for this session", 400);
+      if (!requestId) {
+        log("agent", "warn", "permission response missing requestId \u2014 legacy stdin path removed", { sessionId: sessionId?.slice(0, 8), response });
+        return error(res, "requestId required (legacy stdin path removed)", 400);
       }
-      log("agent", "info", "sending permission response (legacy stdin)", { sessionId: sessionId.slice(0, 8), response });
-      try {
-        agentEntry.lastActivityAt = Date.now();
-        agentEntry.proc.stdin.write(response + "\n");
-        json(res, { ok: true });
-      } catch (err) {
-        error(res, `Failed to send permission response: ${err.message}`, 500);
-      }
-      return true;
+      return error(res, "sessionId or requestId required");
     }
     if (req.method === "GET" && url.pathname === "/agent/permissions") {
       const sessionId = url.searchParams.get("sessionId");
@@ -46456,13 +46447,12 @@ var claude_default = {
     promptDelivery: "arg",
     args: {
       base: [
-        "-p",
-        "{{prompt}}",
         "--output-format",
         "stream-json",
         "--verbose"
       ],
       conditionals: [
+        { if: "prompt", args: ["-p", "{{prompt}}"] },
         { if: "model", args: ["--model", "{{model}}"] },
         { if: "fallbackModel", args: ["--fallback-model", "{{fallbackModel}}"] },
         { if: "systemPrompt", args: ["--append-system-prompt", "{{systemPrompt}}"] },
@@ -46531,7 +46521,7 @@ var claude_default = {
       "ANTHROPIC_API_KEY",
       "CLAUDE_CODE_OAUTH_TOKEN"
     ],
-    stdin: "close",
+    stdin: "pipe",
     timeouts: {
       startupMs: 12e4,
       runtimeMs: 9e5,
@@ -48477,9 +48467,6 @@ function attachStderrHandler(ctx, sessionId, entry, options = {}) {
     const text = chunk.toString().trim();
     if (text) {
       ctx.log("agent", "warn", `stderr: ${text.slice(0, logSlice)}`, { sessionId: sessionId.slice(0, 8) });
-      if (entry.turnActive) {
-        ctx.broadcast("agent:error", { sessionId, error: text });
-      }
     }
   });
 }
@@ -48665,14 +48652,16 @@ function buildStartRoute(ctx) {
       permissionModeKey = modeMap[requested] || requested;
     }
     const argOptions = { prompt, model };
+    const stdinMode = providerConfig.headless.stdin;
     if (hasCapability(providerConfig, "systemPrompt") && fullSystemPrompt) {
       argOptions.systemPrompt = fullSystemPrompt;
     }
     if (resolvedResumeSid) {
       argOptions.resumeSessionId = resolvedResumeSid;
     }
-    if (hasCapability(providerConfig, "inputStreaming")) {
+    if (stdinMode === "pipe" && hasCapability(providerConfig, "inputStreaming")) {
       argOptions.inputFormat = "stream-json";
+      delete argOptions.prompt;
     }
     const args = buildArgs(providerConfig, argOptions);
     if (permissionModeKey) {
@@ -48864,7 +48853,6 @@ function buildStartRoute(ctx) {
       };
       agentProcesses.set(sessionId, entry);
       log("agent", "info", `process spawned pid=${proc.pid}`, { sessionId: shortId });
-      const stdinMode = providerConfig.headless.stdin;
       if (stdinMode === "pipe" && hasCapability(providerConfig, "inputStreaming")) {
         const inputMsg = JSON.stringify({ type: "user", message: { role: "user", content: buildUserContent(prompt, images, effectiveCwd, log) } }) + "\n";
         proc.stdin.write(inputMsg);
@@ -48883,15 +48871,9 @@ function buildStartRoute(ctx) {
           const turnNumber = entry._turnNumber;
           const turnPrompt = entry._turnPrompt || "";
           const turnModel = entry._turnModel || null;
-          const turnInputTokens = entry._turnInputTokens;
-          const turnOutputTokens = entry._turnOutputTokens;
-          const turnCacheRead = entry._turnCacheReadTokens;
-          const turnCacheCreation = entry._turnCacheCreationTokens;
-          const turnToolsUsed = entry._turnToolsUsed.length > 0 ? JSON.stringify([...new Set(entry._turnToolsUsed)]) : null;
           const providerSid = entry.providerSessionId;
           dbWrite((db3) => {
             const now = (/* @__PURE__ */ new Date()).toISOString();
-            const nowMs = Date.now();
             if (costUsd !== null) {
               db3.prepare(`
                 UPDATE session_runtime_state
@@ -48912,40 +48894,7 @@ function buildStartRoute(ctx) {
                  turn_count, total_cost, total_input_tokens, total_output_tokens)
               VALUES (?, ?, ?, 'rudi', ?, ?, ?, 'active', ?, ?, 0, 0, 0, 0)
             `).run(providerSid, provider, providerSid, workingDir, workingDir, turnModel, now, now);
-            const turnId = import_crypto6.default.randomUUID();
-            db3.prepare(`
-              INSERT INTO turns
-                (id, session_id, provider, provider_session_id, turn_number,
-                 user_message, model, cost, input_tokens, output_tokens,
-                 cache_read_tokens, cache_creation_tokens, tools_used, ts, ts_ms)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `).run(
-              turnId,
-              providerSid,
-              provider,
-              providerSid,
-              turnNumber,
-              turnPrompt,
-              turnModel,
-              costUsd,
-              turnInputTokens,
-              turnOutputTokens,
-              turnCacheRead,
-              turnCacheCreation,
-              turnToolsUsed,
-              now,
-              nowMs
-            );
-            const turnCost = costUsd !== null ? costUsd : 0;
-            db3.prepare(`
-              UPDATE sessions
-              SET turn_count = turn_count + 1,
-                  total_cost = total_cost + ?,
-                  total_input_tokens = total_input_tokens + ?,
-                  total_output_tokens = total_output_tokens + ?,
-                  last_active_at = ?
-              WHERE id = ?
-            `).run(turnCost, turnInputTokens, turnOutputTokens, now, providerSid);
+            db3.prepare(`UPDATE sessions SET last_active_at = ? WHERE id = ?`).run(now, providerSid);
           });
           if (turnNumber === 1 && providerSid) {
             autoNameSession(entry, providerSid, turnPrompt, workingDir, broadcast, log);
@@ -49896,12 +49845,11 @@ function createIdleReaper({
 }
 
 // src/commands/serve/sessions.js
-var import_fs44 = __toESM(require("fs"), 1);
-var import_promises7 = __toESM(require("fs/promises"), 1);
-var import_path47 = __toESM(require("path"), 1);
+var import_fs45 = __toESM(require("fs"), 1);
+var import_promises9 = __toESM(require("fs/promises"), 1);
+var import_path48 = __toESM(require("path"), 1);
 var import_os21 = __toESM(require("os"), 1);
 var import_child_process22 = require("child_process");
-var import_readline4 = require("readline");
 
 // src/commands/sessions/providers/common.js
 function stripSystemXml(text) {
@@ -49983,6 +49931,16 @@ function isToolResultOnly(content) {
     (block) => block && typeof block === "object" && block.type === "tool_result"
   );
 }
+function classifyEntry(entry, provider = "claude") {
+  const role = getSessionEntryRole(entry, provider);
+  if (!role) return null;
+  if (role === "user") {
+    const content = entry?.message?.content;
+    if (provider !== "codex" && isToolResultOnly(content)) return "tool-result";
+    return "user-turn";
+  }
+  return "assistant";
+}
 function extractToolResultText(resultContent) {
   let text;
   if (typeof resultContent === "string") {
@@ -50029,10 +49987,10 @@ function parseClaudeSessionMessagesFromJsonl(content) {
     } catch {
       continue;
     }
-    const role = getSessionEntryRole(entry, "claude");
-    if (!role) continue;
+    const cls = classifyEntry(entry, "claude");
+    if (!cls) continue;
     const contentBlocks = entry?.message?.content;
-    if (role === "assistant") {
+    if (cls === "assistant") {
       if (!currentAssistant) {
         currentAssistant = {
           content: "",
@@ -50090,8 +50048,8 @@ function parseClaudeSessionMessagesFromJsonl(content) {
           }
         }
       }
-    } else if (role === "user") {
-      if (Array.isArray(contentBlocks) && isToolResultOnly(contentBlocks)) {
+    } else if (cls === "user-turn" || cls === "tool-result") {
+      if (cls === "tool-result") {
         if (currentAssistant) {
           for (const block of contentBlocks) {
             const idx = currentAssistant.pendingToolIds.get(block.tool_use_id);
@@ -50799,6 +50757,12 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
     const fsSessionIds = /* @__PURE__ */ new Set();
     const claudeFsIds = /* @__PURE__ */ new Set();
     const codexFsIds = /* @__PURE__ */ new Set();
+    const existingSnippets = /* @__PURE__ */ new Map();
+    try {
+      const rows = db3.prepare("SELECT id, snippet, git_branch FROM sessions WHERE snippet IS NOT NULL").all();
+      for (const row of rows) existingSnippets.set(row.id, row);
+    } catch {
+    }
     try {
       const projectDirs = await import_promises5.default.readdir(claudeDir);
       for (const projDir of projectDirs) {
@@ -50806,7 +50770,8 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
         let stat;
         try {
           stat = await import_promises5.default.stat(projPath);
-        } catch {
+        } catch (err) {
+          log("sessions", "warn", `[reconcile] stat failed for ${projPath}: ${err.message}`);
           continue;
         }
         if (!stat.isDirectory()) continue;
@@ -50837,7 +50802,8 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
         let files;
         try {
           files = await import_promises5.default.readdir(projPath);
-        } catch {
+        } catch (err) {
+          log("sessions", "warn", `[reconcile] readdir failed for ${projPath}: ${err.message}`);
           continue;
         }
         for (const file of files) {
@@ -50865,11 +50831,17 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
           let snippet = firstPrompt;
           let snippetBranch = gitBranch;
           if (!snippet) {
-            try {
-              const s2 = await readSessionSnippet(fullPath);
-              snippet = s2.firstPrompt || null;
-              if (!snippetBranch) snippetBranch = s2.gitBranch || null;
-            } catch {
+            const cached = existingSnippets.get(sessionId);
+            if (cached?.snippet) {
+              snippet = cached.snippet;
+              if (!snippetBranch) snippetBranch = cached.git_branch || null;
+            } else {
+              try {
+                const s2 = await readSessionSnippet(fullPath);
+                snippet = s2.firstPrompt || null;
+                if (!snippetBranch) snippetBranch = s2.gitBranch || null;
+              } catch {
+              }
             }
           }
           const existed = db3.prepare("SELECT 1 FROM sessions WHERE id = ?").get(sessionId);
@@ -50887,7 +50859,9 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
               snippet = COALESCE(sessions.snippet, excluded.snippet),
               git_branch = COALESCE(excluded.git_branch, sessions.git_branch),
               origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
-              last_active_at = MAX(sessions.last_active_at, excluded.last_active_at)
+              last_active_at = MAX(sessions.last_active_at, excluded.last_active_at),
+              status = 'active',
+              deleted_at = NULL
           `).run(
             sessionId,
             sessionId,
@@ -50928,11 +50902,17 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
           let snippet = firstPrompt;
           let snippetBranch = gitBranch;
           if (!snippet) {
-            try {
-              const s2 = await readSessionSnippet(extPath);
-              snippet = s2.firstPrompt || null;
-              if (!snippetBranch) snippetBranch = s2.gitBranch || null;
-            } catch {
+            const cached = existingSnippets.get(sessionId);
+            if (cached?.snippet) {
+              snippet = cached.snippet;
+              if (!snippetBranch) snippetBranch = cached.git_branch || null;
+            } else {
+              try {
+                const s2 = await readSessionSnippet(extPath);
+                snippet = s2.firstPrompt || null;
+                if (!snippetBranch) snippetBranch = s2.gitBranch || null;
+              } catch {
+              }
             }
           }
           const existed = db3.prepare("SELECT 1 FROM sessions WHERE id = ?").get(sessionId);
@@ -50950,7 +50930,9 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
               snippet = COALESCE(sessions.snippet, excluded.snippet),
               git_branch = COALESCE(excluded.git_branch, sessions.git_branch),
               origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
-              last_active_at = MAX(sessions.last_active_at, excluded.last_active_at)
+              last_active_at = MAX(sessions.last_active_at, excluded.last_active_at),
+              status = 'active',
+              deleted_at = NULL
           `).run(
             sessionId,
             sessionId,
@@ -50987,11 +50969,16 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
         }
         let snippet = null;
         let cwd = meta.cwd || null;
-        try {
-          const s2 = await readSessionSnippet(filePath, "codex");
-          snippet = s2.firstPrompt || null;
-          if (!cwd) cwd = s2.cwd || null;
-        } catch {
+        const cachedCodex = existingSnippets.get(sessionId);
+        if (cachedCodex?.snippet) {
+          snippet = cachedCodex.snippet;
+        } else {
+          try {
+            const s2 = await readSessionSnippet(filePath, "codex");
+            snippet = s2.firstPrompt || null;
+            if (!cwd) cwd = s2.cwd || null;
+          } catch {
+          }
         }
         const projectPath = cwd || await inferProjectPathFromSessionFile(filePath) || import_os20.default.homedir();
         cacheSessionFileHint(sessionId, "codex", filePath);
@@ -51010,7 +50997,9 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
             project_path = COALESCE(excluded.project_path, sessions.project_path),
             snippet = COALESCE(sessions.snippet, excluded.snippet),
             origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
-            last_active_at = MAX(sessions.last_active_at, excluded.last_active_at)
+            last_active_at = MAX(sessions.last_active_at, excluded.last_active_at),
+            status = 'active',
+            deleted_at = NULL
         `).run(
           sessionId,
           sessionId,
@@ -51029,6 +51018,8 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
     const deleteStmt = db3.prepare(
       `UPDATE sessions SET status = 'deleted', deleted_at = ? WHERE id = ?`
     );
+    const deleteTurnsStmt = db3.prepare(`DELETE FROM turns WHERE session_id = ?`);
+    const deleteFilePosStmt = db3.prepare(`DELETE FROM file_positions WHERE file_path = ?`);
     const pruneNow = (/* @__PURE__ */ new Date()).toISOString();
     const providerPrunes = [
       { provider: "claude", fsIds: claudeFsIds },
@@ -51038,15 +51029,33 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
       if (fsIds.size === 0) continue;
       try {
         const dbRows = db3.prepare(
-          `SELECT id FROM sessions WHERE provider = ? AND status != 'deleted'`
+          `SELECT id, origin_native_file FROM sessions WHERE provider = ? AND status != 'deleted'`
         ).all(prov);
-        const toDelete = dbRows.filter((r2) => !fsIds.has(r2.id));
-        for (const row of toDelete) {
-          deleteStmt.run(pruneNow, row.id);
-          pruned++;
+        const unconfirmed = dbRows.filter((r2) => !fsIds.has(r2.id));
+        for (const row of unconfirmed) {
+          if (!row.origin_native_file) continue;
+          try {
+            await import_promises5.default.access(row.origin_native_file);
+          } catch (err) {
+            if (err.code === "ENOENT") {
+              deleteStmt.run(pruneNow, row.id);
+              deleteTurnsStmt.run(row.id);
+              if (row.origin_native_file) {
+                deleteFilePosStmt.run(row.origin_native_file);
+              }
+              pruned++;
+            }
+          }
         }
       } catch {
       }
+    }
+    const purgedDeletedTurns = db3.prepare(`
+      DELETE FROM turns
+      WHERE session_id IN (SELECT id FROM sessions WHERE status = 'deleted')
+    `).run().changes;
+    if (purgedDeletedTurns > 0) {
+      log("sessions", "info", `[reconcile] purged ${purgedDeletedTurns} turns from deleted sessions`);
     }
     const duration = Date.now() - start;
     const dbCount = db3.prepare(
@@ -51444,6 +51453,16 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
           fstat.birthtime.toISOString(),
           fstat.mtime.toISOString()
         );
+        return {
+          isNew: true,
+          sessionId: resolvedSessionId,
+          provider,
+          snippet,
+          gitBranch,
+          projectPath,
+          modified: fstat.mtime.toISOString(),
+          created: fstat.birthtime.toISOString()
+        };
       } else {
         const nowIso = (/* @__PURE__ */ new Date()).toISOString();
         db3.prepare(`
@@ -52016,6 +52035,958 @@ function createSessionsTailModule({ log, broadcast, findSessionFile }) {
   };
 }
 
+// src/commands/sessions/turn-index.js
+var import_promises7 = __toESM(require("fs/promises"), 1);
+async function readByteRange(filePath, startByte, endByte) {
+  const len = endByte - startByte;
+  if (len <= 0) return "";
+  const fd = await import_promises7.default.open(filePath, "r");
+  try {
+    const buf = Buffer.alloc(len);
+    await fd.read(buf, 0, len, startByte);
+    return buf.toString("utf-8");
+  } finally {
+    await fd.close();
+  }
+}
+
+// src/commands/sessions/ingester.js
+var import_fs44 = __toESM(require("fs"), 1);
+var import_promises8 = __toESM(require("fs/promises"), 1);
+var import_path47 = __toESM(require("path"), 1);
+var import_crypto8 = __toESM(require("crypto"), 1);
+var REWIND_BYTES = 256 * 1024;
+var DEFAULT_RECONCILE_INTERVAL_MS = 6e4;
+var MAX_ERROR_HISTORY = 100;
+function _toIso(v2) {
+  if (!v2) return (/* @__PURE__ */ new Date()).toISOString();
+  const d2 = new Date(v2);
+  return Number.isNaN(d2.getTime()) ? (/* @__PURE__ */ new Date()).toISOString() : d2.toISOString();
+}
+function _shortSid(sessionId) {
+  return typeof sessionId === "string" ? sessionId.slice(0, 8) : "unknown";
+}
+function _inferProvider(filePath, providerHint) {
+  if (providerHint === "codex" || providerHint === "claude") return providerHint;
+  const normalized = String(filePath || "").replace(/\\/g, "/").toLowerCase();
+  if (normalized.includes("/.codex/sessions/")) return "codex";
+  return "claude";
+}
+function _deriveSessionId(filePath, provider, sessionIdHint) {
+  if (sessionIdHint && typeof sessionIdHint === "string") return sessionIdHint;
+  const filename = import_path47.default.basename(filePath || "");
+  if (!filename.endsWith(".jsonl")) return null;
+  if (provider === "codex") {
+    return deriveCodexSessionIdFromFilename(filename) || filename.slice(0, -6);
+  }
+  return filename.slice(0, -6);
+}
+function _hashTurnId(sessionId, provider, userText, userTimestamp = "") {
+  const h2 = import_crypto8.default.createHash("sha256");
+  h2.update(`${sessionId}${provider}${userTimestamp || ""}${userText || ""}`);
+  return `${provider}-h-${h2.digest("hex").slice(0, 40)}`;
+}
+function _extractUserTurnKey(entry, provider = "claude") {
+  let text = "";
+  if (provider === "codex") {
+    if (entry?.type === "event_msg" && entry?.payload?.type === "user_message") {
+      text = typeof entry.payload.message === "string" ? entry.payload.message.trim() : "";
+    } else if (entry?.type === "response_item" && entry?.payload?.type === "message" && entry?.payload?.role === "user") {
+      text = extractCodexTextBlocks(entry?.payload?.content);
+    }
+  } else {
+    text = extractContent(entry);
+  }
+  const ts = typeof entry?.timestamp === "string" ? entry.timestamp : "";
+  return `${ts}${text}`;
+}
+function _extractRawMetadata(content, provider) {
+  const turnIdByKey = /* @__PURE__ */ new Map();
+  const turnMeta = [];
+  if (!content) return { turnIdByKey, turnMeta };
+  const lines = content.split("\n");
+  let currentMeta = null;
+  let codexSessionModel = null;
+  const flushCurrent = () => {
+    if (currentMeta) turnMeta.push(currentMeta);
+    currentMeta = null;
+  };
+  for (const line of lines) {
+    if (!line) continue;
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (provider === "codex" && (entry?.type === "turn_context" || entry?.type === "session_meta")) {
+      if (typeof entry?.payload?.model === "string" && entry.payload.model) {
+        codexSessionModel = entry.payload.model;
+        if (currentMeta && !currentMeta.model) currentMeta.model = entry.payload.model;
+      }
+    }
+    const cls = classifyEntry(entry, provider);
+    if (cls === "user-turn") {
+      flushCurrent();
+      currentMeta = {
+        model: provider === "codex" ? codexSessionModel : null,
+        permissionMode: null,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+        serviceTier: null,
+        durationMs: null,
+        finishReason: null,
+        cost: null
+      };
+      const key = _extractUserTurnKey(entry, provider);
+      let providerTurnId = null;
+      if (provider === "claude") {
+        if (typeof entry?.uuid === "string") providerTurnId = entry.uuid;
+        if (typeof entry?.permissionMode === "string") currentMeta.permissionMode = entry.permissionMode;
+      } else {
+        providerTurnId = entry?.uuid || entry?.id || entry?.payload?.id || null;
+      }
+      if (providerTurnId) {
+        turnIdByKey.set(key, providerTurnId);
+      }
+      continue;
+    }
+    if (!currentMeta) continue;
+    if (provider === "codex") {
+      if (!currentMeta.model && typeof entry?.payload?.model === "string") {
+        currentMeta.model = entry.payload.model;
+      }
+      if (entry?.type === "event_msg" && entry?.payload?.type === "token_count" && entry?.payload?.info) {
+        const usage = entry.payload.info.last_token_usage || entry.payload.info.total_token_usage || null;
+        if (usage) {
+          currentMeta.outputTokens += (usage.output_tokens || 0) + (usage.reasoning_output_tokens || 0);
+          currentMeta.inputTokens += usage.input_tokens || 0;
+          currentMeta.cacheReadTokens += usage.cached_input_tokens || 0;
+        }
+      }
+      if (entry?.type === "event_msg" && entry?.payload?.type === "turn_aborted") {
+        currentMeta.finishReason = "aborted";
+      }
+    } else {
+      if (!currentMeta.model && entry?.message?.model) {
+        currentMeta.model = entry.message.model;
+      }
+      const usage = entry?.message?.usage;
+      if (usage) {
+        currentMeta.outputTokens += usage.output_tokens || 0;
+        const cacheRead = usage.cache_read_input_tokens || 0;
+        const cacheCreation = usage.cache_creation_input_tokens || 0;
+        currentMeta.inputTokens += (usage.input_tokens || 0) + cacheRead + cacheCreation;
+        currentMeta.cacheReadTokens += cacheRead;
+        currentMeta.cacheCreationTokens += cacheCreation;
+        if (typeof usage.service_tier === "string") currentMeta.serviceTier = usage.service_tier;
+      }
+      if (entry?.type === "system" && entry?.subtype === "turn_duration" && Number.isFinite(entry?.durationMs)) {
+        currentMeta.durationMs = entry.durationMs;
+      }
+      if (entry?.type === "result" && typeof entry?.stop_reason === "string") {
+        currentMeta.finishReason = entry.stop_reason;
+      }
+      if (entry?.type === "result" && typeof entry?.cost_usd === "number") {
+        currentMeta.cost = entry.cost_usd;
+      }
+    }
+  }
+  flushCurrent();
+  return { turnIdByKey, turnMeta };
+}
+function _normalizeToolData(toolCalls) {
+  if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
+    return { toolsUsed: null, toolResults: null };
+  }
+  const toolsUsed = [];
+  const toolResults = [];
+  for (const tc of toolCalls) {
+    if (tc?.name) toolsUsed.push(tc.name);
+    if (!tc?.id) continue;
+    toolResults.push({
+      id: tc.id,
+      name: tc.name || null,
+      status: tc.status || null,
+      result: tc.result || null
+    });
+  }
+  return {
+    toolsUsed: toolsUsed.length > 0 ? JSON.stringify([...new Set(toolsUsed)]) : null,
+    toolResults: toolResults.length > 0 ? JSON.stringify(toolResults) : null
+  };
+}
+function _pairMessagesIntoTurns(messages, { sessionId, provider, turnIdByKey, turnMeta }) {
+  const turns = [];
+  let pendingUser = null;
+  let turnIdx = 0;
+  for (const msg of messages) {
+    if (!msg || typeof msg !== "object") continue;
+    if (msg.role === "user") {
+      pendingUser = msg;
+      continue;
+    }
+    if (msg.role !== "assistant") continue;
+    if (!pendingUser) continue;
+    const userContent = typeof pendingUser.content === "string" ? pendingUser.content.trim() : String(pendingUser.content || "").trim();
+    const assistantContent = typeof msg.content === "string" ? msg.content.trim() : String(msg.content || "").trim();
+    const thinking = typeof msg.thinking === "string" ? msg.thinking.trim() : null;
+    if (!userContent && !assistantContent && !thinking) {
+      pendingUser = null;
+      turnIdx++;
+      continue;
+    }
+    const key = `${pendingUser.timestamp || ""}${userContent}`;
+    const storedId = turnIdByKey.get(key) || null;
+    const providerTurnId = storedId || _hashTurnId(sessionId, provider, userContent, pendingUser.timestamp);
+    const toolData = _normalizeToolData(msg.toolCalls);
+    const meta = turnMeta[turnIdx] || {};
+    turns.push({
+      providerTurnId,
+      userMessage: userContent || null,
+      assistantResponse: assistantContent || null,
+      thinking: thinking || null,
+      toolsUsed: toolData.toolsUsed,
+      toolResults: toolData.toolResults,
+      ts: _toIso(pendingUser.timestamp || msg.timestamp),
+      tsMs: new Date(_toIso(pendingUser.timestamp || msg.timestamp)).getTime(),
+      model: meta.model ?? null,
+      permissionMode: meta.permissionMode ?? null,
+      inputTokens: meta.inputTokens ?? null,
+      outputTokens: meta.outputTokens ?? null,
+      cacheReadTokens: meta.cacheReadTokens ?? null,
+      cacheCreationTokens: meta.cacheCreationTokens ?? null,
+      cost: meta.cost ?? null,
+      durationMs: meta.durationMs ?? null,
+      finishReason: meta.finishReason ?? null
+    });
+    pendingUser = null;
+    turnIdx++;
+  }
+  return turns;
+}
+async function _readBufferRange(filePath, startByte, endByte) {
+  const len = Math.max(0, endByte - startByte);
+  if (len <= 0) return Buffer.alloc(0);
+  const fd = await import_promises8.default.open(filePath, "r");
+  try {
+    const buf = Buffer.alloc(len);
+    await fd.read(buf, 0, len, startByte);
+    return buf;
+  } finally {
+    await fd.close();
+  }
+}
+function _extractCompleteChunk(buf) {
+  if (!buf || buf.length === 0) {
+    return { consumedBytes: 0, text: "" };
+  }
+  const newlineIdx = buf.lastIndexOf(10);
+  if (newlineIdx < 0) {
+    return { consumedBytes: 0, text: "" };
+  }
+  const consumedBytes = newlineIdx + 1;
+  const text = buf.subarray(0, consumedBytes).toString("utf-8");
+  return { consumedBytes, text };
+}
+function _getFilePosition(db3, filePath) {
+  return db3.prepare(`
+    SELECT file_path, byte_offset, file_size, mtime_ms, inode, provider
+    FROM file_positions
+    WHERE file_path = ?
+  `).get(filePath) || null;
+}
+function _upsertFilePosition(db3, {
+  filePath,
+  byteOffset,
+  fileSize,
+  mtimeMs,
+  inode,
+  provider
+}) {
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  db3.prepare(`
+    INSERT INTO file_positions (
+      file_path, byte_offset, file_size, mtime_ms, inode, provider, last_synced_at, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(file_path) DO UPDATE SET
+      byte_offset = excluded.byte_offset,
+      file_size = excluded.file_size,
+      mtime_ms = excluded.mtime_ms,
+      inode = excluded.inode,
+      provider = excluded.provider,
+      last_synced_at = excluded.last_synced_at
+  `).run(
+    filePath,
+    byteOffset,
+    fileSize,
+    mtimeMs,
+    inode || null,
+    provider,
+    now,
+    now
+  );
+}
+function _ensureSessionRow(db3, { sessionId, provider, filePath }) {
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  db3.prepare(`
+    INSERT OR IGNORE INTO sessions
+      (id, provider, provider_session_id, origin, origin_native_file, status, created_at, last_active_at)
+    VALUES (?, ?, ?, 'provider-import', ?, 'active', ?, ?)
+  `).run(sessionId, provider, sessionId, filePath, now, now);
+}
+function _recomputeSessionAggregates(db3, sessionId) {
+  const agg = db3.prepare(`
+    SELECT
+      COUNT(*) as turn_count,
+      COALESCE(SUM(cost), 0) as total_cost,
+      COALESCE(SUM(duration_ms), 0) as total_duration_ms,
+      COALESCE(SUM(input_tokens), 0) as total_input_tokens,
+      COALESCE(SUM(output_tokens), 0) as total_output_tokens,
+      MAX(ts) as last_active_at
+    FROM turns
+    WHERE session_id = ?
+  `).get(sessionId);
+  db3.prepare(`
+    UPDATE sessions SET
+      turn_count = ?,
+      total_cost = ?,
+      total_duration_ms = ?,
+      total_input_tokens = ?,
+      total_output_tokens = ?,
+      last_active_at = COALESCE(?, last_active_at)
+    WHERE id = ?
+  `).run(
+    agg?.turn_count || 0,
+    agg?.total_cost || 0,
+    agg?.total_duration_ms || 0,
+    agg?.total_input_tokens || 0,
+    agg?.total_output_tokens || 0,
+    agg?.last_active_at || null,
+    sessionId
+  );
+}
+function _recordError(state, errData) {
+  state.errors.push(errData);
+  if (state.errors.length > MAX_ERROR_HISTORY) {
+    state.errors.splice(0, state.errors.length - MAX_ERROR_HISTORY);
+  }
+}
+function createSessionsIngesterModule({
+  log,
+  resolveDb: resolveDb2,
+  paths = {},
+  reconcileIntervalMs = DEFAULT_RECONCILE_INTERVAL_MS
+} = {}) {
+  const dirs = {
+    claudeProjectsDir: paths.claudeProjectsDir || CLAUDE_PROJECTS_DIR,
+    codexSessionsDir: paths.codexSessionsDir || CODEX_SESSIONS_DIR
+  };
+  const state = {
+    inFlight: /* @__PURE__ */ new Map(),
+    reconcileTimer: null,
+    backfillInFlight: null,
+    repairInFlight: null,
+    totalTurnsAdded: 0,
+    totalTurnsUpdated: 0,
+    totalFilesIngested: 0,
+    lastReconcileAt: null,
+    lastBackfillAt: null,
+    lastRepairAt: null,
+    backfillRuns: 0,
+    backfillFilesTotal: 0,
+    backfillFilesDone: 0,
+    repairRuns: 0,
+    repairSessionsTotal: 0,
+    repairSessionsDone: 0,
+    errors: []
+  };
+  async function _collectFiles() {
+    const files = [];
+    if (import_fs44.default.existsSync(dirs.claudeProjectsDir)) {
+      const claudeFiles = await collectJsonlFiles(dirs.claudeProjectsDir, 4);
+      for (const filePath of claudeFiles) {
+        files.push({
+          filePath,
+          provider: "claude",
+          sessionId: import_path47.default.basename(filePath, ".jsonl")
+        });
+      }
+    }
+    if (import_fs44.default.existsSync(dirs.codexSessionsDir)) {
+      const codexFiles = await collectJsonlFiles(dirs.codexSessionsDir, 6);
+      for (const filePath of codexFiles) {
+        const fname = import_path47.default.basename(filePath);
+        files.push({
+          filePath,
+          provider: "codex",
+          sessionId: deriveCodexSessionIdFromFilename(fname) || import_path47.default.basename(filePath, ".jsonl")
+        });
+      }
+    }
+    return files;
+  }
+  async function _ingestFile(filePath, options = {}) {
+    const db3 = resolveDb2 ? resolveDb2() : null;
+    if (!db3) return { skipped: true, reason: "db_unavailable" };
+    if (!filePath || typeof filePath !== "string" || !filePath.endsWith(".jsonl")) {
+      return { skipped: true, reason: "invalid_file" };
+    }
+    const provider = _inferProvider(filePath, options.provider);
+    const sessionId = _deriveSessionId(filePath, provider, options.sessionId);
+    if (!sessionId) return { skipped: true, reason: "missing_session_id" };
+    const forceRebuild = options.forceRebuild === true;
+    let stat;
+    try {
+      stat = await import_promises8.default.stat(filePath);
+    } catch {
+      return { skipped: true, reason: "stat_failed" };
+    }
+    if (!stat.isFile()) return { skipped: true, reason: "not_file" };
+    const inode = typeof stat.ino === "number" ? String(stat.ino) : null;
+    const checkpoint = _getFilePosition(db3, filePath);
+    let startOffset = checkpoint?.byte_offset || 0;
+    let reset = false;
+    if (forceRebuild) {
+      startOffset = 0;
+      reset = true;
+    } else if (checkpoint) {
+      const inodeChanged = !!(checkpoint.inode && inode && checkpoint.inode !== inode);
+      const truncated = stat.size < startOffset;
+      if (inodeChanged || truncated) {
+        startOffset = 0;
+        reset = true;
+      }
+    }
+    if (stat.size === 0) {
+      const tx2 = db3.transaction(() => {
+        _ensureSessionRow(db3, { sessionId, provider, filePath });
+        if (reset) {
+          db3.prepare("DELETE FROM turns WHERE session_id = ?").run(sessionId);
+          _recomputeSessionAggregates(db3, sessionId);
+        }
+        _upsertFilePosition(db3, {
+          filePath,
+          byteOffset: 0,
+          fileSize: 0,
+          mtimeMs: stat.mtimeMs,
+          inode,
+          provider
+        });
+      });
+      tx2();
+      return {
+        skipped: false,
+        filePath,
+        sessionId,
+        provider,
+        turnsAdded: 0,
+        turnsUpdated: 0,
+        newOffset: 0,
+        reset
+      };
+    }
+    if (!forceRebuild && !reset && checkpoint && stat.size === startOffset) {
+      _upsertFilePosition(db3, {
+        filePath,
+        byteOffset: startOffset,
+        fileSize: stat.size,
+        mtimeMs: stat.mtimeMs,
+        inode,
+        provider
+      });
+      return {
+        skipped: true,
+        reason: "no_new_bytes",
+        filePath,
+        sessionId,
+        provider
+      };
+    }
+    const readStart = startOffset > 0 ? Math.max(0, startOffset - REWIND_BYTES) : 0;
+    const rangeBuf = await _readBufferRange(filePath, readStart, stat.size);
+    const { consumedBytes, text } = _extractCompleteChunk(rangeBuf);
+    const newOffset = readStart + consumedBytes;
+    if (!text) {
+      _upsertFilePosition(db3, {
+        filePath,
+        byteOffset: startOffset,
+        fileSize: stat.size,
+        mtimeMs: stat.mtimeMs,
+        inode,
+        provider
+      });
+      return {
+        skipped: true,
+        reason: "no_complete_lines",
+        filePath,
+        sessionId,
+        provider
+      };
+    }
+    const messages = parseSessionMessagesFromJsonl(text, provider);
+    const { turnIdByKey, turnMeta } = _extractRawMetadata(text, provider);
+    const turns = _pairMessagesIntoTurns(messages, {
+      sessionId,
+      provider,
+      turnIdByKey,
+      turnMeta
+    });
+    let turnsAdded = 0;
+    let turnsUpdated = 0;
+    const tx = db3.transaction(() => {
+      _ensureSessionRow(db3, { sessionId, provider, filePath });
+      if (reset) {
+        db3.prepare("DELETE FROM turns WHERE session_id = ?").run(sessionId);
+      }
+      const selectExisting = db3.prepare(`
+        SELECT id, turn_number
+        FROM turns
+        WHERE session_id = ? AND provider_turn_id = ?
+      `);
+      const getMaxTurn = db3.prepare(`
+        SELECT COALESCE(MAX(turn_number), 0) as max_turn
+        FROM turns
+        WHERE session_id = ?
+      `);
+      const insertTurn = db3.prepare(`
+        INSERT INTO turns (
+          id, session_id, provider, provider_session_id, provider_turn_id, turn_number,
+          user_message, assistant_response, thinking, model, permission_mode,
+          input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
+          cost, duration_ms, finish_reason,
+          tools_used, tool_results, kind, ts, ts_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'message', ?, ?)
+      `);
+      const updateTurn = db3.prepare(`
+        UPDATE turns SET
+          user_message = ?,
+          assistant_response = ?,
+          thinking = ?,
+          model = ?,
+          permission_mode = ?,
+          input_tokens = ?,
+          output_tokens = ?,
+          cache_read_tokens = ?,
+          cache_creation_tokens = ?,
+          cost = ?,
+          duration_ms = ?,
+          finish_reason = ?,
+          tools_used = ?,
+          tool_results = ?,
+          ts = ?,
+          ts_ms = ?
+        WHERE id = ?
+      `);
+      let nextTurnNumber = Number(getMaxTurn.get(sessionId)?.max_turn || 0) + 1;
+      for (const turn of turns) {
+        const existing = selectExisting.get(sessionId, turn.providerTurnId);
+        if (existing?.id) {
+          updateTurn.run(
+            turn.userMessage,
+            turn.assistantResponse,
+            turn.thinking,
+            turn.model,
+            turn.permissionMode,
+            turn.inputTokens,
+            turn.outputTokens,
+            turn.cacheReadTokens,
+            turn.cacheCreationTokens,
+            turn.cost,
+            turn.durationMs,
+            turn.finishReason,
+            turn.toolsUsed,
+            turn.toolResults,
+            turn.ts,
+            turn.tsMs,
+            existing.id
+          );
+          turnsUpdated++;
+        } else {
+          insertTurn.run(
+            import_crypto8.default.randomUUID(),
+            sessionId,
+            provider,
+            sessionId,
+            turn.providerTurnId,
+            nextTurnNumber++,
+            turn.userMessage,
+            turn.assistantResponse,
+            turn.thinking,
+            turn.model,
+            turn.permissionMode,
+            turn.inputTokens,
+            turn.outputTokens,
+            turn.cacheReadTokens,
+            turn.cacheCreationTokens,
+            turn.cost,
+            turn.durationMs,
+            turn.finishReason,
+            turn.toolsUsed,
+            turn.toolResults,
+            turn.ts,
+            turn.tsMs
+          );
+          turnsAdded++;
+        }
+      }
+      _upsertFilePosition(db3, {
+        filePath,
+        byteOffset: Math.max(startOffset, Math.min(newOffset, stat.size)),
+        fileSize: stat.size,
+        mtimeMs: stat.mtimeMs,
+        inode,
+        provider
+      });
+      if (options.recomputeAggregates !== false) {
+        _recomputeSessionAggregates(db3, sessionId);
+      }
+    });
+    tx();
+    if (turnsAdded > 0 || turnsUpdated > 0) {
+      state.totalFilesIngested += 1;
+      state.totalTurnsAdded += turnsAdded;
+      state.totalTurnsUpdated += turnsUpdated;
+      log?.("sessions", "debug", "[ingester.file] ingested", {
+        sessionId: _shortSid(sessionId),
+        provider,
+        turnsAdded,
+        turnsUpdated,
+        readStart,
+        newOffset: Math.max(startOffset, Math.min(newOffset, stat.size))
+      });
+    }
+    return {
+      skipped: false,
+      filePath,
+      sessionId,
+      provider,
+      turnsAdded,
+      turnsUpdated,
+      reset,
+      newOffset: Math.max(startOffset, Math.min(newOffset, stat.size))
+    };
+  }
+  async function repairNoTextTurns({ limit: limit2 = 0, onProgress } = {}) {
+    if (state.repairInFlight) return state.repairInFlight;
+    const p2 = (async () => {
+      const db3 = resolveDb2 ? resolveDb2() : null;
+      if (!db3) return { skipped: true, reason: "db_unavailable" };
+      const t0 = Date.now();
+      let candidates = db3.prepare(`
+        SELECT
+          s.id as session_id,
+          s.provider as provider,
+          s.origin_native_file as file_path,
+          COUNT(*) as no_text_rows
+        FROM turns t
+        JOIN sessions s ON s.id = t.session_id
+        WHERE s.status != 'deleted'
+          AND (t.user_message IS NULL OR TRIM(t.user_message) = '')
+          AND (t.assistant_response IS NULL OR TRIM(t.assistant_response) = '')
+        GROUP BY s.id, s.provider, s.origin_native_file
+        ORDER BY no_text_rows DESC
+      `).all();
+      const normalizedLimit = Number(limit2);
+      if (Number.isFinite(normalizedLimit) && normalizedLimit > 0) {
+        candidates = candidates.slice(0, normalizedLimit);
+      }
+      state.repairRuns += 1;
+      state.repairSessionsTotal = candidates.length;
+      state.repairSessionsDone = 0;
+      let rebuilt = 0;
+      let skipped = 0;
+      let remainingNoTextRows = 0;
+      let errors = 0;
+      for (let i2 = 0; i2 < candidates.length; i2++) {
+        const c2 = candidates[i2];
+        if (!c2?.file_path) {
+          skipped++;
+          state.repairSessionsDone = i2 + 1;
+          onProgress?.({ sessionsTotal: candidates.length, sessionsDone: i2 + 1, rebuilt, skipped });
+          continue;
+        }
+        try {
+          const st2 = await import_promises8.default.stat(c2.file_path);
+          if (!st2.isFile()) {
+            skipped++;
+            state.repairSessionsDone = i2 + 1;
+            onProgress?.({ sessionsTotal: candidates.length, sessionsDone: i2 + 1, rebuilt, skipped });
+            continue;
+          }
+        } catch {
+          skipped++;
+          state.repairSessionsDone = i2 + 1;
+          onProgress?.({ sessionsTotal: candidates.length, sessionsDone: i2 + 1, rebuilt, skipped });
+          continue;
+        }
+        const result = await ingestFile(c2.file_path, {
+          provider: c2.provider || "claude",
+          sessionId: c2.session_id,
+          forceRebuild: true
+        });
+        if (result?.reason === "error") errors++;
+        if (!result?.skipped) rebuilt++;
+        const row = db3.prepare(`
+          SELECT COUNT(*) as c
+          FROM turns
+          WHERE session_id = ?
+            AND (user_message IS NULL OR TRIM(user_message) = '')
+            AND (assistant_response IS NULL OR TRIM(assistant_response) = '')
+        `).get(c2.session_id);
+        remainingNoTextRows += Number(row?.c || 0);
+        state.repairSessionsDone = i2 + 1;
+        onProgress?.({
+          sessionsTotal: candidates.length,
+          sessionsDone: i2 + 1,
+          rebuilt,
+          skipped,
+          remainingNoTextRows
+        });
+        if ((i2 + 1) % 10 === 0) {
+          await new Promise((resolve) => setImmediate(resolve));
+        }
+      }
+      state.lastRepairAt = (/* @__PURE__ */ new Date()).toISOString();
+      const summary = {
+        sessionsTotal: candidates.length,
+        sessionsDone: candidates.length,
+        rebuilt,
+        skipped,
+        remainingNoTextRows,
+        errors,
+        durationMs: Date.now() - t0
+      };
+      log?.("sessions", "info", "[ingester.repair] done", summary);
+      return summary;
+    })().catch((err) => {
+      const errData = {
+        error: err instanceof Error ? err.message : String(err),
+        at: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      _recordError(state, errData);
+      log?.("sessions", "warn", `[ingester.repair] failed: ${errData.error}`);
+      return { skipped: true, reason: "error", ...errData };
+    }).finally(() => {
+      state.repairInFlight = null;
+    });
+    state.repairInFlight = p2;
+    return p2;
+  }
+  async function ingestFile(filePath, options = {}) {
+    const key = String(filePath || "");
+    if (!key) return { skipped: true, reason: "invalid_file" };
+    if (state.inFlight.has(key)) return state.inFlight.get(key);
+    const p2 = _ingestFile(filePath, options).catch((err) => {
+      const errData = {
+        filePath,
+        provider: options.provider || null,
+        sessionId: options.sessionId || null,
+        error: err instanceof Error ? err.message : String(err),
+        at: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      _recordError(state, errData);
+      log?.("sessions", "warn", `[ingester.file] failed: ${errData.error}`, errData);
+      return { skipped: true, reason: "error", ...errData };
+    }).finally(() => {
+      state.inFlight.delete(key);
+    });
+    state.inFlight.set(key, p2);
+    return p2;
+  }
+  async function reconcileAll() {
+    const t0 = Date.now();
+    const files = await _collectFiles();
+    let filesIngested = 0;
+    let turnsAdded = 0;
+    let turnsUpdated = 0;
+    let errors = 0;
+    for (let i2 = 0; i2 < files.length; i2++) {
+      const f2 = files[i2];
+      const result = await ingestFile(f2.filePath, {
+        provider: f2.provider,
+        sessionId: f2.sessionId
+      });
+      if (!result?.skipped) {
+        filesIngested++;
+        turnsAdded += result.turnsAdded || 0;
+        turnsUpdated += result.turnsUpdated || 0;
+      }
+      if (result?.reason === "error") errors++;
+      if ((i2 + 1) % 10 === 0) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+    }
+    state.lastReconcileAt = (/* @__PURE__ */ new Date()).toISOString();
+    log?.("sessions", "info", "[ingester.reconcile] done", {
+      filesScanned: files.length,
+      filesIngested,
+      turnsAdded,
+      turnsUpdated,
+      errors,
+      durationMs: Date.now() - t0
+    });
+    return {
+      filesScanned: files.length,
+      filesIngested,
+      turnsAdded,
+      turnsUpdated,
+      errors,
+      durationMs: Date.now() - t0
+    };
+  }
+  async function backfillAll({ onProgress } = {}) {
+    if (state.backfillInFlight) return state.backfillInFlight;
+    const p2 = (async () => {
+      const db3 = resolveDb2 ? resolveDb2() : null;
+      if (!db3) return { skipped: true, reason: "db_unavailable" };
+      const t0 = Date.now();
+      const discovered = await _collectFiles();
+      const withStat = [];
+      for (const f2 of discovered) {
+        try {
+          const st2 = await import_promises8.default.stat(f2.filePath);
+          if (!st2.isFile()) continue;
+          withStat.push({ ...f2, size: st2.size, mtimeMs: st2.mtimeMs });
+        } catch {
+        }
+      }
+      withStat.sort((a2, b2) => a2.size - b2.size);
+      let filesDone = 0;
+      let filesIngested = 0;
+      let filesSkipped = 0;
+      let turnsAdded = 0;
+      let turnsUpdated = 0;
+      let errors = 0;
+      const touchedSessions = /* @__PURE__ */ new Set();
+      state.backfillRuns += 1;
+      state.backfillFilesTotal = withStat.length;
+      state.backfillFilesDone = 0;
+      for (let i2 = 0; i2 < withStat.length; i2++) {
+        const f2 = withStat[i2];
+        const checkpoint = _getFilePosition(db3, f2.filePath);
+        const alreadySynced = !!checkpoint && checkpoint.byte_offset >= f2.size;
+        if (alreadySynced) {
+          filesSkipped++;
+          filesDone++;
+          state.backfillFilesDone = filesDone;
+          onProgress?.({
+            filesTotal: withStat.length,
+            filesDone,
+            filesIngested,
+            turnsIngested: turnsAdded
+          });
+          if ((i2 + 1) % 10 === 0) await new Promise((resolve) => setImmediate(resolve));
+          continue;
+        }
+        const result = await ingestFile(f2.filePath, {
+          provider: f2.provider,
+          sessionId: f2.sessionId,
+          recomputeAggregates: false
+        });
+        if (!result?.skipped) {
+          filesIngested++;
+          turnsAdded += result.turnsAdded || 0;
+          turnsUpdated += result.turnsUpdated || 0;
+          if (result.sessionId) touchedSessions.add(result.sessionId);
+        } else if (result?.reason === "error") {
+          errors++;
+        } else {
+          filesSkipped++;
+        }
+        filesDone++;
+        state.backfillFilesDone = filesDone;
+        onProgress?.({
+          filesTotal: withStat.length,
+          filesDone,
+          filesIngested,
+          turnsIngested: turnsAdded
+        });
+        if ((i2 + 1) % 10 === 0) await new Promise((resolve) => setImmediate(resolve));
+      }
+      const touched = [...touchedSessions];
+      for (let i2 = 0; i2 < touched.length; i2++) {
+        _recomputeSessionAggregates(db3, touched[i2]);
+        if ((i2 + 1) % 25 === 0) await new Promise((resolve) => setImmediate(resolve));
+      }
+      state.lastBackfillAt = (/* @__PURE__ */ new Date()).toISOString();
+      const summary = {
+        filesTotal: withStat.length,
+        filesDone,
+        filesIngested,
+        filesSkipped,
+        turnsAdded,
+        turnsUpdated,
+        touchedSessions: touched.length,
+        errors,
+        durationMs: Date.now() - t0
+      };
+      log?.("sessions", "info", "[ingester.backfill] done", summary);
+      return summary;
+    })().catch((err) => {
+      const errData = {
+        error: err instanceof Error ? err.message : String(err),
+        at: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      _recordError(state, errData);
+      log?.("sessions", "warn", `[ingester.backfill] failed: ${errData.error}`);
+      return { skipped: true, reason: "error", ...errData };
+    }).finally(() => {
+      state.backfillInFlight = null;
+    });
+    state.backfillInFlight = p2;
+    return p2;
+  }
+  function startPeriodicReconcile() {
+    if (state.reconcileTimer) return;
+    state.reconcileTimer = setInterval(() => {
+      reconcileAll().catch((err) => {
+        const errData = {
+          error: err instanceof Error ? err.message : String(err),
+          at: (/* @__PURE__ */ new Date()).toISOString()
+        };
+        _recordError(state, errData);
+        log?.("sessions", "warn", `[ingester.reconcile] failed: ${errData.error}`);
+      });
+    }, reconcileIntervalMs);
+  }
+  function getStats2() {
+    return {
+      pendingFiles: state.inFlight.size,
+      backfillRunning: !!state.backfillInFlight,
+      backfillFilesTotal: state.backfillFilesTotal,
+      backfillFilesDone: state.backfillFilesDone,
+      lastBackfillAt: state.lastBackfillAt,
+      repairRunning: !!state.repairInFlight,
+      repairSessionsTotal: state.repairSessionsTotal,
+      repairSessionsDone: state.repairSessionsDone,
+      lastRepairAt: state.lastRepairAt,
+      totalFilesIngested: state.totalFilesIngested,
+      totalTurnsAdded: state.totalTurnsAdded,
+      totalTurnsUpdated: state.totalTurnsUpdated,
+      lastReconcileAt: state.lastReconcileAt,
+      errors: [...state.errors]
+    };
+  }
+  function cleanup() {
+    if (state.reconcileTimer) {
+      clearInterval(state.reconcileTimer);
+      state.reconcileTimer = null;
+    }
+  }
+  return {
+    ingestFile,
+    reconcileAll,
+    backfillAll,
+    repairNoTextTurns,
+    startPeriodicReconcile,
+    getStats: getStats2,
+    cleanup
+  };
+}
+
 // src/commands/serve/sessions.js
 var SESSIONS_UPDATE_DEBOUNCE_MS = 350;
 var SESSIONS_WATCH_RETRY_MS = 1e4;
@@ -52052,177 +53023,151 @@ function accumulateEditStats(stats, oldStr, newStr) {
   stats.insertions += diff.insertions;
   stats.deletions += diff.deletions;
 }
-var _sessionFileInfoCache = /* @__PURE__ */ new Map();
-async function getSessionFileInfo(filePath, provider = "claude") {
-  const stat = await import_promises7.default.stat(filePath);
-  const cached = _sessionFileInfoCache.get(filePath);
-  if (cached && cached.mtimeMs === stat.mtimeMs) return cached;
-  const { size } = stat;
-  if (size === 0) {
-    const empty = { lineOffsets: [], fileSize: 0, lineCount: 0, mtimeMs: stat.mtimeMs, usage: null };
-    _sessionFileInfoCache.set(filePath, empty);
-    return empty;
-  }
-  const lineOffsets = await _buildLineOffsets(filePath, size);
-  if (lineOffsets.length > 0 && lineOffsets[lineOffsets.length - 1] >= size) {
-    lineOffsets.pop();
-  }
-  const result = {
-    lineOffsets,
-    fileSize: size,
-    lineCount: lineOffsets.length,
-    mtimeMs: stat.mtimeMs,
-    usage: null
-  };
-  _sessionFileInfoCache.set(filePath, result);
-  result._usagePromise = _extractUsageStreaming(filePath, provider).then((usage) => {
-    result.usage = usage;
-    return usage;
-  }).catch(() => null);
-  return result;
-}
-async function _buildLineOffsets(filePath, fileSize) {
-  const lineOffsets = [0];
-  const fd = await import_promises7.default.open(filePath, "r");
-  try {
-    const CHUNK = 1024 * 1024;
-    const buf = Buffer.alloc(CHUNK);
-    let pos = 0;
-    let bytesRead;
-    do {
-      ({ bytesRead } = await fd.read(buf, 0, CHUNK, pos));
-      for (let i2 = 0; i2 < bytesRead; i2++) {
-        if (buf[i2] === 10) lineOffsets.push(pos + i2 + 1);
-      }
-      pos += bytesRead;
-    } while (bytesRead === CHUNK);
-  } finally {
-    await fd.close();
-  }
-  return lineOffsets;
-}
-async function _extractUsageStreaming(filePath, provider = "claude") {
-  const rl = (0, import_readline4.createInterface)({
-    input: import_fs44.default.createReadStream(filePath, { encoding: "utf-8", highWaterMark: 256 * 1024 }),
-    crlfDelay: Infinity
-  });
-  let totalInputTokens = 0, totalOutputTokens = 0, totalCacheReadTokens = 0;
-  let totalCostUsd = 0, turnCount = 0;
-  let lastRole = null, model = null, createdAt = null, lastActiveAt = null, cwd = null;
-  for await (const line of rl) {
-    if (!line) continue;
-    if (line.length > 5e4 && !line.includes('"usage"') && !line.includes('"result"')) {
-      continue;
-    }
-    let entry;
-    try {
-      entry = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (!createdAt && entry.timestamp) createdAt = entry.timestamp;
-    if (entry.timestamp) lastActiveAt = entry.timestamp;
-    if (!cwd && typeof entry?.cwd === "string") cwd = entry.cwd;
-    if (!cwd && typeof entry?.payload?.cwd === "string") cwd = entry.payload.cwd;
-    if (provider === "codex") {
-      if (!model && typeof entry?.payload?.model === "string") model = entry.payload.model;
-      if (entry?.type === "event_msg" && entry?.payload?.type === "token_count" && entry?.payload?.info) {
-        const usage2 = entry.payload.info.last_token_usage || entry.payload.info.total_token_usage || null;
-        if (usage2) {
-          const output = (usage2.output_tokens || 0) + (usage2.reasoning_output_tokens || 0);
-          const input = (usage2.input_tokens || 0) + (usage2.cached_input_tokens || 0);
-          totalOutputTokens += output;
-          totalInputTokens += input;
-          totalCacheReadTokens += usage2.cached_input_tokens || 0;
-        }
-      }
-      const role2 = getSessionEntryRole(entry, provider);
-      if (role2 === "assistant" && lastRole === "user") turnCount++;
-      if (role2) lastRole = role2;
-      continue;
-    }
-    const role = getSessionEntryRole(entry, provider);
-    const usage = entry?.message?.usage;
-    if (!model && entry.message?.model) model = entry.message.model;
-    if (usage) {
-      totalOutputTokens += usage.output_tokens || 0;
-      totalInputTokens += (usage.input_tokens || 0) + (usage.cache_read_input_tokens || 0) + (usage.cache_creation_input_tokens || 0);
-      totalCacheReadTokens += usage.cache_read_input_tokens || 0;
-    }
-    if (entry?.type === "result" && typeof entry.total_cost_usd === "number") {
-      totalCostUsd = entry.total_cost_usd;
-    }
-    if (role === "assistant" && lastRole === "user") turnCount++;
-    if (role) lastRole = role;
-  }
-  if (totalInputTokens === 0 && totalOutputTokens === 0 && !cwd && !model) return null;
-  return {
-    totalInputTokens,
-    totalOutputTokens,
-    totalCacheReadTokens,
-    turnCount,
-    totalCostUsd: totalCostUsd || void 0,
-    model,
-    createdAt,
-    lastActiveAt,
-    cwd
-  };
-}
-async function _readByteRange(filePath, startByte, endByte) {
-  const len = endByte - startByte;
-  if (len <= 0) return "";
-  const fd = await import_promises7.default.open(filePath, "r");
-  try {
-    const buf = Buffer.alloc(len);
-    await fd.read(buf, 0, len, startByte);
-    return buf.toString("utf-8");
-  } finally {
-    await fd.close();
-  }
-}
-async function readSessionMessagesPaginated(sessionId, { tail, before } = {}, lookup = {}) {
+async function readSessionMessages(sessionId, lookup = {}) {
   const found = await findSessionFileEntry(sessionId, lookup);
   if (!found?.filePath) {
     throw new Error(`Session not found: ${sessionId}`);
   }
   const { provider, filePath } = found;
-  if (!tail && before === void 0) {
-    const content2 = await import_promises7.default.readFile(filePath, "utf-8");
-    const messages2 = parseSessionMessagesFromJsonl2(content2, provider);
-    const usage2 = extractUsageFromJsonl(content2, provider);
-    const byteOffset = Buffer.byteLength(content2, "utf-8");
-    const totalCount = content2.split("\n").filter(Boolean).length;
-    return { messages: messages2, byteOffset, usage: usage2, filePath, totalCount, provider };
-  }
-  const info = await getSessionFileInfo(filePath, provider);
-  const { lineOffsets, fileSize, lineCount } = info;
-  const endLine = before !== void 0 ? Math.min(before, lineCount) : lineCount;
-  const pageSize = tail || 50;
-  const startLine = Math.max(0, endLine - pageSize);
-  const startByte = lineOffsets[startLine] ?? 0;
-  const endByte = endLine < lineOffsets.length ? lineOffsets[endLine] : fileSize;
-  const content = await _readByteRange(filePath, startByte, endByte);
+  const content = await import_promises9.default.readFile(filePath, "utf-8");
   const messages = parseSessionMessagesFromJsonl2(content, provider);
-  const hasMore = startLine > 0;
-  let usage = null;
-  if (before === void 0) {
-    usage = info.usage;
-    if (!usage && info._usagePromise) {
-      usage = await Promise.race([
-        info._usagePromise,
-        new Promise((resolve) => setTimeout(resolve, 200, null))
-      ]);
+  const byteOffset = Buffer.byteLength(content, "utf-8");
+  const usage = extractUsageFromJsonl(content, provider);
+  return { messages, byteOffset, usage, filePath, provider };
+}
+async function readSessionMessagesPaginated(sessionId, { tail, before, count, cursor } = {}, lookup = {}) {
+  if (before !== void 0 && count === void 0 && cursor === void 0) {
+    throw new Error("The 'before' parameter is no longer supported. Use count/cursor pagination instead.");
+  }
+  let normalizedCount = count;
+  if (tail !== void 0 && count === void 0) {
+    const tailNum = Number(tail);
+    normalizedCount = Number.isFinite(tailNum) ? Math.min(Math.max(Math.trunc(tailNum), 1), 200) : void 0;
+  }
+  const result = await readSessionMessages(sessionId, lookup);
+  const totalTurns = result.messages.length;
+  const pageSize = Number.isFinite(normalizedCount) && normalizedCount > 0 ? normalizedCount : totalTurns;
+  let endTurn = totalTurns;
+  if (cursor) {
+    endTurn = Math.min(decodeCursor(cursor), totalTurns);
+  }
+  const startTurn = Math.max(0, endTurn - pageSize);
+  return {
+    ...result,
+    messages: result.messages.slice(startTurn, endTurn),
+    hasMore: startTurn > 0,
+    nextCursor: startTurn > 0 ? encodeCursor(startTurn) : null,
+    totalTurns
+  };
+}
+var _readByteRange = readByteRange;
+function encodeCursor(turnNumber) {
+  return Buffer.from(JSON.stringify({ t: turnNumber, v: 1 })).toString("base64url");
+}
+function decodeCursor(token) {
+  try {
+    const obj = JSON.parse(Buffer.from(token, "base64url").toString());
+    if (obj.v !== 1) throw new Error("Unknown cursor version");
+    if (!Number.isInteger(obj.t) || obj.t < 0) throw new Error("Invalid cursor position");
+    return obj.t;
+  } catch {
+    throw new Error("Invalid cursor");
+  }
+}
+function _turnToMessages(turn) {
+  const msgs = [];
+  if (turn.user_message) {
+    msgs.push({
+      role: "user",
+      content: turn.user_message,
+      timestamp: turn.ts || void 0
+    });
+  }
+  if (turn.assistant_response || turn.thinking || turn.tool_results) {
+    const assistantMsg = {
+      role: "assistant",
+      content: turn.assistant_response || "",
+      timestamp: turn.ts || void 0
+    };
+    if (turn.thinking) {
+      assistantMsg.thinking = turn.thinking;
     }
+    if (turn.tool_results) {
+      try {
+        assistantMsg.toolCalls = JSON.parse(turn.tool_results);
+      } catch {
+      }
+    }
+    msgs.push(assistantMsg);
+  }
+  return msgs;
+}
+async function readSessionMessagesFromDb(sessionId, { count, cursor } = {}, lookup = {}) {
+  const db3 = lookup.resolveDb ? lookup.resolveDb() : null;
+  if (!db3) {
+    throw new Error("Database not available");
+  }
+  const found = await findSessionFileEntry(sessionId, lookup);
+  const filePath = found?.filePath || null;
+  const provider = found?.provider || "claude";
+  const pageSize = Number.isFinite(count) && count > 0 ? count : 30;
+  let beforeTurnNumber;
+  if (cursor) {
+    beforeTurnNumber = decodeCursor(cursor);
+  }
+  const limit2 = pageSize + 1;
+  let rows;
+  if (beforeTurnNumber !== void 0) {
+    rows = db3.prepare(`
+      SELECT * FROM turns
+      WHERE session_id = ? AND turn_number < ?
+      ORDER BY turn_number DESC
+      LIMIT ?
+    `).all(sessionId, beforeTurnNumber, limit2);
+  } else {
+    rows = db3.prepare(`
+      SELECT * FROM turns
+      WHERE session_id = ?
+      ORDER BY turn_number DESC
+      LIMIT ?
+    `).all(sessionId, limit2);
+  }
+  const hasMore = rows.length > pageSize;
+  if (hasMore) rows = rows.slice(0, pageSize);
+  rows.reverse();
+  const messages = [];
+  for (const row of rows) {
+    const turnMsgs = _turnToMessages(row);
+    messages.push(...turnMsgs);
+  }
+  const nextCursor = hasMore && rows.length > 0 ? encodeCursor(rows[0].turn_number) : null;
+  const sessionRow = db3.prepare("SELECT turn_count FROM sessions WHERE id = ?").get(sessionId);
+  const totalTurns = sessionRow?.turn_count || 0;
+  const aggRow = db3.prepare(`
+    SELECT total_input_tokens, total_output_tokens, total_cost, turn_count
+    FROM sessions WHERE id = ?
+  `).get(sessionId);
+  const usage = aggRow ? {
+    totalInputTokens: aggRow.total_input_tokens || 0,
+    totalOutputTokens: aggRow.total_output_tokens || 0,
+    totalCacheReadTokens: 0,
+    turnCount: aggRow.turn_count || 0,
+    totalCostUsd: aggRow.total_cost || void 0
+  } : null;
+  let byteOffset = 0;
+  if (filePath) {
+    const fp = db3.prepare("SELECT byte_offset FROM file_positions WHERE file_path = ?").get(filePath);
+    byteOffset = fp?.byte_offset || 0;
   }
   return {
     messages,
-    byteOffset: fileSize,
+    byteOffset,
     usage,
     filePath,
     provider,
-    before: startLine,
+    nextCursor,
     hasMore,
-    totalCount: lineCount
+    totalTurns
   };
 }
 function extractUsageFromJsonl(content, provider = "claude") {
@@ -52309,7 +53254,7 @@ async function readSessionDiffs(sessionId, lookup = {}) {
   if (provider !== "claude") {
     return [];
   }
-  const content = await import_promises7.default.readFile(filePath, "utf-8");
+  const content = await import_promises9.default.readFile(filePath, "utf-8");
   const lines = content.trim().split("\n").filter(Boolean);
   const diffs = [];
   for (const line of lines) {
@@ -52352,17 +53297,17 @@ async function readSessionDiffs(sessionId, lookup = {}) {
 async function enumerateSessions() {
   const sessions = [];
   try {
-    const projectDirs = await import_promises7.default.readdir(CLAUDE_PROJECTS_DIR);
+    const projectDirs = await import_promises9.default.readdir(CLAUDE_PROJECTS_DIR);
     for (const projDir of projectDirs) {
-      const projPath = import_path47.default.join(CLAUDE_PROJECTS_DIR, projDir);
-      const stat = await import_promises7.default.stat(projPath);
+      const projPath = import_path48.default.join(CLAUDE_PROJECTS_DIR, projDir);
+      const stat = await import_promises9.default.stat(projPath);
       if (!stat.isDirectory()) continue;
-      const files = await import_promises7.default.readdir(projPath);
+      const files = await import_promises9.default.readdir(projPath);
       for (const file of files) {
         if (!file.endsWith(".jsonl")) continue;
         const sessionId = file.replace(".jsonl", "");
-        const filePath = import_path47.default.join(projPath, file);
-        const fstat = await import_promises7.default.stat(filePath);
+        const filePath = import_path48.default.join(projPath, file);
+        const fstat = await import_promises9.default.stat(filePath);
         cacheSessionFileHint(sessionId, "claude", filePath);
         sessions.push({
           id: sessionId,
@@ -52384,7 +53329,7 @@ async function enumerateSessions() {
       if (!sessionId) continue;
       let fstat;
       try {
-        fstat = await import_promises7.default.stat(filePath);
+        fstat = await import_promises9.default.stat(filePath);
       } catch {
         continue;
       }
@@ -52392,7 +53337,7 @@ async function enumerateSessions() {
       sessions.push({
         id: sessionId,
         provider: "codex",
-        projectPath: meta.cwd || import_path47.default.dirname(filePath),
+        projectPath: meta.cwd || import_path48.default.dirname(filePath),
         messageCount: 0,
         createdAt: fstat.birthtime.toISOString(),
         updatedAt: fstat.mtime.toISOString()
@@ -52451,7 +53396,7 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
   async function computeSessionDiffStatsAsync(sessionJsonlPath) {
     if (!sessionJsonlPath) return null;
     try {
-      const stat = await import_promises7.default.stat(sessionJsonlPath);
+      const stat = await import_promises9.default.stat(sessionJsonlPath);
       if (stat.size === 0) return null;
       const tailSize = 256 * 1024;
       const startByte = Math.max(0, stat.size - tailSize);
@@ -52489,9 +53434,9 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
   function getProjectGitStatusAsync(projectPath) {
     return new Promise((resolve) => {
       if (!projectPath) return resolve(null);
-      const gitDir = import_path47.default.join(projectPath, ".git");
+      const gitDir = import_path48.default.join(projectPath, ".git");
       try {
-        if (!import_fs44.default.existsSync(gitDir)) return resolve(null);
+        if (!import_fs45.default.existsSync(gitDir)) return resolve(null);
       } catch {
         return resolve(null);
       }
@@ -52579,6 +53524,18 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
     getProjectsFromDb,
     isDbSpineEnabled
   } = dbModule;
+  const ingesterModule = createSessionsIngesterModule({
+    log,
+    resolveDb: resolveDb2
+  });
+  const {
+    ingestFile: ingestSessionFile,
+    reconcileAll: reconcileSessionTurnsToDb,
+    backfillAll: backfillSessionTurnsToDb,
+    repairNoTextTurns: repairNoTextSessionTurnsToDb,
+    startPeriodicReconcile: startTurnIngestReconcile,
+    getStats: getTurnIngestStats
+  } = ingesterModule;
   const tailModule = createSessionsTailModule({
     log,
     broadcast,
@@ -52621,14 +53578,14 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
   function startSessionsWatcher() {
     if (sessionsWatcher) return;
     const watcherSpecs = [];
-    if (import_fs44.default.existsSync(CLAUDE_PROJECTS_DIR)) {
+    if (import_fs45.default.existsSync(CLAUDE_PROJECTS_DIR)) {
       watcherSpecs.push({ provider: "claude", rootPath: CLAUDE_PROJECTS_DIR });
-    } else if (import_fs44.default.existsSync(CLAUDE_ROOT_DIR)) {
+    } else if (import_fs45.default.existsSync(CLAUDE_ROOT_DIR)) {
       watcherSpecs.push({ provider: "claude", rootPath: CLAUDE_ROOT_DIR });
     }
-    if (import_fs44.default.existsSync(CODEX_SESSIONS_DIR)) {
+    if (import_fs45.default.existsSync(CODEX_SESSIONS_DIR)) {
       watcherSpecs.push({ provider: "codex", rootPath: CODEX_SESSIONS_DIR });
-    } else if (import_fs44.default.existsSync(CODEX_ROOT_DIR)) {
+    } else if (import_fs45.default.existsSync(CODEX_ROOT_DIR)) {
       watcherSpecs.push({ provider: "codex", rootPath: CODEX_ROOT_DIR });
     }
     if (watcherSpecs.length === 0) {
@@ -52645,7 +53602,7 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
     for (const spec of watcherSpecs) {
       const { provider, rootPath } = spec;
       try {
-        const watcher = import_fs44.default.watch(rootPath, { recursive: true }, (eventType, filename) => {
+        const watcher = import_fs45.default.watch(rootPath, { recursive: true }, (eventType, filename) => {
           const relPath = typeof filename === "string" ? filename : "";
           if (!relPath) {
             queueSessionsUpdated({
@@ -52658,7 +53615,7 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
             return;
           }
           if (!shouldBroadcastSessionUpdate(rootPath, relPath)) return;
-          const fullPath = import_path47.default.join(rootPath, relPath);
+          const fullPath = import_path48.default.join(rootPath, relPath);
           const updateData = {
             source: "watcher",
             provider,
@@ -52686,9 +53643,30 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
             }
             if (updateData.sessionId) {
               cacheSessionFileHint(updateData.sessionId, provider, fullPath);
+              ingestSessionFile(fullPath, {
+                provider,
+                sessionId: updateData.sessionId
+              }).catch(() => {
+              });
               watcherDbUpsert(updateData.sessionId, fullPath, {
                 provider,
                 projectDir: updateData.projectDir || null
+              }).then((result) => {
+                if (result?.isNew) {
+                  queueSessionsUpdated({
+                    source: "watcher-new",
+                    sessionId: result.sessionId,
+                    newSession: {
+                      sessionId: result.sessionId,
+                      provider: result.provider,
+                      firstPrompt: result.snippet,
+                      modified: result.modified,
+                      created: result.created,
+                      projectPath: result.projectPath,
+                      gitBranch: result.gitBranch
+                    }
+                  });
+                }
               }).catch(() => {
               });
             }
@@ -52713,61 +53691,68 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
     sessionsWatcher = { watchers };
   }
   async function enumerateProjectsWithSessions() {
-    const claudeDir = import_path47.default.join(import_os21.default.homedir(), ".claude", "projects");
+    const claudeDir = import_path48.default.join(import_os21.default.homedir(), ".claude", "projects");
     const projects = [];
     async function processProject(projDir) {
-      const projPath = import_path47.default.join(claudeDir, projDir);
-      const stat = await import_promises7.default.stat(projPath);
+      const projPath = import_path48.default.join(claudeDir, projDir);
+      const stat = await import_promises9.default.stat(projPath);
       if (!stat.isDirectory()) return null;
       let sessions = [];
       let originalPath = null;
-      const indexPath = import_path47.default.join(projPath, "sessions-index.json");
+      const indexPath = import_path48.default.join(projPath, "sessions-index.json");
       try {
-        const indexContent = await import_promises7.default.readFile(indexPath, "utf-8");
+        const indexContent = await import_promises9.default.readFile(indexPath, "utf-8");
         const index = JSON.parse(indexContent);
         originalPath = index.originalPath || null;
         if (Array.isArray(index.entries)) {
           const STALE_THRESHOLD_MS = 2 * 60 * 1e3;
           const now = Date.now();
-          sessions = (await Promise.all(index.entries.map(async (entry) => {
-            const fullPath = entry.fullPath || import_path47.default.join(projPath, `${entry.sessionId}.jsonl`);
-            let modified = entry.modified || "";
-            const indexAge = modified ? now - new Date(modified).getTime() : Infinity;
-            if (indexAge > STALE_THRESHOLD_MS) {
-              try {
-                const fstat = await import_promises7.default.stat(fullPath);
-                const fileMtime = fstat.mtime.toISOString();
-                if (!modified || new Date(fileMtime) > new Date(modified)) {
-                  modified = fileMtime;
+          const ENTRY_BATCH = 50;
+          for (let ei = 0; ei < index.entries.length; ei += ENTRY_BATCH) {
+            const batch = index.entries.slice(ei, ei + ENTRY_BATCH);
+            const results = await Promise.all(batch.map(async (entry) => {
+              const fullPath = entry.fullPath || import_path48.default.join(projPath, `${entry.sessionId}.jsonl`);
+              let modified = entry.modified || "";
+              const indexAge = modified ? now - new Date(modified).getTime() : Infinity;
+              if (indexAge > STALE_THRESHOLD_MS) {
+                try {
+                  const fstat = await import_promises9.default.stat(fullPath);
+                  const fileMtime = fstat.mtime.toISOString();
+                  if (!modified || new Date(fileMtime) > new Date(modified)) {
+                    modified = fileMtime;
+                  }
+                } catch {
+                  return null;
                 }
-              } catch {
-                return null;
               }
+              return {
+                sessionId: entry.sessionId,
+                provider: "claude",
+                summary: entry.summary || "",
+                firstPrompt: entry.firstPrompt || "",
+                messageCount: entry.messageCount || 0,
+                modified,
+                created: entry.created || "",
+                gitBranch: entry.gitBranch || "",
+                originNativeFile: fullPath,
+                fullPath,
+                diffStats: null
+              };
+            }));
+            for (const r2 of results) {
+              if (r2) sessions.push(r2);
             }
-            return {
-              sessionId: entry.sessionId,
-              provider: "claude",
-              summary: entry.summary || "",
-              firstPrompt: entry.firstPrompt || "",
-              messageCount: entry.messageCount || 0,
-              modified,
-              created: entry.created || "",
-              gitBranch: entry.gitBranch || "",
-              originNativeFile: fullPath,
-              fullPath,
-              diffStats: null
-            };
-          }))).filter(Boolean);
+          }
         }
         const indexedIds = new Set(sessions.map((s2) => s2.sessionId));
-        const files = await import_promises7.default.readdir(projPath);
+        const files = await import_promises9.default.readdir(projPath);
         for (const file of files) {
           if (!file.endsWith(".jsonl")) continue;
           const sessionId = file.replace(".jsonl", "");
           if (indexedIds.has(sessionId)) continue;
-          const filePath = import_path47.default.join(projPath, file);
+          const filePath = import_path48.default.join(projPath, file);
           try {
-            const fstat = await import_promises7.default.stat(filePath);
+            const fstat = await import_promises9.default.stat(filePath);
             const snippet = await readSessionSnippet(filePath);
             sessions.push({
               sessionId,
@@ -52786,13 +53771,13 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
           }
         }
       } catch {
-        const files = await import_promises7.default.readdir(projPath);
+        const files = await import_promises9.default.readdir(projPath);
         for (const file of files) {
           if (!file.endsWith(".jsonl")) continue;
           const sessionId = file.replace(".jsonl", "");
-          const filePath = import_path47.default.join(projPath, file);
+          const filePath = import_path48.default.join(projPath, file);
           try {
-            const fstat = await import_promises7.default.stat(filePath);
+            const fstat = await import_promises9.default.stat(filePath);
             const snippet = await readSessionSnippet(filePath);
             sessions.push({
               sessionId,
@@ -52833,7 +53818,7 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
         decodedPath = "/" + projDir.replace(/-/g, "/").replace(/^\//, "");
       }
       const displayPath = originalPath || decodedPath;
-      const name = import_path47.default.basename(displayPath);
+      const name = import_path48.default.basename(displayPath);
       for (const session of sessions) {
         if (session.fullPath) {
           _sessionPathMap.set(session.sessionId, session.fullPath);
@@ -52854,7 +53839,7 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
       };
     }
     try {
-      const projectDirs = await import_promises7.default.readdir(claudeDir);
+      const projectDirs = await import_promises9.default.readdir(claudeDir);
       const CONCURRENCY = 8;
       for (let i2 = 0; i2 < projectDirs.length; i2 += CONCURRENCY) {
         const batch = projectDirs.slice(i2, i2 + CONCURRENCY);
@@ -52874,7 +53859,7 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
         const batchRows = await Promise.all(batch.map(async (filePath) => {
           let fstat;
           try {
-            fstat = await import_promises7.default.stat(filePath);
+            fstat = await import_promises9.default.stat(filePath);
           } catch {
             return null;
           }
@@ -52908,7 +53893,7 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
           const encoded = projectPath.replace(/^\//, "").replace(/\//g, "-") || "-";
           codexProjectMap.set(projectPath, {
             path: encoded,
-            name: import_path47.default.basename(projectPath) || projectPath,
+            name: import_path48.default.basename(projectPath) || projectPath,
             originalPath: projectPath,
             sessions: [],
             gitStatus: null
@@ -52988,7 +53973,7 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
           const parent = mergedProjects[parentMap.get(realRoot)];
           parent.sessions.push(...proj.sessions);
         } else {
-          const realName = import_path47.default.basename(realRoot);
+          const realName = import_path48.default.basename(realRoot);
           parentMap.set(realRoot, mergedProjects.length);
           mergedProjects.push({
             ...proj,
@@ -53078,11 +54063,34 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
       const sessionId = decodeURIComponent(msgMatch[1]);
       const tailParam = url.searchParams.get("tail");
       const beforeParam = url.searchParams.get("before");
+      const countParam = url.searchParams.get("count");
+      const cursorParam = url.searchParams.get("cursor");
       const paginationOpts = {};
       if (tailParam) paginationOpts.tail = parseInt(tailParam, 10);
       if (beforeParam) paginationOpts.before = parseInt(beforeParam, 10);
+      if (countParam) paginationOpts.count = parseInt(countParam, 10);
+      if (cursorParam) paginationOpts.cursor = cursorParam;
       try {
-        const result = await readSessionMessagesPaginated(sessionId, paginationOpts, { resolveDb: resolveDb2 });
+        const useDbMessages = process.env.RUDI_DB_MESSAGES !== "0";
+        let result;
+        if (useDbMessages) {
+          result = await readSessionMessagesFromDb(sessionId, paginationOpts, { resolveDb: resolveDb2 });
+          const needsWarmup = !paginationOpts.cursor && (result.messages?.length || 0) === 0 && (result.totalTurns || 0) === 0;
+          if (needsWarmup) {
+            const found = await findSessionFileEntry(sessionId, { resolveDb: resolveDb2 });
+            if (found?.filePath) {
+              await ingestSessionFile(found.filePath, { provider: found.provider, sessionId });
+              result = await readSessionMessagesFromDb(sessionId, paginationOpts, { resolveDb: resolveDb2 });
+            }
+          }
+          if (!paginationOpts.cursor && (result.messages?.length || 0) === 0 && (result.totalTurns || 0) === 0) {
+            log("sessions", "debug", "DB messages empty on initial page after warmup", {
+              sessionId: sessionId.slice(0, 8)
+            });
+          }
+        } else {
+          result = await readSessionMessagesPaginated(sessionId, paginationOpts, { resolveDb: resolveDb2 });
+        }
         const { messages, byteOffset, filePath } = result;
         const provider = result.provider || "claude";
         const usage = result.usage;
@@ -53107,14 +54115,15 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
           } catch {
           }
         }
-        json(res, {
+        const response = {
           messages,
           byteOffset,
           usage,
-          before: result.before,
-          hasMore: result.hasMore,
-          totalCount: result.totalCount
-        });
+          hasMore: result.hasMore
+        };
+        if (result.nextCursor !== void 0) response.nextCursor = result.nextCursor;
+        if (result.totalTurns !== void 0) response.totalTurns = result.totalTurns;
+        json(res, response);
         if (usage) {
           try {
             const db3 = resolveDb2 ? resolveDb2() : null;
@@ -53155,7 +54164,9 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
           }
         }
       } catch (err) {
-        error(res, err.message, 404);
+        const message = err?.message || String(err);
+        const status = /invalid cursor|no longer supported/i.test(message) ? 400 : /database not available/i.test(message) ? 503 : 404;
+        error(res, message, status);
       }
       return true;
     }
@@ -53235,6 +54246,7 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
       _enrichmentTimer = null;
     }
     _lastEnrichmentProjects = null;
+    ingesterModule.cleanup();
     dbModule.cleanup();
   }
   return {
@@ -53248,13 +54260,19 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
     cleanup,
     // DB-as-spine
     reconcileSessionsToDb,
+    reconcileSessionTurnsToDb,
+    backfillSessionTurnsToDb,
+    repairNoTextSessionTurnsToDb,
     startPeriodicReconcile,
-    enableDbSpine
+    startTurnIngestReconcile,
+    enableDbSpine,
+    isDbSpineEnabled,
+    getTurnIngestStats
   };
 }
 
 // src/commands/serve/ctx.js
-var import_crypto8 = __toESM(require("crypto"), 1);
+var import_crypto9 = __toESM(require("crypto"), 1);
 var import_url = require("url");
 var LOG_MAX = 500;
 var SSE_CLIENT_CAP = 50;
@@ -53336,7 +54354,7 @@ function createInfrastructure() {
     return JSON.parse(Buffer.concat(chunks).toString());
   }
   function generateToken() {
-    return import_crypto8.default.randomBytes(32).toString("hex");
+    return import_crypto9.default.randomBytes(32).toString("hex");
   }
   function checkAuth4(req) {
     const headerToken = req.headers["x-rudi-token"];
@@ -53367,10 +54385,10 @@ function createInfrastructure() {
 }
 
 // src/commands/serve/startup.js
-var import_fs45 = __toESM(require("fs"), 1);
-var import_path48 = __toESM(require("path"), 1);
+var import_fs46 = __toESM(require("fs"), 1);
+var import_path49 = __toESM(require("path"), 1);
 var import_child_process23 = require("child_process");
-async function runStartupTasks({ log, reconcileSessionsToDb, enableDbSpine, startPeriodicReconcile }) {
+function runStartupTasks({ log }) {
   try {
     initSchema();
   } catch (err) {
@@ -53384,17 +54402,10 @@ async function runStartupTasks({ log, reconcileSessionsToDb, enableDbSpine, star
       WHERE status IN ('starting', 'running')
     `).run((/* @__PURE__ */ new Date()).toISOString());
     if (stale.changes > 0) {
-      console.log(`[serve] Marked ${stale.changes} stale session(s) as crashed`);
+      log("serve", "info", `Marked ${stale.changes} stale session(s) as crashed`);
     }
   } catch (err) {
     console.warn("[serve] Failed to sweep stale sessions:", err.message);
-  }
-  try {
-    await reconcileSessionsToDb();
-    enableDbSpine();
-    startPeriodicReconcile();
-  } catch (err) {
-    console.warn("[serve] Session reconciliation failed, falling back to filesystem:", err.message);
   }
   try {
     const psOutput = (0, import_child_process23.execSync)("ps -axo pid=,ppid=,command=", {
@@ -53445,7 +54456,7 @@ async function runStartupTasks({ log, reconcileSessionsToDb, enableDbSpine, star
         AND status IN ('completed', 'error', 'stopped', 'crashed')
     `).all();
     for (const row of orphans) {
-      if (!row.worktree_path || !import_fs45.default.existsSync(row.worktree_path)) {
+      if (!row.worktree_path || !import_fs46.default.existsSync(row.worktree_path)) {
         db3.prepare("UPDATE session_runtime_state SET worktree_path = NULL WHERE session_id = ?").run(row.session_id);
         continue;
       }
@@ -53469,7 +54480,7 @@ async function runStartupTasks({ log, reconcileSessionsToDb, enableDbSpine, star
           log("serve", "warn", `orphan worktree has unmerged commits, skipping: ${row.worktree_path}`);
           continue;
         }
-        const repoDir = row.project_root || import_path48.default.dirname(import_path48.default.dirname(import_path48.default.dirname(row.worktree_path)));
+        const repoDir = row.project_root || import_path49.default.dirname(import_path49.default.dirname(import_path49.default.dirname(row.worktree_path)));
         (0, import_child_process23.execSync)(`git worktree remove ${JSON.stringify(row.worktree_path)}`, { cwd: repoDir, stdio: "pipe" });
         if (row.worktree_branch) {
           try {
@@ -53539,9 +54550,9 @@ function buildLogsRoutes(ctx) {
 }
 
 // src/commands/serve/routes/fs.js
-var import_fs46 = __toESM(require("fs"), 1);
-var import_promises8 = __toESM(require("fs/promises"), 1);
-var import_path49 = __toESM(require("path"), 1);
+var import_fs47 = __toESM(require("fs"), 1);
+var import_promises10 = __toESM(require("fs/promises"), 1);
+var import_path50 = __toESM(require("path"), 1);
 var FS_READDIR_CACHE_TTL_MS = 1200;
 function buildFsRoutes(ctx) {
   const { json, error, readBody, log, broadcast } = ctx;
@@ -53569,12 +54580,12 @@ function buildFsRoutes(ctx) {
     }
     const generationAtStart = fsReaddirCacheGeneration;
     const request = (async () => {
-      const names = await import_promises8.default.readdir(dirPath);
+      const names = await import_promises10.default.readdir(dirPath);
       const entries = await Promise.all(
         names.filter((n2) => showHidden || !n2.startsWith(".")).map(async (name) => {
-          const fullPath = import_path49.default.join(dirPath, name);
+          const fullPath = import_path50.default.join(dirPath, name);
           try {
-            const stat = await import_promises8.default.stat(fullPath);
+            const stat = await import_promises10.default.stat(fullPath);
             return {
               name,
               path: fullPath,
@@ -53607,7 +54618,7 @@ function buildFsRoutes(ctx) {
       const filePath = url.searchParams.get("path");
       if (!filePath) return error(res, "path required");
       try {
-        const content = await import_promises8.default.readFile(filePath, "utf-8");
+        const content = await import_promises10.default.readFile(filePath, "utf-8");
         json(res, { content });
       } catch (err) {
         error(res, err.message, 404);
@@ -53618,8 +54629,8 @@ function buildFsRoutes(ctx) {
       const body = await readBody(req);
       if (!body.path || body.content === void 0) return error(res, "path and content required");
       try {
-        await import_promises8.default.mkdir(import_path49.default.dirname(body.path), { recursive: true });
-        await import_promises8.default.writeFile(body.path, body.content, "utf-8");
+        await import_promises10.default.mkdir(import_path50.default.dirname(body.path), { recursive: true });
+        await import_promises10.default.writeFile(body.path, body.content, "utf-8");
         invalidateFsReaddirCache();
         json(res, { ok: true });
       } catch (err) {
@@ -53631,9 +54642,9 @@ function buildFsRoutes(ctx) {
       const body = await readBody(req);
       if (!body.path || body.base64 === void 0) return error(res, "path and base64 required");
       try {
-        await import_promises8.default.mkdir(import_path49.default.dirname(body.path), { recursive: true });
+        await import_promises10.default.mkdir(import_path50.default.dirname(body.path), { recursive: true });
         const buffer = Buffer.from(body.base64, "base64");
-        await import_promises8.default.writeFile(body.path, buffer);
+        await import_promises10.default.writeFile(body.path, buffer);
         invalidateFsReaddirCache();
         json(res, { ok: true });
       } catch (err) {
@@ -53657,9 +54668,9 @@ function buildFsRoutes(ctx) {
       const filePath = url.searchParams.get("path");
       if (!filePath) return error(res, "path required");
       try {
-        const stat = await import_promises8.default.stat(filePath);
+        const stat = await import_promises10.default.stat(filePath);
         json(res, {
-          name: import_path49.default.basename(filePath),
+          name: import_path50.default.basename(filePath),
           path: filePath,
           isDirectory: stat.isDirectory(),
           isFile: stat.isFile(),
@@ -53675,8 +54686,8 @@ function buildFsRoutes(ctx) {
       const filePath = url.searchParams.get("path");
       if (!filePath) return error(res, "path required");
       try {
-        const stat = await import_promises8.default.stat(filePath);
-        const ext = import_path49.default.extname(filePath).toLowerCase();
+        const stat = await import_promises10.default.stat(filePath);
+        const ext = import_path50.default.extname(filePath).toLowerCase();
         const mimeTypes = {
           ".png": "image/png",
           ".jpg": "image/jpeg",
@@ -53708,7 +54719,7 @@ function buildFsRoutes(ctx) {
           "Cache-Control": "public, max-age=5",
           "ETag": etag
         });
-        import_fs46.default.createReadStream(filePath).pipe(res);
+        import_fs47.default.createReadStream(filePath).pipe(res);
       } catch (err) {
         error(res, err.message, 404);
       }
@@ -53718,7 +54729,7 @@ function buildFsRoutes(ctx) {
       const body = await readBody(req);
       if (!body.path) return error(res, "path required");
       try {
-        await import_promises8.default.mkdir(body.path, { recursive: true });
+        await import_promises10.default.mkdir(body.path, { recursive: true });
         invalidateFsReaddirCache();
         json(res, { ok: true });
       } catch (err) {
@@ -53730,7 +54741,7 @@ function buildFsRoutes(ctx) {
       const body = await readBody(req);
       if (!body.path) return error(res, "path required");
       try {
-        await import_promises8.default.rm(body.path, { recursive: true });
+        await import_promises10.default.rm(body.path, { recursive: true });
         invalidateFsReaddirCache();
         json(res, { ok: true });
       } catch (err) {
@@ -53742,7 +54753,7 @@ function buildFsRoutes(ctx) {
       const body = await readBody(req);
       if (!body.oldPath || !body.newPath) return error(res, "oldPath and newPath required");
       try {
-        await import_promises8.default.rename(body.oldPath, body.newPath);
+        await import_promises10.default.rename(body.oldPath, body.newPath);
         invalidateFsReaddirCache();
         json(res, { ok: true });
       } catch (err) {
@@ -53759,14 +54770,14 @@ function buildFsRoutes(ctx) {
         return true;
       }
       try {
-        const watcher = import_fs46.default.watch(watchPath, { recursive: true }, (eventType, filename) => {
+        const watcher = import_fs47.default.watch(watchPath, { recursive: true }, (eventType, filename) => {
           if (!filename) return;
           const entry = fsWatchers.get(watchPath);
           if (!entry) return;
           clearTimeout(entry.debounceTimer);
           entry.debounceTimer = setTimeout(() => {
-            const fullPath = import_path49.default.join(watchPath, filename);
-            const dirPath = import_path49.default.dirname(fullPath);
+            const fullPath = import_path50.default.join(watchPath, filename);
+            const dirPath = import_path50.default.dirname(fullPath);
             invalidateFsReaddirCache();
             broadcast("fs:change", { event: eventType, path: fullPath, dir: dirPath });
           }, 100);
@@ -53808,8 +54819,8 @@ function buildFsRoutes(ctx) {
 }
 
 // src/commands/serve/routes/auth.js
-var import_fs47 = __toESM(require("fs"), 1);
-var import_path50 = __toESM(require("path"), 1);
+var import_fs48 = __toESM(require("fs"), 1);
+var import_path51 = __toESM(require("path"), 1);
 var import_os22 = __toESM(require("os"), 1);
 var import_child_process24 = require("child_process");
 init_src();
@@ -53836,10 +54847,10 @@ function buildAuthRoutes(ctx) {
       const body = await readBody(req);
       if (body.apiKey || body.oauthToken) {
         try {
-          const envPath = import_path50.default.join(PATHS.home, ".env");
+          const envPath = import_path51.default.join(PATHS.home, ".env");
           let content = "";
-          if (import_fs47.default.existsSync(envPath)) {
-            content = import_fs47.default.readFileSync(envPath, "utf-8");
+          if (import_fs48.default.existsSync(envPath)) {
+            content = import_fs48.default.readFileSync(envPath, "utf-8");
           }
           if (body.oauthToken) {
             content = content.replace(/^CLAUDE_CODE_OAUTH_TOKEN=.*$/m, "").trim();
@@ -53856,7 +54867,7 @@ ANTHROPIC_API_KEY=${body.apiKey}
             process.env.ANTHROPIC_API_KEY = body.apiKey;
             log("auth", "info", "API key saved to .env");
           }
-          import_fs47.default.writeFileSync(envPath, content.trim() + "\n");
+          import_fs48.default.writeFileSync(envPath, content.trim() + "\n");
           json(res, { ok: true });
         } catch (err) {
           log("auth", "error", `Failed to save credential: ${err.message}`);
@@ -53866,9 +54877,9 @@ ANTHROPIC_API_KEY=${body.apiKey}
         const binaryPath = resolveClaudeBinary();
         if (binaryPath && import_os22.default.platform() === "darwin") {
           try {
-            const helperPath = import_path50.default.join(PATHS.home, ".login-helper.sh");
-            const envPath = import_path50.default.join(PATHS.home, ".env");
-            const captureFile = import_path50.default.join(PATHS.home, ".setup-token-output");
+            const helperPath = import_path51.default.join(PATHS.home, ".login-helper.sh");
+            const envPath = import_path51.default.join(PATHS.home, ".env");
+            const captureFile = import_path51.default.join(PATHS.home, ".setup-token-output");
             const script = [
               "#!/bin/bash",
               `CAPTURE="${captureFile}"`,
@@ -53890,7 +54901,7 @@ ANTHROPIC_API_KEY=${body.apiKey}
               '  echo "  $CAPTURE"',
               "fi"
             ].join("\n");
-            import_fs47.default.writeFileSync(helperPath, script, { mode: 493 });
+            import_fs48.default.writeFileSync(helperPath, script, { mode: 493 });
             (0, import_child_process24.execSync)(`osascript -e 'tell application "Terminal" to do script "${helperPath}"'`, { stdio: "pipe" });
             log("auth", "info", "Launched login helper in Terminal.app");
             json(res, { ok: true, launched: true });
@@ -53989,21 +55000,21 @@ function buildProjectRoutes(ctx) {
 }
 
 // src/commands/serve/routes/notes.js
-var import_promises9 = __toESM(require("fs/promises"), 1);
-var import_path51 = __toESM(require("path"), 1);
-var import_crypto9 = __toESM(require("crypto"), 1);
+var import_promises11 = __toESM(require("fs/promises"), 1);
+var import_path52 = __toESM(require("path"), 1);
+var import_crypto10 = __toESM(require("crypto"), 1);
 init_src();
-var NOTES_DIR = import_path51.default.join(PATHS.home, "notes");
+var NOTES_DIR = import_path52.default.join(PATHS.home, "notes");
 function buildNotesRoutes(ctx) {
   const { json, error, readBody } = ctx;
   async function handle(req, res, url) {
-    await import_promises9.default.mkdir(NOTES_DIR, { recursive: true });
+    await import_promises11.default.mkdir(NOTES_DIR, { recursive: true });
     if (req.method === "GET" && url.pathname === "/notes") {
       try {
-        const files = await import_promises9.default.readdir(NOTES_DIR);
+        const files = await import_promises11.default.readdir(NOTES_DIR);
         const notes = await Promise.all(
           files.filter((f2) => f2.endsWith(".json")).map(async (f2) => {
-            const content = await import_promises9.default.readFile(import_path51.default.join(NOTES_DIR, f2), "utf-8");
+            const content = await import_promises11.default.readFile(import_path52.default.join(NOTES_DIR, f2), "utf-8");
             return JSON.parse(content);
           })
         );
@@ -54017,20 +55028,20 @@ function buildNotesRoutes(ctx) {
     if (req.method === "POST" && url.pathname === "/notes") {
       const body = await readBody(req);
       if (!body.title) return error(res, "title required");
-      const id = import_crypto9.default.randomUUID();
+      const id = import_crypto10.default.randomUUID();
       const now = (/* @__PURE__ */ new Date()).toISOString();
       const note = { id, title: body.title, content: body.content || "", createdAt: now, updatedAt: now };
-      await import_promises9.default.writeFile(import_path51.default.join(NOTES_DIR, `${id}.json`), JSON.stringify(note, null, 2));
+      await import_promises11.default.writeFile(import_path52.default.join(NOTES_DIR, `${id}.json`), JSON.stringify(note, null, 2));
       json(res, note, 201);
       return true;
     }
     const match = url.pathname.match(/^\/notes\/([^/]+)$/);
     if (match) {
       const id = decodeURIComponent(match[1]);
-      const filePath = import_path51.default.join(NOTES_DIR, `${id}.json`);
+      const filePath = import_path52.default.join(NOTES_DIR, `${id}.json`);
       if (req.method === "GET") {
         try {
-          const content = await import_promises9.default.readFile(filePath, "utf-8");
+          const content = await import_promises11.default.readFile(filePath, "utf-8");
           json(res, JSON.parse(content));
         } catch {
           error(res, "Note not found", 404);
@@ -54039,7 +55050,7 @@ function buildNotesRoutes(ctx) {
       }
       if (req.method === "POST") {
         try {
-          const existing = JSON.parse(await import_promises9.default.readFile(filePath, "utf-8"));
+          const existing = JSON.parse(await import_promises11.default.readFile(filePath, "utf-8"));
           const body = await readBody(req);
           const updated = {
             ...existing,
@@ -54047,7 +55058,7 @@ function buildNotesRoutes(ctx) {
             id,
             updatedAt: (/* @__PURE__ */ new Date()).toISOString()
           };
-          await import_promises9.default.writeFile(filePath, JSON.stringify(updated, null, 2));
+          await import_promises11.default.writeFile(filePath, JSON.stringify(updated, null, 2));
           json(res, updated);
         } catch {
           error(res, "Note not found", 404);
@@ -54056,7 +55067,7 @@ function buildNotesRoutes(ctx) {
       }
       if (req.method === "DELETE") {
         try {
-          await import_promises9.default.rm(filePath);
+          await import_promises11.default.rm(filePath);
           json(res, { ok: true });
         } catch {
           error(res, "Note not found", 404);
@@ -54590,10 +55601,33 @@ function buildProviderRoutes(ctx) {
 }
 
 // src/commands/serve.js
-var PORT_FILE = import_path52.default.join(PATHS.home, ".rudi-lite-port");
-var TOKEN_FILE = import_path52.default.join(PATHS.home, ".rudi-lite-token");
+var PORT_FILE = import_path53.default.join(PATHS.home, ".rudi-lite-port");
+var TOKEN_FILE = import_path53.default.join(PATHS.home, ".rudi-lite-token");
 var MAX_CONCURRENT = parseInt(process.env.RUDI_MAX_AGENT_PROCESSES || "10", 10) || 10;
 var IDLE_TIMEOUT_MS = parseInt(process.env.RUDI_IDLE_TIMEOUT_MS || String(10 * 60 * 1e3), 10) || 10 * 60 * 1e3;
+var WS_TOKEN_PROTOCOL_PREFIX = "rudi-token.";
+function shouldRunInitialTurnBackfill(db3) {
+  if (!db3 || typeof db3.prepare !== "function") return false;
+  try {
+    const turnsCount = Number(db3.prepare("SELECT COUNT(*) as c FROM turns").get()?.c || 0);
+    const sessionsCount = Number(db3.prepare(`SELECT COUNT(*) as c FROM sessions WHERE status != 'deleted'`).get()?.c || 0);
+    return turnsCount === 0 && sessionsCount > 0;
+  } catch {
+    return false;
+  }
+}
+function readWsTokenFromProtocolHeader(headerValue) {
+  if (!headerValue) return null;
+  const raw = Array.isArray(headerValue) ? headerValue.join(",") : headerValue;
+  const protocols = raw.split(",").map((p2) => p2.trim()).filter(Boolean);
+  for (const protocol of protocols) {
+    const normalized = protocol.replace(/^"+|"+$/g, "");
+    if (normalized.startsWith(WS_TOKEN_PROTOCOL_PREFIX)) {
+      return normalized.slice(WS_TOKEN_PROTOCOL_PREFIX.length);
+    }
+  }
+  return null;
+}
 async function cmdServe(args, flags) {
   const ctx = createInfrastructure();
   const { log, broadcast, json, error, readBody, checkAuth: checkAuth4, generateToken, setWss, setToken } = ctx;
@@ -54629,10 +55663,16 @@ async function cmdServe(args, flags) {
     handleWsDisconnect: handleSessionsWsDisconnect,
     cleanup: cleanupSessions,
     reconcileSessionsToDb,
+    reconcileSessionTurnsToDb,
+    backfillSessionTurnsToDb,
+    repairNoTextSessionTurnsToDb,
     startPeriodicReconcile,
-    enableDbSpine
+    startTurnIngestReconcile,
+    enableDbSpine,
+    isDbSpineEnabled,
+    getTurnIngestStats
   } = sessionsModule;
-  await runStartupTasks({ log, reconcileSessionsToDb, enableDbSpine, startPeriodicReconcile });
+  runStartupTasks({ log });
   let sidecarPort = 0;
   let sidecarToken = "";
   const logsRoutes = buildLogsRoutes(ctx);
@@ -54723,6 +55763,63 @@ async function cmdServe(args, flags) {
       if (url.pathname.startsWith("/terminal/")) {
         if (await terminalRoutes.handle(req, res, url)) return;
       }
+      if (url.pathname === "/admin/ingester" && req.method === "GET") {
+        const stats = getTurnIngestStats();
+        json(res, { status: stats.errors.length > 0 ? "degraded" : "healthy", ...stats });
+        return;
+      }
+      if (url.pathname === "/admin/backfill" && req.method === "POST") {
+        const stats = getTurnIngestStats();
+        if (!stats.backfillRunning) {
+          backfillSessionTurnsToDb().then((result) => log("sessions", "info", "Manual backfill complete", result)).catch((err) => log("sessions", "warn", `Manual backfill failed: ${err.message}`));
+          const next = getTurnIngestStats();
+          json(res, {
+            status: "started",
+            backfillRunning: next.backfillRunning,
+            progress: {
+              filesDone: next.backfillFilesDone || 0,
+              filesTotal: next.backfillFilesTotal || 0
+            }
+          });
+        } else {
+          json(res, {
+            status: "running",
+            backfillRunning: true,
+            progress: {
+              filesDone: stats.backfillFilesDone || 0,
+              filesTotal: stats.backfillFilesTotal || 0
+            }
+          });
+        }
+        return;
+      }
+      if (url.pathname === "/admin/repair-no-text" && req.method === "POST") {
+        const stats = getTurnIngestStats();
+        if (!stats.repairRunning) {
+          const limitRaw = url.searchParams.get("limit");
+          const limit2 = limitRaw ? Number.parseInt(limitRaw, 10) : 0;
+          repairNoTextSessionTurnsToDb({ limit: Number.isFinite(limit2) ? limit2 : 0 }).then((result) => log("sessions", "info", "Manual no-text repair complete", result)).catch((err) => log("sessions", "warn", `Manual no-text repair failed: ${err.message}`));
+          const next = getTurnIngestStats();
+          json(res, {
+            status: "started",
+            repairRunning: next.repairRunning,
+            progress: {
+              sessionsDone: next.repairSessionsDone || 0,
+              sessionsTotal: next.repairSessionsTotal || 0
+            }
+          });
+        } else {
+          json(res, {
+            status: "running",
+            repairRunning: true,
+            progress: {
+              sessionsDone: stats.repairSessionsDone || 0,
+              sessionsTotal: stats.repairSessionsTotal || 0
+            }
+          });
+        }
+        return;
+      }
       log("http", "warn", `404 ${req.method} ${url.pathname}`);
       error(res, "Not found", 404);
     } catch (err) {
@@ -54735,11 +55832,32 @@ async function cmdServe(args, flags) {
       }
     }
   });
-  const wss = new import_websocket_server.default({ noServer: true });
+  const wss = new import_websocket_server.default({
+    noServer: true,
+    // Avoid extension negotiation edge-cases across runtimes/webviews.
+    perMessageDeflate: false,
+    handleProtocols: (protocols) => {
+      for (const offered of protocols) {
+        const normalized = offered.replace(/^"+|"+$/g, "");
+        if (normalized.startsWith(WS_TOKEN_PROTOCOL_PREFIX)) {
+          return normalized;
+        }
+      }
+      return protocols.size === 0 ? void 0 : false;
+    }
+  });
   setWss(wss);
   server.on("upgrade", (req, socket, head) => {
     const url = new import_url2.URL(req.url, `http://localhost`);
-    if (url.searchParams.get("token") !== token) {
+    const protocolToken = readWsTokenFromProtocolHeader(req.headers["sec-websocket-protocol"]);
+    const queryToken = url.searchParams.get("token");
+    const presentedToken = protocolToken ?? queryToken;
+    if (presentedToken !== token) {
+      log("ws", "warn", "upgrade auth failed", {
+        path: url.pathname,
+        hasProtocolToken: !!protocolToken,
+        hasQueryToken: !!queryToken
+      });
       socket.destroy();
       return;
     }
@@ -54748,8 +55866,7 @@ async function cmdServe(args, flags) {
     });
   });
   wss.on("connection", (ws) => {
-    log("ws", "info", `client connected (total: ${wss.clients.size})`);
-    ws.send(JSON.stringify({ type: "connected", data: { version: "0.1.0" } }));
+    log("ws", "info", `client connected (total: ${wss.clients.size})`, { protocol: ws.protocol || null });
     ws.on("message", (raw) => {
       try {
         const msg = JSON.parse(typeof raw === "string" ? raw : raw.toString());
@@ -54774,9 +55891,9 @@ async function cmdServe(args, flags) {
     const actualPort = server.address().port;
     sidecarPort = actualPort;
     sidecarToken = token;
-    import_fs48.default.mkdirSync(PATHS.home, { recursive: true });
-    import_fs48.default.writeFileSync(PORT_FILE, String(actualPort), { mode: 384 });
-    import_fs48.default.writeFileSync(TOKEN_FILE, token, { mode: 384 });
+    import_fs49.default.mkdirSync(PATHS.home, { recursive: true });
+    import_fs49.default.writeFileSync(PORT_FILE, String(actualPort), { mode: 384 });
+    import_fs49.default.writeFileSync(TOKEN_FILE, token, { mode: 384 });
     console.log("");
     console.log("\u2550".repeat(50));
     console.log("  RUDI Lite Server");
@@ -54789,17 +55906,50 @@ async function cmdServe(args, flags) {
     console.log(`  Token file: ${TOKEN_FILE}`);
     console.log("\u2550".repeat(50));
     console.log("");
+    const db3 = sessionsResolveDb();
+    if (db3) {
+      try {
+        const { c: c2 } = db3.prepare(`SELECT COUNT(*) as c FROM sessions WHERE status != 'deleted'`).get();
+        if (c2 > 0) {
+          enableDbSpine();
+          log("sessions", "info", `DB-as-spine enabled immediately (${c2} existing rows)`);
+        }
+      } catch {
+      }
+    }
+    reconcileSessionsToDb().then(async () => {
+      if (!isDbSpineEnabled()) {
+        enableDbSpine();
+        log("sessions", "info", "DB-as-spine enabled after reconciliation");
+      }
+      try {
+        const db4 = sessionsResolveDb();
+        const shouldBackfill = shouldRunInitialTurnBackfill(db4);
+        if (shouldBackfill) {
+          await backfillSessionTurnsToDb();
+        } else {
+          await reconcileSessionTurnsToDb();
+        }
+      } catch (ingestErr) {
+        log("sessions", "warn", `Turn ingest reconcile failed: ${ingestErr.message}`);
+      }
+    }).catch((err) => {
+      log("sessions", "warn", `Reconciliation failed: ${err.message}`);
+    }).finally(() => {
+      startPeriodicReconcile();
+      startTurnIngestReconcile();
+    });
   });
   let cleanupDone = false;
   const cleanup = (exitCode = 0) => {
     if (cleanupDone) return;
     cleanupDone = true;
     try {
-      import_fs48.default.unlinkSync(PORT_FILE);
+      import_fs49.default.unlinkSync(PORT_FILE);
     } catch {
     }
     try {
-      import_fs48.default.unlinkSync(TOKEN_FILE);
+      import_fs49.default.unlinkSync(TOKEN_FILE);
     } catch {
     }
     for (const [, { proc }] of agentProcesses) {

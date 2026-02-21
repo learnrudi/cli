@@ -31,6 +31,7 @@ export interface DbSession {
   provider: string
   provider_session_id: string | null
   project_id: string | null
+  run_group_id: string | null
   origin: string
   origin_imported_at: string | null
   origin_native_file: string | null
@@ -61,6 +62,33 @@ export interface DbSession {
   slug: string | null
   version: string | null
   user_type: string | null
+}
+
+// ============================================================================
+// Run Group Types
+// ============================================================================
+
+export type RunGroupStatus = 'pending' | 'running' | 'completed' | 'partial' | 'failed' | 'stopped'
+
+export interface DbRunGroup {
+  id: string
+  name: string | null
+  status: RunGroupStatus
+  project_path: string | null
+  base_branch: string | null
+  provider: string | null
+  model: string | null
+  permission_mode: string | null
+  session_count: number
+  completed_count: number
+  failed_count: number
+  total_cost: number
+  total_tokens: number
+  config_json: string | null
+  created_at: string
+  started_at: string | null
+  completed_at: string | null
+  updated_at: string
 }
 
 // ============================================================================
@@ -236,6 +264,23 @@ export interface SearchResult {
   userHighlighted?: string
   assistantHighlighted?: string
   rank?: number
+}
+
+export interface SessionSearchResult {
+  sessionId: string
+  title: string | null
+  provider: ProviderId
+  cwd: string | null
+  projectPath: string | null
+  lastActiveAt: string
+  turnCount: number
+  titleMatch?: string
+  snippetMatch?: string
+  turnMatches: Array<{
+    turnNumber: number
+    userHighlighted?: string
+    assistantHighlighted?: string
+  }>
 }
 
 export interface UsageStats {

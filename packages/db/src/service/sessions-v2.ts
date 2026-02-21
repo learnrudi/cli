@@ -154,6 +154,7 @@ export interface RudiSession {
   provider: ProviderId
   providerSessionId: string | null    // Native session ID
   projectId: string | null            // null = Inbox
+  runGroupId?: string | null          // Parallel run-group ownership
 
   // Origin - where did this session come from?
   origin: SessionOrigin               // 'rudi' | 'provider-import' | 'mixed'
@@ -308,6 +309,7 @@ export interface SessionCreateOptions {
   // For imports: native session info
   providerSessionId?: string
   nativeStoragePath?: string
+  runGroupId?: string | null
   // v4: Sub-agent/branching support
   parentSessionId?: string
   agentId?: string

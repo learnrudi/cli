@@ -206,22 +206,29 @@ EXAMPLES
     console.log('\nUpdating titles...');
 
     const updateTitle = db.prepare(`
-      UPDATE sessions SET title = ?, title_override = ? WHERE id = ?
+      UPDATE sessions
+      SET title = ?, title_override = ?, title_source = 'user', title_generated_at = ?
+      WHERE id = ?
     `);
 
     let updated = 0;
     for (const t of updateTitles) {
       // Get current title for undo
-      const current = db.prepare('SELECT title, title_override FROM sessions WHERE id = ?').get(t.sessionId);
+      const current = db.prepare(
+        'SELECT title, title_override, title_source, title_generated_at FROM sessions WHERE id = ?'
+      ).get(t.sessionId);
 
       try {
-        updateTitle.run(t.suggestedTitle, t.suggestedTitle, t.sessionId);
+        const now = new Date().toISOString();
+        updateTitle.run(t.suggestedTitle, t.suggestedTitle, now, t.sessionId);
         updated++;
         undoActions.push({
           type: 'updateTitle',
           sessionId: t.sessionId,
           fromTitle: current?.title,
           fromTitleOverride: current?.title_override,
+          fromTitleSource: current?.title_source,
+          fromTitleGeneratedAt: current?.title_generated_at,
           toTitle: t.suggestedTitle
         });
       } catch (err) {
@@ -302,8 +309,14 @@ async function undoPlan(planId) {
         break;
 
       case 'updateTitle':
-        db.prepare('UPDATE sessions SET title = ?, title_override = ? WHERE id = ?')
-          .run(action.fromTitle, action.fromTitleOverride, action.sessionId);
+        db.prepare('UPDATE sessions SET title = ?, title_override = ?, title_source = ?, title_generated_at = ? WHERE id = ?')
+          .run(
+            action.fromTitle,
+            action.fromTitleOverride,
+            action.fromTitleSource || null,
+            action.fromTitleGeneratedAt || null,
+            action.sessionId,
+          );
         console.log(`  ✓ Restored title: ${action.sessionId.slice(0, 8)}...`);
         break;
     }

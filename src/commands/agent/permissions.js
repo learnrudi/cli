@@ -183,7 +183,7 @@ export function ensurePermissionHook(log) {
 // ---------------------------------------------------------------------------
 
 export function buildPermissionRoutes(ctx) {
-  const { json, error, readBody, log, broadcast, agentProcesses, pendingPermissions, sessionAlwaysAllowed } = ctx;
+  const { json, error, readBody, log, broadcast, agentProcesses, pendingPermissions, sessionAlwaysAllowed, groupAlwaysAllowed } = ctx;
 
   return async (req, res, url) => {
     // POST /agent/permission-request (called by PreToolUse hook script)
@@ -220,6 +220,30 @@ export function buildPermissionRoutes(ctx) {
         });
         json(res, { ok: true });
         return true;
+      }
+
+      // Check group-level permissions (run-group sessions)
+      const processEntry_ = agentProcesses.get(rudiSessionId);
+      if (processEntry_?.runGroupId) {
+        // Auto-allow all tools for run-group sessions (they run autonomously)
+        const groupAllowed = groupAlwaysAllowed?.get(processEntry_.runGroupId);
+        if (groupAllowed?.has(toolName) || processEntry_.permissionMode === 'bypassPermissions' || processEntry_.permissionMode === null) {
+          log('agent', 'debug', 'auto-allowing tool (run-group)', { toolName, sessionId: rudiSessionId.slice(0, 8), groupId: processEntry_.runGroupId });
+          pendingPermissions.set(requestId, {
+            rudiSessionId,
+            claudeSessionId,
+            toolName,
+            toolInput,
+            batchId,
+            status: 'decided',
+            decision: { permissionDecision: 'allow', reason: 'Auto-allowed for run group' },
+            resolve: null,
+            timer: null,
+            createdAt,
+          });
+          json(res, { ok: true });
+          return true;
+        }
       }
 
       // Check project-level .claude/settings.local.json permissions
@@ -365,6 +389,16 @@ export function buildPermissionRoutes(ctx) {
             }
             sessionAlwaysAllowed.get(entry.rudiSessionId).add(entry.toolName);
             log('agent', 'info', 'added to always-allowed', { toolName: entry.toolName, sessionId: entry.rudiSessionId.slice(0, 8) });
+
+            // Also add to group-level always-allowed if session belongs to a run group
+            const proc_ = agentProcesses.get(entry.rudiSessionId);
+            if (proc_?.runGroupId && groupAlwaysAllowed) {
+              if (!groupAlwaysAllowed.has(proc_.runGroupId)) {
+                groupAlwaysAllowed.set(proc_.runGroupId, new Set());
+              }
+              groupAlwaysAllowed.get(proc_.runGroupId).add(entry.toolName);
+              log('agent', 'info', 'added to group always-allowed', { toolName: entry.toolName, groupId: proc_.runGroupId });
+            }
 
             // Persist to project .claude/settings.local.json
             const proc = agentProcesses.get(entry.rudiSessionId);

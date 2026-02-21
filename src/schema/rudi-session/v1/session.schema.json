@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.learnrudi.com/rudi-session/v1/session.schema.json",
+  "title": "RUDI Session Document v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schemaNamespace",
+    "schemaVersion",
+    "kind",
+    "id",
+    "provider",
+    "status",
+    "metrics"
+  ],
+  "properties": {
+    "schemaNamespace": {
+      "const": "io.rudi.session.v1"
+    },
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^1\\.\\d+\\.\\d+$"
+    },
+    "kind": {
+      "const": "session"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "provider": {
+      "type": "string",
+      "minLength": 1
+    },
+    "providerSessionId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "startedAt": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "lastActiveAt": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "completedAt": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "metrics": {
+      "type": "object",
+      "required": [
+        "turnCount",
+        "totalCostUsd",
+        "totalInputTokens",
+        "totalOutputTokens",
+        "totalDurationMs"
+      ],
+      "properties": {
+        "turnCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "totalCostUsd": {
+          "type": "number"
+        },
+        "totalInputTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "totalOutputTokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "totalDurationMs": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

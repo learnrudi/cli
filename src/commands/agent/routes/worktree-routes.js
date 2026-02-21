@@ -1,5 +1,6 @@
 /**
- * Worktree management endpoints: cleanup-worktree, delete-worktree-branch.
+ * Worktree management endpoints: cleanup-worktree, delete-worktree-branch,
+ * worktrees/status, worktrees/diff.
  */
 
 import fs from 'fs';
@@ -128,6 +129,172 @@ export function buildWorktreeRoutes(ctx) {
         log('agent', 'info', `worktree branch deleted for session ${body.sessionId.slice(0, 8)}`, { branch: row.worktree_branch });
       } catch (err) {
         error(res, `Branch delete failed: ${err.message}`, 500);
+      }
+      return true;
+    }
+
+    // GET /git/worktrees/status — enriched worktree list with status details
+    if (req.method === 'GET' && url.pathname === '/git/worktrees/status') {
+      const repoPath = url.searchParams.get('path');
+      if (!repoPath) return error(res, 'path query param required', 400);
+
+      try {
+        // Parse worktree list
+        const rawList = execFileSync('git', ['worktree', 'list', '--porcelain'], {
+          cwd: repoPath,
+          stdio: 'pipe',
+        }).toString();
+
+        const worktrees = [];
+        let current = {};
+
+        for (const line of rawList.split('\n')) {
+          if (line.startsWith('worktree ')) {
+            if (current.path) worktrees.push(current);
+            current = { path: line.slice(9).trim() };
+          } else if (line.startsWith('HEAD ')) {
+            current.head = line.slice(5).trim();
+          } else if (line.startsWith('branch ')) {
+            current.branch = line.slice(7).trim().replace('refs/heads/', '');
+          } else if (line === 'bare') {
+            current.bare = true;
+          } else if (line === 'detached') {
+            current.detached = true;
+          }
+        }
+        if (current.path) worktrees.push(current);
+
+        // Enrich each worktree
+        const enriched = [];
+        const db = getDb();
+
+        for (const wt of worktrees) {
+          const entry = {
+            path: wt.path,
+            head: wt.head || null,
+            branch: wt.branch || null,
+            bare: Boolean(wt.bare),
+            detached: Boolean(wt.detached),
+            dirty: false,
+            changedFiles: [],
+            ahead: 0,
+            behind: 0,
+            linkedSessionId: null,
+            linkedSessionStatus: null,
+          };
+
+          if (wt.bare) {
+            enriched.push(entry);
+            continue;
+          }
+
+          // Get dirty/clean status + changed files
+          try {
+            const status = execFileSync('git', ['status', '--porcelain'], {
+              cwd: wt.path,
+              stdio: 'pipe',
+            }).toString().trim();
+
+            if (status) {
+              entry.dirty = true;
+              entry.changedFiles = status.split('\n').map((line) => ({
+                status: line.slice(0, 2).trim(),
+                path: line.slice(3).trim(),
+              })).slice(0, 20); // Cap at 20 files
+            }
+          } catch {
+            // May fail if worktree dir is gone
+          }
+
+          // Get ahead/behind relative to main tracking branch
+          if (wt.branch) {
+            try {
+              const revList = execFileSync(
+                'git',
+                ['rev-list', '--left-right', '--count', `${wt.branch}...origin/${wt.branch}`],
+                { cwd: wt.path, stdio: 'pipe' },
+              ).toString().trim();
+              const parts = revList.split('\t');
+              if (parts.length === 2) {
+                entry.ahead = parseInt(parts[0], 10) || 0;
+                entry.behind = parseInt(parts[1], 10) || 0;
+              }
+            } catch {
+              // No remote tracking branch — try against base branch
+              try {
+                // Find the base branch from session_runtime_state if available
+                const srs = db.prepare(
+                  'SELECT base_branch FROM session_runtime_state WHERE worktree_branch = ? LIMIT 1'
+                ).get(wt.branch);
+                const base = srs?.base_branch || 'main';
+                const revList = execFileSync(
+                  'git',
+                  ['rev-list', '--left-right', '--count', `${wt.branch}...${base}`],
+                  { cwd: repoPath, stdio: 'pipe' },
+                ).toString().trim();
+                const parts = revList.split('\t');
+                if (parts.length === 2) {
+                  entry.ahead = parseInt(parts[0], 10) || 0;
+                  entry.behind = parseInt(parts[1], 10) || 0;
+                }
+              } catch {
+                // Ignore
+              }
+            }
+          }
+
+          // Link to session if any
+          try {
+            const srs = db.prepare(
+              'SELECT session_id, status FROM session_runtime_state WHERE worktree_path = ? OR worktree_branch = ?'
+            ).get(wt.path, wt.branch);
+            if (srs) {
+              entry.linkedSessionId = srs.session_id;
+              entry.linkedSessionStatus = srs.status;
+            }
+          } catch {
+            // DB may not have this table in some setups
+          }
+
+          enriched.push(entry);
+        }
+
+        json(res, { worktrees: enriched });
+      } catch (err) {
+        error(res, `Failed to list worktrees: ${err.message}`, 500);
+      }
+      return true;
+    }
+
+    // GET /git/worktrees/diff/:branch — unified diff against base
+    const diffBranchMatch = url.pathname.match(/^\/git\/worktrees\/diff\/(.+)$/);
+    if (req.method === 'GET' && diffBranchMatch) {
+      const branch = decodeURIComponent(diffBranchMatch[1]);
+      const repoPath = url.searchParams.get('path');
+      const base = url.searchParams.get('base') || 'main';
+
+      if (!repoPath) return error(res, 'path query param required', 400);
+
+      try {
+        const diff = execFileSync(
+          'git',
+          ['diff', `${base}...${branch}`],
+          { cwd: repoPath, stdio: 'pipe', maxBuffer: 5 * 1024 * 1024 },
+        ).toString();
+
+        // Also get stat summary
+        let stat = '';
+        try {
+          stat = execFileSync(
+            'git',
+            ['diff', '--stat', `${base}...${branch}`],
+            { cwd: repoPath, stdio: 'pipe' },
+          ).toString().trim();
+        } catch {}
+
+        json(res, { branch, base, diff, stat });
+      } catch (err) {
+        error(res, `Failed to get diff: ${err.message}`, 500);
       }
       return true;
     }

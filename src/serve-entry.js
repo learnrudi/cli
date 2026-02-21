@@ -15,6 +15,11 @@ for (let i = 2; i < process.argv.length; i++) {
     i++;
   } else if (arg.startsWith('--port=')) {
     flags.port = parseInt(arg.split('=')[1], 10);
+  } else if ((arg === '--web-root' || arg === '--web') && process.argv[i + 1]) {
+    flags['web-root'] = process.argv[i + 1];
+    i++;
+  } else if (arg.startsWith('--web-root=')) {
+    flags['web-root'] = arg.split('=')[1];
   }
   // "serve" arg from Tauri sidecar is harmless — we always start the server
 }

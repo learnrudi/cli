@@ -7,7 +7,7 @@
 import { v4 as uuidv4 } from 'uuid'
 import type BetterSqlite3 from 'better-sqlite3'
 import type { TurnEvent, ProviderId } from './sessions-v2'
-import type { DbTurn, TurnCreateOptions, TurnUpdateOptions, SearchResult } from './types'
+import type { DbTurn, TurnCreateOptions, TurnUpdateOptions, SearchResult, SessionSearchResult } from './types'
 
 // ============================================================================
 // Statement Cache (per-connection, cleared on DB close/migrations)
@@ -755,6 +755,53 @@ export function getMaxTurnNumber(db: BetterSqlite3.Database, sessionId: string):
   return result.max_turn ?? 0
 }
 
+/**
+ * Paginated turn query for DB-backed /messages endpoint.
+ *
+ * Returns the most recent `count` turns before `beforeTurnNumber` (exclusive).
+ * Results are in ascending turn_number order (oldest → newest within page).
+ *
+ * @param beforeTurnNumber - If provided, only returns turns with turn_number < this value.
+ *                           Omit to get the latest page.
+ * @returns turns in ASC order + hasMore flag
+ */
+export function getTurnsForSessionPaginated(
+  db: BetterSqlite3.Database,
+  sessionId: string,
+  opts: { count: number; beforeTurnNumber?: number }
+): { turns: TurnEvent[]; hasMore: boolean } {
+  const { count, beforeTurnNumber } = opts
+  const limit = count + 1 // fetch one extra to detect hasMore
+
+  let rows: DbTurn[]
+  if (beforeTurnNumber !== undefined) {
+    rows = db.prepare(`
+      SELECT * FROM turns
+      WHERE session_id = ? AND turn_number < ?
+      ORDER BY turn_number DESC
+      LIMIT ?
+    `).all(sessionId, beforeTurnNumber, limit) as DbTurn[]
+  } else {
+    rows = db.prepare(`
+      SELECT * FROM turns
+      WHERE session_id = ?
+      ORDER BY turn_number DESC
+      LIMIT ?
+    `).all(sessionId, limit) as DbTurn[]
+  }
+
+  const hasMore = rows.length > count
+  if (hasMore) rows = rows.slice(0, count)
+
+  // Reverse to ASC order (queried DESC for efficient LIMIT)
+  rows.reverse()
+
+  return {
+    turns: rows.map(mapDbTurnToTurnEvent),
+    hasMore,
+  }
+}
+
 // ============================================================================
 // Search
 // ============================================================================
@@ -868,4 +915,241 @@ function searchTurnsFallback(
   params.push(limit)
 
   return db.prepare(sql).all(...params) as SearchResult[]
+}
+
+/**
+ * Unified session search across session titles/snippets and turn content.
+ * Returns session-level grouped results with up to 3 matched turns per session.
+ */
+export function searchSessions(
+  db: BetterSqlite3.Database,
+  query: string,
+  options: { limit?: number; provider?: ProviderId } = {}
+): SessionSearchResult[] {
+  const text = query.trim()
+  if (!text) return []
+
+  const limit = Math.min(Math.max(options.limit ?? 20, 1), 100)
+  const provider = options.provider
+  const ftsQuery = prepareFtsQuery(text)
+
+  try {
+    return searchSessionsFts(db, ftsQuery, { limit, provider })
+  } catch {
+    return searchSessionsFallback(db, text, { limit, provider })
+  }
+}
+
+function searchSessionsFts(
+  db: BetterSqlite3.Database,
+  ftsQuery: string,
+  options: { limit: number; provider?: ProviderId }
+): SessionSearchResult[] {
+  const { limit, provider } = options
+  const paramsTitle: (string | number)[] = [ftsQuery]
+  const paramsTurns: (string | number)[] = [ftsQuery]
+  let providerClause = ''
+  if (provider) {
+    providerClause = ' AND s.provider = ?'
+    paramsTitle.push(provider)
+    paramsTurns.push(provider)
+  }
+
+  const titleRows = db.prepare(`
+    SELECT
+      s.id as sessionId,
+      highlight(sessions_fts, 1, '<mark>', '</mark>') as titleMatch,
+      highlight(sessions_fts, 2, '<mark>', '</mark>') as snippetMatch,
+      bm25(sessions_fts) as rank
+    FROM sessions_fts
+    JOIN sessions s ON sessions_fts.session_id = s.id
+    WHERE sessions_fts MATCH ?
+      AND s.status != 'deleted'
+      ${providerClause}
+    ORDER BY rank
+    LIMIT ?
+  `).all(...paramsTitle, limit * 4) as Array<{
+    sessionId: string
+    titleMatch: string | null
+    snippetMatch: string | null
+    rank: number
+  }>
+
+  const turnRows = db.prepare(`
+    SELECT
+      t.session_id as sessionId,
+      t.turn_number as turnNumber,
+      highlight(turns_fts, 0, '<mark>', '</mark>') as userHighlighted,
+      highlight(turns_fts, 1, '<mark>', '</mark>') as assistantHighlighted,
+      bm25(turns_fts) as rank
+    FROM turns_fts
+    JOIN turns t ON turns_fts.rowid = t.rowid
+    JOIN sessions s ON s.id = t.session_id
+    WHERE turns_fts MATCH ?
+      AND s.status != 'deleted'
+      ${providerClause}
+    ORDER BY rank
+    LIMIT ?
+  `).all(...paramsTurns, limit * 20) as Array<{
+    sessionId: string
+    turnNumber: number
+    userHighlighted: string | null
+    assistantHighlighted: string | null
+    rank: number
+  }>
+
+  return mergeSessionSearchRows(db, titleRows, turnRows, limit)
+}
+
+function searchSessionsFallback(
+  db: BetterSqlite3.Database,
+  query: string,
+  options: { limit: number; provider?: ProviderId }
+): SessionSearchResult[] {
+  const { limit, provider } = options
+  const likeQuery = `%${query}%`
+  const paramsTitle: (string | number)[] = [likeQuery, likeQuery]
+  const paramsTurns: (string | number)[] = [likeQuery, likeQuery]
+  let providerClause = ''
+  if (provider) {
+    providerClause = ' AND s.provider = ?'
+    paramsTitle.push(provider)
+    paramsTurns.push(provider)
+  }
+
+  const titleRows = db.prepare(`
+    SELECT
+      s.id as sessionId,
+      s.title as titleMatch,
+      s.snippet as snippetMatch,
+      0 as rank
+    FROM sessions s
+    WHERE s.status != 'deleted'
+      AND (s.title LIKE ? OR s.snippet LIKE ?)
+      ${providerClause}
+    ORDER BY s.last_active_at DESC
+    LIMIT ?
+  `).all(...paramsTitle, limit * 4) as Array<{
+    sessionId: string
+    titleMatch: string | null
+    snippetMatch: string | null
+    rank: number
+  }>
+
+  const turnRows = db.prepare(`
+    SELECT
+      t.session_id as sessionId,
+      t.turn_number as turnNumber,
+      t.user_message as userHighlighted,
+      t.assistant_response as assistantHighlighted,
+      0 as rank
+    FROM turns t
+    JOIN sessions s ON s.id = t.session_id
+    WHERE s.status != 'deleted'
+      AND (t.user_message LIKE ? OR t.assistant_response LIKE ?)
+      ${providerClause}
+    ORDER BY t.ts DESC
+    LIMIT ?
+  `).all(...paramsTurns, limit * 20) as Array<{
+    sessionId: string
+    turnNumber: number
+    userHighlighted: string | null
+    assistantHighlighted: string | null
+    rank: number
+  }>
+
+  return mergeSessionSearchRows(db, titleRows, turnRows, limit)
+}
+
+function mergeSessionSearchRows(
+  db: BetterSqlite3.Database,
+  titleRows: Array<{ sessionId: string; titleMatch: string | null; snippetMatch: string | null; rank: number }>,
+  turnRows: Array<{ sessionId: string; turnNumber: number; userHighlighted: string | null; assistantHighlighted: string | null; rank: number }>,
+  limit: number
+): SessionSearchResult[] {
+  const scoreBySession = new Map<string, number>()
+  const titleBySession = new Map<string, { titleMatch?: string; snippetMatch?: string }>()
+  const turnsBySession = new Map<string, Array<{
+    turnNumber: number
+    userHighlighted?: string
+    assistantHighlighted?: string
+  }>>()
+
+  titleRows.forEach((row, idx) => {
+    const base = scoreBySession.get(row.sessionId) ?? 0
+    scoreBySession.set(row.sessionId, base + (10_000 - idx))
+    titleBySession.set(row.sessionId, {
+      titleMatch: row.titleMatch || undefined,
+      snippetMatch: row.snippetMatch || undefined,
+    })
+  })
+
+  turnRows.forEach((row, idx) => {
+    const base = scoreBySession.get(row.sessionId) ?? 0
+    scoreBySession.set(row.sessionId, base + (1_000 - idx))
+    const existing = turnsBySession.get(row.sessionId) ?? []
+    if (existing.length < 3) {
+      existing.push({
+        turnNumber: row.turnNumber,
+        userHighlighted: row.userHighlighted || undefined,
+        assistantHighlighted: row.assistantHighlighted || undefined,
+      })
+      turnsBySession.set(row.sessionId, existing)
+    }
+  })
+
+  const sessionIds = [...scoreBySession.keys()]
+  if (sessionIds.length === 0) return []
+
+  const placeholders = sessionIds.map(() => '?').join(', ')
+  const rows = db.prepare(`
+    SELECT
+      id as sessionId,
+      title,
+      provider,
+      cwd,
+      project_path as projectPath,
+      last_active_at as lastActiveAt,
+      COALESCE(turn_count, 0) as turnCount
+    FROM sessions
+    WHERE id IN (${placeholders})
+      AND status != 'deleted'
+  `).all(...sessionIds) as Array<{
+    sessionId: string
+    title: string | null
+    provider: ProviderId
+    cwd: string | null
+    projectPath: string | null
+    lastActiveAt: string
+    turnCount: number
+  }>
+
+  const rowById = new Map(rows.map(r => [r.sessionId, r]))
+  const sortedIds = sessionIds
+    .filter(id => rowById.has(id))
+    .sort((a, b) => {
+      const scoreDiff = (scoreBySession.get(b) ?? 0) - (scoreBySession.get(a) ?? 0)
+      if (scoreDiff !== 0) return scoreDiff
+      const aTs = new Date(rowById.get(a)!.lastActiveAt).getTime()
+      const bTs = new Date(rowById.get(b)!.lastActiveAt).getTime()
+      return bTs - aTs
+    })
+    .slice(0, limit)
+
+  return sortedIds.map((id) => {
+    const meta = rowById.get(id)!
+    const title = titleBySession.get(id) ?? {}
+    return {
+      sessionId: id,
+      title: meta.title,
+      provider: meta.provider,
+      cwd: meta.cwd,
+      projectPath: meta.projectPath,
+      lastActiveAt: meta.lastActiveAt,
+      turnCount: meta.turnCount,
+      titleMatch: title.titleMatch,
+      snippetMatch: title.snippetMatch,
+      turnMatches: turnsBySession.get(id) ?? [],
+    }
+  })
 }

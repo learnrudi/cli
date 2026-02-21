@@ -56,6 +56,7 @@ import { cmdApply } from './commands/apply.js';
 import { cmdProject } from './commands/project.js';
 import { cmdStudio } from './commands/studio.js';
 import { cmdServe } from './commands/serve.js';
+import { cmdParallel } from './commands/parallel.js';
 
 const VERSION = typeof __RUDI_CLI_VERSION__ === 'string'
   ? __RUDI_CLI_VERSION__
@@ -202,6 +203,11 @@ async function main() {
 
       case 'serve':
         await cmdServe(args, flags);
+        break;
+
+      case 'parallel':
+      case 'par':
+        await cmdParallel(args, flags);
         break;
 
       // Shortcuts for listing specific package types
