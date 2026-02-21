@@ -155,7 +155,7 @@ export function buildAnalyticsRoutes(ctx) {
       const session = db.prepare(`
         SELECT
           id, provider, title, status, model,
-          turn_count, total_cost, total_tokens, total_duration_ms,
+          turn_count, total_cost, total_input_tokens, total_output_tokens, total_duration_ms,
           created_at, last_active_at
         FROM sessions
         WHERE id = ?
@@ -212,7 +212,8 @@ export function buildAnalyticsRoutes(ctx) {
           model: session.model,
           total_turns: session.turn_count,
           total_cost: session.total_cost,
-          total_tokens: session.total_tokens,
+          total_input_tokens: session.total_input_tokens,
+          total_output_tokens: session.total_output_tokens,
           total_duration_ms: session.total_duration_ms,
           created_at: session.created_at,
           last_active_at: session.last_active_at
