@@ -688,9 +688,22 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
       ORDER BY last_active_at DESC
     `).all();
 
+    // Build parent session lookup so child sessions inherit their parent's project
+    const parentProjectPaths = new Map();
+    for (const row of rows) {
+      if (!row.parent_session_id) {
+        parentProjectPaths.set(row.id, row.project_path || row.cwd || 'unknown');
+      }
+    }
+
     const projectMap = new Map();
     for (const row of rows) {
-      const pp = row.project_path || row.cwd || 'unknown';
+      let pp;
+      if (row.parent_session_id) {
+        pp = parentProjectPaths.get(row.parent_session_id) || row.project_path || row.cwd || 'unknown';
+      } else {
+        pp = row.project_path || row.cwd || 'unknown';
+      }
       const sessionId = row.provider_session_id || row.id;
       if (!projectMap.has(pp)) {
         projectMap.set(pp, {
@@ -743,15 +756,16 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
     let projects = [...projectMap.values()];
 
     // Merge worktree projects into their parent
-    const worktreeMarker = '/.rudi/worktrees/';
+    // Matches /.rudi/worktrees/, //rudi/worktrees/, .claude-worktrees/, .claude/worktrees/, .codex/worktrees/
+    const worktreeRe = /[/.](?:rudi|claude(?:-worktrees)?|codex)\/worktrees?\//;
     const mergedProjects = [];
     const parentMap = new Map();
 
     for (const proj of projects) {
       const op = proj.originalPath || '';
-      const wtIdx = op.indexOf(worktreeMarker);
-      if (wtIdx !== -1) {
-        const realRoot = op.slice(0, wtIdx);
+      const wtMatch = op.match(worktreeRe);
+      if (wtMatch) {
+        const realRoot = op.slice(0, wtMatch.index).replace(/\/+$/, '');
         if (parentMap.has(realRoot)) {
           mergedProjects[parentMap.get(realRoot)].sessions.push(...proj.sessions);
         } else {
