@@ -9,6 +9,8 @@
  *   GET /analytics/tools/files?session_id=X       — files touched in one session
  *   GET /analytics/tools/timeline?session_id=X    — tool calls over time for a session
  *   GET /analytics/tools/errors?session_id=X      — failed tool calls for a session
+ *   GET /analytics/session-summary?session_id=X   — compact summary for one session
+ *   GET /analytics/overview                       — cross-session dashboard data
  */
 
 import { getDb, isDatabaseInitialized } from '@learnrudi/db';
@@ -139,6 +141,140 @@ export function buildAnalyticsRoutes(ctx) {
 
       const rows = db.prepare(sql).all(...binds);
       json(res, { errors: rows });
+      return true;
+    }
+
+    // GET /analytics/session-summary — compact summary for one session
+    if (url.pathname === '/analytics/session-summary') {
+      const sessionId = params.get('session_id');
+      if (!sessionId) {
+        return error(res, 'session_id required'), true;
+      }
+
+      // Session metadata
+      const session = db.prepare(`
+        SELECT
+          id, provider, title, status, model,
+          turn_count, total_cost, total_tokens, total_duration_ms,
+          created_at, last_active_at
+        FROM sessions
+        WHERE id = ?
+      `).get(sessionId);
+
+      if (!session) {
+        return error(res, 'Session not found', 404), true;
+      }
+
+      // Tool breakdown
+      const toolBreakdown = db.prepare(`
+        SELECT
+          canonical_name,
+          COUNT(*) as count,
+          SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as error_count
+        FROM tool_calls
+        WHERE session_id = ?
+        GROUP BY canonical_name
+        ORDER BY count DESC
+      `).all(sessionId);
+
+      // File breakdown
+      const fileBreakdown = db.prepare(`
+        SELECT
+          file_path,
+          SUM(CASE WHEN canonical_name = 'file_read' THEN 1 ELSE 0 END) as read_count,
+          SUM(CASE WHEN canonical_name = 'file_edit' THEN 1 ELSE 0 END) as edit_count,
+          SUM(CASE WHEN canonical_name = 'file_write' THEN 1 ELSE 0 END) as write_count
+        FROM tool_calls
+        WHERE session_id = ? AND file_path IS NOT NULL
+        GROUP BY file_path
+        ORDER BY (read_count + edit_count + write_count) DESC
+      `).all(sessionId);
+
+      // Top errors
+      const topErrors = db.prepare(`
+        SELECT
+          tool_name,
+          error_message,
+          COUNT(*) as count
+        FROM tool_calls
+        WHERE session_id = ? AND success = 0
+        GROUP BY tool_name, error_message
+        ORDER BY count DESC
+        LIMIT 10
+      `).all(sessionId);
+
+      json(res, {
+        session: {
+          id: session.id,
+          provider: session.provider,
+          title: session.title,
+          status: session.status,
+          model: session.model,
+          total_turns: session.turn_count,
+          total_cost: session.total_cost,
+          total_tokens: session.total_tokens,
+          total_duration_ms: session.total_duration_ms,
+          created_at: session.created_at,
+          last_active_at: session.last_active_at
+        },
+        tool_breakdown: toolBreakdown,
+        file_breakdown: fileBreakdown,
+        top_errors: topErrors
+      });
+      return true;
+    }
+
+    // GET /analytics/overview — cross-session dashboard data
+    if (url.pathname === '/analytics/overview') {
+      // Total sessions
+      const totalSessions = db.prepare(`SELECT COUNT(*) as count FROM sessions`).get().count;
+
+      // Total cost
+      const totalCost = db.prepare(`SELECT SUM(total_cost) as sum FROM sessions`).get().sum || 0;
+
+      // Total tool calls
+      const totalToolCalls = db.prepare(`SELECT COUNT(*) as count FROM tool_calls`).get().count;
+
+      // Sessions by provider
+      const sessionsByProvider = db.prepare(`
+        SELECT
+          provider,
+          COUNT(*) as count,
+          SUM(total_cost) as total_cost
+        FROM sessions
+        GROUP BY provider
+        ORDER BY count DESC
+      `).all();
+
+      // Tool usage by canonical name (top 15)
+      const toolUsage = db.prepare(`
+        SELECT
+          canonical_name,
+          COUNT(*) as count,
+          CAST(SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) AS REAL) / COUNT(*) as success_rate
+        FROM tool_calls
+        GROUP BY canonical_name
+        ORDER BY count DESC
+        LIMIT 15
+      `).all();
+
+      // Recent sessions (last 10)
+      const recentSessions = db.prepare(`
+        SELECT
+          id, title, provider, total_cost, turn_count, created_at
+        FROM sessions
+        ORDER BY created_at DESC
+        LIMIT 10
+      `).all();
+
+      json(res, {
+        total_sessions: totalSessions,
+        total_cost: totalCost,
+        total_tool_calls: totalToolCalls,
+        sessions_by_provider: sessionsByProvider,
+        tool_usage_by_canonical: toolUsage,
+        recent_sessions: recentSessions
+      });
       return true;
     }
 
