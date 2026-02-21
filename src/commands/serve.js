@@ -36,6 +36,7 @@ import { buildShellRoutes } from './serve/routes/shell.js';
 import { buildTerminalRoutes } from './serve/routes/terminal.js';
 import { buildSuggestRoutes } from './serve/routes/suggest.js';
 import { buildProviderRoutes } from './serve/routes/providers.js';
+import { buildAnalyticsRoutes } from './serve/routes/analytics.js';
 
 // Re-exports for test compatibility
 export { parseWorktreeList } from './serve/git.js';
@@ -80,10 +81,39 @@ function readWsTokenFromProtocolHeader(headerValue) {
 // Main server
 // ---------------------------------------------------------------------------
 
+// MIME types for static file serving (web mode)
+const MIME_TYPES = {
+  '.html': 'text/html',
+  '.js': 'application/javascript',
+  '.mjs': 'application/javascript',
+  '.css': 'text/css',
+  '.json': 'application/json',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.wasm': 'application/wasm',
+};
+
 export async function cmdServe(args, flags) {
   // 1. Create shared infrastructure (log, broadcast, json, error, etc.)
   const ctx = createInfrastructure();
   const { log, broadcast, json, error, readBody, checkAuth, generateToken, setWss, setToken } = ctx;
+
+  // Web mode: resolve --web-root to absolute path
+  const webRoot = flags['web-root'] ? path.resolve(flags['web-root']) : null;
+  if (webRoot) {
+    if (!fs.existsSync(path.join(webRoot, 'index.html'))) {
+      console.error(`[web-root] No index.html found in ${webRoot}`);
+      console.error('  Build the frontend first: cd lite && pnpm build');
+      process.exit(1);
+    }
+  }
 
   // 2. Shared maps (owned by serve.js, passed to agent handler)
   const agentProcesses = new Map();
@@ -134,6 +164,7 @@ export async function cmdServe(args, flags) {
   const terminalRoutes = buildTerminalRoutes(ctx);
   const suggestRoutes = buildSuggestRoutes(ctx);
   const providerRoutes = buildProviderRoutes(ctx);
+  const analyticsRoutes = buildAnalyticsRoutes(ctx);
 
   // 8. Previously-extracted handlers (git, agent)
   const handleGit = createGitHandler({ readBody, error, json });
@@ -220,6 +251,9 @@ export async function cmdServe(args, flags) {
       if (url.pathname.startsWith('/terminal/')) {
         if (await terminalRoutes.handle(req, res, url)) return;
       }
+      if (url.pathname.startsWith('/analytics/')) {
+        if (analyticsRoutes.handle(req, res, url)) return;
+      }
       if (url.pathname === '/admin/ingester' && req.method === 'GET') {
         const stats = getTurnIngestStats();
         json(res, { status: stats.errors.length > 0 ? 'degraded' : 'healthy', ...stats });
@@ -302,6 +336,34 @@ export async function cmdServe(args, flags) {
         return;
       }
 
+      // Web mode: serve static files from --web-root
+      if (webRoot && req.method === 'GET') {
+        const reqPath = decodeURIComponent(url.pathname);
+        // Prevent directory traversal
+        const safePath = path.normalize(reqPath).replace(/^(\.\.[/\\])+/, '');
+        let filePath = path.join(webRoot, safePath);
+
+        // Try the exact file, then fall back to index.html (SPA routing)
+        let stat = null;
+        try { stat = fs.statSync(filePath); } catch {}
+        if (!stat || stat.isDirectory()) {
+          filePath = path.join(webRoot, 'index.html');
+          try { stat = fs.statSync(filePath); } catch { stat = null; }
+        }
+
+        if (stat && stat.isFile()) {
+          const ext = path.extname(filePath).toLowerCase();
+          const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+          res.writeHead(200, {
+            'Content-Type': contentType,
+            'Content-Length': stat.size,
+            'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable',
+          });
+          fs.createReadStream(filePath).pipe(res);
+          return;
+        }
+      }
+
       log('http', 'warn', `404 ${req.method} ${url.pathname}`);
       error(res, 'Not found', 404);
     } catch (err) {
@@ -339,7 +401,10 @@ export async function cmdServe(args, flags) {
     const protocolToken = readWsTokenFromProtocolHeader(req.headers['sec-websocket-protocol']);
     const queryToken = url.searchParams.get('token');
     const presentedToken = protocolToken ?? queryToken;
-    if (presentedToken !== token) {
+    // Allow same-origin token for web mode (localhost only)
+    const isSameOrigin = presentedToken === 'same-origin' &&
+      (req.headers.host || '').match(/^(127\.0\.0\.1|localhost)(:|$)/);
+    if (presentedToken !== token && !isSameOrigin) {
       log('ws', 'warn', 'upgrade auth failed', {
         path: url.pathname,
         hasProtocolToken: !!protocolToken,
@@ -392,11 +457,17 @@ export async function cmdServe(args, flags) {
 
     console.log('');
     console.log('═'.repeat(50));
-    console.log('  RUDI Lite Server');
+    console.log(webRoot ? '  RUDI Dashboard' : '  RUDI Lite Server');
     console.log('═'.repeat(50));
+    if (webRoot) {
+      console.log(`  Open:  http://localhost:${actualPort}`);
+    }
     console.log(`  Port:  ${actualPort}`);
     console.log(`  Token: ${token.slice(0, 8)}...`);
     console.log(`  PID:   ${process.pid}`);
+    if (webRoot) {
+      console.log(`  Web:   ${webRoot}`);
+    }
     console.log('');
     console.log(`  Port file:  ${PORT_FILE}`);
     console.log(`  Token file: ${TOKEN_FILE}`);

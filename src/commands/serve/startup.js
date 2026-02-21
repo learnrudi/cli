@@ -24,16 +24,110 @@ export function runStartupTasks({ log }) {
     console.warn('[serve] Failed to initialize database schema:', err);
   }
 
-  // 2. Sweep stale runtime states
+  // 2. Sweep stale runtime states + refresh affected run_group aggregates
   try {
     const db = getDb();
+    const now = new Date().toISOString();
+
+    // Find run_groups affected by the sweep before marking crashed
+    const affectedGroups = db.prepare(`
+      SELECT DISTINCT s.run_group_id
+      FROM session_runtime_state srs
+      JOIN sessions s ON s.id = srs.session_id
+      WHERE srs.status IN ('starting', 'running')
+        AND s.run_group_id IS NOT NULL
+    `).all().map(r => r.run_group_id);
+
     const stale = db.prepare(`
       UPDATE session_runtime_state
       SET status = 'crashed', updated_at = ?
       WHERE status IN ('starting', 'running')
-    `).run(new Date().toISOString());
+    `).run(now);
     if (stale.changes > 0) {
       log('serve', 'info', `Marked ${stale.changes} stale session(s) as crashed`);
+    }
+
+    // Refresh aggregates for any run_groups whose sessions were just marked crashed
+    for (const groupId of affectedGroups) {
+      const stats = db.prepare(`
+        SELECT
+          COUNT(*) AS session_count,
+          SUM(CASE WHEN COALESCE(srs.status, '') = 'completed' THEN 1 ELSE 0 END) AS completed_count,
+          SUM(CASE WHEN COALESCE(srs.status, '') IN ('error', 'crashed') THEN 1 ELSE 0 END) AS failed_count,
+          SUM(CASE WHEN COALESCE(srs.status, '') IN ('completed', 'error', 'stopped', 'crashed') THEN 1 ELSE 0 END) AS done_count,
+          COALESCE(SUM(COALESCE(srs.cost_total, s.total_cost, 0)), 0) AS total_cost,
+          COALESCE(SUM(COALESCE(srs.tokens_total, (COALESCE(s.total_input_tokens, 0) + COALESCE(s.total_output_tokens, 0)), 0)), 0) AS total_tokens
+        FROM sessions s
+        LEFT JOIN session_runtime_state srs ON srs.session_id = s.id
+        WHERE s.run_group_id = ?
+      `).get(groupId);
+      if (!stats) continue;
+
+      const doneCount = Number(stats.done_count || 0);
+      const sessionCount = Number(stats.session_count || 0);
+      const failedCount = Number(stats.failed_count || 0);
+      const completedCount = Number(stats.completed_count || 0);
+
+      let finalStatus = 'running';
+      if (doneCount >= sessionCount && sessionCount > 0) {
+        if (failedCount > 0 && completedCount > 0) finalStatus = 'partial';
+        else if (failedCount > 0) finalStatus = 'failed';
+        else finalStatus = 'completed';
+      }
+
+      db.prepare(`
+        UPDATE run_groups
+        SET session_count = ?, completed_count = ?, failed_count = ?,
+            total_cost = ?, total_tokens = ?, updated_at = ?
+        WHERE id = ?
+      `).run(
+        sessionCount, completedCount, failedCount,
+        Number(stats.total_cost || 0), Number(stats.total_tokens || 0), now,
+        groupId,
+      );
+
+      if (doneCount >= sessionCount && sessionCount > 0) {
+        db.prepare(`
+          UPDATE run_groups
+          SET status = ?, completed_at = COALESCE(completed_at, ?)
+          WHERE id = ?
+        `).run(finalStatus, now, groupId);
+      }
+      log('serve', 'info', `Refreshed run_group ${groupId.slice(0, 8)} aggregates (status=${finalStatus})`);
+    }
+
+    // Also fix run_groups stuck as 'running' from previous crashes (all sessions already terminal)
+    const stuckGroups = db.prepare(`
+      SELECT rg.id FROM run_groups rg
+      WHERE rg.status = 'running'
+        AND rg.session_count > 0
+        AND NOT EXISTS (
+          SELECT 1 FROM sessions s
+          JOIN session_runtime_state srs ON srs.session_id = s.id
+          WHERE s.run_group_id = rg.id
+            AND srs.status NOT IN ('completed', 'error', 'stopped', 'crashed')
+        )
+    `).all();
+    for (const { id: groupId } of stuckGroups) {
+      const stats = db.prepare(`
+        SELECT
+          COUNT(*) AS session_count,
+          SUM(CASE WHEN srs.status = 'completed' THEN 1 ELSE 0 END) AS completed_count,
+          SUM(CASE WHEN srs.status IN ('error', 'crashed') THEN 1 ELSE 0 END) AS failed_count
+        FROM sessions s
+        LEFT JOIN session_runtime_state srs ON srs.session_id = s.id
+        WHERE s.run_group_id = ?
+      `).get(groupId);
+      if (!stats) continue;
+      const cc = Number(stats.completed_count || 0);
+      const fc = Number(stats.failed_count || 0);
+      let status = fc > 0 && cc > 0 ? 'partial' : fc > 0 ? 'failed' : 'completed';
+      db.prepare(`
+        UPDATE run_groups
+        SET completed_count = ?, failed_count = ?, status = ?, completed_at = COALESCE(completed_at, ?), updated_at = ?
+        WHERE id = ?
+      `).run(cc, fc, status, now, now, groupId);
+      log('serve', 'info', `Fixed stuck run_group ${groupId.slice(0, 8)} → ${status}`);
     }
   } catch (err) {
     console.warn('[serve] Failed to sweep stale sessions:', err.message);

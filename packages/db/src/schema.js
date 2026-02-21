@@ -4,7 +4,7 @@
 
 import { getDb } from './index.js';
 
-export const SCHEMA_VERSION = 13;
+export const SCHEMA_VERSION = 15;
 
 export const SCHEMA_SQL = `
 -- Schema version tracking
@@ -34,12 +34,39 @@ CREATE TABLE IF NOT EXISTS projects (
 
 CREATE INDEX IF NOT EXISTS idx_projects_provider ON projects(provider);
 
+-- Run groups (parallel session orchestration)
+CREATE TABLE IF NOT EXISTS run_groups (
+  id TEXT PRIMARY KEY,
+  name TEXT,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending','running','completed','partial','failed','stopped')),
+  project_path TEXT,
+  base_branch TEXT,
+  provider TEXT DEFAULT 'claude',
+  model TEXT,
+  permission_mode TEXT,
+  session_count INTEGER NOT NULL DEFAULT 0,
+  completed_count INTEGER NOT NULL DEFAULT 0,
+  failed_count INTEGER NOT NULL DEFAULT 0,
+  total_cost REAL NOT NULL DEFAULT 0,
+  total_tokens INTEGER NOT NULL DEFAULT 0,
+  config_json TEXT,
+  created_at TEXT NOT NULL,
+  started_at TEXT,
+  completed_at TEXT,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_run_groups_status ON run_groups(status);
+CREATE INDEX IF NOT EXISTS idx_run_groups_created ON run_groups(created_at DESC);
+
 -- Sessions (conversation containers)
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
   provider TEXT NOT NULL CHECK (provider IN ('claude', 'codex', 'gemini', 'ollama')),
   provider_session_id TEXT,
   project_id TEXT,
+  run_group_id TEXT REFERENCES run_groups(id) ON DELETE SET NULL,
 
   -- Origin tracking
   origin TEXT NOT NULL CHECK (origin IN ('rudi', 'provider-import', 'mixed')),
@@ -109,6 +136,7 @@ CREATE INDEX IF NOT EXISTS idx_sessions_project_active ON sessions(project_path,
 CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_session_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_agent ON sessions(agent_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_type ON sessions(session_type);
+CREATE INDEX IF NOT EXISTS idx_sessions_run_group ON sessions(run_group_id);
 
 -- Turns (individual user->assistant exchanges)
 CREATE TABLE IF NOT EXISTS turns (
@@ -211,6 +239,39 @@ CREATE TRIGGER IF NOT EXISTS turns_au AFTER UPDATE ON turns BEGIN
   INSERT INTO turns_fts(rowid, user_message, assistant_response)
   VALUES (NEW.rowid, NEW.user_message, NEW.assistant_response);
 END;
+
+-- Tool calls (normalized from turns.tool_results JSON)
+CREATE TABLE IF NOT EXISTS tool_calls (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  turn_id TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  tool_name TEXT NOT NULL,
+  canonical_name TEXT,
+  file_path TEXT,
+  success INTEGER NOT NULL,
+  error_message TEXT,
+  duration_ms INTEGER,
+  input_preview TEXT,
+  output_preview TEXT,
+  ts_ms INTEGER NOT NULL,
+
+  FOREIGN KEY (session_id) REFERENCES sessions(id),
+  FOREIGN KEY (turn_id) REFERENCES turns(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tool_calls_session ON tool_calls(session_id);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_turn ON tool_calls(turn_id);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_name ON tool_calls(tool_name);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_canonical ON tool_calls(canonical_name);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_file ON tool_calls(file_path) WHERE file_path IS NOT NULL;
+
+-- Full-text search on sessions
+CREATE VIRTUAL TABLE IF NOT EXISTS sessions_fts USING fts5(
+  session_id UNINDEXED,
+  title,
+  snippet
+);
 
 -- Tags (many-to-many with sessions)
 CREATE TABLE IF NOT EXISTS tags (
@@ -575,6 +636,41 @@ export function applySchemaUpdates(db) {
     ensureColumn(db, 'projects', 'settings', 'ALTER TABLE projects ADD COLUMN settings TEXT');
   }
 
+  // Run groups
+  ensureTable(db, 'run_groups', `
+    CREATE TABLE IF NOT EXISTS run_groups (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending','running','completed','partial','failed','stopped')),
+      project_path TEXT,
+      base_branch TEXT,
+      provider TEXT DEFAULT 'claude',
+      model TEXT,
+      permission_mode TEXT,
+      session_count INTEGER NOT NULL DEFAULT 0,
+      completed_count INTEGER NOT NULL DEFAULT 0,
+      failed_count INTEGER NOT NULL DEFAULT 0,
+      total_cost REAL NOT NULL DEFAULT 0,
+      total_tokens INTEGER NOT NULL DEFAULT 0,
+      config_json TEXT,
+      created_at TEXT NOT NULL,
+      started_at TEXT,
+      completed_at TEXT,
+      updated_at TEXT NOT NULL
+    );
+  `);
+  ensureIndex(
+    db,
+    'idx_run_groups_status',
+    "CREATE INDEX IF NOT EXISTS idx_run_groups_status ON run_groups(status)"
+  );
+  ensureIndex(
+    db,
+    'idx_run_groups_created',
+    "CREATE INDEX IF NOT EXISTS idx_run_groups_created ON run_groups(created_at DESC)"
+  );
+
   // Sessions
   if (tableExists(db, 'sessions')) {
     ensureColumn(db, 'sessions', 'title_override', 'ALTER TABLE sessions ADD COLUMN title_override TEXT');
@@ -617,9 +713,17 @@ export function applySchemaUpdates(db) {
     ensureColumn(db, 'sessions', 'error_message', 'ALTER TABLE sessions ADD COLUMN error_message TEXT');
     // v10: project_path for DB-as-spine sidebar queries
     ensureColumn(db, 'sessions', 'project_path', 'ALTER TABLE sessions ADD COLUMN project_path TEXT');
+    // v15: run group linkage for parallel orchestration
+    ensureColumn(
+      db,
+      'sessions',
+      'run_group_id',
+      'ALTER TABLE sessions ADD COLUMN run_group_id TEXT REFERENCES run_groups(id) ON DELETE SET NULL'
+    );
     // v11: title provenance tracking
     ensureColumn(db, 'sessions', 'title_source', 'ALTER TABLE sessions ADD COLUMN title_source TEXT');
     ensureColumn(db, 'sessions', 'title_generated_at', 'ALTER TABLE sessions ADD COLUMN title_generated_at TEXT');
+    ensureSessionsFtsHealthy(db);
 
     if (columnExists(db, 'sessions', 'session_type')) {
       db.exec("UPDATE sessions SET session_type = 'main' WHERE session_type = 'task'");
@@ -630,6 +734,7 @@ export function applySchemaUpdates(db) {
     ensureIndex(db, 'idx_sessions_type', 'CREATE INDEX IF NOT EXISTS idx_sessions_type ON sessions(session_type)');
     ensureIndex(db, 'idx_sessions_project_path', 'CREATE INDEX IF NOT EXISTS idx_sessions_project_path ON sessions(project_path)');
     ensureIndex(db, 'idx_sessions_project_active', "CREATE INDEX IF NOT EXISTS idx_sessions_project_active ON sessions(project_path, last_active_at DESC) WHERE status != 'deleted'");
+    ensureIndex(db, 'idx_sessions_run_group', 'CREATE INDEX IF NOT EXISTS idx_sessions_run_group ON sessions(run_group_id)');
 
     if (!indexExists(db, 'idx_sessions_provider_session_unique')) {
       dedupeProviderSessions(db);
@@ -640,6 +745,7 @@ export function applySchemaUpdates(db) {
           WHERE provider_session_id IS NOT NULL AND status != 'deleted'
       `);
     }
+
   }
 
   // Turns
@@ -1414,7 +1520,83 @@ function runMigrations(db, from, to) {
           total_input_tokens = COALESCE((SELECT SUM(input_tokens) FROM turns WHERE turns.session_id = sessions.id), 0),
           total_output_tokens = COALESCE((SELECT SUM(output_tokens) FROM turns WHERE turns.session_id = sessions.id), 0)
       `);
-    }
+    },
+
+    // Version 14: Add tool_calls table, backfill from turns.tool_results JSON
+    14: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS tool_calls (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          turn_id TEXT NOT NULL,
+          provider TEXT NOT NULL,
+          tool_name TEXT NOT NULL,
+          canonical_name TEXT,
+          file_path TEXT,
+          success INTEGER NOT NULL,
+          error_message TEXT,
+          duration_ms INTEGER,
+          input_preview TEXT,
+          output_preview TEXT,
+          ts_ms INTEGER NOT NULL,
+
+          FOREIGN KEY (session_id) REFERENCES sessions(id),
+          FOREIGN KEY (turn_id) REFERENCES turns(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_tool_calls_session ON tool_calls(session_id);
+        CREATE INDEX IF NOT EXISTS idx_tool_calls_turn ON tool_calls(turn_id);
+        CREATE INDEX IF NOT EXISTS idx_tool_calls_name ON tool_calls(tool_name);
+        CREATE INDEX IF NOT EXISTS idx_tool_calls_canonical ON tool_calls(canonical_name);
+        CREATE INDEX IF NOT EXISTS idx_tool_calls_file ON tool_calls(file_path) WHERE file_path IS NOT NULL;
+      `);
+
+      // Backfill from existing turns.tool_results JSON
+      const CLAUDE_CANONICAL = {
+        Read: 'file_read', Edit: 'file_edit', Write: 'file_write', NotebookEdit: 'notebook_edit',
+        Grep: 'search_content', Glob: 'search_files',
+        Bash: 'shell',
+        WebFetch: 'web_fetch', WebSearch: 'web_search',
+        LSP: 'lsp',
+        Task: 'agent_spawn', AskUserQuestion: 'ask_user',
+      };
+
+      const rows = db.prepare(
+        'SELECT id, session_id, provider, tool_results, ts_ms FROM turns WHERE tool_results IS NOT NULL'
+      ).all();
+
+      const insert = db.prepare(`
+        INSERT OR IGNORE INTO tool_calls (id, session_id, turn_id, provider, tool_name, canonical_name, file_path, success, error_message, input_preview, output_preview, ts_ms)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      let backfilled = 0;
+      for (const row of rows) {
+        let calls;
+        try { calls = JSON.parse(row.tool_results); } catch { continue; }
+        if (!Array.isArray(calls)) continue;
+        for (const tc of calls) {
+          if (!tc.id || !tc.name) continue;
+          const success = tc.status === 'error' ? 0 : 1;
+          const canonical = row.provider === 'claude' ? (CLAUDE_CANONICAL[tc.name] || 'mcp') : null;
+          const resultStr = typeof tc.result === 'string' ? tc.result : null;
+          const errorMsg = !success && resultStr ? resultStr.slice(0, 500) : null;
+          const outputPreview = success && resultStr ? resultStr.slice(0, 300) : null;
+          insert.run(
+            tc.id, row.session_id, row.id, row.provider,
+            tc.name, canonical, null, success, errorMsg,
+            null, outputPreview,
+            row.ts_ms || 0,
+          );
+          backfilled++;
+        }
+      }
+      console.log(`    Backfilled ${backfilled} tool_calls from existing turns`);
+    },
+
+    // Version 15: Add run_groups + sessions.run_group_id for parallel orchestration
+    15: (db) => {
+      applySchemaUpdates(db);
+    },
   };
 
   for (let v = from + 1; v <= to; v++) {
@@ -1442,6 +1624,52 @@ function tableExists(db, table) {
     SELECT name FROM sqlite_master WHERE type='table' AND name=?
   `).get(table);
   return !!result;
+}
+
+function _createSessionsFtsTable(db) {
+  db.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS sessions_fts USING fts5(
+      session_id UNINDEXED,
+      title,
+      snippet
+    );
+  `);
+}
+
+function _refreshSessionsFts(db) {
+  db.exec('DELETE FROM sessions_fts');
+  db.exec(`
+    INSERT INTO sessions_fts(session_id, title, snippet)
+    SELECT
+      id,
+      COALESCE(title, ''),
+      COALESCE(snippet, '')
+    FROM sessions
+    WHERE status != 'deleted'
+  `);
+}
+
+function ensureSessionsFtsHealthy(db) {
+  try { db.exec('DROP TRIGGER IF EXISTS sessions_fts_ai'); } catch {}
+  try { db.exec('DROP TRIGGER IF EXISTS sessions_fts_ad'); } catch {}
+  try { db.exec('DROP TRIGGER IF EXISTS sessions_fts_au'); } catch {}
+
+  try {
+    let recreate = !tableExists(db, 'sessions_fts');
+    if (!recreate) {
+      const cols = db.pragma('table_info(sessions_fts)');
+      const hasSessionId = cols.some((col) => col.name === 'session_id');
+      if (!hasSessionId) recreate = true;
+    }
+    if (recreate) {
+      try { db.exec('DROP TABLE IF EXISTS sessions_fts'); } catch {}
+    }
+
+    _createSessionsFtsTable(db);
+    _refreshSessionsFts(db);
+  } catch (err) {
+    console.warn(`[schema] sessions_fts setup failed: ${String(err?.message || err || '')}`);
+  }
 }
 
 function columnExists(db, table, column) {
