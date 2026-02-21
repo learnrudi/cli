@@ -145,6 +145,7 @@ export async function cmdServe(args, flags) {
     startPeriodicReconcile, startTurnIngestReconcile,
     enableDbSpine, isDbSpineEnabled, getTurnIngestStats,
     backfillSessionTitles, getTitleBackfillStats,
+    backfillSessionMetadata, getMetadataBackfillStats,
   } = sessionsModule;
 
   // 5. Run fast synchronous startup tasks (schema, stale sweep, orphan cleanup)
@@ -335,6 +336,22 @@ export async function cmdServe(args, flags) {
         }
         return;
       }
+      if (url.pathname === '/admin/metadata-backfill' && req.method === 'GET') {
+        json(res, getMetadataBackfillStats());
+        return;
+      }
+      if (url.pathname === '/admin/metadata-backfill' && req.method === 'POST') {
+        const stats = getMetadataBackfillStats();
+        if (!stats.running) {
+          backfillSessionMetadata()
+            .then((result) => log('sessions', 'info', 'Manual metadata backfill complete', result))
+            .catch((err) => log('sessions', 'warn', `Manual metadata backfill failed: ${err.message}`));
+          json(res, { status: 'started', ...getMetadataBackfillStats() });
+        } else {
+          json(res, { status: 'running', ...stats });
+        }
+        return;
+      }
 
       // Web mode: serve static files from --web-root
       if (webRoot && req.method === 'GET') {
@@ -509,6 +526,12 @@ export async function cmdServe(args, flags) {
         await backfillSessionTitles({ llm: true, minTurns: 1 });
       } catch (titleErr) {
         log('sessions', 'warn', `Title backfill failed: ${titleErr.message}`);
+      }
+      // Metadata backfill runs after turn ingest (enriches subagent sessions)
+      try {
+        await backfillSessionMetadata();
+      } catch (metaErr) {
+        log('sessions', 'warn', `Metadata backfill failed: ${metaErr.message}`);
       }
     }).catch(err => {
       log('sessions', 'warn', `Reconciliation failed: ${err.message}`);

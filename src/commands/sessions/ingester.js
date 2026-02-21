@@ -13,7 +13,7 @@ import {
   CLAUDE_PROJECTS_DIR,
   CODEX_SESSIONS_DIR,
 } from './constants.js';
-import { collectJsonlFiles } from './discovery.js';
+import { collectJsonlFiles, decodeProjectDirFromFilesystem } from './discovery.js';
 import { deriveCodexSessionIdFromFilename } from './providers/codex/discovery.js';
 import {
   classifyEntry,
@@ -495,13 +495,89 @@ function _upsertFilePosition(db, {
   );
 }
 
-function _ensureSessionRow(db, { sessionId, provider, filePath }) {
+async function _extractAgentMeta(text, filePath, provider) {
+  if (provider !== 'claude') return null;
+  const basename = path.basename(filePath);
+  if (!basename.startsWith('agent-')) return null;
+
+  try {
+    const lines = text.split('\n');
+    const firstLine = lines[0];
+    if (!firstLine) return null;
+    const header = JSON.parse(firstLine);
+
+    // Extract model from second line (assistant message)
+    let model = null;
+    for (let i = 1; i < Math.min(lines.length, 5); i++) {
+      if (!lines[i]) continue;
+      try {
+        const entry = JSON.parse(lines[i]);
+        if (entry?.message?.model) { model = entry.message.model; break; }
+      } catch { /* skip */ }
+    }
+
+    // Derive projectPath from filePath
+    // Path pattern: ~/.claude/projects/<projDir>/<UUID>/subagents/agent-xxx.jsonl
+    let projectPath = null;
+    const projMatch = filePath.match(/\.claude\/projects\/([^/]+)\//);
+    if (projMatch) {
+      projectPath = await decodeProjectDirFromFilesystem(projMatch[1]);
+      if (!projectPath) {
+        projectPath = '/' + projMatch[1].replace(/-/g, '/').replace(/^\//, '');
+      }
+    }
+
+    return {
+      cwd: header.cwd || null,
+      projectPath,
+      gitBranch: header.gitBranch || null,
+      parentSessionId: header.sessionId || null,
+      agentId: header.agentId || null,
+      isSidechain: header.isSidechain ? 1 : 0,
+      sessionType: 'task',
+      model,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function _ensureSessionRow(db, { sessionId, provider, filePath, agentMeta }) {
   const now = new Date().toISOString();
-  db.prepare(`
-    INSERT OR IGNORE INTO sessions
-      (id, provider, provider_session_id, origin, origin_native_file, status, created_at, last_active_at)
-    VALUES (?, ?, ?, 'provider-import', ?, 'active', ?, ?)
-  `).run(sessionId, provider, sessionId, filePath, now, now);
+  if (agentMeta) {
+    db.prepare(`
+      INSERT INTO sessions
+        (id, provider, provider_session_id, origin, origin_native_file,
+         cwd, project_path, git_branch, parent_session_id, agent_id,
+         is_sidechain, session_type, model, status, created_at, last_active_at)
+      VALUES (?, ?, ?, 'provider-import', ?,
+              ?, ?, ?, ?, ?,
+              ?, ?, ?, 'active', ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        cwd = COALESCE(excluded.cwd, sessions.cwd),
+        project_path = COALESCE(excluded.project_path, sessions.project_path),
+        git_branch = COALESCE(excluded.git_branch, sessions.git_branch),
+        parent_session_id = COALESCE(excluded.parent_session_id, sessions.parent_session_id),
+        agent_id = COALESCE(excluded.agent_id, sessions.agent_id),
+        is_sidechain = COALESCE(excluded.is_sidechain, sessions.is_sidechain),
+        session_type = COALESCE(excluded.session_type, sessions.session_type),
+        model = COALESCE(excluded.model, sessions.model),
+        origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
+        status = 'active'
+    `).run(
+      sessionId, provider, sessionId, filePath,
+      agentMeta.cwd || null, agentMeta.projectPath || null, agentMeta.gitBranch || null,
+      agentMeta.parentSessionId || null, agentMeta.agentId || null,
+      agentMeta.isSidechain ?? null, agentMeta.sessionType || null, agentMeta.model || null,
+      now, now,
+    );
+  } else {
+    db.prepare(`
+      INSERT OR IGNORE INTO sessions
+        (id, provider, provider_session_id, origin, origin_native_file, status, created_at, last_active_at)
+      VALUES (?, ?, ?, 'provider-import', ?, 'active', ?, ?)
+    `).run(sessionId, provider, sessionId, filePath, now, now);
+  }
 }
 
 function _recomputeSessionAggregates(db, sessionId) {
@@ -720,6 +796,9 @@ export function createSessionsIngesterModule({
       turnMeta,
     });
 
+    // Extract agent metadata from JSONL header (must happen before transaction)
+    const agentMeta = await _extractAgentMeta(text, filePath, provider);
+
     // Compute cost from tokens + model pricing when not already set
     const pricing = _getPricingMap(db);
     for (const turn of turns) {
@@ -736,7 +815,7 @@ export function createSessionsIngesterModule({
     let turnsUpdated = 0;
 
     const tx = db.transaction(() => {
-      _ensureSessionRow(db, { sessionId, provider, filePath });
+      _ensureSessionRow(db, { sessionId, provider, filePath, agentMeta });
       if (reset) {
         db.prepare('DELETE FROM tool_calls WHERE session_id = ?').run(sessionId);
         db.prepare('DELETE FROM turns WHERE session_id = ?').run(sessionId);

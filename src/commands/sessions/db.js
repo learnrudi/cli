@@ -250,6 +250,108 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
       // ~/.claude/projects/ may not exist
     }
 
+    // Subagent sessions: walk subagents/ dirs inside session UUID dirs
+    try {
+      const projDirs2 = await fsp.readdir(path.join(os.homedir(), '.claude', 'projects'));
+      for (const projDir of projDirs2) {
+        const projPath = path.join(os.homedir(), '.claude', 'projects', projDir);
+        let stat2;
+        try { stat2 = await fsp.stat(projPath); } catch { continue; }
+        if (!stat2.isDirectory()) continue;
+
+        let projectPath = await decodeProjectDirFromFilesystem(projDir);
+        if (!projectPath) {
+          projectPath = '/' + projDir.replace(/-/g, '/').replace(/^\//, '');
+        }
+
+        let entries;
+        try { entries = await fsp.readdir(projPath); } catch { continue; }
+
+        for (const entry of entries) {
+          // Look for UUID directories (session dirs)
+          if (!entry.match(/^[0-9a-f]{8}-/)) continue;
+          const subagentsDir = path.join(projPath, entry, 'subagents');
+          let subFiles;
+          try { subFiles = await fsp.readdir(subagentsDir); } catch { continue; }
+
+          for (const subFile of subFiles) {
+            if (!subFile.startsWith('agent-') || !subFile.endsWith('.jsonl')) continue;
+            const agentSessionId = subFile.slice(0, -6); // e.g., "agent-a3a6f79"
+            const fullPath = path.join(subagentsDir, subFile);
+
+            // Skip if already in DB with metadata populated
+            const existing = db.prepare(
+              'SELECT parent_session_id, cwd FROM sessions WHERE id = ?'
+            ).get(agentSessionId);
+            if (existing?.parent_session_id && existing?.cwd) {
+              fsSessionIds.add(agentSessionId);
+              claudeFsIds.add(agentSessionId);
+              continue;
+            }
+
+            let fstat;
+            try { fstat = await fsp.stat(fullPath); } catch { continue; }
+
+            // Read snippet data
+            let snippet = null;
+            let snippetCwd = null;
+            let snippetModel = null;
+            let snippetBranch = null;
+            try {
+              const s = await readSessionSnippet(fullPath);
+              snippet = s.firstPrompt || null;
+              snippetCwd = s.cwd || null;
+              snippetModel = s.model || null;
+              snippetBranch = s.gitBranch || null;
+            } catch {
+              // ignore
+            }
+
+            fsSessionIds.add(agentSessionId);
+            claudeFsIds.add(agentSessionId);
+            fsCount++;
+
+            db.prepare(`
+              INSERT INTO sessions
+                (id, provider, provider_session_id, origin, origin_native_file,
+                 snippet, cwd, project_path, git_branch, model,
+                 parent_session_id, agent_id, is_sidechain, session_type,
+                 status, created_at, last_active_at)
+              VALUES (?, 'claude', ?, 'provider-import', ?,
+                      ?, ?, ?, ?, ?,
+                      ?, ?, 1, 'task',
+                      'active', ?, ?)
+              ON CONFLICT(id) DO UPDATE SET
+                cwd = COALESCE(excluded.cwd, sessions.cwd),
+                project_path = COALESCE(excluded.project_path, sessions.project_path),
+                git_branch = COALESCE(excluded.git_branch, sessions.git_branch),
+                model = COALESCE(excluded.model, sessions.model),
+                parent_session_id = COALESCE(excluded.parent_session_id, sessions.parent_session_id),
+                agent_id = COALESCE(excluded.agent_id, sessions.agent_id),
+                is_sidechain = COALESCE(excluded.is_sidechain, sessions.is_sidechain),
+                session_type = COALESCE(excluded.session_type, sessions.session_type),
+                snippet = COALESCE(sessions.snippet, excluded.snippet),
+                origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
+                last_active_at = MAX(sessions.last_active_at, excluded.last_active_at),
+                status = 'active',
+                deleted_at = NULL
+            `).run(
+              agentSessionId, agentSessionId, fullPath,
+              snippet, snippetCwd || null, projectPath, snippetBranch || null, snippetModel || null,
+              entry, // parent session UUID = the directory name
+              subFile.slice(6, -6), // agent ID = strip "agent-" prefix and ".jsonl" suffix
+              fstat.birthtime.toISOString(), fstat.mtime.toISOString(),
+            );
+
+            if (existing) updated++;
+            else { added++; }
+          }
+        }
+      }
+    } catch {
+      // subagent walk is best-effort
+    }
+
     // Codex sessions: walk ~/.codex/sessions/ recursively
     try {
       const codexFiles = await collectJsonlFiles(CODEX_SESSIONS_DIR, 6);

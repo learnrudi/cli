@@ -46,6 +46,7 @@ import { createSessionsTailModule } from '../sessions/tail.js';
 import { readByteRange } from '../sessions/turn-index.js';
 import { createSessionsIngesterModule } from '../sessions/ingester.js';
 import { createTitleBackfillModule } from '../sessions/title-backfill.js';
+import { createMetadataBackfillModule } from '../sessions/metadata-backfill.js';
 
 // ---------------------------------------------------------------------------
 // Constants (local — not extracted)
@@ -1086,6 +1087,20 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
   } = titleBackfillModule;
 
   // -----------------------------------------------------------------------
+  // Metadata backfill (subagent session enrichment)
+  // -----------------------------------------------------------------------
+
+  const metadataBackfillModule = createMetadataBackfillModule({
+    log,
+    resolveDb,
+    broadcast,
+  });
+  const {
+    backfillMetadata: backfillSessionMetadata,
+    getStats: getMetadataBackfillStats,
+  } = metadataBackfillModule;
+
+  // -----------------------------------------------------------------------
   // Live tail: delegated to sessions/tail.js factory
   // -----------------------------------------------------------------------
 
@@ -1975,5 +1990,7 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
     getTurnIngestStats,
     backfillSessionTitles,
     getTitleBackfillStats,
+    backfillSessionMetadata,
+    getMetadataBackfillStats,
   };
 }
