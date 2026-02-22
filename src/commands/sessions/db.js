@@ -131,6 +131,7 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
 
           let snippet = firstPrompt;
           let snippetBranch = gitBranch;
+          let snippetModel = null;
           if (!snippet) {
             // Use cached DB snippet to avoid disk read on subsequent boots
             const cached = existingSnippets.get(sessionId);
@@ -142,6 +143,7 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
                 const s = await readSessionSnippet(fullPath);
                 snippet = s.firstPrompt || null;
                 if (!snippetBranch) snippetBranch = s.gitBranch || null;
+                if (!snippetModel) snippetModel = s.model || null;
               } catch {
                 // ignore
               }
@@ -153,23 +155,24 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
           db.prepare(`
             INSERT INTO sessions
               (id, provider, provider_session_id, origin, origin_native_file,
-               title, snippet, cwd, project_path, git_branch,
+               title, snippet, cwd, project_path, git_branch, model,
                status, created_at, last_active_at, turn_count)
             VALUES (?, 'claude', ?, 'provider-import', ?,
-                    ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?,
                     'active', ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
               project_path = COALESCE(excluded.project_path, sessions.project_path),
               title = COALESCE(sessions.title, excluded.title),
               snippet = COALESCE(sessions.snippet, excluded.snippet),
               git_branch = COALESCE(excluded.git_branch, sessions.git_branch),
+              model = COALESCE(excluded.model, sessions.model),
               origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
               last_active_at = MAX(sessions.last_active_at, excluded.last_active_at),
               status = 'active',
               deleted_at = NULL
           `).run(
             sessionId, sessionId, fullPath,
-            title, snippet, projectPath, projectPath, snippetBranch,
+            title, snippet, projectPath, projectPath, snippetBranch, snippetModel,
             created, lastActive, messageCount,
           );
 
@@ -200,6 +203,7 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
 
           let snippet = firstPrompt;
           let snippetBranch = gitBranch;
+          let snippetModel = null;
           if (!snippet) {
             // Use cached DB snippet to avoid disk read on subsequent boots
             const cached = existingSnippets.get(sessionId);
@@ -211,6 +215,7 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
                 const s = await readSessionSnippet(extPath);
                 snippet = s.firstPrompt || null;
                 if (!snippetBranch) snippetBranch = s.gitBranch || null;
+                if (!snippetModel) snippetModel = s.model || null;
               } catch {
                 // ignore
               }
@@ -222,23 +227,24 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
           db.prepare(`
             INSERT INTO sessions
               (id, provider, provider_session_id, origin, origin_native_file,
-               title, snippet, cwd, project_path, git_branch,
+               title, snippet, cwd, project_path, git_branch, model,
                status, created_at, last_active_at, turn_count)
             VALUES (?, 'claude', ?, 'provider-import', ?,
-                    ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?,
                     'active', ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
               project_path = COALESCE(excluded.project_path, sessions.project_path),
               title = COALESCE(sessions.title, excluded.title),
               snippet = COALESCE(sessions.snippet, excluded.snippet),
               git_branch = COALESCE(excluded.git_branch, sessions.git_branch),
+              model = COALESCE(excluded.model, sessions.model),
               origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
               last_active_at = MAX(sessions.last_active_at, excluded.last_active_at),
               status = 'active',
               deleted_at = NULL
           `).run(
             sessionId, sessionId, extPath,
-            title, snippet, projectPath, projectPath, snippetBranch,
+            title, snippet, projectPath, projectPath, snippetBranch, snippetModel,
             created, lastActive, messageCount,
           );
 
@@ -744,6 +750,7 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
       if (row.parent_session_id) session.parentSessionId = row.parent_session_id;
       if (row.is_sidechain) session.isSidechain = true;
       if (row.session_type && row.session_type !== 'main') session.sessionType = row.session_type;
+      if (row.model) session.model = row.model;
 
       const cached = diffStatsCache.get(sessionId) || diffStatsCache.get(row.id);
       if (cached) session.diffStats = cached.diffStats;

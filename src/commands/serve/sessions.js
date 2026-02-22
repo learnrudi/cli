@@ -1891,6 +1891,52 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
       return true;
     }
 
+    // GET /sessions/:id/subagents — list child sessions spawned by Task tool
+    const subagentsMatch = url.pathname.match(/^\/sessions\/([^/]+)\/subagents$/);
+    if (req.method === 'GET' && subagentsMatch) {
+      const sessionId = decodeURIComponent(subagentsMatch[1]);
+      const db = resolveDb ? resolveDb() : null;
+      if (!db) return error(res, 'database not available', 503);
+
+      try {
+        const rows = db.prepare(`
+          SELECT id, agent_id, session_type, model, status,
+                 total_cost, total_input_tokens, total_output_tokens, turn_count,
+                 snippet, created_at, last_active_at
+          FROM sessions
+          WHERE parent_session_id = ?
+          ORDER BY created_at ASC
+        `).all(sessionId);
+
+        const subagents = rows.map(r => ({
+          sessionId: r.id,
+          agentId: r.agent_id || '',
+          sessionType: r.session_type || 'task',
+          model: r.model || '',
+          status: r.status || 'active',
+          totalCost: r.total_cost || 0,
+          totalInputTokens: r.total_input_tokens || 0,
+          totalOutputTokens: r.total_output_tokens || 0,
+          turnCount: r.turn_count || 0,
+          snippet: r.snippet || '',
+          createdAt: r.created_at || '',
+          lastActiveAt: r.last_active_at || '',
+        }));
+
+        const aggregated = {
+          totalCost: subagents.reduce((s, a) => s + a.totalCost, 0),
+          totalInputTokens: subagents.reduce((s, a) => s + a.totalInputTokens, 0),
+          totalOutputTokens: subagents.reduce((s, a) => s + a.totalOutputTokens, 0),
+          count: subagents.length,
+        };
+
+        json(res, { subagents, aggregated });
+      } catch (err) {
+        error(res, err.message, 500);
+      }
+      return true;
+    }
+
     // POST /sessions/:id/title — set a user-chosen title (title_override)
     const titleMatch = url.pathname.match(/^\/sessions\/([^/]+)\/title$/);
     if (req.method === 'POST' && titleMatch) {
