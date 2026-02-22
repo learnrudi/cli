@@ -29,7 +29,7 @@ export function buildShellRoutes(ctx) {
       switch (body.app) {
         case 'vscode':      cmd = 'code';       args = [p]; break;
         case 'cursor':      cmd = 'cursor';     args = [p]; break;
-        case 'finder':      cmd = 'open';       args = [p]; break;
+        case 'finder':      cmd = 'open';       args = ['-R', p]; break;
         case 'xcode':       cmd = 'open';       args = ['-a', 'Xcode', p]; break;
         case 'antigravity': cmd = 'open';       args = ['-a', 'Antigravity', p]; break;
         case 'warp':        cmd = 'open';       args = ['-a', 'Warp', p]; break;
