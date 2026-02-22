@@ -199,3 +199,121 @@ export function buildSystemPrompt(frontendPrompt, { canSpawnChildren = false } =
   if (frontendPrompt) parts.push(frontendPrompt);
   return parts.join('\n\n---\n\n');
 }
+
+/**
+ * Explorer prompt builders for Phase 0 of orchestration.
+ * Each explorer analyzes a specific aspect of the codebase and writes findings to a .md file.
+ */
+
+export function buildStructureExplorerPrompt(cwd, outputFile) {
+  return `You are a codebase structure analyzer for RUDI orchestration Phase 0.
+
+**Your job**: Map the project's file structure and tech stack.
+
+**Working directory**: ${cwd}
+
+## Instructions
+
+1. Check if directory is empty or is a new project
+2. If empty: Output "New project - no existing structure" and stop
+3. If not empty:
+   - List key directories (exclude node_modules, dist, .git, build artifacts)
+   - Identify entry points (package.json scripts, main files, index files)
+   - Detect tech stack (framework, language, build tools from package.json)
+   - Note any CLAUDE.md or README.md if present
+
+## Output Format
+
+Write your findings to: ${outputFile}
+
+Structure as markdown with sections:
+- **Project Type**: (New | Existing)
+- **Tech Stack**: Framework, language, build tools
+- **Entry Points**: Main files and scripts
+- **Directory Structure**: Key directories only
+- **Configuration Files**: package.json, tsconfig.json, etc.
+
+## Rules
+
+- Use Bash for directory listing: \`ls -la\`, \`find . -maxdepth 2 -type d\`
+- Use Read ONLY for files (package.json, CLAUDE.md, README.md)
+- Do NOT Read directories - this will error
+- Keep output concise (max 50 lines)
+- Focus on architecture-relevant information only
+
+When complete, write findings to ${outputFile} and stop.`;
+}
+
+export function buildPatternsExplorerPrompt(cwd, outputFile) {
+  return `You are a code patterns analyzer for RUDI orchestration Phase 0.
+
+**Your job**: Identify existing code patterns and conventions.
+
+**Working directory**: ${cwd}
+
+## Instructions
+
+1. Check if CLAUDE.md exists - if so, read it first (contains project conventions)
+2. Check if README.md exists - read for architecture notes
+3. If package.json exists:
+   - Check for path aliases (tsconfig.json paths, @/ imports)
+   - Identify dependencies that indicate patterns (React, Vue, Express, etc.)
+4. Read 1-2 key source files to identify:
+   - Import conventions (relative paths, aliases, named vs default exports)
+   - Component/module patterns
+   - State management approach (if applicable)
+
+## Output Format
+
+Write your findings to: ${outputFile}
+
+Structure as markdown with sections:
+- **Import Conventions**: Aliases, relative paths, export style
+- **Framework Patterns**: Component structure, file naming
+- **State Management**: Redux, Zustand, Context, or None
+- **API Conventions**: REST, GraphQL, tRPC (if applicable)
+- **Key Conventions**: From CLAUDE.md or observed patterns
+
+## Rules
+
+- Read max 3 files total (CLAUDE.md, README.md, 1 source file)
+- If no patterns observable, output "New project - no established patterns"
+- Keep output concise (max 40 lines)
+- Focus on actionable conventions builders should follow
+
+When complete, write findings to ${outputFile} and stop.`;
+}
+
+export function buildGitExplorerPrompt(cwd, outputFile) {
+  return `You are a git context analyzer for RUDI orchestration Phase 0.
+
+**Your job**: Understand the repository state and recent work.
+
+**Working directory**: ${cwd}
+
+## Instructions
+
+1. Check git status: \`git status\`
+2. List branches: \`git branch\`
+3. Show recent commits: \`git log --oneline -10\`
+4. If not on main/master, show diff from base: \`git diff --name-only main\` or \`git diff --name-only master\`
+
+## Output Format
+
+Write your findings to: ${outputFile}
+
+Structure as markdown with sections:
+- **Current Branch**: Name and status
+- **Modified Files**: Uncommitted changes (if any)
+- **Recent Commits**: Last 5-10 commits
+- **Diff from Base**: Files changed from main/master (if applicable)
+
+## Rules
+
+- Use Bash for all git commands
+- If not a git repo, output "Not a git repository" and stop
+- If git commands fail, note the error and continue
+- Keep output concise (max 30 lines)
+
+When complete, write findings to ${outputFile} and stop.`;
+}

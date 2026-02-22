@@ -21,9 +21,10 @@ import {
   hasCapability,
   expandConditional,
 } from '../providers/index.js';
-import { buildOrchestratorPrompt } from '../prompts.js';
+import { buildOrchestratorPrompt, buildStructureExplorerPrompt, buildPatternsExplorerPrompt, buildGitExplorerPrompt } from '../prompts.js';
 import { spawnAgentProcess } from '../spawn-process.js';
 import { createRunGroupFromRequest } from './run-group.js';
+import { synthesizeCodebaseMap } from '../orchestrate-synthesis.js';
 
 const ORCHESTRATION_PLAN_SCHEMA = JSON.stringify({
   type: 'object',
@@ -63,6 +64,170 @@ export function buildOrchestrateRoutes(ctx) {
     json, error, readBody, log, broadcast,
     agentProcesses, getSidecarPort, getSidecarToken,
   } = ctx;
+
+  /**
+   * Phase 0: Spawn 3 parallel explorer agents to analyze the codebase.
+   * Returns path to synthesized codebase-map.md.
+   */
+  async function spawnExplorerAgents({ orchestrationId, artifactDir, workingDir, requestedProvider, providerConfig, binaryPath }) {
+    const explorerConfigs = [
+      {
+        name: 'structure',
+        title: 'Explorer: Structure',
+        outputFile: path.join(artifactDir, 'structure.md'),
+        promptBuilder: buildStructureExplorerPrompt,
+      },
+      {
+        name: 'patterns',
+        title: 'Explorer: Patterns',
+        outputFile: path.join(artifactDir, 'patterns.md'),
+        promptBuilder: buildPatternsExplorerPrompt,
+      },
+      {
+        name: 'git',
+        title: 'Explorer: Git Context',
+        outputFile: path.join(artifactDir, 'git-context.md'),
+        promptBuilder: buildGitExplorerPrompt,
+      },
+    ];
+
+    const db = getDb();
+    const now = new Date().toISOString();
+    const getSidecarPort = ctx.getSidecarPort;
+    const getSidecarToken = ctx.getSidecarToken;
+
+    // Build environment for explorers
+    const configEnv = buildEnv(providerConfig, process.env);
+    const baseEnv = { ...process.env, ...configEnv };
+    if (getSidecarPort() > 0) {
+      baseEnv.RUDI_SIDECAR_URL = `http://127.0.0.1:${getSidecarPort()}`;
+      baseEnv.RUDI_SIDECAR_TOKEN = getSidecarToken();
+    }
+
+    // Spawn all explorers in parallel
+    const explorerPromises = explorerConfigs.map((config) => {
+      return new Promise((resolve, reject) => {
+        const sessionId = crypto.randomUUID();
+        const prompt = config.promptBuilder(workingDir, config.outputFile);
+
+        // Create session row for this explorer
+        db.prepare(`
+          INSERT INTO sessions (
+            id, provider, provider_session_id, project_id, run_group_id,
+            origin, title, title_override, snippet, status, model,
+            cwd, project_path, git_branch,
+            created_at, last_active_at, started_at,
+            session_type, turn_count, total_cost, total_input_tokens, total_output_tokens, total_duration_ms
+          ) VALUES (
+            ?, ?, NULL, NULL, NULL,
+            'rudi', ?, ?, '', 'active', ?,
+            ?, ?, NULL,
+            ?, ?, ?,
+            'explorer', 0, 0, 0, 0, 0
+          )
+        `).run(
+          sessionId,
+          requestedProvider,
+          config.title,
+          config.title,
+          'haiku',
+          workingDir,
+          workingDir,
+          now,
+          now,
+          now,
+        );
+
+        db.prepare(`
+          INSERT INTO session_runtime_state
+            (session_id, status, provider, cwd, started_at, updated_at)
+          VALUES (?, 'starting', ?, ?, ?, ?)
+        `).run(sessionId, requestedProvider, workingDir, now, now);
+
+        // Build args for explorer (use haiku for speed)
+        const argOptions = {
+          prompt,
+          model: 'haiku',
+          outputFormat: 'stream-json',
+          maxTurns: 5,
+        };
+        const args = buildArgs(providerConfig, argOptions);
+
+        // Use bypassPermissions mode
+        const modes = providerConfig?.headless?.permissionModes || {};
+        const permKey = modes.bypassPermissions ? 'bypassPermissions' : (modes.agent ? 'agent' : Object.keys(modes)[0]);
+        if (permKey) {
+          args.push(...getPermissionArgs(providerConfig, permKey));
+        }
+
+        const env = { ...baseEnv, RUDI_SESSION_ID: sessionId };
+
+        try {
+          spawnAgentProcess(ctx, {
+            sessionId,
+            prompt,
+            provider: requestedProvider,
+            model: 'haiku',
+            permissionMode: 'bypassPermissions',
+            providerConfig,
+            binaryPath,
+            args,
+            env,
+            spawnCwd: workingDir,
+            effectiveCwd: workingDir,
+            workingDir,
+            stdinModeOverride: 'close',
+            sessionRowMode: 'existingSession',
+            existingSessionId: sessionId,
+            autoNameOnFirstTurn: false,
+            onProcessClose: ({ finalStatus }) => {
+              if (finalStatus === 'completed') {
+                log('agent', 'info', `Explorer ${config.name} completed`, {
+                  orchestrationId: orchestrationId.slice(0, 8),
+                });
+                resolve({ name: config.name, status: 'completed' });
+              } else {
+                log('agent', 'warn', `Explorer ${config.name} failed: ${finalStatus}`, {
+                  orchestrationId: orchestrationId.slice(0, 8),
+                });
+                reject(new Error(`Explorer ${config.name} failed: ${finalStatus}`));
+              }
+            },
+            onProcessError: (err) => {
+              log('agent', 'error', `Explorer ${config.name} error: ${err.message}`, {
+                orchestrationId: orchestrationId.slice(0, 8),
+              });
+              reject(err);
+            },
+          });
+        } catch (spawnErr) {
+          reject(spawnErr);
+        }
+      });
+    });
+
+    // Wait for all explorers to complete
+    const results = await Promise.allSettled(explorerPromises);
+
+    // Log results
+    const succeeded = results.filter((r) => r.status === 'fulfilled').length;
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    log('agent', 'info', `Explorers completed: ${succeeded} succeeded, ${failed} failed`, {
+      orchestrationId: orchestrationId.slice(0, 8),
+    });
+
+    // Synthesize codebase map from explorer outputs
+    const codebaseMapContent = synthesizeCodebaseMap(artifactDir);
+    const codebaseMapPath = path.join(artifactDir, 'codebase-map.md');
+    fs.writeFileSync(codebaseMapPath, codebaseMapContent, 'utf-8');
+
+    log('agent', 'info', 'Codebase map synthesized', {
+      orchestrationId: orchestrationId.slice(0, 8),
+      path: codebaseMapPath,
+    });
+
+    return codebaseMapPath;
+  }
 
   return async (req, res, url) => {
     // POST /agent/orchestrate — start a planning session
@@ -112,6 +277,27 @@ export function buildOrchestrateRoutes(ctx) {
         now,
       );
 
+      // Phase 0: Create artifact directory
+      const artifactDir = path.join(PATHS.home, '.rudi', 'tmp', `orchestration-${orchestrationId}`);
+      try {
+        fs.mkdirSync(artifactDir, { recursive: true });
+      } catch (mkdirErr) {
+        return error(res, `Failed to create artifact directory: ${mkdirErr.message}`, 500);
+      }
+
+      // Phase 0: Spawn parallel explorer agents
+      let codebaseMapPath = null;
+      try {
+        codebaseMapPath = await spawnExplorerAgents({
+          orchestrationId, artifactDir, workingDir, requestedProvider, providerConfig, binaryPath,
+        });
+      } catch (explorerErr) {
+        log('agent', 'warn', `Explorer phase failed: ${explorerErr.message}`, {
+          orchestrationId: orchestrationId.slice(0, 8),
+        });
+        // Continue without codebase map (explorers are best-effort)
+      }
+
       // Build planner agent args
       const orchestratorPrompt = buildOrchestratorPrompt(prompt);
       const argOptions = {
@@ -127,6 +313,12 @@ export function buildOrchestrateRoutes(ctx) {
       }
 
       const args = buildArgs(providerConfig, argOptions);
+
+      // If we have a codebase map from Phase 0, add it as context for the planner
+      if (codebaseMapPath && hasCapability(providerConfig, 'addDir')) {
+        const addDirArgs = expandConditional(providerConfig.headless.addDir, codebaseMapPath);
+        if (addDirArgs) args.push(...addDirArgs);
+      }
 
       // Use bypassPermissions for planner (read-only analysis)
       const modes = providerConfig?.headless?.permissionModes || {};
@@ -352,6 +544,11 @@ export function buildOrchestrateRoutes(ctx) {
         UPDATE orchestration_plans SET status = 'executing', updated_at = ? WHERE id = ?
       `).run(execNow, id);
 
+      // Check if codebase map exists from Phase 0
+      const artifactDir = path.join(PATHS.home, '.rudi', 'tmp', `orchestration-${id}`);
+      const codebaseMapPath = path.join(artifactDir, 'codebase-map.md');
+      const hasCodebaseMap = fs.existsSync(codebaseMapPath);
+
       // Build run-group body from the orchestration tasks
       const runGroupBody = {
         name: `Orchestration: ${row.prompt.slice(0, 60)}`,
@@ -363,6 +560,7 @@ export function buildOrchestrateRoutes(ctx) {
           name: t.name || null,
           provider: t.provider || row.provider || 'claude',
           model: t.model || row.model || null,
+          contextFiles: hasCodebaseMap ? [codebaseMapPath] : undefined,
         })),
       };
 
