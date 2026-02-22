@@ -222,13 +222,32 @@ export function buildPermissionRoutes(ctx) {
         return true;
       }
 
+      // Check if session is in YOLO mode (dangerouslySkipPermissions)
+      const processEntry = agentProcesses.get(rudiSessionId);
+      if (processEntry && processEntry.permissionMode === 'dangerouslySkipPermissions') {
+        log('agent', 'debug', 'auto-allowing tool (YOLO mode)', { toolName, sessionId: rudiSessionId.slice(0, 8) });
+        pendingPermissions.set(requestId, {
+          rudiSessionId,
+          claudeSessionId,
+          toolName,
+          toolInput,
+          batchId,
+          status: 'decided',
+          decision: { permissionDecision: 'allow', reason: 'YOLO mode enabled' },
+          resolve: null,
+          timer: null,
+          createdAt,
+        });
+        json(res, { ok: true });
+        return true;
+      }
+
       // Check group-level permissions (run-group sessions)
-      const processEntry_ = agentProcesses.get(rudiSessionId);
-      if (processEntry_?.runGroupId) {
+      if (processEntry?.runGroupId) {
         // Auto-allow all tools for run-group sessions (they run autonomously)
-        const groupAllowed = groupAlwaysAllowed?.get(processEntry_.runGroupId);
-        if (groupAllowed?.has(toolName) || processEntry_.permissionMode === 'bypassPermissions' || processEntry_.permissionMode === null) {
-          log('agent', 'debug', 'auto-allowing tool (run-group)', { toolName, sessionId: rudiSessionId.slice(0, 8), groupId: processEntry_.runGroupId });
+        const groupAllowed = groupAlwaysAllowed?.get(processEntry.runGroupId);
+        if (groupAllowed?.has(toolName) || processEntry.permissionMode === 'dangerouslySkipPermissions') {
+          log('agent', 'debug', 'auto-allowing tool (run-group)', { toolName, sessionId: rudiSessionId.slice(0, 8), groupId: processEntry.runGroupId });
           pendingPermissions.set(requestId, {
             rudiSessionId,
             claudeSessionId,
@@ -247,7 +266,6 @@ export function buildPermissionRoutes(ctx) {
       }
 
       // Check project-level .claude/settings.local.json permissions
-      const processEntry = agentProcesses.get(rudiSessionId);
       const projectCwd = processEntry?.cwd;
       if (projectCwd && isToolAllowedByProject(projectCwd, toolName, toolInput)) {
         log('agent', 'debug', 'auto-allowing tool (project settings)', { toolName, sessionId: rudiSessionId.slice(0, 8) });
