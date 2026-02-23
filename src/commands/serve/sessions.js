@@ -1642,6 +1642,20 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
       );
     }
 
+    // Disambiguate duplicate project names by prepending parent directory
+    const nameCount = new Map();
+    for (const proj of mergedProjects) {
+      nameCount.set(proj.name, (nameCount.get(proj.name) || 0) + 1);
+    }
+    for (const proj of mergedProjects) {
+      if (nameCount.get(proj.name) > 1 && proj.originalPath) {
+        const parent = path.basename(path.dirname(proj.originalPath));
+        if (parent && parent !== '.' && parent !== '/') {
+          proj.name = `${parent}/${proj.name}`;
+        }
+      }
+    }
+
     mergedProjects.sort((a, b) => {
       const aTime = a.sessions[0]?.modified || '';
       const bTime = b.sessions[0]?.modified || '';
