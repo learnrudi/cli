@@ -817,6 +817,18 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
       }
     }
 
+    // Disambiguate duplicate project names
+    const nameCount = new Map();
+    for (const proj of mergedProjects) {
+      nameCount.set(proj.name, (nameCount.get(proj.name) || 0) + 1);
+    }
+    for (const proj of mergedProjects) {
+      if (nameCount.get(proj.name) > 1 && proj.originalPath) {
+        const parent = path.basename(path.dirname(proj.originalPath));
+        proj.name = `${parent}/${proj.name}`;
+      }
+    }
+
     mergedProjects.sort((a, b) => {
       const aTime = a.sessions[0]?.modified || '';
       const bTime = b.sessions[0]?.modified || '';
