@@ -14,6 +14,9 @@
  */
 
 import { getDb, isDatabaseInitialized } from '@learnrudi/db';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
 
 export function buildAnalyticsRoutes(ctx) {
   const { json, error } = ctx;
@@ -276,6 +279,129 @@ export function buildAnalyticsRoutes(ctx) {
         tool_usage_by_canonical: toolUsage,
         recent_sessions: recentSessions
       });
+      return true;
+    }
+
+    // GET /analytics/daily-activity — daily activity breakdown by provider
+    if (url.pathname === '/analytics/daily-activity') {
+      const days = parseInt(params.get('days') || '30', 10);
+      if (isNaN(days) || days < 1 || days > 365) {
+        return error(res, 'days must be integer 1-365', 400), true;
+      }
+
+      const rows = db.prepare(`
+        SELECT
+          DATE(last_active_at) as date,
+          provider,
+          COUNT(*) as sessions,
+          SUM(turn_count) as turns,
+          SUM(total_cost) as cost
+        FROM sessions
+        WHERE last_active_at > datetime('now', ?)
+          AND status != 'deleted'
+        GROUP BY DATE(last_active_at), provider
+        ORDER BY date DESC, provider
+      `).all(`-${days} days`);
+
+      json(res, { activity: rows });
+      return true;
+    }
+
+    // GET /analytics/cost-breakdown — cost breakdown by provider and month
+    if (url.pathname === '/analytics/cost-breakdown') {
+      const byProvider = db.prepare(`
+        SELECT provider, SUM(total_cost) as cost, COUNT(*) as sessions
+        FROM sessions WHERE status != 'deleted'
+        GROUP BY provider ORDER BY cost DESC
+      `).all();
+
+      const byMonth = db.prepare(`
+        SELECT strftime('%Y-%m', last_active_at) as month,
+               SUM(total_cost) as cost, SUM(turn_count) as turns
+        FROM sessions WHERE status != 'deleted'
+        GROUP BY strftime('%Y-%m', last_active_at)
+        ORDER BY month DESC LIMIT 12
+      `).all();
+
+      const totalRow = db.prepare(`
+        SELECT SUM(total_cost) as total FROM sessions WHERE status != 'deleted'
+      `).get();
+
+      json(res, {
+        total: totalRow?.total || 0,
+        byProvider: byProvider.reduce((acc, r) => {
+          acc[r.provider] = { cost: r.cost || 0, sessions: r.sessions };
+          return acc;
+        }, {}),
+        byMonth
+      });
+      return true;
+    }
+
+    // GET /analytics/stats — aggregate stats for period
+    if (url.pathname === '/analytics/stats') {
+      const period = params.get('period') || 'month';
+      const validPeriods = { day: '-1 day', week: '-7 days', month: '-30 days', year: '-365 days' };
+      if (!validPeriods[period]) {
+        return error(res, 'period must be day|week|month|year', 400), true;
+      }
+      const offset = validPeriods[period];
+      const stats = db.prepare(`
+        SELECT COUNT(*) as sessions, SUM(turn_count) as turns,
+               SUM(total_cost) as cost, SUM(total_input_tokens) as input_tokens,
+               SUM(total_output_tokens) as output_tokens
+        FROM sessions WHERE last_active_at > datetime('now', ?) AND status != 'deleted'
+      `).get(offset);
+
+      json(res, {
+        period,
+        sessions: stats?.sessions || 0,
+        turns: stats?.turns || 0,
+        cost: stats?.cost || 0,
+        inputTokens: stats?.input_tokens || 0,
+        outputTokens: stats?.output_tokens || 0
+      });
+      return true;
+    }
+
+    // GET /analytics/cost-timeline — per-turn cost timeline with cache efficiency
+    if (url.pathname === '/analytics/cost-timeline') {
+      const sessionId = params.get('session_id');
+      if (!sessionId) {
+        return error(res, 'session_id required', 400), true;
+      }
+
+      const turns = db.prepare(`
+        SELECT turn_number, model, cost, input_tokens, output_tokens,
+               cache_read_tokens, cache_creation_tokens, ts_ms
+        FROM turns WHERE session_id = ? ORDER BY turn_number ASC
+      `).all(sessionId);
+
+      let totalInput = 0, totalCacheRead = 0;
+      for (const t of turns) {
+        totalInput += t.input_tokens || 0;
+        totalCacheRead += t.cache_read_tokens || 0;
+      }
+      const cacheEfficiency = (totalInput + totalCacheRead) > 0
+        ? totalCacheRead / (totalInput + totalCacheRead)
+        : 0;
+
+      json(res, { turns, cacheEfficiency });
+      return true;
+    }
+
+    // GET /analytics/stats-cache — cached stats from ~/.claude/stats-cache.json
+    if (url.pathname === '/analytics/stats-cache') {
+      const cachePath = join(homedir(), '.claude', 'stats-cache.json');
+      if (!existsSync(cachePath)) {
+        return error(res, 'Stats cache not found', 404), true;
+      }
+      try {
+        const data = JSON.parse(readFileSync(cachePath, 'utf-8'));
+        json(res, data);
+      } catch (e) {
+        return error(res, 'Failed to read stats cache', 500), true;
+      }
       return true;
     }
 

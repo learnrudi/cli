@@ -182,9 +182,9 @@ async function importSessions(args, flags) {
         turn_number, user_message, assistant_response, thinking,
         model, cost, duration_ms,
         input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
-        finish_reason, tools_used, kind, ts, ts_ms,
+        finish_reason, tools_used, tool_results, kind, ts, ts_ms,
         service_tier
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'message', ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'message', ?, ?, ?)
     `);
 
     const updateSessionAggregatesStmt = db.prepare(`
@@ -317,6 +317,7 @@ async function importSessions(args, flags) {
               turn.cacheCreationTokens,
               turn.finishReason,
               turn.toolsUsed ? JSON.stringify(turn.toolsUsed) : null,
+              turn.toolResults || null,
               turn.ts || nowIso,
               tsMs,
               turn.serviceTier
@@ -825,10 +826,35 @@ function parseClaudeTurns(filepath) {
           durationMs: null,
           finishReason: null,
           toolsUsed: null,
+          toolResults: null,
           providerTurnId: data.uuid || null,
           ts: data.timestamp || null,
           serviceTier: null,
         };
+      } else if (isToolResult && current && Array.isArray(msg.content)) {
+        // Merge tool_result data into existing toolResults
+        for (const block of msg.content) {
+          if (block.type === 'tool_result' && block.tool_use_id) {
+            if (!current.toolResults) current.toolResults = [];
+            const existing = current.toolResults.find(tc => tc.id === block.tool_use_id);
+            if (existing) {
+              existing.status = block.is_error ? 'error' : 'success';
+              existing.result = typeof block.content === 'string'
+                ? block.content
+                : JSON.stringify(block.content);
+            } else {
+              current.toolResults.push({
+                id: block.tool_use_id,
+                name: null,
+                input: null,
+                status: block.is_error ? 'error' : 'success',
+                result: typeof block.content === 'string'
+                  ? block.content
+                  : JSON.stringify(block.content),
+              });
+            }
+          }
+        }
       }
     } else if (data.type === 'assistant' && current) {
       const msg = data.message;
@@ -854,6 +880,7 @@ function parseClaudeTurns(filepath) {
         const textBlocks = [];
         const thinkingBlocks = [];
         const tools = [];
+        const toolCalls = [];
 
         for (const block of msg.content) {
           if (block.type === 'text') {
@@ -862,6 +889,15 @@ function parseClaudeTurns(filepath) {
             thinkingBlocks.push(block.thinking);
           } else if (block.type === 'tool_use') {
             tools.push(block.name);
+            if (block.id && block.name) {
+              toolCalls.push({
+                id: block.id,
+                name: block.name,
+                input: block.input || null,
+                status: null,
+                result: null,
+              });
+            }
           }
         }
 
@@ -880,6 +916,10 @@ function parseClaudeTurns(filepath) {
             ? [...current.toolsUsed, ...tools]
             : tools;
         }
+        if (toolCalls.length > 0) {
+          if (!current.toolResults) current.toolResults = [];
+          current.toolResults.push(...toolCalls);
+        }
       }
 
       // Use assistant uuid as providerTurnId (more reliable for dedup)
@@ -895,10 +935,15 @@ function parseClaudeTurns(filepath) {
     turns.push(current);
   }
 
-  // Deduplicate tools
+  // Deduplicate tools and serialize toolResults
   for (const turn of turns) {
     if (turn.toolsUsed) {
       turn.toolsUsed = [...new Set(turn.toolsUsed)];
+    }
+    if (turn.toolResults && turn.toolResults.length > 0) {
+      turn.toolResults = JSON.stringify(turn.toolResults);
+    } else {
+      turn.toolResults = null;
     }
   }
 
@@ -1015,10 +1060,15 @@ function parseCodexTurns(filepath) {
     turns.push(current);
   }
 
-  // Deduplicate tools
+  // Deduplicate tools and serialize toolResults
   for (const turn of turns) {
     if (turn.toolsUsed) {
       turn.toolsUsed = [...new Set(turn.toolsUsed)];
+    }
+    if (turn.toolResults && turn.toolResults.length > 0) {
+      turn.toolResults = JSON.stringify(turn.toolResults);
+    } else {
+      turn.toolResults = null;
     }
   }
 

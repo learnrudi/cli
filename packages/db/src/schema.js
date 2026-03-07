@@ -4,7 +4,7 @@
 
 import { getDb } from './index.js';
 
-export const SCHEMA_VERSION = 16;
+export const SCHEMA_VERSION = 17;
 
 export const SCHEMA_SQL = `
 -- Schema version tracking
@@ -1644,6 +1644,93 @@ function runMigrations(db, from, to) {
     // Version 16: Add orchestration_plans table for natural language decomposition
     16: (db) => {
       applySchemaUpdates(db);
+    },
+
+    // Version 17: Backfill tool_calls file_path and input_preview from turns.tool_results JSON
+    17: (db) => {
+      const FILE_PATH_KEYS = {
+        claude: {
+          Read: 'file_path', Edit: 'file_path', Write: 'file_path',
+          NotebookEdit: 'notebook_path', Grep: 'path', LSP: 'filePath',
+          Glob: 'path',
+        },
+        codex: {
+          file_read: 'path', file_edit: 'path', file_write: 'path',
+        },
+        gemini: {
+          read_file: 'target_file', edit_file: 'target_file', create_file: 'target_file',
+        },
+      };
+      const INPUT_PREVIEW_KEYS = {
+        claude: {
+          Bash: 'command', Grep: 'pattern', Glob: 'pattern',
+        },
+        codex: {
+          shell: 'command', shell_command: 'command', exec_command: 'cmd',
+          write_stdin: 'chars', grep: 'pattern', glob: 'pattern',
+        },
+        gemini: {
+          run_terminal_command: 'command', search_files: 'pattern',
+        },
+      };
+
+      const rows = db.prepare(`
+        SELECT id, provider, tool_results FROM turns WHERE tool_results IS NOT NULL
+      `).all();
+
+      const update = db.prepare(`
+        UPDATE tool_calls
+        SET file_path = COALESCE(file_path, ?), input_preview = COALESCE(input_preview, ?)
+        WHERE id = ?
+          AND (file_path IS NULL OR input_preview IS NULL)
+      `);
+
+      function extractBackfillData(provider, toolName, input) {
+        if (!input || typeof input !== 'object') {
+          return { filePath: null, inputPreview: null };
+        }
+
+        const filePathKey = FILE_PATH_KEYS[provider]?.[toolName];
+        const previewKey = INPUT_PREVIEW_KEYS[provider]?.[toolName];
+
+        const filePath = filePathKey && typeof input[filePathKey] === 'string'
+          ? input[filePathKey]
+          : null;
+        const previewValue = previewKey && typeof input[previewKey] === 'string'
+          ? input[previewKey].slice(0, 300)
+          : null;
+
+        return { filePath, inputPreview: previewValue };
+      }
+
+      let updated = 0;
+      let total = 0;
+      const txn = db.transaction(() => {
+        for (const row of rows) {
+          let calls;
+          try { calls = JSON.parse(row.tool_results); } catch { continue; }
+          if (!Array.isArray(calls)) continue;
+
+          for (const tc of calls) {
+            if (!tc.id || !tc.name) continue;
+            total++;
+
+            const { filePath, inputPreview } = extractBackfillData(row.provider, tc.name, tc.input);
+
+            if (filePath || inputPreview) {
+              const result = update.run(filePath, inputPreview, tc.id);
+              if (result.changes > 0) updated++;
+            }
+          }
+
+          if (total > 0 && total % 10000 === 0) {
+            console.log(`    Backfill progress: ${total} tool_calls processed, ${updated} updated`);
+          }
+        }
+      });
+
+      txn();
+      console.log(`    Backfilled ${updated}/${total} tool_calls with file_path/input_preview`);
     },
   };
 

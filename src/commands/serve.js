@@ -37,6 +37,7 @@ import { buildTerminalRoutes } from './serve/routes/terminal.js';
 import { buildSuggestRoutes } from './serve/routes/suggest.js';
 import { buildProviderRoutes } from './serve/routes/providers.js';
 import { buildAnalyticsRoutes } from './serve/routes/analytics.js';
+import { buildPlansRoutes } from './serve/routes/plans.js';
 
 // Re-exports for test compatibility
 export { parseWorktreeList } from './serve/git.js';
@@ -166,6 +167,7 @@ export async function cmdServe(args, flags) {
   const suggestRoutes = buildSuggestRoutes(ctx);
   const providerRoutes = buildProviderRoutes(ctx);
   const analyticsRoutes = buildAnalyticsRoutes(ctx);
+  const plansRoutes = buildPlansRoutes(ctx);
 
   // 8. Previously-extracted handlers (git, agent)
   const handleGit = createGitHandler({ readBody, error, json });
@@ -254,6 +256,9 @@ export async function cmdServe(args, flags) {
       }
       if (url.pathname.startsWith('/analytics/')) {
         if (analyticsRoutes.handle(req, res, url)) return;
+      }
+      if (url.pathname.startsWith('/plans')) {
+        if (plansRoutes.handle(req, res, url)) return;
       }
       if (url.pathname === '/admin/ingester' && req.method === 'GET') {
         const stats = getTurnIngestStats();
@@ -384,8 +389,9 @@ export async function cmdServe(args, flags) {
       log('http', 'warn', `404 ${req.method} ${url.pathname}`);
       error(res, 'Not found', 404);
     } catch (err) {
-      log('http', 'error', `500 ${req.method} ${url.pathname}: ${err.message}`, { stack: err.stack });
-      error(res, `Internal server error: ${err.message}`, 500);
+      const status = err.statusCode || 500;
+      log('http', status >= 500 ? 'error' : 'warn', `${status} ${req.method} ${url.pathname}: ${err.message}`, { stack: status >= 500 ? err.stack : undefined });
+      error(res, err.message, status);
     } finally {
       const ms = Date.now() - start;
       if (!url.pathname.startsWith('/logs') && url.pathname !== '/health') {

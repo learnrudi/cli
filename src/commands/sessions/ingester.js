@@ -113,9 +113,25 @@ function _resolveCanonical(provider, toolName) {
 
 function _extractFilePath(provider, toolName, input) {
   const key = FILE_PATH_KEYS[provider]?.[toolName];
-  if (!key || !input) return null;
-  const v = input[key];
-  return typeof v === 'string' ? v : null;
+  let filePath = null;
+  let inputPreview = null;
+
+  if (key && input) {
+    const v = input[key];
+    if (typeof v === 'string') filePath = v;
+  }
+
+  if (input) {
+    if (toolName === 'Bash' && typeof input.command === 'string') {
+      inputPreview = input.command.slice(0, 300);
+    } else if (toolName === 'Grep' && typeof input.pattern === 'string') {
+      inputPreview = input.pattern.slice(0, 300);
+    } else if (toolName === 'Glob' && typeof input.pattern === 'string') {
+      inputPreview = input.pattern.slice(0, 300);
+    }
+  }
+
+  return { filePath, inputPreview };
 }
 
 function _toIso(v) {
@@ -347,14 +363,15 @@ function _normalizeToolData(toolCalls, provider) {
     const success = tc.status === 'error' ? 0 : 1;
     const resultStr = typeof tc.result === 'string' ? tc.result : null;
     const inputStr = tc.input ? JSON.stringify(tc.input) : null;
+    const extracted = _extractFilePath(provider, tc.name, tc.input);
     toolCallRows.push({
       id: tc.id,
       toolName: tc.name,
       canonicalName: _resolveCanonical(provider, tc.name),
-      filePath: _extractFilePath(provider, tc.name, tc.input),
+      filePath: extracted.filePath,
       success,
       errorMessage: !success && resultStr ? resultStr.slice(0, 500) : null,
-      inputPreview: inputStr ? inputStr.slice(0, 300) : null,
+      inputPreview: extracted.inputPreview || (inputStr ? inputStr.slice(0, 300) : null),
       outputPreview: success && resultStr ? resultStr.slice(0, 300) : null,
     });
   }
@@ -602,7 +619,8 @@ function _recomputeSessionAggregates(db, sessionId) {
       total_input_tokens = ?,
       total_output_tokens = ?,
       last_active_at = COALESCE(?, last_active_at),
-      started_at = COALESCE(started_at, ?)
+      started_at = COALESCE(started_at, ?),
+      model = COALESCE(model, (SELECT model FROM turns WHERE session_id = ? AND model IS NOT NULL ORDER BY turn_number DESC LIMIT 1))
     WHERE id = ?
   `).run(
     agg?.turn_count || 0,
@@ -612,6 +630,7 @@ function _recomputeSessionAggregates(db, sessionId) {
     agg?.total_output_tokens || 0,
     agg?.last_active_at || null,
     agg?.first_ts || null,
+    sessionId,
     sessionId,
   );
 }
