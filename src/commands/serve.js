@@ -38,6 +38,7 @@ import { buildSuggestRoutes } from './serve/routes/suggest.js';
 import { buildProviderRoutes } from './serve/routes/providers.js';
 import { buildAnalyticsRoutes } from './serve/routes/analytics.js';
 import { buildPlansRoutes } from './serve/routes/plans.js';
+import { buildPackageRoutes } from './serve/routes/packages.js';
 
 // Re-exports for test compatibility
 export { parseWorktreeList } from './serve/git.js';
@@ -49,9 +50,24 @@ export { extractSessionCwdFromJsonlChunk, parseSessionMessagesFromJsonl } from '
 
 const PORT_FILE = path.join(PATHS.home, '.rudi-lite-port');
 const TOKEN_FILE = path.join(PATHS.home, '.rudi-lite-token');
-const MAX_CONCURRENT = parseInt(process.env.RUDI_MAX_AGENT_PROCESSES || '10', 10) || 10;
-const IDLE_TIMEOUT_MS = parseInt(process.env.RUDI_IDLE_TIMEOUT_MS || String(10 * 60 * 1000), 10) || 10 * 60 * 1000;
 const WS_TOKEN_PROTOCOL_PREFIX = 'rudi-token.';
+
+export function clampedInt(value, { min = 0, max = Number.MAX_SAFE_INTEGER, fallback }) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(parsed, min), max);
+}
+
+const MAX_CONCURRENT = clampedInt(process.env.RUDI_MAX_AGENT_PROCESSES, {
+  min: 1,
+  max: 100,
+  fallback: 10,
+});
+const IDLE_TIMEOUT_MS = clampedInt(process.env.RUDI_IDLE_TIMEOUT_MS, {
+  min: 60_000,
+  max: 3_600_000,
+  fallback: 10 * 60 * 1000,
+});
 
 export function shouldRunInitialTurnBackfill(db) {
   if (!db || typeof db.prepare !== 'function') return false;
@@ -168,6 +184,7 @@ export async function cmdServe(args, flags) {
   const providerRoutes = buildProviderRoutes(ctx);
   const analyticsRoutes = buildAnalyticsRoutes(ctx);
   const plansRoutes = buildPlansRoutes(ctx);
+  const packageRoutes = buildPackageRoutes(ctx);
 
   // 8. Previously-extracted handlers (git, agent)
   const handleGit = createGitHandler({ readBody, error, json });
@@ -239,6 +256,9 @@ export async function cmdServe(args, flags) {
       }
       if (url.pathname.startsWith('/sessions')) {
         if (await handleSessions(req, res, url)) return;
+      }
+      if (url.pathname.startsWith('/packages')) {
+        if (await packageRoutes.handle(req, res, url)) return;
       }
       if (url.pathname.startsWith('/git/')) {
         if (await handleGit(req, res, url)) return;
@@ -511,7 +531,9 @@ export async function cmdServe(args, flags) {
       }
     }
 
-    reconcileSessionsToDb().then(async () => {
+    reconcileSessionsToDb().catch(err => {
+      log('sessions', 'warn', `Reconciliation failed (continuing): ${err.message}`);
+    }).then(async () => {
       if (!isDbSpineEnabled()) {
         enableDbSpine();
         log('sessions', 'info', 'DB-as-spine enabled after reconciliation');
@@ -539,8 +561,6 @@ export async function cmdServe(args, flags) {
       } catch (metaErr) {
         log('sessions', 'warn', `Metadata backfill failed: ${metaErr.message}`);
       }
-    }).catch(err => {
-      log('sessions', 'warn', `Reconciliation failed: ${err.message}`);
     }).finally(() => {
       startPeriodicReconcile();
       startTurnIngestReconcile();
@@ -560,6 +580,7 @@ export async function cmdServe(args, flags) {
     terminalRoutes.cleanup();
     fsRoutes.cleanup();
     suggestRoutes.cleanup();
+    packageRoutes.cleanup();
     resumeSessionIndex.clear();
     cleanupSessions();
     stopIdleReaper();

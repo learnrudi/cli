@@ -678,7 +678,7 @@ async function downloadDirectoryFromGitHub(dirUrl, destDir, onProgress) {
 async function downloadRuntime(runtime, version, destPath, options = {}) {
   const { onProgress } = options;
   const platformArch = getPlatformArch2();
-  const { execSync: execSync21 } = await import("child_process");
+  const { execSync: execSync23 } = await import("child_process");
   const runtimeManifest = await loadRuntimeManifest(runtime);
   const customDownload = runtimeManifest?.download?.[platformArch];
   const tempDir = import_path3.default.join(PATHS2.cache, "downloads");
@@ -704,7 +704,7 @@ async function downloadRuntime(runtime, version, destPath, options = {}) {
   const tempFile = import_path3.default.join(tempDir, `${runtime}-${version}-${platformArch}.download`);
   try {
     if (url.includes("github.com")) {
-      execSync21(`curl -sL "${url}" -o "${tempFile}"`, { stdio: "pipe" });
+      execSync23(`curl -sL "${url}" -o "${tempFile}"`, { stdio: "pipe" });
     } else {
       const response = await fetch(url, {
         headers: {
@@ -725,13 +725,13 @@ async function downloadRuntime(runtime, version, destPath, options = {}) {
       import_fs2.default.renameSync(tempFile, binaryPath);
       import_fs2.default.chmodSync(binaryPath, 493);
     } else if (downloadType === "tar.gz" || downloadType === "tgz") {
-      execSync21(`tar -xzf "${tempFile}" -C "${destPath}" --strip-components=1`, { stdio: "pipe" });
+      execSync23(`tar -xzf "${tempFile}" -C "${destPath}" --strip-components=1`, { stdio: "pipe" });
       import_fs2.default.unlinkSync(tempFile);
     } else if (downloadType === "tar.xz") {
-      execSync21(`tar -xJf "${tempFile}" -C "${destPath}" --strip-components=1`, { stdio: "pipe" });
+      execSync23(`tar -xJf "${tempFile}" -C "${destPath}" --strip-components=1`, { stdio: "pipe" });
       import_fs2.default.unlinkSync(tempFile);
     } else if (downloadType === "zip") {
-      execSync21(`unzip -o "${tempFile}" -d "${destPath}"`, { stdio: "pipe" });
+      execSync23(`unzip -o "${tempFile}" -d "${destPath}"`, { stdio: "pipe" });
       import_fs2.default.unlinkSync(tempFile);
     } else {
       throw new Error(`Unsupported download type: ${downloadType}`);
@@ -772,7 +772,7 @@ async function downloadTool(toolName, destPath, options = {}) {
     import_fs2.default.rmSync(destPath, { recursive: true });
   }
   import_fs2.default.mkdirSync(destPath, { recursive: true });
-  const { execSync: execSync21 } = await import("child_process");
+  const { execSync: execSync23 } = await import("child_process");
   const downloads = toolManifest.downloads?.[platformArch];
   if (downloads && Array.isArray(downloads)) {
     const downloadedUrls = /* @__PURE__ */ new Set();
@@ -801,11 +801,11 @@ async function downloadTool(toolName, destPath, options = {}) {
         onProgress?.({ phase: "extracting", tool: toolName, binary: import_path3.default.basename(binary) });
         const archiveType = type || guessArchiveType(urlFilename);
         if (archiveType === "zip") {
-          execSync21(`unzip -o "${tempFile}" -d "${destPath}"`, { stdio: "pipe" });
+          execSync23(`unzip -o "${tempFile}" -d "${destPath}"`, { stdio: "pipe" });
         } else if (archiveType === "tar.xz") {
-          execSync21(`tar -xJf "${tempFile}" -C "${destPath}"`, { stdio: "pipe" });
+          execSync23(`tar -xJf "${tempFile}" -C "${destPath}"`, { stdio: "pipe" });
         } else if (archiveType === "tar.gz" || archiveType === "tgz") {
-          execSync21(`tar -xzf "${tempFile}" -C "${destPath}"`, { stdio: "pipe" });
+          execSync23(`tar -xzf "${tempFile}" -C "${destPath}"`, { stdio: "pipe" });
         } else {
           throw new Error(`Unsupported archive type: ${archiveType}`);
         }
@@ -854,11 +854,11 @@ async function downloadTool(toolName, destPath, options = {}) {
       const stripComponents = extractConfig.strip || 0;
       const stripFlag = stripComponents > 0 ? ` --strip-components=${stripComponents}` : "";
       if (archiveType === "zip") {
-        execSync21(`unzip -o "${tempFile}" -d "${destPath}"`, { stdio: "pipe" });
+        execSync23(`unzip -o "${tempFile}" -d "${destPath}"`, { stdio: "pipe" });
       } else if (archiveType === "tar.xz") {
-        execSync21(`tar -xJf "${tempFile}" -C "${destPath}"${stripFlag}`, { stdio: "pipe" });
+        execSync23(`tar -xJf "${tempFile}" -C "${destPath}"${stripFlag}`, { stdio: "pipe" });
       } else if (archiveType === "tar.gz" || archiveType === "tgz") {
-        execSync21(`tar -xzf "${tempFile}" -C "${destPath}"${stripFlag}`, { stdio: "pipe" });
+        execSync23(`tar -xzf "${tempFile}" -C "${destPath}"${stripFlag}`, { stdio: "pipe" });
       } else {
         throw new Error(`Unsupported archive type: ${archiveType}`);
       }
@@ -1314,17 +1314,17 @@ var require_visit = __commonJS({
     visit.BREAK = BREAK;
     visit.SKIP = SKIP;
     visit.REMOVE = REMOVE;
-    function visit_(key, node, visitor, path61) {
-      const ctrl = callVisitor(key, node, visitor, path61);
+    function visit_(key, node, visitor, path68) {
+      const ctrl = callVisitor(key, node, visitor, path68);
       if (identity.isNode(ctrl) || identity.isPair(ctrl)) {
-        replaceNode(key, path61, ctrl);
-        return visit_(key, ctrl, visitor, path61);
+        replaceNode(key, path68, ctrl);
+        return visit_(key, ctrl, visitor, path68);
       }
       if (typeof ctrl !== "symbol") {
         if (identity.isCollection(node)) {
-          path61 = Object.freeze(path61.concat(node));
+          path68 = Object.freeze(path68.concat(node));
           for (let i2 = 0; i2 < node.items.length; ++i2) {
-            const ci = visit_(i2, node.items[i2], visitor, path61);
+            const ci = visit_(i2, node.items[i2], visitor, path68);
             if (typeof ci === "number")
               i2 = ci - 1;
             else if (ci === BREAK)
@@ -1335,13 +1335,13 @@ var require_visit = __commonJS({
             }
           }
         } else if (identity.isPair(node)) {
-          path61 = Object.freeze(path61.concat(node));
-          const ck = visit_("key", node.key, visitor, path61);
+          path68 = Object.freeze(path68.concat(node));
+          const ck = visit_("key", node.key, visitor, path68);
           if (ck === BREAK)
             return BREAK;
           else if (ck === REMOVE)
             node.key = null;
-          const cv = visit_("value", node.value, visitor, path61);
+          const cv = visit_("value", node.value, visitor, path68);
           if (cv === BREAK)
             return BREAK;
           else if (cv === REMOVE)
@@ -1362,17 +1362,17 @@ var require_visit = __commonJS({
     visitAsync.BREAK = BREAK;
     visitAsync.SKIP = SKIP;
     visitAsync.REMOVE = REMOVE;
-    async function visitAsync_(key, node, visitor, path61) {
-      const ctrl = await callVisitor(key, node, visitor, path61);
+    async function visitAsync_(key, node, visitor, path68) {
+      const ctrl = await callVisitor(key, node, visitor, path68);
       if (identity.isNode(ctrl) || identity.isPair(ctrl)) {
-        replaceNode(key, path61, ctrl);
-        return visitAsync_(key, ctrl, visitor, path61);
+        replaceNode(key, path68, ctrl);
+        return visitAsync_(key, ctrl, visitor, path68);
       }
       if (typeof ctrl !== "symbol") {
         if (identity.isCollection(node)) {
-          path61 = Object.freeze(path61.concat(node));
+          path68 = Object.freeze(path68.concat(node));
           for (let i2 = 0; i2 < node.items.length; ++i2) {
-            const ci = await visitAsync_(i2, node.items[i2], visitor, path61);
+            const ci = await visitAsync_(i2, node.items[i2], visitor, path68);
             if (typeof ci === "number")
               i2 = ci - 1;
             else if (ci === BREAK)
@@ -1383,13 +1383,13 @@ var require_visit = __commonJS({
             }
           }
         } else if (identity.isPair(node)) {
-          path61 = Object.freeze(path61.concat(node));
-          const ck = await visitAsync_("key", node.key, visitor, path61);
+          path68 = Object.freeze(path68.concat(node));
+          const ck = await visitAsync_("key", node.key, visitor, path68);
           if (ck === BREAK)
             return BREAK;
           else if (ck === REMOVE)
             node.key = null;
-          const cv = await visitAsync_("value", node.value, visitor, path61);
+          const cv = await visitAsync_("value", node.value, visitor, path68);
           if (cv === BREAK)
             return BREAK;
           else if (cv === REMOVE)
@@ -1416,23 +1416,23 @@ var require_visit = __commonJS({
       }
       return visitor;
     }
-    function callVisitor(key, node, visitor, path61) {
+    function callVisitor(key, node, visitor, path68) {
       if (typeof visitor === "function")
-        return visitor(key, node, path61);
+        return visitor(key, node, path68);
       if (identity.isMap(node))
-        return visitor.Map?.(key, node, path61);
+        return visitor.Map?.(key, node, path68);
       if (identity.isSeq(node))
-        return visitor.Seq?.(key, node, path61);
+        return visitor.Seq?.(key, node, path68);
       if (identity.isPair(node))
-        return visitor.Pair?.(key, node, path61);
+        return visitor.Pair?.(key, node, path68);
       if (identity.isScalar(node))
-        return visitor.Scalar?.(key, node, path61);
+        return visitor.Scalar?.(key, node, path68);
       if (identity.isAlias(node))
-        return visitor.Alias?.(key, node, path61);
+        return visitor.Alias?.(key, node, path68);
       return void 0;
     }
-    function replaceNode(key, path61, node) {
-      const parent = path61[path61.length - 1];
+    function replaceNode(key, path68, node) {
+      const parent = path68[path68.length - 1];
       if (identity.isCollection(parent)) {
         parent.items[key] = node;
       } else if (identity.isPair(parent)) {
@@ -2040,10 +2040,10 @@ var require_Collection = __commonJS({
     var createNode = require_createNode();
     var identity = require_identity();
     var Node = require_Node();
-    function collectionFromPath(schema, path61, value) {
+    function collectionFromPath(schema, path68, value) {
       let v2 = value;
-      for (let i2 = path61.length - 1; i2 >= 0; --i2) {
-        const k2 = path61[i2];
+      for (let i2 = path68.length - 1; i2 >= 0; --i2) {
+        const k2 = path68[i2];
         if (typeof k2 === "number" && Number.isInteger(k2) && k2 >= 0) {
           const a2 = [];
           a2[k2] = v2;
@@ -2062,7 +2062,7 @@ var require_Collection = __commonJS({
         sourceObjects: /* @__PURE__ */ new Map()
       });
     }
-    var isEmptyPath = (path61) => path61 == null || typeof path61 === "object" && !!path61[Symbol.iterator]().next().done;
+    var isEmptyPath = (path68) => path68 == null || typeof path68 === "object" && !!path68[Symbol.iterator]().next().done;
     var Collection = class extends Node.NodeBase {
       constructor(type, schema) {
         super(type);
@@ -2092,11 +2092,11 @@ var require_Collection = __commonJS({
        * be a Pair instance or a `{ key, value }` object, which may not have a key
        * that already exists in the map.
        */
-      addIn(path61, value) {
-        if (isEmptyPath(path61))
+      addIn(path68, value) {
+        if (isEmptyPath(path68))
           this.add(value);
         else {
-          const [key, ...rest] = path61;
+          const [key, ...rest] = path68;
           const node = this.get(key, true);
           if (identity.isCollection(node))
             node.addIn(rest, value);
@@ -2110,8 +2110,8 @@ var require_Collection = __commonJS({
        * Removes a value from the collection.
        * @returns `true` if the item was found and removed.
        */
-      deleteIn(path61) {
-        const [key, ...rest] = path61;
+      deleteIn(path68) {
+        const [key, ...rest] = path68;
         if (rest.length === 0)
           return this.delete(key);
         const node = this.get(key, true);
@@ -2125,8 +2125,8 @@ var require_Collection = __commonJS({
        * scalar values from their surrounding node; to disable set `keepScalar` to
        * `true` (collections are always returned intact).
        */
-      getIn(path61, keepScalar) {
-        const [key, ...rest] = path61;
+      getIn(path68, keepScalar) {
+        const [key, ...rest] = path68;
         const node = this.get(key, true);
         if (rest.length === 0)
           return !keepScalar && identity.isScalar(node) ? node.value : node;
@@ -2144,8 +2144,8 @@ var require_Collection = __commonJS({
       /**
        * Checks if the collection includes a value with the key `key`.
        */
-      hasIn(path61) {
-        const [key, ...rest] = path61;
+      hasIn(path68) {
+        const [key, ...rest] = path68;
         if (rest.length === 0)
           return this.has(key);
         const node = this.get(key, true);
@@ -2155,8 +2155,8 @@ var require_Collection = __commonJS({
        * Sets a value in this collection. For `!!set`, `value` needs to be a
        * boolean to add/remove the item from the set.
        */
-      setIn(path61, value) {
-        const [key, ...rest] = path61;
+      setIn(path68, value) {
+        const [key, ...rest] = path68;
         if (rest.length === 0) {
           this.set(key, value);
         } else {
@@ -2951,7 +2951,7 @@ var require_merge = __commonJS({
 var require_addPairToJSMap = __commonJS({
   "node_modules/.pnpm/yaml@2.8.2/node_modules/yaml/dist/nodes/addPairToJSMap.js"(exports2) {
     "use strict";
-    var log = require_log();
+    var log2 = require_log();
     var merge = require_merge();
     var stringify2 = require_stringify();
     var identity = require_identity();
@@ -3000,7 +3000,7 @@ var require_addPairToJSMap = __commonJS({
           let jsonStr = JSON.stringify(strKey);
           if (jsonStr.length > 40)
             jsonStr = jsonStr.substring(0, 36) + '..."';
-          log.warn(ctx.doc.options.logLevel, `Keys with collection values will be stringified due to JS Object restrictions: ${jsonStr}. Set mapAsMap: true to use object keys.`);
+          log2.warn(ctx.doc.options.logLevel, `Keys with collection values will be stringified due to JS Object restrictions: ${jsonStr}. Set mapAsMap: true to use object keys.`);
           ctx.mapKeyWarned = true;
         }
         return strKey;
@@ -4660,9 +4660,9 @@ var require_Document = __commonJS({
           this.contents.add(value);
       }
       /** Adds a value to the document. */
-      addIn(path61, value) {
+      addIn(path68, value) {
         if (assertCollection(this.contents))
-          this.contents.addIn(path61, value);
+          this.contents.addIn(path68, value);
       }
       /**
        * Create a new `Alias` node, ensuring that the target `node` has the required anchor.
@@ -4737,14 +4737,14 @@ var require_Document = __commonJS({
        * Removes a value from the document.
        * @returns `true` if the item was found and removed.
        */
-      deleteIn(path61) {
-        if (Collection.isEmptyPath(path61)) {
+      deleteIn(path68) {
+        if (Collection.isEmptyPath(path68)) {
           if (this.contents == null)
             return false;
           this.contents = null;
           return true;
         }
-        return assertCollection(this.contents) ? this.contents.deleteIn(path61) : false;
+        return assertCollection(this.contents) ? this.contents.deleteIn(path68) : false;
       }
       /**
        * Returns item at `key`, or `undefined` if not found. By default unwraps
@@ -4759,10 +4759,10 @@ var require_Document = __commonJS({
        * scalar values from their surrounding node; to disable set `keepScalar` to
        * `true` (collections are always returned intact).
        */
-      getIn(path61, keepScalar) {
-        if (Collection.isEmptyPath(path61))
+      getIn(path68, keepScalar) {
+        if (Collection.isEmptyPath(path68))
           return !keepScalar && identity.isScalar(this.contents) ? this.contents.value : this.contents;
-        return identity.isCollection(this.contents) ? this.contents.getIn(path61, keepScalar) : void 0;
+        return identity.isCollection(this.contents) ? this.contents.getIn(path68, keepScalar) : void 0;
       }
       /**
        * Checks if the document includes a value with the key `key`.
@@ -4773,10 +4773,10 @@ var require_Document = __commonJS({
       /**
        * Checks if the document includes a value at `path`.
        */
-      hasIn(path61) {
-        if (Collection.isEmptyPath(path61))
+      hasIn(path68) {
+        if (Collection.isEmptyPath(path68))
           return this.contents !== void 0;
-        return identity.isCollection(this.contents) ? this.contents.hasIn(path61) : false;
+        return identity.isCollection(this.contents) ? this.contents.hasIn(path68) : false;
       }
       /**
        * Sets a value in this document. For `!!set`, `value` needs to be a
@@ -4793,13 +4793,13 @@ var require_Document = __commonJS({
        * Sets a value in this document. For `!!set`, `value` needs to be a
        * boolean to add/remove the item from the set.
        */
-      setIn(path61, value) {
-        if (Collection.isEmptyPath(path61)) {
+      setIn(path68, value) {
+        if (Collection.isEmptyPath(path68)) {
           this.contents = value;
         } else if (this.contents == null) {
-          this.contents = Collection.collectionFromPath(this.schema, Array.from(path61), value);
+          this.contents = Collection.collectionFromPath(this.schema, Array.from(path68), value);
         } else if (assertCollection(this.contents)) {
-          this.contents.setIn(path61, value);
+          this.contents.setIn(path68, value);
         }
       }
       /**
@@ -6751,9 +6751,9 @@ var require_cst_visit = __commonJS({
     visit.BREAK = BREAK;
     visit.SKIP = SKIP;
     visit.REMOVE = REMOVE;
-    visit.itemAtPath = (cst, path61) => {
+    visit.itemAtPath = (cst, path68) => {
       let item = cst;
-      for (const [field, index] of path61) {
+      for (const [field, index] of path68) {
         const tok = item?.[field];
         if (tok && "items" in tok) {
           item = tok.items[index];
@@ -6762,23 +6762,23 @@ var require_cst_visit = __commonJS({
       }
       return item;
     };
-    visit.parentCollection = (cst, path61) => {
-      const parent = visit.itemAtPath(cst, path61.slice(0, -1));
-      const field = path61[path61.length - 1][0];
+    visit.parentCollection = (cst, path68) => {
+      const parent = visit.itemAtPath(cst, path68.slice(0, -1));
+      const field = path68[path68.length - 1][0];
       const coll = parent?.[field];
       if (coll && "items" in coll)
         return coll;
       throw new Error("Parent collection not found");
     };
-    function _visit(path61, item, visitor) {
-      let ctrl = visitor(item, path61);
+    function _visit(path68, item, visitor) {
+      let ctrl = visitor(item, path68);
       if (typeof ctrl === "symbol")
         return ctrl;
       for (const field of ["key", "value"]) {
         const token = item[field];
         if (token && "items" in token) {
           for (let i2 = 0; i2 < token.items.length; ++i2) {
-            const ci = _visit(Object.freeze(path61.concat([[field, i2]])), token.items[i2], visitor);
+            const ci = _visit(Object.freeze(path68.concat([[field, i2]])), token.items[i2], visitor);
             if (typeof ci === "number")
               i2 = ci - 1;
             else if (ci === BREAK)
@@ -6789,10 +6789,10 @@ var require_cst_visit = __commonJS({
             }
           }
           if (typeof ctrl === "function" && field === "key")
-            ctrl = ctrl(item, path61);
+            ctrl = ctrl(item, path68);
         }
       }
-      return typeof ctrl === "function" ? ctrl(item, path61) : ctrl;
+      return typeof ctrl === "function" ? ctrl(item, path68) : ctrl;
     }
     exports2.visit = visit;
   }
@@ -8077,14 +8077,14 @@ var require_parser = __commonJS({
             case "scalar":
             case "single-quoted-scalar":
             case "double-quoted-scalar": {
-              const fs54 = this.flowScalar(this.type);
+              const fs60 = this.flowScalar(this.type);
               if (atNextItem || it2.value) {
-                map.items.push({ start, key: fs54, sep: [] });
+                map.items.push({ start, key: fs60, sep: [] });
                 this.onKeyLine = true;
               } else if (it2.sep) {
-                this.stack.push(fs54);
+                this.stack.push(fs60);
               } else {
-                Object.assign(it2, { key: fs54, sep: [] });
+                Object.assign(it2, { key: fs60, sep: [] });
                 this.onKeyLine = true;
               }
               return;
@@ -8212,13 +8212,13 @@ var require_parser = __commonJS({
             case "scalar":
             case "single-quoted-scalar":
             case "double-quoted-scalar": {
-              const fs54 = this.flowScalar(this.type);
+              const fs60 = this.flowScalar(this.type);
               if (!it2 || it2.value)
-                fc.items.push({ start: [], key: fs54, sep: [] });
+                fc.items.push({ start: [], key: fs60, sep: [] });
               else if (it2.sep)
-                this.stack.push(fs54);
+                this.stack.push(fs60);
               else
-                Object.assign(it2, { key: fs54, sep: [] });
+                Object.assign(it2, { key: fs60, sep: [] });
               return;
             }
             case "flow-map-end":
@@ -8384,7 +8384,7 @@ var require_public_api = __commonJS({
     var composer = require_composer();
     var Document = require_Document();
     var errors = require_errors();
-    var log = require_log();
+    var log2 = require_log();
     var identity = require_identity();
     var lineCounter = require_line_counter();
     var parser = require_parser();
@@ -8436,7 +8436,7 @@ var require_public_api = __commonJS({
       const doc = parseDocument(src, options);
       if (!doc)
         return null;
-      doc.warnings.forEach((warning) => log.warn(doc.options.logLevel, warning));
+      doc.warnings.forEach((warning) => log2.warn(doc.options.logLevel, warning));
       if (doc.errors.length > 0) {
         if (doc.options.logLevel !== "silent")
           throw doc.errors[0];
@@ -8595,13 +8595,13 @@ async function verifyLockfile(id) {
   };
 }
 async function computeChecksum(pkg) {
-  const crypto9 = await import("crypto");
+  const crypto12 = await import("crypto");
   const data = JSON.stringify({
     id: pkg.id,
     version: pkg.version,
     name: pkg.name
   });
-  return crypto9.createHash("sha256").update(data).digest("hex").slice(0, 16);
+  return crypto12.createHash("sha256").update(data).digest("hex").slice(0, 16);
 }
 function getAllLockfiles() {
   const lockfiles = [];
@@ -8965,9 +8965,9 @@ async function installSinglePackage(pkg, options = {}) {
   if (pkg.kind === "runtime" || pkg.kind === "binary" || pkg.kind === "agent") {
     onProgress?.({ phase: "downloading", package: pkg.id });
     if (pkg.installType === "native-installer" && pkg.nativeInstaller) {
-      const { execSync: execSync21 } = await import("child_process");
-      const homedir5 = import_os3.default.homedir();
-      const nativeBin = pkg.nativeBinPath ? import_path6.default.join(homedir5, pkg.nativeBinPath) : null;
+      const { execSync: execSync23 } = await import("child_process");
+      const homedir7 = import_os3.default.homedir();
+      const nativeBin = pkg.nativeBinPath ? import_path6.default.join(homedir7, pkg.nativeBinPath) : null;
       if (nativeBin && import_fs5.default.existsSync(nativeBin) && !force) {
         console.log(`  Found ${pkg.name} at ${nativeBin}`);
         if (!import_fs5.default.existsSync(installPath)) import_fs5.default.mkdirSync(installPath, { recursive: true });
@@ -8983,7 +8983,7 @@ async function installSinglePackage(pkg, options = {}) {
       }
       if (!force) {
         try {
-          const which2 = execSync21(`which ${pkgName}`, { encoding: "utf-8" }).trim();
+          const which2 = execSync23(`which ${pkgName}`, { encoding: "utf-8" }).trim();
           if (which2 && import_fs5.default.existsSync(which2)) {
             console.log(`  Found ${pkg.name} in PATH: ${which2}`);
             if (!import_fs5.default.existsSync(installPath)) import_fs5.default.mkdirSync(installPath, { recursive: true });
@@ -9006,10 +9006,10 @@ async function installSinglePackage(pkg, options = {}) {
         throw new Error(`No native installer available for platform: ${platform}`);
       }
       console.log(`  Running native installer for ${pkg.name}...`);
-      execSync21(installerCmd, { stdio: "inherit" });
+      execSync23(installerCmd, { stdio: "inherit" });
       const verifyPath = nativeBin && import_fs5.default.existsSync(nativeBin) ? nativeBin : (() => {
         try {
-          return execSync21(`which ${pkgName}`, { encoding: "utf-8" }).trim();
+          return execSync23(`which ${pkgName}`, { encoding: "utf-8" }).trim();
         } catch {
           return null;
         }
@@ -9030,7 +9030,7 @@ async function installSinglePackage(pkg, options = {}) {
     }
     if (pkg.npmPackage) {
       try {
-        const { execSync: execSync21 } = await import("child_process");
+        const { execSync: execSync23 } = await import("child_process");
         const npmInstallRoot = isAgentNpm ? getNodeRuntimeRoot() : installPath;
         const npmScope = isAgentNpm ? "global" : "local";
         if (!import_fs5.default.existsSync(installPath)) {
@@ -9043,12 +9043,12 @@ async function installSinglePackage(pkg, options = {}) {
         const resourcesPath = process.env.RESOURCES_PATH;
         const npmCmd = resourcesPath ? import_path6.default.join(resourcesPath, "bundled-runtimes", "node", "bin", "npm") : await findNpmExecutable();
         if (!isAgentNpm && !import_fs5.default.existsSync(import_path6.default.join(installPath, "package.json"))) {
-          execSync21(`"${npmCmd}" init -y`, { cwd: installPath, stdio: "pipe", env: buildNodeToolEnv(npmCmd) });
+          execSync23(`"${npmCmd}" init -y`, { cwd: installPath, stdio: "pipe", env: buildNodeToolEnv(npmCmd) });
         }
         const shouldIgnoreScripts = pkg.source?.type === "npm" && !allowScripts;
         const installFlags = shouldIgnoreScripts ? "--ignore-scripts --no-audit --no-fund" : "--no-audit --no-fund";
         const installCmd = isAgentNpm ? `install -g ${pkg.npmPackage} ${installFlags} --prefix "${npmInstallRoot}"` : `install ${pkg.npmPackage} ${installFlags}`;
-        execSync21(`"${npmCmd}" ${installCmd}`, { cwd: installPath, stdio: "pipe", env: buildNodeToolEnv(npmCmd) });
+        execSync23(`"${npmCmd}" ${installCmd}`, { cwd: installPath, stdio: "pipe", env: buildNodeToolEnv(npmCmd) });
         let bins = pkg.bins;
         if (!bins || bins.length === 0) {
           bins = discoverNpmBins(npmInstallRoot, pkg.npmPackage, npmScope);
@@ -9070,7 +9070,7 @@ async function installSinglePackage(pkg, options = {}) {
             /^npx\s+(\S+)/,
             `"${import_path6.default.join(binDir, "$1")}"`
           );
-          execSync21(postInstallCmd, {
+          execSync23(postInstallCmd, {
             cwd: installPath,
             stdio: "pipe",
             env: {
@@ -9292,10 +9292,10 @@ async function uninstallPackage(id) {
     }
     if (kind2 === "agent" && manifest?.npmPackage) {
       try {
-        const { execSync: execSync21 } = await import("child_process");
+        const { execSync: execSync23 } = await import("child_process");
         const npmCmd = await findNpmExecutable();
         const npmPrefix = getNodeRuntimeRoot();
-        execSync21(`"${npmCmd}" uninstall -g ${manifest.npmPackage} --prefix "${npmPrefix}" --no-audit --no-fund`, {
+        execSync23(`"${npmCmd}" uninstall -g ${manifest.npmPackage} --prefix "${npmPrefix}" --no-audit --no-fund`, {
           stdio: "pipe",
           env: buildNodeToolEnv(npmCmd)
         });
@@ -9474,7 +9474,7 @@ async function updateAll(options = {}) {
   return results;
 }
 async function installStackDependencies(stackPath, onProgress) {
-  const { execSync: execSync21 } = await import("child_process");
+  const { execSync: execSync23 } = await import("child_process");
   const nodeDepsPaths = [
     stackPath,
     // Flat layout: package.json at stack root
@@ -9491,7 +9491,7 @@ async function installStackDependencies(stackPath, onProgress) {
       if (pnpmCmd) {
         const pnpmStore = import_path6.default.join(PATHS.cache, "pnpm");
         import_fs5.default.mkdirSync(pnpmStore, { recursive: true });
-        execSync21(`"${pnpmCmd}" install --store-dir "${pnpmStore}" --prefer-frozen-lockfile`, {
+        execSync23(`"${pnpmCmd}" install --store-dir "${pnpmStore}" --prefer-frozen-lockfile`, {
           cwd: nodePath,
           stdio: "pipe",
           env: buildNodeToolEnv(pnpmCmd)
@@ -9505,7 +9505,7 @@ async function installStackDependencies(stackPath, onProgress) {
     if (!installedWithPnpm) {
       try {
         const npmCmd = await findNpmExecutable();
-        execSync21(`"${npmCmd}" install`, { cwd: nodePath, stdio: "pipe", env: buildNodeToolEnv(npmCmd) });
+        execSync23(`"${npmCmd}" install`, { cwd: nodePath, stdio: "pipe", env: buildNodeToolEnv(npmCmd) });
         onProgress?.({ phase: "installing-deps", message: "Dependencies installed with npm" });
       } catch (error) {
         console.warn(`Warning: Failed to install Node.js dependencies: ${error.message}`);
@@ -9573,8 +9573,8 @@ async function findPnpmExecutable() {
     return flatPnpm;
   }
   try {
-    const { execSync: execSync21 } = await import("child_process");
-    execSync21("pnpm --version", { stdio: "pipe" });
+    const { execSync: execSync23 } = await import("child_process");
+    execSync23("pnpm --version", { stdio: "pipe" });
     return "pnpm";
   } catch {
     return null;
@@ -9604,8 +9604,8 @@ function findUvExecutable() {
     return uvPath;
   }
   try {
-    const { execSync: execSync21 } = require("child_process");
-    execSync21("uv --version", { stdio: "pipe" });
+    const { execSync: execSync23 } = require("child_process");
+    execSync23("uv --version", { stdio: "pipe" });
     return "uv";
   } catch {
     return null;
@@ -9629,37 +9629,37 @@ async function ensureUv(onProgress) {
   return null;
 }
 async function installPythonPackage(installPath, pipPackage, onProgress) {
-  const { execSync: execSync21 } = await import("child_process");
+  const { execSync: execSync23 } = await import("child_process");
   const uvCmd = findUvExecutable();
   if (uvCmd) {
     onProgress?.({ phase: "installing", message: `uv pip install ${pipPackage}` });
-    execSync21(`"${uvCmd}" venv "${installPath}/venv"`, { stdio: "pipe" });
-    execSync21(`"${uvCmd}" pip install --python "${installPath}/venv/bin/python" ${pipPackage}`, { stdio: "pipe" });
+    execSync23(`"${uvCmd}" venv "${installPath}/venv"`, { stdio: "pipe" });
+    execSync23(`"${uvCmd}" pip install --python "${installPath}/venv/bin/python" ${pipPackage}`, { stdio: "pipe" });
     return { usedUv: true };
   } else {
     onProgress?.({ phase: "installing", message: `pip install ${pipPackage}` });
     const pythonCmd = await findPythonExecutable();
-    execSync21(`"${pythonCmd}" -m venv "${installPath}/venv"`, { stdio: "pipe" });
-    execSync21(`"${installPath}/venv/bin/pip" install ${pipPackage}`, { stdio: "pipe" });
+    execSync23(`"${pythonCmd}" -m venv "${installPath}/venv"`, { stdio: "pipe" });
+    execSync23(`"${installPath}/venv/bin/pip" install ${pipPackage}`, { stdio: "pipe" });
     return { usedUv: false };
   }
 }
 async function installPythonRequirements(pythonPath, onProgress) {
-  const { execSync: execSync21 } = await import("child_process");
+  const { execSync: execSync23 } = await import("child_process");
   const uvCmd = findUvExecutable();
   const isWindows = process.platform === "win32";
   const venvPython = isWindows ? import_path6.default.join(pythonPath, "venv", "Scripts", "python.exe") : import_path6.default.join(pythonPath, "venv", "bin", "python");
   if (uvCmd) {
     onProgress?.({ phase: "installing-deps", message: "Installing Python dependencies with uv..." });
-    execSync21(`"${uvCmd}" venv "${pythonPath}/venv"`, { cwd: pythonPath, stdio: "pipe" });
-    execSync21(`"${uvCmd}" pip install --python "${venvPython}" -r requirements.txt`, { cwd: pythonPath, stdio: "pipe" });
+    execSync23(`"${uvCmd}" venv "${pythonPath}/venv"`, { cwd: pythonPath, stdio: "pipe" });
+    execSync23(`"${uvCmd}" pip install --python "${venvPython}" -r requirements.txt`, { cwd: pythonPath, stdio: "pipe" });
     return { usedUv: true };
   } else {
     onProgress?.({ phase: "installing-deps", message: "Installing Python dependencies..." });
     const pythonCmd = await findPythonExecutable();
-    execSync21(`"${pythonCmd}" -m venv venv`, { cwd: pythonPath, stdio: "pipe" });
+    execSync23(`"${pythonCmd}" -m venv venv`, { cwd: pythonPath, stdio: "pipe" });
     const pipCmd = isWindows ? ".\\venv\\Scripts\\pip" : "./venv/bin/pip";
-    execSync21(`${pipCmd} install -r requirements.txt`, { cwd: pythonPath, stdio: "pipe" });
+    execSync23(`${pipCmd} install -r requirements.txt`, { cwd: pythonPath, stdio: "pipe" });
     return { usedUv: false };
   }
 }
@@ -10149,7 +10149,7 @@ function getStackSecrets(stackConfig) {
   return { secrets, missing };
 }
 async function discoverStackTools(stackId, stackConfig, options = {}) {
-  const { timeout = REQUEST_TIMEOUT_MS, log = () => {
+  const { timeout = REQUEST_TIMEOUT_MS, log: log2 = () => {
   } } = options;
   const launch = stackConfig.launch;
   if (!launch || !launch.bin) {
@@ -10176,7 +10176,7 @@ async function discoverStackTools(stackId, stackConfig, options = {}) {
   if (runtimePaths.length > 0) {
     env.PATH = runtimePaths.join(path9.delimiter) + path9.delimiter + (env.PATH || "");
   }
-  log(`  Spawning ${stackId}...`);
+  log2(`  Spawning ${stackId}...`);
   return new Promise((resolve) => {
     let resolved = false;
     let childProcess;
@@ -10340,7 +10340,7 @@ function createToolIndex() {
   };
 }
 async function indexAllStacks(options = {}) {
-  const { stacks: stackFilter, log = console.log, timeout } = options;
+  const { stacks: stackFilter, log: log2 = console.log, timeout } = options;
   const config = readRudiConfig();
   if (!config) {
     throw new Error("rudi.json not found");
@@ -10352,17 +10352,17 @@ async function indexAllStacks(options = {}) {
   for (const stackId of stackIds) {
     const stackConfig = config.stacks[stackId];
     if (!stackConfig) {
-      log(`  \u26A0 Stack not found: ${stackId}`);
+      log2(`  \u26A0 Stack not found: ${stackId}`);
       failed++;
       continue;
     }
     if (!stackConfig.installed) {
-      log(`  \u26A0 Stack not installed: ${stackId}`);
+      log2(`  \u26A0 Stack not installed: ${stackId}`);
       failed++;
       continue;
     }
-    log(`Indexing ${stackId}...`);
-    const result = await discoverStackTools(stackId, stackConfig, { timeout, log });
+    log2(`Indexing ${stackId}...`);
+    const result = await discoverStackTools(stackId, stackConfig, { timeout, log: log2 });
     index.byStack[stackId] = {
       indexedAt: (/* @__PURE__ */ new Date()).toISOString(),
       tools: result.tools,
@@ -10370,10 +10370,10 @@ async function indexAllStacks(options = {}) {
       missingSecrets: result.missingSecrets.length > 0 ? result.missingSecrets : void 0
     };
     if (result.error) {
-      log(`  \u2717 ${result.error}`);
+      log2(`  \u2717 ${result.error}`);
       failed++;
     } else {
-      log(`  \u2713 ${result.tools.length} tools`);
+      log2(`  \u2713 ${result.tools.length} tools`);
       indexed++;
     }
   }
@@ -13899,8 +13899,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path61) {
-      let input = path61;
+    function removeDotSegments(path68) {
+      let input = path68;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -14099,8 +14099,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path61, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path61 && path61 !== "/" ? path61 : void 0;
+        const [path68, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path68 && path68 !== "/" ? path68 : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -14990,11 +14990,11 @@ var require_core = __commonJS({
     Ajv2.ValidationError = validation_error_1.default;
     Ajv2.MissingRefError = ref_error_1.default;
     exports2.default = Ajv2;
-    function checkOptions(checkOpts, options, msg, log = "error") {
+    function checkOptions(checkOpts, options, msg, log2 = "error") {
       for (const key in checkOpts) {
         const opt = key;
         if (opt in options)
-          this.logger[log](`${msg}: option ${key}. ${checkOpts[opt]}`);
+          this.logger[log2](`${msg}: option ${key}. ${checkOpts[opt]}`);
       }
     }
     function getSchEnv(keyRef) {
@@ -17453,12 +17453,12 @@ var require_dist2 = __commonJS({
         throw new Error(`Unknown format "${name}"`);
       return f2;
     };
-    function addFormats2(ajv2, list, fs54, exportName) {
+    function addFormats2(ajv2, list, fs60, exportName) {
       var _a2;
       var _b;
       (_a2 = (_b = ajv2.opts.code).formats) !== null && _a2 !== void 0 ? _a2 : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
       for (const f2 of list)
-        ajv2.addFormat(f2, fs54[f2]);
+        ajv2.addFormat(f2, fs60[f2]);
     }
     module2.exports = exports2 = formatsPlugin;
     Object.defineProperty(exports2, "__esModule", { value: true });
@@ -19158,14 +19158,14 @@ var require_url_state_machine = __commonJS({
       return url.replace(/\u0009|\u000A|\u000D/g, "");
     }
     function shortenPath(url) {
-      const path61 = url.path;
-      if (path61.length === 0) {
+      const path68 = url.path;
+      if (path68.length === 0) {
         return;
       }
-      if (url.scheme === "file" && path61.length === 1 && isNormalizedWindowsDriveLetter(path61[0])) {
+      if (url.scheme === "file" && path68.length === 1 && isNormalizedWindowsDriveLetter(path68[0])) {
         return;
       }
-      path61.pop();
+      path68.pop();
     }
     function includesCredentials(url) {
       return url.username !== "" || url.password !== "";
@@ -25149,14 +25149,14 @@ __export(fileFromPath_exports, {
   fileFromPathSync: () => fileFromPathSync,
   isFile: () => isFile
 });
-function createFileFromPath(path61, { mtimeMs, size }, filenameOrOptions, options = {}) {
+function createFileFromPath(path68, { mtimeMs, size }, filenameOrOptions, options = {}) {
   let filename;
   if (isPlainObject_default2(filenameOrOptions)) {
     [options, filename] = [filenameOrOptions, void 0];
   } else {
     filename = filenameOrOptions;
   }
-  const file = new FileFromPath({ path: path61, size, lastModified: mtimeMs });
+  const file = new FileFromPath({ path: path68, size, lastModified: mtimeMs });
   if (!filename) {
     filename = file.name;
   }
@@ -25165,13 +25165,13 @@ function createFileFromPath(path61, { mtimeMs, size }, filenameOrOptions, option
     lastModified: file.lastModified
   });
 }
-function fileFromPathSync(path61, filenameOrOptions, options = {}) {
-  const stats = (0, import_fs16.statSync)(path61);
-  return createFileFromPath(path61, stats, filenameOrOptions, options);
+function fileFromPathSync(path68, filenameOrOptions, options = {}) {
+  const stats = (0, import_fs16.statSync)(path68);
+  return createFileFromPath(path68, stats, filenameOrOptions, options);
 }
-async function fileFromPath2(path61, filenameOrOptions, options) {
-  const stats = await import_fs16.promises.stat(path61);
-  return createFileFromPath(path61, stats, filenameOrOptions, options);
+async function fileFromPath2(path68, filenameOrOptions, options) {
+  const stats = await import_fs16.promises.stat(path68);
+  return createFileFromPath(path68, stats, filenameOrOptions, options);
 }
 var import_fs16, import_path18, import_node_domexception, __classPrivateFieldSet4, __classPrivateFieldGet5, _FileFromPath_path, _FileFromPath_start, MESSAGE, FileFromPath;
 var init_fileFromPath = __esm({
@@ -25232,13 +25232,13 @@ var init_fileFromPath = __esm({
 });
 
 // node_modules/.pnpm/openai@4.104.0_ws@8.19.0/node_modules/openai/_shims/node-runtime.mjs
-async function fileFromPath3(path61, ...args) {
+async function fileFromPath3(path68, ...args) {
   const { fileFromPath: _fileFromPath } = await Promise.resolve().then(() => (init_fileFromPath(), fileFromPath_exports));
   if (!fileFromPathWarned) {
-    console.warn(`fileFromPath is deprecated; use fs.createReadStream(${JSON.stringify(path61)}) instead`);
+    console.warn(`fileFromPath is deprecated; use fs.createReadStream(${JSON.stringify(path68)}) instead`);
     fileFromPathWarned = true;
   }
-  return await _fileFromPath(path61, ...args);
+  return await _fileFromPath(path68, ...args);
 }
 async function getMultipartRequestOptions2(form, opts) {
   const encoder = new FormDataEncoder(form);
@@ -26171,29 +26171,29 @@ var init_core = __esm({
       defaultIdempotencyKey() {
         return `stainless-node-retry-${uuid4()}`;
       }
-      get(path61, opts) {
-        return this.methodRequest("get", path61, opts);
+      get(path68, opts) {
+        return this.methodRequest("get", path68, opts);
       }
-      post(path61, opts) {
-        return this.methodRequest("post", path61, opts);
+      post(path68, opts) {
+        return this.methodRequest("post", path68, opts);
       }
-      patch(path61, opts) {
-        return this.methodRequest("patch", path61, opts);
+      patch(path68, opts) {
+        return this.methodRequest("patch", path68, opts);
       }
-      put(path61, opts) {
-        return this.methodRequest("put", path61, opts);
+      put(path68, opts) {
+        return this.methodRequest("put", path68, opts);
       }
-      delete(path61, opts) {
-        return this.methodRequest("delete", path61, opts);
+      delete(path68, opts) {
+        return this.methodRequest("delete", path68, opts);
       }
-      methodRequest(method, path61, opts) {
+      methodRequest(method, path68, opts) {
         return this.request(Promise.resolve(opts).then(async (opts2) => {
           const body = opts2 && isBlobLike(opts2?.body) ? new DataView(await opts2.body.arrayBuffer()) : opts2?.body instanceof DataView ? opts2.body : opts2?.body instanceof ArrayBuffer ? new DataView(opts2.body) : opts2 && ArrayBuffer.isView(opts2?.body) ? new DataView(opts2.body.buffer) : opts2?.body;
-          return { method, path: path61, ...opts2, body };
+          return { method, path: path68, ...opts2, body };
         }));
       }
-      getAPIList(path61, Page2, opts) {
-        return this.requestAPIList(Page2, { method: "get", path: path61, ...opts });
+      getAPIList(path68, Page2, opts) {
+        return this.requestAPIList(Page2, { method: "get", path: path68, ...opts });
       }
       calculateContentLength(body) {
         if (typeof body === "string") {
@@ -26212,10 +26212,10 @@ var init_core = __esm({
       }
       buildRequest(inputOptions, { retryCount = 0 } = {}) {
         const options = { ...inputOptions };
-        const { method, path: path61, query, headers = {} } = options;
+        const { method, path: path68, query, headers = {} } = options;
         const body = ArrayBuffer.isView(options.body) || options.__binaryRequest && typeof options.body === "string" ? options.body : isMultipartBody(options.body) ? options.body.body : options.body ? JSON.stringify(options.body, null, 2) : null;
         const contentLength = this.calculateContentLength(body);
-        const url = this.buildURL(path61, query);
+        const url = this.buildURL(path68, query);
         if ("timeout" in options)
           validatePositiveInteger("timeout", options.timeout);
         options.timeout = options.timeout ?? this.timeout;
@@ -26331,8 +26331,8 @@ var init_core = __esm({
         const request = this.makeRequest(options, null);
         return new PagePromise(this, request, Page2);
       }
-      buildURL(path61, query) {
-        const url = isAbsoluteURL(path61) ? new URL(path61) : new URL(this.baseURL + (this.baseURL.endsWith("/") && path61.startsWith("/") ? path61.slice(1) : path61));
+      buildURL(path68, query) {
+        const url = isAbsoluteURL(path68) ? new URL(path68) : new URL(this.baseURL + (this.baseURL.endsWith("/") && path68.startsWith("/") ? path68.slice(1) : path68));
         const defaultQuery = this.defaultQuery();
         if (!isEmptyObj(defaultQuery)) {
           query = { ...defaultQuery, ...query };
@@ -31937,9 +31937,9 @@ async function checkProviderStatus() {
     }
   };
   try {
-    const { execSync: execSync21 } = await import("child_process");
+    const { execSync: execSync23 } = await import("child_process");
     try {
-      execSync21("which ollama", { stdio: "pipe" });
+      execSync23("which ollama", { stdio: "pipe" });
       status.ollama.installed = true;
     } catch {
     }
@@ -32015,9 +32015,9 @@ async function autoSetupOllama() {
     };
   }
   try {
-    const { execSync: execSync21 } = await import("child_process");
+    const { execSync: execSync23 } = await import("child_process");
     console.log("Pulling nomic-embed-text model...");
-    execSync21("ollama pull nomic-embed-text", { stdio: "inherit" });
+    execSync23("ollama pull nomic-embed-text", { stdio: "inherit" });
     return { success: true, message: "Ollama configured with nomic-embed-text" };
   } catch (err) {
     return { success: false, message: `Failed to pull model: ${err.message}` };
@@ -35780,6 +35780,7 @@ AGENT INTEGRATION
 
 RUN
   run <stack>           Run a stack directly
+  parallel <tasks...>   Run multiple agent tasks in parallel (grouped)
 
 SECRETS
   secrets set <name>    Set a secret
@@ -35875,6 +35876,27 @@ OPTIONS
 EXAMPLES
   rudi run pdf-creator
   rudi run pdf-creator --input '{"file": "doc.html"}'
+`,
+    parallel: `
+rudi parallel - Launch grouped parallel agent sessions
+
+USAGE
+  rudi parallel "<task1>" "<task2>" [more tasks] [options]
+
+OPTIONS
+  --name <name>               Group display name
+  --provider <provider>       Agent provider (default: claude)
+  --model <model>             Model override
+  --base-branch <branch>      Base branch for worktrees (default: current branch)
+  --cwd <path>                Working directory (default: current dir)
+  --permission-mode <mode>    Permission mode passed to provider
+  --system-prompt <prompt>    Additional system prompt
+  --no-worktree               Run in shared cwd instead of isolated worktrees
+
+EXAMPLES
+  rudi parallel "implement auth" "write tests" "update docs"
+  rudi parallel "fix bug A" "fix bug B" --name "Bug batch"
+  rudi parallel "task1" "task2" --provider claude --model sonnet
 `,
     list: `
 rudi list - List installed packages
@@ -37303,11 +37325,11 @@ async function runStack(id, options = {}) {
   const startTime = Date.now();
   const packagePath = getPackagePath2(id);
   const manifestPath = import_path12.default.join(packagePath, "manifest.json");
-  const { default: fs54 } = await import("fs");
-  if (!fs54.existsSync(manifestPath)) {
+  const { default: fs60 } = await import("fs");
+  if (!fs60.existsSync(manifestPath)) {
     throw new Error(`Stack manifest not found: ${id}`);
   }
-  const manifest = JSON.parse(fs54.readFileSync(manifestPath, "utf-8"));
+  const manifest = JSON.parse(fs60.readFileSync(manifestPath, "utf-8"));
   const { command, args } = resolveCommandFromManifest(manifest, packagePath);
   const secrets = await getSecrets(manifest.requires?.secrets || []);
   const runEnv = {
@@ -38293,7 +38315,7 @@ var import_fs13 = __toESM(require("fs"), 1);
 init_src2();
 
 // packages/db/src/schema.js
-var SCHEMA_VERSION = 10;
+var SCHEMA_VERSION = 22;
 var SCHEMA_SQL = `
 -- Schema version tracking
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -38322,12 +38344,64 @@ CREATE TABLE IF NOT EXISTS projects (
 
 CREATE INDEX IF NOT EXISTS idx_projects_provider ON projects(provider);
 
+-- Run groups (parallel session orchestration)
+CREATE TABLE IF NOT EXISTS run_groups (
+  id TEXT PRIMARY KEY,
+  name TEXT,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending','running','completed','partial','failed','stopped')),
+  project_path TEXT,
+  base_branch TEXT,
+  execution_mode TEXT NOT NULL DEFAULT 'worktree'
+    CHECK (execution_mode IN ('worktree','shared_cwd','read_only','detached')),
+  coordination_mode TEXT NOT NULL DEFAULT 'flat'
+    CHECK (coordination_mode IN ('flat','phased','supervisor')),
+  requires_git INTEGER NOT NULL DEFAULT 1,
+  workspace_root TEXT,
+  provider TEXT DEFAULT 'claude',
+  model TEXT,
+  permission_mode TEXT,
+  session_count INTEGER NOT NULL DEFAULT 0,
+  completed_count INTEGER NOT NULL DEFAULT 0,
+  failed_count INTEGER NOT NULL DEFAULT 0,
+  total_cost REAL NOT NULL DEFAULT 0,
+  total_tokens INTEGER NOT NULL DEFAULT 0,
+  config_json TEXT,
+  created_at TEXT NOT NULL,
+  started_at TEXT,
+  completed_at TEXT,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_run_groups_status ON run_groups(status);
+CREATE INDEX IF NOT EXISTS idx_run_groups_created ON run_groups(created_at DESC);
+
+-- Orchestration plans (natural language \u2192 run group decomposition)
+CREATE TABLE IF NOT EXISTS orchestration_plans (
+  id TEXT PRIMARY KEY,
+  status TEXT NOT NULL DEFAULT 'planning'
+    CHECK (status IN ('planning', 'ready', 'executing', 'completed', 'failed', 'cancelled')),
+  prompt TEXT NOT NULL,
+  provider TEXT DEFAULT 'claude',
+  model TEXT,
+  plan_json TEXT,
+  planner_session_id TEXT,
+  run_group_id TEXT REFERENCES run_groups(id) ON DELETE SET NULL,
+  project_path TEXT,
+  created_at TEXT NOT NULL,
+  completed_at TEXT,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_orchestration_plans_status ON orchestration_plans(status);
+
 -- Sessions (conversation containers)
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
   provider TEXT NOT NULL CHECK (provider IN ('claude', 'codex', 'gemini', 'ollama')),
   provider_session_id TEXT,
   project_id TEXT,
+  run_group_id TEXT REFERENCES run_groups(id) ON DELETE SET NULL,
 
   -- Origin tracking
   origin TEXT NOT NULL CHECK (origin IN ('rudi', 'provider-import', 'mixed')),
@@ -38397,6 +38471,7 @@ CREATE INDEX IF NOT EXISTS idx_sessions_project_active ON sessions(project_path,
 CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_session_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_agent ON sessions(agent_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_type ON sessions(session_type);
+CREATE INDEX IF NOT EXISTS idx_sessions_run_group ON sessions(run_group_id);
 
 -- Turns (individual user->assistant exchanges)
 CREATE TABLE IF NOT EXISTS turns (
@@ -38427,6 +38502,7 @@ CREATE TABLE IF NOT EXISTS turns (
   output_tokens INTEGER,
   cache_read_tokens INTEGER,
   cache_creation_tokens INTEGER,
+  context_tokens INTEGER,
 
   -- Completion
   finish_reason TEXT,
@@ -38498,6 +38574,39 @@ CREATE TRIGGER IF NOT EXISTS turns_au AFTER UPDATE ON turns BEGIN
   INSERT INTO turns_fts(rowid, user_message, assistant_response)
   VALUES (NEW.rowid, NEW.user_message, NEW.assistant_response);
 END;
+
+-- Tool calls (normalized from turns.tool_results JSON)
+CREATE TABLE IF NOT EXISTS tool_calls (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  turn_id TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  tool_name TEXT NOT NULL,
+  canonical_name TEXT,
+  file_path TEXT,
+  success INTEGER NOT NULL,
+  error_message TEXT,
+  duration_ms INTEGER,
+  input_preview TEXT,
+  output_preview TEXT,
+  ts_ms INTEGER NOT NULL,
+
+  FOREIGN KEY (session_id) REFERENCES sessions(id),
+  FOREIGN KEY (turn_id) REFERENCES turns(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tool_calls_session ON tool_calls(session_id);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_turn ON tool_calls(turn_id);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_name ON tool_calls(tool_name);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_canonical ON tool_calls(canonical_name);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_file ON tool_calls(file_path) WHERE file_path IS NOT NULL;
+
+-- Full-text search on sessions
+CREATE VIRTUAL TABLE IF NOT EXISTS sessions_fts USING fts5(
+  session_id UNINDEXED,
+  title,
+  snippet
+);
 
 -- Tags (many-to-many with sessions)
 CREATE TABLE IF NOT EXISTS tags (
@@ -38645,12 +38754,18 @@ CREATE TABLE IF NOT EXISTS session_runtime_state (
   turn_count INTEGER NOT NULL DEFAULT 0,
   cost_total REAL NOT NULL DEFAULT 0,
   tokens_total INTEGER NOT NULL DEFAULT 0,
+  compaction_count INTEGER NOT NULL DEFAULT 0,
+  tokens_saved_total INTEGER NOT NULL DEFAULT 0,
+  last_compaction_at TEXT,
+  last_compaction_json TEXT,
   unseen_completion INTEGER NOT NULL DEFAULT 0,
   last_error TEXT,
   worktree_path TEXT,
   worktree_branch TEXT,
   project_root TEXT,
-  base_branch TEXT
+  base_branch TEXT,
+  use_worktree INTEGER NOT NULL DEFAULT 1,
+  execution_mode TEXT DEFAULT 'shared_cwd'
 );
 
 CREATE TABLE IF NOT EXISTS session_runtime_events (
@@ -38837,6 +38952,91 @@ function applySchemaUpdates(db3) {
   if (tableExists(db3, "projects")) {
     ensureColumn(db3, "projects", "settings", "ALTER TABLE projects ADD COLUMN settings TEXT");
   }
+  ensureTable(db3, "run_groups", `
+    CREATE TABLE IF NOT EXISTS run_groups (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending','running','completed','partial','failed','stopped')),
+      project_path TEXT,
+      base_branch TEXT,
+      execution_mode TEXT NOT NULL DEFAULT 'worktree'
+        CHECK (execution_mode IN ('worktree','shared_cwd','read_only','detached')),
+      coordination_mode TEXT NOT NULL DEFAULT 'flat'
+        CHECK (coordination_mode IN ('flat','phased','supervisor')),
+      requires_git INTEGER NOT NULL DEFAULT 1,
+      workspace_root TEXT,
+      provider TEXT DEFAULT 'claude',
+      model TEXT,
+      permission_mode TEXT,
+      session_count INTEGER NOT NULL DEFAULT 0,
+      completed_count INTEGER NOT NULL DEFAULT 0,
+      failed_count INTEGER NOT NULL DEFAULT 0,
+      total_cost REAL NOT NULL DEFAULT 0,
+      total_tokens INTEGER NOT NULL DEFAULT 0,
+      config_json TEXT,
+      created_at TEXT NOT NULL,
+      started_at TEXT,
+      completed_at TEXT,
+      updated_at TEXT NOT NULL
+    );
+  `);
+  ensureColumn(
+    db3,
+    "run_groups",
+    "execution_mode",
+    "ALTER TABLE run_groups ADD COLUMN execution_mode TEXT NOT NULL DEFAULT 'worktree'"
+  );
+  ensureColumn(
+    db3,
+    "run_groups",
+    "coordination_mode",
+    "ALTER TABLE run_groups ADD COLUMN coordination_mode TEXT NOT NULL DEFAULT 'flat'"
+  );
+  ensureColumn(
+    db3,
+    "run_groups",
+    "requires_git",
+    "ALTER TABLE run_groups ADD COLUMN requires_git INTEGER NOT NULL DEFAULT 1"
+  );
+  ensureColumn(
+    db3,
+    "run_groups",
+    "workspace_root",
+    "ALTER TABLE run_groups ADD COLUMN workspace_root TEXT"
+  );
+  ensureIndex(
+    db3,
+    "idx_run_groups_status",
+    "CREATE INDEX IF NOT EXISTS idx_run_groups_status ON run_groups(status)"
+  );
+  ensureIndex(
+    db3,
+    "idx_run_groups_created",
+    "CREATE INDEX IF NOT EXISTS idx_run_groups_created ON run_groups(created_at DESC)"
+  );
+  ensureTable(db3, "orchestration_plans", `
+    CREATE TABLE IF NOT EXISTS orchestration_plans (
+      id TEXT PRIMARY KEY,
+      status TEXT NOT NULL DEFAULT 'planning'
+        CHECK (status IN ('planning', 'ready', 'executing', 'completed', 'failed', 'cancelled')),
+      prompt TEXT NOT NULL,
+      provider TEXT DEFAULT 'claude',
+      model TEXT,
+      plan_json TEXT,
+      planner_session_id TEXT,
+      run_group_id TEXT REFERENCES run_groups(id) ON DELETE SET NULL,
+      project_path TEXT,
+      created_at TEXT NOT NULL,
+      completed_at TEXT,
+      updated_at TEXT NOT NULL
+    );
+  `);
+  ensureIndex(
+    db3,
+    "idx_orchestration_plans_status",
+    "CREATE INDEX IF NOT EXISTS idx_orchestration_plans_status ON orchestration_plans(status)"
+  );
   if (tableExists(db3, "sessions")) {
     ensureColumn(db3, "sessions", "title_override", "ALTER TABLE sessions ADD COLUMN title_override TEXT");
     ensureColumn(db3, "sessions", "system_prompt", "ALTER TABLE sessions ADD COLUMN system_prompt TEXT");
@@ -38876,6 +39076,15 @@ function applySchemaUpdates(db3) {
     ensureColumn(db3, "sessions", "error_code", "ALTER TABLE sessions ADD COLUMN error_code TEXT");
     ensureColumn(db3, "sessions", "error_message", "ALTER TABLE sessions ADD COLUMN error_message TEXT");
     ensureColumn(db3, "sessions", "project_path", "ALTER TABLE sessions ADD COLUMN project_path TEXT");
+    ensureColumn(
+      db3,
+      "sessions",
+      "run_group_id",
+      "ALTER TABLE sessions ADD COLUMN run_group_id TEXT REFERENCES run_groups(id) ON DELETE SET NULL"
+    );
+    ensureColumn(db3, "sessions", "title_source", "ALTER TABLE sessions ADD COLUMN title_source TEXT");
+    ensureColumn(db3, "sessions", "title_generated_at", "ALTER TABLE sessions ADD COLUMN title_generated_at TEXT");
+    ensureSessionsFtsHealthy(db3);
     if (columnExists(db3, "sessions", "session_type")) {
       db3.exec("UPDATE sessions SET session_type = 'main' WHERE session_type = 'task'");
     }
@@ -38884,6 +39093,7 @@ function applySchemaUpdates(db3) {
     ensureIndex(db3, "idx_sessions_type", "CREATE INDEX IF NOT EXISTS idx_sessions_type ON sessions(session_type)");
     ensureIndex(db3, "idx_sessions_project_path", "CREATE INDEX IF NOT EXISTS idx_sessions_project_path ON sessions(project_path)");
     ensureIndex(db3, "idx_sessions_project_active", "CREATE INDEX IF NOT EXISTS idx_sessions_project_active ON sessions(project_path, last_active_at DESC) WHERE status != 'deleted'");
+    ensureIndex(db3, "idx_sessions_run_group", "CREATE INDEX IF NOT EXISTS idx_sessions_run_group ON sessions(run_group_id)");
     if (!indexExists(db3, "idx_sessions_provider_session_unique")) {
       dedupeProviderSessions(db3);
       db3.exec("DROP INDEX IF EXISTS idx_sessions_provider_session");
@@ -38909,6 +39119,7 @@ function applySchemaUpdates(db3) {
     ensureColumn(db3, "turns", "thinking_config", "ALTER TABLE turns ADD COLUMN thinking_config TEXT");
     ensureColumn(db3, "turns", "image_ids", "ALTER TABLE turns ADD COLUMN image_ids TEXT");
     ensureColumn(db3, "turns", "compact_metadata", "ALTER TABLE turns ADD COLUMN compact_metadata TEXT");
+    ensureColumn(db3, "turns", "context_tokens", "ALTER TABLE turns ADD COLUMN context_tokens INTEGER");
     ensureColumn(db3, "turns", "logical_parent_id", "ALTER TABLE turns ADD COLUMN logical_parent_id TEXT");
     ensureColumn(db3, "turns", "leaf_uuid", "ALTER TABLE turns ADD COLUMN leaf_uuid TEXT");
     if (!columnExists(db3, "turns", "ts_ms")) {
@@ -39106,6 +39317,10 @@ function applySchemaUpdates(db3) {
       turn_count INTEGER NOT NULL DEFAULT 0,
       cost_total REAL NOT NULL DEFAULT 0,
       tokens_total INTEGER NOT NULL DEFAULT 0,
+      compaction_count INTEGER NOT NULL DEFAULT 0,
+      tokens_saved_total INTEGER NOT NULL DEFAULT 0,
+      last_compaction_at TEXT,
+      last_compaction_json TEXT,
       unseen_completion INTEGER NOT NULL DEFAULT 0,
       last_error TEXT
     )
@@ -39114,11 +39329,16 @@ function applySchemaUpdates(db3) {
     ensureColumn(db3, "session_runtime_state", "turn_count", "ALTER TABLE session_runtime_state ADD COLUMN turn_count INTEGER NOT NULL DEFAULT 0");
     ensureColumn(db3, "session_runtime_state", "cwd", "ALTER TABLE session_runtime_state ADD COLUMN cwd TEXT");
     ensureColumn(db3, "session_runtime_state", "resume_session_id", "ALTER TABLE session_runtime_state ADD COLUMN resume_session_id TEXT");
+    ensureColumn(db3, "session_runtime_state", "compaction_count", "ALTER TABLE session_runtime_state ADD COLUMN compaction_count INTEGER NOT NULL DEFAULT 0");
+    ensureColumn(db3, "session_runtime_state", "tokens_saved_total", "ALTER TABLE session_runtime_state ADD COLUMN tokens_saved_total INTEGER NOT NULL DEFAULT 0");
+    ensureColumn(db3, "session_runtime_state", "last_compaction_at", "ALTER TABLE session_runtime_state ADD COLUMN last_compaction_at TEXT");
+    ensureColumn(db3, "session_runtime_state", "last_compaction_json", "ALTER TABLE session_runtime_state ADD COLUMN last_compaction_json TEXT");
     ensureColumn(db3, "session_runtime_state", "worktree_path", "ALTER TABLE session_runtime_state ADD COLUMN worktree_path TEXT");
     ensureColumn(db3, "session_runtime_state", "worktree_branch", "ALTER TABLE session_runtime_state ADD COLUMN worktree_branch TEXT");
     ensureColumn(db3, "session_runtime_state", "project_root", "ALTER TABLE session_runtime_state ADD COLUMN project_root TEXT");
     ensureColumn(db3, "session_runtime_state", "base_branch", "ALTER TABLE session_runtime_state ADD COLUMN base_branch TEXT");
     ensureColumn(db3, "session_runtime_state", "use_worktree", "ALTER TABLE session_runtime_state ADD COLUMN use_worktree INTEGER NOT NULL DEFAULT 1");
+    ensureColumn(db3, "session_runtime_state", "execution_mode", "ALTER TABLE session_runtime_state ADD COLUMN execution_mode TEXT DEFAULT 'shared_cwd'");
   }
   ensureTable(db3, "session_runtime_events", `
     CREATE TABLE IF NOT EXISTS session_runtime_events (
@@ -39223,9 +39443,67 @@ function applySchemaUpdates(db3) {
         INSERT OR IGNORE INTO model_pricing
         (provider, model_pattern, display_name, input_cost_per_mtok, output_cost_per_mtok, cache_read_cost_per_mtok, cache_write_cost_per_mtok, effective_from, notes)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run("claude", "claude-opus-4-6-%", "Claude Opus 4.6", 15, 75, 1.5, 18.75, "2025-01-01", "Most capable");
+      `).run("claude", "claude-opus-4-6%", "Claude Opus 4.6", 5, 25, 0.5, 6.25, "2025-01-01", "Most capable");
     }
   }
+}
+function extractToolPreview(input, keys) {
+  if (!input || typeof input !== "object" || !keys) return null;
+  const candidates = Array.isArray(keys) ? keys : [keys];
+  for (const key of candidates) {
+    if (typeof input[key] === "string") {
+      return input[key].slice(0, 300);
+    }
+  }
+  return null;
+}
+function extractPatchFilePath(patchText) {
+  if (typeof patchText !== "string" || patchText.length === 0) return null;
+  const moved = patchText.match(/^\*\*\* Move to: (.+)$/m);
+  if (moved?.[1]) return moved[1].trim();
+  const fileMatch = patchText.match(/^\*\*\* (?:Update|Add|Delete) File: (.+)$/m);
+  return fileMatch?.[1]?.trim() || null;
+}
+function extractToolBackfillData(provider, toolName, input, filePathKeys, inputPreviewKeys) {
+  if (!input || typeof input !== "object") {
+    return { filePath: null, inputPreview: null };
+  }
+  const filePathKey = filePathKeys[provider]?.[toolName];
+  let filePath = filePathKey && typeof input[filePathKey] === "string" ? input[filePathKey] : null;
+  if (!filePath && provider === "codex" && toolName === "apply_patch") {
+    filePath = extractPatchFilePath(input.apply_patch);
+  }
+  const inputPreview = extractToolPreview(input, inputPreviewKeys[provider]?.[toolName]);
+  return { filePath, inputPreview };
+}
+function escapeRegex(text) {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function decodeJsonStringFragment(fragment) {
+  if (typeof fragment !== "string") return null;
+  return fragment.replace(/\\u([0-9a-fA-F]{4})/g, (_2, hex) => String.fromCharCode(Number.parseInt(hex, 16))).replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, "	").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+}
+function extractToolPreviewFromBlob(blob, keys) {
+  if (typeof blob !== "string" || !keys) return null;
+  const candidates = Array.isArray(keys) ? keys : [keys];
+  for (const key of candidates) {
+    const pattern = new RegExp(`"${escapeRegex(key)}"\\s*:\\s*"((?:\\\\.|[^"])*)`);
+    const match = blob.match(pattern);
+    if (!match?.[1]) continue;
+    const decoded = decodeJsonStringFragment(match[1]);
+    if (decoded) return decoded.slice(0, 300);
+  }
+  return null;
+}
+function extractToolBackfillDataFromBlob(provider, toolName, blob, filePathKeys, inputPreviewKeys) {
+  const filePathKey = filePathKeys[provider]?.[toolName];
+  let filePath = extractToolPreviewFromBlob(blob, filePathKey);
+  if (!filePath && provider === "codex" && toolName === "apply_patch") {
+    const patchText = extractToolPreviewFromBlob(blob, "apply_patch");
+    filePath = extractPatchFilePath(patchText);
+  }
+  const inputPreview = extractToolPreviewFromBlob(blob, inputPreviewKeys[provider]?.[toolName]);
+  return { filePath, inputPreview };
 }
 function runMigrations(db3, from, to) {
   console.log(`Migrating database from v${from} to v${to}...`);
@@ -39468,6 +39746,10 @@ function runMigrations(db3, from, to) {
             turn_count INTEGER NOT NULL DEFAULT 0,
             cost_total REAL NOT NULL DEFAULT 0,
             tokens_total INTEGER NOT NULL DEFAULT 0,
+            compaction_count INTEGER NOT NULL DEFAULT 0,
+            tokens_saved_total INTEGER NOT NULL DEFAULT 0,
+            last_compaction_at TEXT,
+            last_compaction_json TEXT,
             unseen_completion INTEGER NOT NULL DEFAULT 0,
             last_error TEXT
           );
@@ -39497,6 +39779,574 @@ function runMigrations(db3, from, to) {
     10: (db4) => {
       applySchemaUpdates(db4);
       db4.exec(`UPDATE sessions SET project_path = cwd WHERE project_path IS NULL AND cwd IS NOT NULL`);
+    },
+    // Version 11: Add context_tokens to turns and backfill approximate values
+    11: (db4) => {
+      applySchemaUpdates(db4);
+      db4.exec(`
+        UPDATE turns
+        SET context_tokens = input_tokens
+        WHERE context_tokens IS NULL
+          AND input_tokens IS NOT NULL
+          AND input_tokens > 0
+      `);
+    },
+    // Version 12: Fix model pricing (correct cache rates) and recompute all costs
+    12: (db4) => {
+      const updates = [
+        ["claude-opus-4-6%", 5, 25, 0.5, 6.25],
+        ["claude-opus-4-5-%", 5, 25, 0.5, 6.25],
+        ["claude-sonnet-4-5-%", 3, 15, 0.3, 3.75],
+        ["claude-haiku-4-5-%", 1, 5, 0.1, 1.25],
+        // 3.5 models — correct cache rates
+        ["claude-3-5-haiku-%", 0.8, 4, 0.08, 1],
+        ["claude-3-5-sonnet-%", 3, 15, 0.3, 3.75]
+      ];
+      const updateStmt = db4.prepare(`
+        UPDATE model_pricing
+        SET input_cost_per_mtok = ?, output_cost_per_mtok = ?,
+            cache_read_cost_per_mtok = ?, cache_write_cost_per_mtok = ?
+        WHERE model_pattern = ?
+      `);
+      for (const [pattern, inp, out, cr2, cw] of updates) {
+        updateStmt.run(inp, out, cr2, cw, pattern);
+      }
+      const pricingRows = db4.prepare("SELECT model_pattern, provider, input_cost_per_mtok, output_cost_per_mtok, cache_read_cost_per_mtok, cache_write_cost_per_mtok FROM model_pricing").all();
+      const updateCost = db4.prepare("UPDATE turns SET cost = ? WHERE id = ?");
+      const allTurns = db4.prepare("SELECT id, provider, model, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens FROM turns WHERE (input_tokens > 0 OR output_tokens > 0) AND model IS NOT NULL").all();
+      for (const turn of allTurns) {
+        const entry = pricingRows.find((p2) => {
+          if (p2.provider !== turn.provider) return false;
+          const re2 = new RegExp("^" + p2.model_pattern.replace(/%/g, ".*").replace(/_/g, ".") + "$");
+          return re2.test(turn.model);
+        });
+        if (!entry) continue;
+        const baseInput = Math.max((turn.input_tokens || 0) - (turn.cache_read_tokens || 0) - (turn.cache_creation_tokens || 0), 0);
+        const cost = baseInput * entry.input_cost_per_mtok / 1e6 + (turn.output_tokens || 0) * entry.output_cost_per_mtok / 1e6 + (turn.cache_read_tokens || 0) * entry.cache_read_cost_per_mtok / 1e6 + (turn.cache_creation_tokens || 0) * entry.cache_write_cost_per_mtok / 1e6;
+        updateCost.run(cost, turn.id);
+      }
+      db4.exec(`
+        UPDATE sessions SET
+          total_cost = COALESCE((SELECT SUM(cost) FROM turns WHERE turns.session_id = sessions.id), 0),
+          total_input_tokens = COALESCE((SELECT SUM(input_tokens) FROM turns WHERE turns.session_id = sessions.id), 0),
+          total_output_tokens = COALESCE((SELECT SUM(output_tokens) FROM turns WHERE turns.session_id = sessions.id), 0)
+      `);
+    },
+    // Version 13: Fix opus-4-6 pricing pattern (was claude-opus-4-6-%, now claude-opus-4-6%)
+    // The old pattern required a trailing dash, so "claude-opus-4-6" fell through to
+    // "claude-opus-4-%" at $15/mtok instead of the correct $5/mtok
+    13: (db4) => {
+      db4.prepare(`
+        UPDATE model_pricing SET model_pattern = 'claude-opus-4-6%'
+        WHERE model_pattern = 'claude-opus-4-6-%'
+      `).run();
+      const pricingRows = db4.prepare(
+        "SELECT model_pattern, provider, input_cost_per_mtok, output_cost_per_mtok, cache_read_cost_per_mtok, cache_write_cost_per_mtok FROM model_pricing ORDER BY LENGTH(model_pattern) DESC"
+      ).all();
+      const updateCost = db4.prepare("UPDATE turns SET cost = ? WHERE id = ?");
+      const allTurns = db4.prepare(
+        "SELECT id, provider, model, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens FROM turns WHERE (input_tokens > 0 OR output_tokens > 0) AND model IS NOT NULL"
+      ).all();
+      for (const turn of allTurns) {
+        const entry = pricingRows.find((p2) => {
+          if (p2.provider !== null && p2.provider !== turn.provider) return false;
+          const re2 = new RegExp("^" + p2.model_pattern.replace(/%/g, ".*").replace(/_/g, ".") + "$");
+          return re2.test(turn.model);
+        });
+        if (!entry) continue;
+        const baseInput = Math.max((turn.input_tokens || 0) - (turn.cache_read_tokens || 0) - (turn.cache_creation_tokens || 0), 0);
+        const cost = baseInput * entry.input_cost_per_mtok / 1e6 + (turn.output_tokens || 0) * entry.output_cost_per_mtok / 1e6 + (turn.cache_read_tokens || 0) * entry.cache_read_cost_per_mtok / 1e6 + (turn.cache_creation_tokens || 0) * entry.cache_write_cost_per_mtok / 1e6;
+        updateCost.run(cost, turn.id);
+      }
+      db4.exec(`
+        UPDATE sessions SET
+          total_cost = COALESCE((SELECT SUM(cost) FROM turns WHERE turns.session_id = sessions.id), 0),
+          total_input_tokens = COALESCE((SELECT SUM(input_tokens) FROM turns WHERE turns.session_id = sessions.id), 0),
+          total_output_tokens = COALESCE((SELECT SUM(output_tokens) FROM turns WHERE turns.session_id = sessions.id), 0)
+      `);
+    },
+    // Version 14: Add tool_calls table, backfill from turns.tool_results JSON
+    14: (db4) => {
+      db4.exec(`
+        CREATE TABLE IF NOT EXISTS tool_calls (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          turn_id TEXT NOT NULL,
+          provider TEXT NOT NULL,
+          tool_name TEXT NOT NULL,
+          canonical_name TEXT,
+          file_path TEXT,
+          success INTEGER NOT NULL,
+          error_message TEXT,
+          duration_ms INTEGER,
+          input_preview TEXT,
+          output_preview TEXT,
+          ts_ms INTEGER NOT NULL,
+
+          FOREIGN KEY (session_id) REFERENCES sessions(id),
+          FOREIGN KEY (turn_id) REFERENCES turns(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_tool_calls_session ON tool_calls(session_id);
+        CREATE INDEX IF NOT EXISTS idx_tool_calls_turn ON tool_calls(turn_id);
+        CREATE INDEX IF NOT EXISTS idx_tool_calls_name ON tool_calls(tool_name);
+        CREATE INDEX IF NOT EXISTS idx_tool_calls_canonical ON tool_calls(canonical_name);
+        CREATE INDEX IF NOT EXISTS idx_tool_calls_file ON tool_calls(file_path) WHERE file_path IS NOT NULL;
+      `);
+      const CLAUDE_CANONICAL = {
+        Read: "file_read",
+        Edit: "file_edit",
+        Write: "file_write",
+        NotebookEdit: "notebook_edit",
+        Grep: "search_content",
+        Glob: "search_files",
+        Bash: "shell",
+        WebFetch: "web_fetch",
+        WebSearch: "web_search",
+        LSP: "lsp",
+        Task: "agent_spawn",
+        AskUserQuestion: "ask_user"
+      };
+      const rows = db4.prepare(
+        "SELECT id, session_id, provider, tool_results, ts_ms FROM turns WHERE tool_results IS NOT NULL"
+      ).all();
+      const insert = db4.prepare(`
+        INSERT OR IGNORE INTO tool_calls (id, session_id, turn_id, provider, tool_name, canonical_name, file_path, success, error_message, input_preview, output_preview, ts_ms)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      let backfilled = 0;
+      for (const row of rows) {
+        let calls;
+        try {
+          calls = JSON.parse(row.tool_results);
+        } catch {
+          continue;
+        }
+        if (!Array.isArray(calls)) continue;
+        for (const tc of calls) {
+          if (!tc.id || !tc.name) continue;
+          const success = tc.status === "error" ? 0 : 1;
+          const canonical = row.provider === "claude" ? CLAUDE_CANONICAL[tc.name] || "mcp" : null;
+          const resultStr = typeof tc.result === "string" ? tc.result : null;
+          const errorMsg = !success && resultStr ? resultStr.slice(0, 500) : null;
+          const outputPreview = success && resultStr ? resultStr.slice(0, 300) : null;
+          insert.run(
+            tc.id,
+            row.session_id,
+            row.id,
+            row.provider,
+            tc.name,
+            canonical,
+            null,
+            success,
+            errorMsg,
+            null,
+            outputPreview,
+            row.ts_ms || 0
+          );
+          backfilled++;
+        }
+      }
+      console.log(`    Backfilled ${backfilled} tool_calls from existing turns`);
+    },
+    // Version 15: Add run_groups + sessions.run_group_id for parallel orchestration
+    15: (db4) => {
+      applySchemaUpdates(db4);
+    },
+    // Version 16: Add orchestration_plans table for natural language decomposition
+    16: (db4) => {
+      applySchemaUpdates(db4);
+    },
+    // Version 17: Backfill tool_calls file_path and input_preview from turns.tool_results JSON
+    17: (db4) => {
+      const FILE_PATH_KEYS2 = {
+        claude: {
+          Read: "file_path",
+          Edit: "file_path",
+          Write: "file_path",
+          NotebookEdit: "notebook_path",
+          Grep: "path",
+          LSP: "filePath",
+          Glob: "path"
+        },
+        codex: {
+          file_read: "path",
+          file_edit: "path",
+          file_write: "path"
+        },
+        gemini: {
+          read_file: "target_file",
+          edit_file: "target_file",
+          create_file: "target_file"
+        }
+      };
+      const INPUT_PREVIEW_KEYS2 = {
+        claude: {
+          Read: "file_path",
+          Edit: "file_path",
+          Write: "file_path",
+          NotebookEdit: "notebook_path",
+          Bash: "command",
+          Grep: "pattern",
+          Glob: "pattern",
+          WebFetch: "url",
+          WebSearch: "query",
+          Task: "description"
+        },
+        codex: {
+          file_read: "path",
+          file_edit: "path",
+          file_write: "path",
+          apply_patch: "apply_patch",
+          shell: "command",
+          shell_command: "command",
+          exec_command: "cmd",
+          write_stdin: "chars",
+          grep: "pattern",
+          glob: "pattern"
+        },
+        gemini: {
+          read_file: "target_file",
+          edit_file: "target_file",
+          create_file: "target_file",
+          run_terminal_command: "command",
+          search_files: "pattern"
+        }
+      };
+      const rows = db4.prepare(`
+        SELECT id, provider, tool_results FROM turns WHERE tool_results IS NOT NULL
+      `).all();
+      const update = db4.prepare(`
+        UPDATE tool_calls
+        SET file_path = COALESCE(file_path, ?), input_preview = COALESCE(input_preview, ?)
+        WHERE id = ?
+          AND (file_path IS NULL OR input_preview IS NULL)
+      `);
+      let updated = 0;
+      let total = 0;
+      const txn = db4.transaction(() => {
+        for (const row of rows) {
+          let calls;
+          try {
+            calls = JSON.parse(row.tool_results);
+          } catch {
+            continue;
+          }
+          if (!Array.isArray(calls)) continue;
+          for (const tc of calls) {
+            if (!tc.id || !tc.name) continue;
+            total++;
+            const { filePath, inputPreview } = extractToolBackfillData(
+              row.provider,
+              tc.name,
+              tc.input,
+              FILE_PATH_KEYS2,
+              INPUT_PREVIEW_KEYS2
+            );
+            if (filePath || inputPreview) {
+              const result = update.run(filePath, inputPreview, tc.id);
+              if (result.changes > 0) updated++;
+            }
+          }
+          if (total > 0 && total % 1e4 === 0) {
+            console.log(`    Backfill progress: ${total} tool_calls processed, ${updated} updated`);
+          }
+        }
+      });
+      txn();
+      console.log(`    Backfilled ${updated}/${total} tool_calls with file_path/input_preview`);
+    },
+    // Version 18: Normalize JSON blob input_preview values into extracted command/pattern strings
+    18: (db4) => {
+      const INPUT_PREVIEW_KEYS2 = {
+        claude: {
+          Read: "file_path",
+          Edit: "file_path",
+          Write: "file_path",
+          NotebookEdit: "notebook_path",
+          Bash: "command",
+          Grep: "pattern",
+          Glob: "pattern",
+          WebFetch: "url",
+          WebSearch: "query",
+          Task: "description"
+        },
+        codex: {
+          file_read: "path",
+          file_edit: "path",
+          file_write: "path",
+          apply_patch: "apply_patch",
+          shell: ["command", "cmd"],
+          shell_command: ["command", "cmd"],
+          exec_command: ["cmd", "command"],
+          write_stdin: "chars",
+          grep: "pattern",
+          glob: "pattern"
+        },
+        gemini: {
+          read_file: "target_file",
+          edit_file: "target_file",
+          create_file: "target_file",
+          run_terminal_command: "command",
+          search_files: "pattern"
+        }
+      };
+      const rows = db4.prepare(`
+        SELECT provider, tool_results
+        FROM turns
+        WHERE tool_results IS NOT NULL
+      `).all();
+      const update = db4.prepare(`
+        UPDATE tool_calls
+        SET input_preview = ?
+        WHERE id = ?
+          AND (? IS NOT NULL)
+          AND (input_preview IS NULL OR input_preview LIKE '{%')
+      `);
+      let normalized = 0;
+      let total = 0;
+      const txn = db4.transaction(() => {
+        for (const row of rows) {
+          let calls;
+          try {
+            calls = JSON.parse(row.tool_results);
+          } catch {
+            continue;
+          }
+          if (!Array.isArray(calls)) continue;
+          for (const tc of calls) {
+            if (!tc?.id || !tc?.name) continue;
+            total++;
+            const preview = extractToolPreview(tc.input, INPUT_PREVIEW_KEYS2[row.provider]?.[tc.name]);
+            if (!preview) continue;
+            const result = update.run(preview, tc.id, preview);
+            if (result.changes > 0) normalized++;
+          }
+        }
+      });
+      txn();
+      console.log(`    Normalized ${normalized}/${total} tool_call input_preview values`);
+    },
+    // Version 19: Parse existing JSON blob input_preview values into normalized previews/file paths
+    19: (db4) => {
+      const FILE_PATH_KEYS2 = {
+        claude: {
+          Read: "file_path",
+          Edit: "file_path",
+          Write: "file_path",
+          NotebookEdit: "notebook_path",
+          Grep: "path",
+          LSP: "filePath",
+          Glob: "path"
+        },
+        codex: {
+          file_read: "path",
+          file_edit: "path",
+          file_write: "path"
+        },
+        gemini: {
+          read_file: "target_file",
+          edit_file: "target_file",
+          create_file: "target_file"
+        }
+      };
+      const INPUT_PREVIEW_KEYS2 = {
+        claude: {
+          Read: "file_path",
+          Edit: "file_path",
+          Write: "file_path",
+          NotebookEdit: "notebook_path",
+          Bash: "command",
+          Grep: "pattern",
+          Glob: "pattern",
+          WebFetch: "url",
+          WebSearch: "query",
+          Task: "description"
+        },
+        codex: {
+          file_read: "path",
+          file_edit: "path",
+          file_write: "path",
+          apply_patch: "apply_patch",
+          shell: ["command", "cmd"],
+          shell_command: ["command", "cmd"],
+          exec_command: ["cmd", "command"],
+          write_stdin: "chars",
+          grep: "pattern",
+          glob: "pattern"
+        },
+        gemini: {
+          read_file: "target_file",
+          edit_file: "target_file",
+          create_file: "target_file",
+          run_terminal_command: "command",
+          search_files: "pattern"
+        }
+      };
+      const rows = db4.prepare(`
+        SELECT id, provider, tool_name, file_path, input_preview
+        FROM tool_calls
+        WHERE input_preview LIKE '{%' OR input_preview LIKE '[%'
+      `).all();
+      const update = db4.prepare(`
+        UPDATE tool_calls
+        SET
+          file_path = COALESCE(file_path, ?),
+          input_preview = CASE
+            WHEN (input_preview LIKE '{%' OR input_preview LIKE '[%') AND ? IS NOT NULL THEN ?
+            ELSE input_preview
+          END
+        WHERE id = ?
+          AND (
+            (file_path IS NULL AND ? IS NOT NULL)
+            OR ((input_preview LIKE '{%' OR input_preview LIKE '[%') AND ? IS NOT NULL AND input_preview != ?)
+          )
+      `);
+      let normalized = 0;
+      let total = 0;
+      const txn = db4.transaction(() => {
+        for (const row of rows) {
+          total++;
+          let parsed;
+          try {
+            parsed = JSON.parse(row.input_preview);
+          } catch {
+            continue;
+          }
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+          const { filePath, inputPreview } = extractToolBackfillData(
+            row.provider,
+            row.tool_name,
+            parsed,
+            FILE_PATH_KEYS2,
+            INPUT_PREVIEW_KEYS2
+          );
+          if (!filePath && !inputPreview) continue;
+          const result = update.run(
+            filePath,
+            inputPreview,
+            inputPreview,
+            row.id,
+            filePath,
+            inputPreview,
+            inputPreview
+          );
+          if (result.changes > 0) normalized++;
+        }
+      });
+      txn();
+      console.log(`    Normalized ${normalized}/${total} raw JSON tool_call previews`);
+    },
+    // Version 20: Recover normalized previews/file paths from truncated JSON preview blobs
+    20: (db4) => {
+      const FILE_PATH_KEYS2 = {
+        claude: {
+          Read: "file_path",
+          Edit: "file_path",
+          Write: "file_path",
+          NotebookEdit: "notebook_path",
+          Grep: "path",
+          LSP: "filePath",
+          Glob: "path"
+        },
+        codex: {
+          file_read: "path",
+          file_edit: "path",
+          file_write: "path"
+        },
+        gemini: {
+          read_file: "target_file",
+          edit_file: "target_file",
+          create_file: "target_file"
+        }
+      };
+      const INPUT_PREVIEW_KEYS2 = {
+        claude: {
+          Read: "file_path",
+          Edit: "file_path",
+          Write: "file_path",
+          NotebookEdit: "notebook_path",
+          Bash: "command",
+          Grep: "pattern",
+          Glob: "pattern",
+          WebFetch: "url",
+          WebSearch: "query",
+          Task: "description"
+        },
+        codex: {
+          file_read: "path",
+          file_edit: "path",
+          file_write: "path",
+          apply_patch: "apply_patch",
+          shell: ["command", "cmd"],
+          shell_command: ["command", "cmd"],
+          exec_command: ["cmd", "command"],
+          write_stdin: "chars",
+          grep: "pattern",
+          glob: "pattern"
+        },
+        gemini: {
+          read_file: "target_file",
+          edit_file: "target_file",
+          create_file: "target_file",
+          run_terminal_command: "command",
+          search_files: "pattern"
+        }
+      };
+      const rows = db4.prepare(`
+        SELECT id, provider, tool_name, input_preview
+        FROM tool_calls
+        WHERE input_preview LIKE '{%' OR input_preview LIKE '[%'
+      `).all();
+      const update = db4.prepare(`
+        UPDATE tool_calls
+        SET
+          file_path = COALESCE(file_path, ?),
+          input_preview = CASE
+            WHEN (input_preview LIKE '{%' OR input_preview LIKE '[%') AND ? IS NOT NULL THEN ?
+            ELSE input_preview
+          END
+        WHERE id = ?
+          AND (
+            (file_path IS NULL AND ? IS NOT NULL)
+            OR ((input_preview LIKE '{%' OR input_preview LIKE '[%') AND ? IS NOT NULL AND input_preview != ?)
+          )
+      `);
+      let normalized = 0;
+      let total = 0;
+      const txn = db4.transaction(() => {
+        for (const row of rows) {
+          total++;
+          const { filePath, inputPreview } = extractToolBackfillDataFromBlob(
+            row.provider,
+            row.tool_name,
+            row.input_preview,
+            FILE_PATH_KEYS2,
+            INPUT_PREVIEW_KEYS2
+          );
+          if (!filePath && !inputPreview) continue;
+          const result = update.run(
+            filePath,
+            inputPreview,
+            inputPreview,
+            row.id,
+            filePath,
+            inputPreview,
+            inputPreview
+          );
+          if (result.changes > 0) normalized++;
+        }
+      });
+      txn();
+      console.log(`    Recovered ${normalized}/${total} truncated raw JSON tool_call previews`);
+    },
+    21: (db4) => {
+      if (tableExists(db4, "sessions")) {
+        ensureColumn(db4, "sessions", "description", "ALTER TABLE sessions ADD COLUMN description TEXT");
+        ensureColumn(db4, "sessions", "enriched_at", "ALTER TABLE sessions ADD COLUMN enriched_at TEXT");
+      }
+    },
+    22: (db4) => {
+      applySchemaUpdates(db4);
     }
   };
   for (let v2 = from + 1; v2 <= to; v2++) {
@@ -39520,6 +40370,62 @@ function tableExists(db3, table) {
     SELECT name FROM sqlite_master WHERE type='table' AND name=?
   `).get(table);
   return !!result;
+}
+function _createSessionsFtsTable(db3) {
+  db3.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS sessions_fts USING fts5(
+      session_id UNINDEXED,
+      title,
+      description,
+      snippet
+    );
+  `);
+}
+function _refreshSessionsFts(db3) {
+  db3.exec("DELETE FROM sessions_fts");
+  db3.exec(`
+    INSERT INTO sessions_fts(session_id, title, description, snippet)
+    SELECT
+      id,
+      COALESCE(title, ''),
+      COALESCE(description, ''),
+      COALESCE(snippet, '')
+    FROM sessions
+    WHERE status != 'deleted'
+  `);
+}
+function ensureSessionsFtsHealthy(db3) {
+  try {
+    db3.exec("DROP TRIGGER IF EXISTS sessions_fts_ai");
+  } catch {
+  }
+  try {
+    db3.exec("DROP TRIGGER IF EXISTS sessions_fts_ad");
+  } catch {
+  }
+  try {
+    db3.exec("DROP TRIGGER IF EXISTS sessions_fts_au");
+  } catch {
+  }
+  try {
+    let recreate = !tableExists(db3, "sessions_fts");
+    if (!recreate) {
+      const cols = db3.pragma("table_info(sessions_fts)");
+      const hasSessionId = cols.some((col) => col.name === "session_id");
+      const hasDescription = cols.some((col) => col.name === "description");
+      if (!hasSessionId || !hasDescription) recreate = true;
+    }
+    if (recreate) {
+      try {
+        db3.exec("DROP TABLE IF EXISTS sessions_fts");
+      } catch {
+      }
+    }
+    _createSessionsFtsTable(db3);
+    _refreshSessionsFts(db3);
+  } catch (err) {
+    console.warn(`[schema] sessions_fts setup failed: ${String(err?.message || err || "")}`);
+  }
 }
 function columnExists(db3, table, column) {
   try {
@@ -39589,10 +40495,12 @@ function seedModelPricing(db3) {
   `);
   const pricingData = [
     // Claude models (Anthropic)
-    ["claude", "claude-opus-4-6-%", "Claude Opus 4.6", 15, 75, 1.5, 18.75, "2025-01-01", "Most capable"],
-    ["claude", "claude-opus-4-5-%", "Claude Opus 4.5", 15, 75, 1.5, 18.75, "2025-01-01", "Most capable"],
+    // Pricing from https://platform.claude.com/docs/en/about-claude/pricing
+    // Cache read = 0.1x input, Cache write (5min) = 1.25x input
+    ["claude", "claude-opus-4-6%", "Claude Opus 4.6", 5, 25, 0.5, 6.25, "2025-01-01", "Most capable"],
+    ["claude", "claude-opus-4-5-%", "Claude Opus 4.5", 5, 25, 0.5, 6.25, "2025-01-01", "Most capable"],
     ["claude", "claude-sonnet-4-5-%", "Claude Sonnet 4.5", 3, 15, 0.3, 3.75, "2025-01-01", "Best balance"],
-    ["claude", "claude-haiku-4-5-%", "Claude Haiku 4.5", 0.8, 4, 0.08, 1, "2025-01-01", "Fastest"],
+    ["claude", "claude-haiku-4-5-%", "Claude Haiku 4.5", 1, 5, 0.1, 1.25, "2025-01-01", "Fastest"],
     ["claude", "claude-opus-4-1-%", "Claude Opus 4.1", 15, 75, 1.5, 18.75, "2025-01-01", "Previous gen"],
     ["claude", "claude-3-5-haiku-%", "Claude 3.5 Haiku", 0.8, 4, 0.08, 1, "2024-10-01", "Legacy"],
     ["claude", "claude-3-5-sonnet-%", "Claude 3.5 Sonnet", 3, 15, 0.3, 3.75, "2024-06-01", "Legacy"],
@@ -40459,8 +41367,8 @@ async function ensureEmbeddingProvider(preferredProvider = "auto", options = {})
     });
     console.log("\r  \u2713 Ollama installed     ");
     console.log("  Starting ollama serve...");
-    const { spawn: spawn10 } = await import("child_process");
-    const server = spawn10("ollama", ["serve"], {
+    const { spawn: spawn11 } = await import("child_process");
+    const server = spawn11("ollama", ["serve"], {
       detached: true,
       stdio: "ignore",
       env: { ...process.env, HOME: process.env.HOME }
@@ -40468,8 +41376,8 @@ async function ensureEmbeddingProvider(preferredProvider = "auto", options = {})
     server.unref();
     await new Promise((r2) => setTimeout(r2, 2e3));
     console.log("  Pulling nomic-embed-text model (274MB)...");
-    const { execSync: execSync21 } = await import("child_process");
-    execSync21("ollama pull nomic-embed-text", { stdio: "inherit" });
+    const { execSync: execSync23 } = await import("child_process");
+    execSync23("ollama pull nomic-embed-text", { stdio: "inherit" });
     console.log("  \u2713 Model ready\n");
     return await getProvider2("ollama");
   } catch (err) {
@@ -40525,45 +41433,50 @@ async function cmdSession(args, flags) {
 rudi session - Manage RUDI sessions
 
 COMMANDS
-  list [--provider] [--project] [--limit]   List sessions with filters
+  list [options]                             List sessions with filters
   show <id>                                  Show session details
   rename <id> <title>                        Rename a session
   delete <id> [--force]                      Delete a session
   tag <id> <tags>                            Add tags (comma-separated)
+  tag <id> --list                            List tags on a session
+  tag <id> --remove <tag>                    Remove a tag
   move <id> --project <name>                 Move session to project
   export <id> [-o file]                      Export session to JSON
 
-SEMANTIC SEARCH
+SEARCH
+  search <query> [--scope titles]           Search turns (default) or titles
+  search <query> --semantic                  Semantic search (requires embeddings)
   setup                                      Check/setup embedding providers
-  search <query> [--semantic] [--limit]     Search sessions (FTS or semantic)
   index [--embeddings] [--provider X]        Index sessions for semantic search
   similar <id> [--limit]                     Find similar sessions
 
-ORGANIZATION (batch operations)
+ORGANIZATION
   organize [--dry-run] [--out plan.json]     Auto-organize sessions into projects
 
-OPTIONS
+LIST OPTIONS
   --provider <name>     Filter by provider (claude, codex, gemini)
   --project <name>      Filter by project name
-  --limit <n>           Limit results (default: 10)
+  --tag <name>          Filter by tag
+  --since <date>        Sessions active since date (ISO or YYYY-MM-DD)
+  --until <date>        Sessions active until date
+  --days <n>            Sessions active in last N days
+  --limit <n>           Limit results (default: 20)
   --format <fmt>        Output format (table, json, jsonl)
-  --force               Skip confirmation prompts
+
+SEARCH OPTIONS
+  --scope <s>           Search scope: turns (default) or titles
   --semantic            Use semantic search (requires embeddings)
-  -o, --output <file>   Output file for export
+  --limit <n>           Limit results (default: 10)
 
 EXAMPLES
-  rudi session list --provider claude --limit 10
-  rudi session show 7bfa7be7-337f-42d3-90ac-3c8e48b921cb
-  rudi session rename 7bfa7be7... "New Title"
-  rudi session delete 7bfa7be7... --force
+  rudi session list --days 7
+  rudi session list --since 2026-02-01 --until 2026-02-15
+  rudi session list --provider claude --tag auth
+  rudi session search "authentication bugs"
+  rudi session search "auth refactor" --scope titles
   rudi session tag 7bfa7be7... "bug,auth,urgent"
-  rudi session move 7bfa7be7... --project resonance
-  rudi session export 7bfa7be7... -o session.json
-
-  # Semantic search
-  rudi session search "authentication bugs" --semantic
-  rudi session index --embeddings
-  rudi session similar 7bfa7be7...
+  rudi session tag 7bfa7be7... --remove bug
+  rudi session search "auth" --semantic
 `);
   }
 }
@@ -40577,7 +41490,11 @@ function sessionList(flags) {
   const limit2 = flags.limit || 20;
   const provider = flags.provider;
   const projectName = flags.project;
+  const tag = flags.tag;
   const format = flags.format || "table";
+  const since = flags.since;
+  const until = flags.until;
+  const days = flags.days;
   let query = `
     SELECT
       s.id,
@@ -40602,6 +41519,23 @@ function sessionList(flags) {
   if (projectName) {
     query += ` AND p.name LIKE ?`;
     params.push(`%${projectName}%`);
+  }
+  if (tag) {
+    query += ` AND s.id IN (SELECT st.session_id FROM session_tags st JOIN tags t ON st.tag_id = t.id WHERE t.name = ?)`;
+    params.push(tag);
+  }
+  if (days) {
+    query += ` AND s.last_active_at >= datetime('now', ?)`;
+    params.push(`-${parseInt(days, 10)} days`);
+  } else {
+    if (since) {
+      query += ` AND s.last_active_at >= ?`;
+      params.push(since);
+    }
+    if (until) {
+      query += ` AND s.last_active_at <= ?`;
+      params.push(until);
+    }
   }
   query += ` ORDER BY s.last_active_at DESC LIMIT ?`;
   params.push(limit2);
@@ -40692,11 +41626,12 @@ function sessionRename(args, flags) {
     return;
   }
   const db3 = getDb();
+  const now = (/* @__PURE__ */ new Date()).toISOString();
   const result = db3.prepare(`
     UPDATE sessions
-    SET title = ?, title_override = ?
+    SET title = ?, title_override = ?, title_source = 'user', title_generated_at = ?
     WHERE id = ? OR provider_session_id = ?
-  `).run(newTitle, newTitle, sessionId, sessionId);
+  `).run(newTitle, newTitle, now, sessionId, sessionId);
   if (result.changes === 0) {
     console.log(`Session not found: ${sessionId}`);
     return;
@@ -40740,8 +41675,78 @@ Use --force to confirm deletion`);
   console.log(`\u2713 Deleted session: ${session.title || session.id}`);
 }
 function sessionTag(args, flags) {
-  console.log("Session tagging not yet implemented");
-  console.log("Coming soon: Tag sessions for better organization");
+  if (!isDatabaseInitialized()) {
+    console.log("Database not initialized.");
+    return;
+  }
+  const sessionId = args[0];
+  if (!sessionId) {
+    console.log("Error: Session ID required");
+    console.log("Usage: rudi session tag <id> <tags>         Add tags (comma-separated)");
+    console.log("       rudi session tag <id> --remove <tag>  Remove a tag");
+    console.log("       rudi session tag <id> --list          List tags");
+    return;
+  }
+  const db3 = getDb();
+  const session = db3.prepare(`
+    SELECT id, title FROM sessions
+    WHERE id = ? OR provider_session_id = ?
+  `).get(sessionId, sessionId);
+  if (!session) {
+    console.log(`Session not found: ${sessionId}`);
+    return;
+  }
+  if (flags.list || !args[1] && !flags.remove) {
+    const tags = db3.prepare(`
+      SELECT t.name FROM tags t
+      JOIN session_tags st ON st.tag_id = t.id
+      WHERE st.session_id = ?
+      ORDER BY t.name
+    `).all(session.id);
+    if (tags.length === 0) {
+      console.log(`No tags on session: ${session.title || session.id.substring(0, 8)}`);
+    } else {
+      console.log(`Tags for "${session.title || session.id.substring(0, 8)}":`);
+      console.log(`  ${tags.map((t2) => t2.name).join(", ")}`);
+    }
+    return;
+  }
+  if (flags.remove) {
+    const tagName = flags.remove;
+    const tag = db3.prepare("SELECT id FROM tags WHERE name = ?").get(tagName);
+    if (!tag) {
+      console.log(`Tag not found: ${tagName}`);
+      return;
+    }
+    const result = db3.prepare("DELETE FROM session_tags WHERE session_id = ? AND tag_id = ?").run(session.id, tag.id);
+    if (result.changes > 0) {
+      console.log(`Removed tag "${tagName}" from session`);
+    } else {
+      console.log(`Session didn't have tag "${tagName}"`);
+    }
+    return;
+  }
+  const tagNames = args.slice(1).join(" ").split(",").map((t2) => t2.trim()).filter(Boolean);
+  if (tagNames.length === 0) {
+    console.log("Error: Tag name(s) required");
+    console.log('Usage: rudi session tag <id> "bug,auth,urgent"');
+    return;
+  }
+  const insertTag = db3.prepare("INSERT OR IGNORE INTO tags (name) VALUES (?)");
+  const getTag = db3.prepare("SELECT id FROM tags WHERE name = ?");
+  const linkTag = db3.prepare("INSERT OR IGNORE INTO session_tags (session_id, tag_id) VALUES (?, ?)");
+  const added = [];
+  for (const name of tagNames) {
+    insertTag.run(name);
+    const tag = getTag.get(name);
+    const result = linkTag.run(session.id, tag.id);
+    if (result.changes > 0) added.push(name);
+  }
+  if (added.length > 0) {
+    console.log(`Added tag(s): ${added.join(", ")}`);
+  } else {
+    console.log(`Session already has all specified tags`);
+  }
 }
 function sessionMove(args, flags) {
   if (!isDatabaseInitialized()) {
@@ -40816,9 +41821,9 @@ async function sessionExport(args, flags) {
   };
   const json = JSON.stringify(exportData, null, 2);
   if (flags.output || flags.o) {
-    const fs54 = await import("fs");
+    const fs60 = await import("fs");
     const outputFile = flags.output || flags.o;
-    fs54.writeFileSync(outputFile, json);
+    fs60.writeFileSync(outputFile, json);
     console.log(`\u2713 Exported session to: ${outputFile}`);
   } else {
     console.log(json);
@@ -40837,8 +41842,13 @@ async function sessionSearch(args, flags) {
   }
   const limit2 = flags.limit || 10;
   const format = flags.format || "table";
+  const scope = flags.scope || "turns";
   if (flags.semantic) {
     await semanticSearch(query, { limit: limit2, format });
+    return;
+  }
+  if (scope === "titles" || scope === "sessions") {
+    ftsSessionSearch(query, { limit: limit2, format });
     return;
   }
   ftsSearch(query, { limit: limit2, format });
@@ -40882,6 +41892,74 @@ Found ${results.length} result(s) for "${query}":
     const snippet = (r2.user_highlight || r2.assistant_highlight || "").substring(0, 200);
     if (snippet) {
       console.log(`   "${snippet.replace(/\n/g, " ")}..."`);
+    }
+    console.log("");
+  });
+}
+function ftsSessionSearch(query, options) {
+  const { limit: limit2, format } = options;
+  const db3 = getDb();
+  let results;
+  try {
+    results = db3.prepare(`
+      SELECT
+        sf.session_id,
+        s.title,
+        s.provider,
+        s.turn_count,
+        s.total_cost,
+        s.created_at,
+        s.last_active_at,
+        p.name as project_name,
+        highlight(sessions_fts, 1, '>>>', '<<<') as title_highlight,
+        highlight(sessions_fts, 2, '>>>', '<<<') as snippet_highlight
+      FROM sessions_fts sf
+      JOIN sessions s ON sf.session_id = s.id
+      LEFT JOIN projects p ON s.project_id = p.id
+      WHERE sessions_fts MATCH ?
+      ORDER BY rank
+      LIMIT ?
+    `).all(query, limit2);
+  } catch {
+    results = db3.prepare(`
+      SELECT
+        s.id as session_id,
+        s.title,
+        s.provider,
+        s.turn_count,
+        s.total_cost,
+        s.created_at,
+        s.last_active_at,
+        p.name as project_name,
+        s.title as title_highlight,
+        s.snippet as snippet_highlight
+      FROM sessions s
+      LEFT JOIN projects p ON s.project_id = p.id
+      WHERE s.deleted_at IS NULL AND (s.title LIKE ? OR s.snippet LIKE ?)
+      ORDER BY s.last_active_at DESC
+      LIMIT ?
+    `).all(`%${query}%`, `%${query}%`, limit2);
+  }
+  if (format === "json") {
+    console.log(JSON.stringify(results, null, 2));
+    return;
+  }
+  if (results.length === 0) {
+    console.log(`No sessions found matching: "${query}"`);
+    return;
+  }
+  console.log(`
+Found ${results.length} session(s) matching "${query}":
+`);
+  results.forEach((r2, i2) => {
+    const title = r2.title_highlight || r2.title || "(untitled)";
+    console.log(`${i2 + 1}. ${title}`);
+    console.log(`   Provider: ${r2.provider} | Turns: ${r2.turn_count} | Cost: $${(r2.total_cost || 0).toFixed(4)}`);
+    if (r2.project_name) console.log(`   Project: ${r2.project_name}`);
+    console.log(`   Last active: ${new Date(r2.last_active_at).toLocaleString()}`);
+    if (r2.snippet_highlight) {
+      const snippet = r2.snippet_highlight.substring(0, 150).replace(/\n/g, " ");
+      console.log(`   "${snippet}..."`);
     }
     console.log("");
   });
@@ -41444,9 +42522,9 @@ async function importSessions(args, flags) {
         turn_number, user_message, assistant_response, thinking,
         model, cost, duration_ms,
         input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
-        finish_reason, tools_used, kind, ts, ts_ms,
+        finish_reason, tools_used, tool_results, kind, ts, ts_ms,
         service_tier
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'message', ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'message', ?, ?, ?)
     `);
     const updateSessionAggregatesStmt = db3.prepare(`
       UPDATE sessions SET
@@ -41555,6 +42633,7 @@ async function importSessions(args, flags) {
               turn.cacheCreationTokens,
               turn.finishReason,
               turn.toolsUsed ? JSON.stringify(turn.toolsUsed) : null,
+              turn.toolResults || null,
               turn.ts || nowIso,
               tsMs,
               turn.serviceTier
@@ -41963,10 +43042,30 @@ function parseClaudeTurns(filepath) {
           durationMs: null,
           finishReason: null,
           toolsUsed: null,
+          toolResults: null,
           providerTurnId: data.uuid || null,
           ts: data.timestamp || null,
           serviceTier: null
         };
+      } else if (isToolResult && current && Array.isArray(msg.content)) {
+        for (const block of msg.content) {
+          if (block.type === "tool_result" && block.tool_use_id) {
+            if (!current.toolResults) current.toolResults = [];
+            const existing = current.toolResults.find((tc) => tc.id === block.tool_use_id);
+            if (existing) {
+              existing.status = block.is_error ? "error" : "success";
+              existing.result = typeof block.content === "string" ? block.content : JSON.stringify(block.content);
+            } else {
+              current.toolResults.push({
+                id: block.tool_use_id,
+                name: null,
+                input: null,
+                status: block.is_error ? "error" : "success",
+                result: typeof block.content === "string" ? block.content : JSON.stringify(block.content)
+              });
+            }
+          }
+        }
       }
     } else if (data.type === "assistant" && current) {
       const msg = data.message;
@@ -41984,6 +43083,7 @@ function parseClaudeTurns(filepath) {
         const textBlocks = [];
         const thinkingBlocks = [];
         const tools = [];
+        const toolCalls = [];
         for (const block of msg.content) {
           if (block.type === "text") {
             textBlocks.push(block.text);
@@ -41991,6 +43091,15 @@ function parseClaudeTurns(filepath) {
             thinkingBlocks.push(block.thinking);
           } else if (block.type === "tool_use") {
             tools.push(block.name);
+            if (block.id && block.name) {
+              toolCalls.push({
+                id: block.id,
+                name: block.name,
+                input: block.input || null,
+                status: null,
+                result: null
+              });
+            }
           }
         }
         if (textBlocks.length > 0) {
@@ -42001,6 +43110,10 @@ function parseClaudeTurns(filepath) {
         }
         if (tools.length > 0) {
           current.toolsUsed = current.toolsUsed ? [...current.toolsUsed, ...tools] : tools;
+        }
+        if (toolCalls.length > 0) {
+          if (!current.toolResults) current.toolResults = [];
+          current.toolResults.push(...toolCalls);
         }
       }
       if (data.uuid) current.providerTurnId = data.uuid;
@@ -42014,6 +43127,11 @@ function parseClaudeTurns(filepath) {
   for (const turn of turns) {
     if (turn.toolsUsed) {
       turn.toolsUsed = [...new Set(turn.toolsUsed)];
+    }
+    if (turn.toolResults && turn.toolResults.length > 0) {
+      turn.toolResults = JSON.stringify(turn.toolResults);
+    } else {
+      turn.toolResults = null;
     }
   }
   return turns;
@@ -42098,6 +43216,11 @@ function parseCodexTurns(filepath) {
   for (const turn of turns) {
     if (turn.toolsUsed) {
       turn.toolsUsed = [...new Set(turn.toolsUsed)];
+    }
+    if (turn.toolResults && turn.toolResults.length > 0) {
+      turn.toolResults = JSON.stringify(turn.toolResults);
+    } else {
+      turn.toolResults = null;
     }
   }
   return turns;
@@ -43947,12 +45070,12 @@ Use --force to re-index.`);
     console.log(`Indexing ${stacksToIndex.length} stack(s)...
 `);
   }
-  const log = jsonOutput ? () => {
+  const log2 = jsonOutput ? () => {
   } : console.log;
   try {
     const result = await indexAllStacks({
       stacks: stacksToIndex,
-      log,
+      log: log2,
       timeout: 2e4
       // 20s per stack
     });
@@ -45232,19 +46355,26 @@ Applying plan ${planId}...
   if (updateTitles.length > 0) {
     console.log("\nUpdating titles...");
     const updateTitle = db3.prepare(`
-      UPDATE sessions SET title = ?, title_override = ? WHERE id = ?
+      UPDATE sessions
+      SET title = ?, title_override = ?, title_source = 'user', title_generated_at = ?
+      WHERE id = ?
     `);
     let updated = 0;
     for (const t2 of updateTitles) {
-      const current = db3.prepare("SELECT title, title_override FROM sessions WHERE id = ?").get(t2.sessionId);
+      const current = db3.prepare(
+        "SELECT title, title_override, title_source, title_generated_at FROM sessions WHERE id = ?"
+      ).get(t2.sessionId);
       try {
-        updateTitle.run(t2.suggestedTitle, t2.suggestedTitle, t2.sessionId);
+        const now = (/* @__PURE__ */ new Date()).toISOString();
+        updateTitle.run(t2.suggestedTitle, t2.suggestedTitle, now, t2.sessionId);
         updated++;
         undoActions.push({
           type: "updateTitle",
           sessionId: t2.sessionId,
           fromTitle: current?.title,
           fromTitleOverride: current?.title_override,
+          fromTitleSource: current?.title_source,
+          fromTitleGeneratedAt: current?.title_generated_at,
           toTitle: t2.suggestedTitle
         });
       } catch (err) {
@@ -45668,9 +46798,9 @@ async function cmdStudio(args, flags) {
 
 // src/commands/serve.js
 var import_http = __toESM(require("http"), 1);
-var import_fs49 = __toESM(require("fs"), 1);
-var import_path53 = __toESM(require("path"), 1);
-var import_os24 = __toESM(require("os"), 1);
+var import_fs54 = __toESM(require("fs"), 1);
+var import_path60 = __toESM(require("path"), 1);
+var import_os26 = __toESM(require("os"), 1);
 var import_url2 = require("url");
 init_src();
 
@@ -46122,7 +47252,7 @@ function generatePermissionPattern(toolName, toolInput) {
   }
   return toolName;
 }
-function saveToolPermission(projectCwd, pattern, log) {
+function saveToolPermission(projectCwd, pattern, log2) {
   try {
     const settingsPath = import_path31.default.join(projectCwd, ".claude", "settings.local.json");
     let settings = {};
@@ -46135,12 +47265,12 @@ function saveToolPermission(projectCwd, pattern, log) {
     settings.permissions.allow.push(pattern);
     import_fs32.default.mkdirSync(import_path31.default.dirname(settingsPath), { recursive: true });
     import_fs32.default.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
-    log("agent", "info", "saved tool permission to settings.local.json", { pattern, path: settingsPath });
+    log2("agent", "info", "saved tool permission to settings.local.json", { pattern, path: settingsPath });
   } catch (err) {
-    log("agent", "warn", `failed to save tool permission: ${err.message}`);
+    log2("agent", "warn", `failed to save tool permission: ${err.message}`);
   }
 }
-function ensurePermissionHook(log) {
+function ensurePermissionHook(log2) {
   const hookBinPath = import_path31.default.join(PATHS.home, "bins", "permission-hook");
   const hookScriptPath = import_path31.default.join(PATHS.home, "router", "permission-hook.js");
   const settingsPath = import_path31.default.join(import_os13.default.homedir(), ".claude", "settings.json");
@@ -46159,7 +47289,7 @@ function ensurePermissionHook(log) {
       ""
     ].join("\n");
     import_fs32.default.writeFileSync(hookBinPath, shim, { mode: 493 });
-    log("agent", "info", "installed permission hook shim", { path: hookBinPath });
+    log2("agent", "info", "installed permission hook shim", { path: hookBinPath });
   }
   try {
     let settings = {};
@@ -46188,15 +47318,15 @@ function ensurePermissionHook(log) {
       ];
       import_fs32.default.mkdirSync(import_path31.default.dirname(settingsPath), { recursive: true });
       import_fs32.default.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
-      log("agent", "info", "installed PreToolUse hook in Claude settings", { path: settingsPath });
-      log("agent", "warn", "Permission hook installed \u2014 you may need to approve it via /hooks in Claude CLI on first use");
+      log2("agent", "info", "installed PreToolUse hook in Claude settings", { path: settingsPath });
+      log2("agent", "warn", "Permission hook installed \u2014 you may need to approve it via /hooks in Claude CLI on first use");
     }
   } catch (err) {
-    log("agent", "warn", `failed to update Claude settings for permission hook: ${err.message}`);
+    log2("agent", "warn", `failed to update Claude settings for permission hook: ${err.message}`);
   }
 }
 function buildPermissionRoutes(ctx) {
-  const { json, error, readBody, log, broadcast, agentProcesses, pendingPermissions, sessionAlwaysAllowed } = ctx;
+  const { json, error, readBody, log: log2, broadcast: broadcast2, agentProcesses: agentProcesses2, pendingPermissions, sessionAlwaysAllowed, groupAlwaysAllowed } = ctx;
   return async (req, res, url) => {
     if (req.method === "POST" && url.pathname === "/agent/permission-request") {
       const body = await readBody(req);
@@ -46204,7 +47334,7 @@ function buildPermissionRoutes(ctx) {
       if (!requestId || !rudiSessionId) return error(res, "requestId and rudiSessionId required");
       const createdAt = Date.now();
       const batchId = deriveBatchId(rudiSessionId, toolName, createdAt);
-      log("agent", "info", "permission request from hook", {
+      log2("agent", "info", "permission request from hook", {
         requestId: requestId.slice(0, 8),
         rudiSessionId: rudiSessionId.slice(0, 8),
         toolName,
@@ -46212,7 +47342,7 @@ function buildPermissionRoutes(ctx) {
       });
       const allowed = sessionAlwaysAllowed.get(rudiSessionId);
       if (allowed && allowed.has(toolName)) {
-        log("agent", "debug", "auto-allowing tool (session always-allowed)", { toolName, sessionId: rudiSessionId.slice(0, 8) });
+        log2("agent", "debug", "auto-allowing tool (session always-allowed)", { toolName, sessionId: rudiSessionId.slice(0, 8) });
         pendingPermissions.set(requestId, {
           rudiSessionId,
           claudeSessionId,
@@ -46228,10 +47358,47 @@ function buildPermissionRoutes(ctx) {
         json(res, { ok: true });
         return true;
       }
-      const processEntry = agentProcesses.get(rudiSessionId);
+      const processEntry = agentProcesses2.get(rudiSessionId);
+      if (processEntry && processEntry.permissionMode === "dangerouslySkipPermissions") {
+        log2("agent", "debug", "auto-allowing tool (YOLO mode)", { toolName, sessionId: rudiSessionId.slice(0, 8) });
+        pendingPermissions.set(requestId, {
+          rudiSessionId,
+          claudeSessionId,
+          toolName,
+          toolInput,
+          batchId,
+          status: "decided",
+          decision: { permissionDecision: "allow", reason: "YOLO mode enabled" },
+          resolve: null,
+          timer: null,
+          createdAt
+        });
+        json(res, { ok: true });
+        return true;
+      }
+      if (processEntry?.runGroupId) {
+        const groupAllowed = groupAlwaysAllowed?.get(processEntry.runGroupId);
+        if (groupAllowed?.has(toolName) || processEntry.permissionMode === "dangerouslySkipPermissions") {
+          log2("agent", "debug", "auto-allowing tool (run-group)", { toolName, sessionId: rudiSessionId.slice(0, 8), groupId: processEntry.runGroupId });
+          pendingPermissions.set(requestId, {
+            rudiSessionId,
+            claudeSessionId,
+            toolName,
+            toolInput,
+            batchId,
+            status: "decided",
+            decision: { permissionDecision: "allow", reason: "Auto-allowed for run group" },
+            resolve: null,
+            timer: null,
+            createdAt
+          });
+          json(res, { ok: true });
+          return true;
+        }
+      }
       const projectCwd = processEntry?.cwd;
       if (projectCwd && isToolAllowedByProject(projectCwd, toolName, toolInput)) {
-        log("agent", "debug", "auto-allowing tool (project settings)", { toolName, sessionId: rudiSessionId.slice(0, 8) });
+        log2("agent", "debug", "auto-allowing tool (project settings)", { toolName, sessionId: rudiSessionId.slice(0, 8) });
         pendingPermissions.set(requestId, {
           rudiSessionId,
           claudeSessionId,
@@ -46269,7 +47436,7 @@ function buildPermissionRoutes(ctx) {
         timer: null,
         createdAt
       });
-      broadcast("agent:event", {
+      broadcast2("agent:event", {
         sessionId: rudiSessionId,
         event: {
           type: "system",
@@ -46342,17 +47509,25 @@ function buildPermissionRoutes(ctx) {
               sessionAlwaysAllowed.set(entry.rudiSessionId, /* @__PURE__ */ new Set());
             }
             sessionAlwaysAllowed.get(entry.rudiSessionId).add(entry.toolName);
-            log("agent", "info", "added to always-allowed", { toolName: entry.toolName, sessionId: entry.rudiSessionId.slice(0, 8) });
-            const proc = agentProcesses.get(entry.rudiSessionId);
+            log2("agent", "info", "added to always-allowed", { toolName: entry.toolName, sessionId: entry.rudiSessionId.slice(0, 8) });
+            const proc_ = agentProcesses2.get(entry.rudiSessionId);
+            if (proc_?.runGroupId && groupAlwaysAllowed) {
+              if (!groupAlwaysAllowed.has(proc_.runGroupId)) {
+                groupAlwaysAllowed.set(proc_.runGroupId, /* @__PURE__ */ new Set());
+              }
+              groupAlwaysAllowed.get(proc_.runGroupId).add(entry.toolName);
+              log2("agent", "info", "added to group always-allowed", { toolName: entry.toolName, groupId: proc_.runGroupId });
+            }
+            const proc = agentProcesses2.get(entry.rudiSessionId);
             if (proc?.cwd) {
               const pattern = generatePermissionPattern(entry.toolName, entry.toolInput);
-              saveToolPermission(proc.cwd, pattern, log);
+              saveToolPermission(proc.cwd, pattern, log2);
             }
           }
         } else {
           decision = { permissionDecision: "deny", reason: "Denied by user in RUDI" };
         }
-        log("agent", "info", "permission response via hook", {
+        log2("agent", "info", "permission response via hook", {
           requestId: requestId.slice(0, 8),
           response,
           permissionDecision: decision.permissionDecision,
@@ -46373,7 +47548,7 @@ function buildPermissionRoutes(ctx) {
             }
           }
           if (batchResolved > 0) {
-            log("agent", "info", `batch-resolved ${batchResolved} sibling(s)`, {
+            log2("agent", "info", `batch-resolved ${batchResolved} sibling(s)`, {
               batchId: entry.batchId.slice(-12)
             });
           }
@@ -46382,7 +47557,7 @@ function buildPermissionRoutes(ctx) {
         return true;
       }
       if (!requestId) {
-        log("agent", "warn", "permission response missing requestId \u2014 legacy stdin path removed", { sessionId: sessionId?.slice(0, 8), response });
+        log2("agent", "warn", "permission response missing requestId \u2014 legacy stdin path removed", { sessionId: sessionId?.slice(0, 8), response });
         return error(res, "requestId required (legacy stdin path removed)", 400);
       }
       return error(res, "sessionId or requestId required");
@@ -46411,10 +47586,10 @@ function buildPermissionRoutes(ctx) {
 
 // src/commands/agent/routes/start.js
 var import_os17 = __toESM(require("os"), 1);
-var import_fs39 = __toESM(require("fs"), 1);
+var import_fs40 = __toESM(require("fs"), 1);
 var import_path39 = __toESM(require("path"), 1);
 var import_crypto6 = __toESM(require("crypto"), 1);
-var import_child_process19 = require("child_process");
+var import_child_process20 = require("child_process");
 init_src();
 
 // src/commands/agent/providers/index.js
@@ -47345,6 +48520,42 @@ curl -s "$RUDI_SIDECAR_URL/agent/children/$RUDI_SESSION_ID" \\
   -H "X-Rudi-Token: $RUDI_SIDECAR_TOKEN" \\
   -H "X-Rudi-Caller-Session: $RUDI_SESSION_ID"
 \`\`\``;
+var ORCHESTRATOR_PLAN_PROMPT = `You are an orchestration planner for RUDI, an AI-powered development environment.
+
+Your job: read the codebase and decompose the user's request into 2-8 parallel tasks that can be executed by independent agents.
+
+## Instructions
+
+1. Start by reading the project structure (CLAUDE.md, key files, directory layout)
+2. Understand the user's intent and identify the independent work units
+3. Decompose into tasks that can run in parallel with minimal file overlap
+4. Assign provider/model per task based on complexity:
+   - opus or sonnet for complex architecture/reasoning tasks
+   - sonnet for standard implementation work (default)
+   - haiku for mechanical/boilerplate tasks (renames, formatting, simple tests)
+5. Each task's prompt should be self-contained \u2014 the executing agent has zero context beyond it
+6. Include file paths each task will touch \u2014 avoid overlap between parallel tasks
+7. If the work is non-trivial, include a QA/review task as the final task
+
+## Rules
+
+- Output ONLY the JSON matching the provided schema \u2014 no explanatory text
+- Keep task prompts specific and actionable with clear scope boundaries
+- Tasks should be independent: no task should depend on another task's output
+- Each task should specify exactly which files/directories it owns
+- Total tasks: minimum 2, maximum 8
+- Provider defaults to "claude" if unspecified
+`;
+function buildOrchestratorPrompt(userPrompt) {
+  const parts = [RUDI_BASE_PROMPT];
+  const userFile = loadUserPrompt();
+  if (userFile) parts.push(userFile);
+  parts.push(ORCHESTRATOR_PLAN_PROMPT);
+  parts.push(`## User Request
+
+${userPrompt}`);
+  return parts.join("\n\n---\n\n");
+}
 var USER_PROMPT_PATH = import_path32.default.join(PATHS.home, "system-prompt.md");
 var _cachedUserPrompt = null;
 var _userPromptMtime = 0;
@@ -47368,6 +48579,116 @@ function buildSystemPrompt(frontendPrompt, { canSpawnChildren = false } = {}) {
   if (canSpawnChildren) parts.push(SPAWN_CHILDREN_PROMPT);
   if (frontendPrompt) parts.push(frontendPrompt);
   return parts.join("\n\n---\n\n");
+}
+function buildStructureExplorerPrompt(cwd, outputFile) {
+  return `You are a codebase structure analyzer for RUDI orchestration Phase 0.
+
+**Your job**: Map the project's file structure and tech stack.
+
+**Working directory**: ${cwd}
+
+## Instructions
+
+1. Check if directory is empty or is a new project
+2. If empty: Output "New project - no existing structure" and stop
+3. If not empty:
+   - List key directories (exclude node_modules, dist, .git, build artifacts)
+   - Identify entry points (package.json scripts, main files, index files)
+   - Detect tech stack (framework, language, build tools from package.json)
+   - Note any CLAUDE.md or README.md if present
+
+## Output Format
+
+Write your findings to: ${outputFile}
+
+Structure as markdown with sections:
+- **Project Type**: (New | Existing)
+- **Tech Stack**: Framework, language, build tools
+- **Entry Points**: Main files and scripts
+- **Directory Structure**: Key directories only
+- **Configuration Files**: package.json, tsconfig.json, etc.
+
+## Rules
+
+- Use Bash for directory listing: \`ls -la\`, \`find . -maxdepth 2 -type d\`
+- Use Read ONLY for files (package.json, CLAUDE.md, README.md)
+- Do NOT Read directories - this will error
+- Keep output concise (max 50 lines)
+- Focus on architecture-relevant information only
+
+When complete, write findings to ${outputFile} and stop.`;
+}
+function buildPatternsExplorerPrompt(cwd, outputFile) {
+  return `You are a code patterns analyzer for RUDI orchestration Phase 0.
+
+**Your job**: Identify existing code patterns and conventions.
+
+**Working directory**: ${cwd}
+
+## Instructions
+
+1. Check if CLAUDE.md exists - if so, read it first (contains project conventions)
+2. Check if README.md exists - read for architecture notes
+3. If package.json exists:
+   - Check for path aliases (tsconfig.json paths, @/ imports)
+   - Identify dependencies that indicate patterns (React, Vue, Express, etc.)
+4. Read 1-2 key source files to identify:
+   - Import conventions (relative paths, aliases, named vs default exports)
+   - Component/module patterns
+   - State management approach (if applicable)
+
+## Output Format
+
+Write your findings to: ${outputFile}
+
+Structure as markdown with sections:
+- **Import Conventions**: Aliases, relative paths, export style
+- **Framework Patterns**: Component structure, file naming
+- **State Management**: Redux, Zustand, Context, or None
+- **API Conventions**: REST, GraphQL, tRPC (if applicable)
+- **Key Conventions**: From CLAUDE.md or observed patterns
+
+## Rules
+
+- Read max 3 files total (CLAUDE.md, README.md, 1 source file)
+- If no patterns observable, output "New project - no established patterns"
+- Keep output concise (max 40 lines)
+- Focus on actionable conventions builders should follow
+
+When complete, write findings to ${outputFile} and stop.`;
+}
+function buildGitExplorerPrompt(cwd, outputFile) {
+  return `You are a git context analyzer for RUDI orchestration Phase 0.
+
+**Your job**: Understand the repository state and recent work.
+
+**Working directory**: ${cwd}
+
+## Instructions
+
+1. Check git status: \`git status\`
+2. List branches: \`git branch\`
+3. Show recent commits: \`git log --oneline -10\`
+4. If not on main/master, show diff from base: \`git diff --name-only main\` or \`git diff --name-only master\`
+
+## Output Format
+
+Write your findings to: ${outputFile}
+
+Structure as markdown with sections:
+- **Current Branch**: Name and status
+- **Modified Files**: Uncommitted changes (if any)
+- **Recent Commits**: Last 5-10 commits
+- **Diff from Base**: Files changed from main/master (if applicable)
+
+## Rules
+
+- Use Bash for all git commands
+- If not a git repo, output "Not a git repository" and stop
+- If git commands fail, note the error and continue
+- Keep output concise (max 30 lines)
+
+When complete, write findings to ${outputFile} and stop.`;
 }
 
 // src/commands/agent/db.js
@@ -47606,6 +48927,38 @@ var _db = null;
 var _dbReadyChecked = false;
 var _dbWriteQueue = [];
 var _dbWriteFlushScheduled = false;
+var _dbWriteQueueWarned = false;
+var DB_WRITE_QUEUE_WARN_THRESHOLD = 5e3;
+var DB_WRITE_QUEUE_MAX = 1e4;
+var DB_WRITE_QUEUE_DROP_COUNT = Math.ceil(DB_WRITE_QUEUE_MAX * 0.1);
+var TERMINAL_RUNTIME_STATES = /* @__PURE__ */ new Set(["completed", "error", "stopped", "crashed"]);
+var RUNTIME_STATE_TRANSITIONS = Object.freeze({
+  starting: /* @__PURE__ */ new Set(["running", "error", "stopped", "crashed"]),
+  running: /* @__PURE__ */ new Set(["completed", "error", "stopped", "crashed"]),
+  completed: /* @__PURE__ */ new Set(),
+  error: /* @__PURE__ */ new Set(),
+  stopped: /* @__PURE__ */ new Set(),
+  crashed: /* @__PURE__ */ new Set()
+});
+function resolveValidFromStates(toStatus, { allowTerminalUpdate = false } = {}) {
+  const validFromStates = [];
+  for (const [fromStatus, nextStates] of Object.entries(RUNTIME_STATE_TRANSITIONS)) {
+    if (nextStates.has(toStatus)) validFromStates.push(fromStatus);
+  }
+  if (allowTerminalUpdate && TERMINAL_RUNTIME_STATES.has(toStatus)) {
+    for (const terminalState of TERMINAL_RUNTIME_STATES) {
+      if (!validFromStates.includes(terminalState)) validFromStates.push(terminalState);
+    }
+  }
+  return validFromStates;
+}
+function warnRejectedTransition(sessionId, toStatus, validFromStates, currentStatus) {
+  const fromStatus = currentStatus || "missing";
+  console.warn(
+    "[agent-db] rejected runtime status transition:",
+    `${sessionId} ${fromStatus} -> ${toStatus} (allowed from: ${validFromStates.join(", ") || "none"})`
+  );
+}
 function resolveDb() {
   if (_db) return _db;
   if (_dbReadyChecked) return null;
@@ -47623,6 +48976,7 @@ function flushDbWrites() {
   const db3 = resolveDb();
   if (!db3) {
     _dbWriteQueue.length = 0;
+    _dbWriteQueueWarned = false;
     return;
   }
   while (_dbWriteQueue.length > 0) {
@@ -47633,14 +48987,63 @@ function flushDbWrites() {
       console.error("[agent-db] write failed:", err.message);
     }
   }
+  _dbWriteQueueWarned = false;
 }
 function dbWrite(fn) {
+  if (_dbWriteQueue.length >= DB_WRITE_QUEUE_MAX) {
+    _dbWriteQueue.splice(0, DB_WRITE_QUEUE_DROP_COUNT);
+    console.warn(
+      "[agent-db] write queue overflow: dropped oldest writes",
+      { dropped: DB_WRITE_QUEUE_DROP_COUNT, depth: _dbWriteQueue.length }
+    );
+    _dbWriteQueueWarned = false;
+  }
   _dbWriteQueue.push(fn);
+  if (!_dbWriteQueueWarned && _dbWriteQueue.length >= DB_WRITE_QUEUE_WARN_THRESHOLD) {
+    _dbWriteQueueWarned = true;
+    console.warn("[agent-db] write queue depth warning", {
+      depth: _dbWriteQueue.length,
+      warnThreshold: DB_WRITE_QUEUE_WARN_THRESHOLD,
+      maxDepth: DB_WRITE_QUEUE_MAX
+    });
+  }
   if (_dbWriteFlushScheduled) return;
   _dbWriteFlushScheduled = true;
   setImmediate(flushDbWrites);
 }
-function autoNameSession(entry, providerSessionId, firstMessage, cwd, broadcast, log) {
+function transitionSessionStatus(db3, sessionId, toStatus, options = {}) {
+  const { lastError, completedAt, allowTerminalUpdate = false } = options;
+  const validFromStates = resolveValidFromStates(toStatus, { allowTerminalUpdate });
+  if (validFromStates.length === 0) {
+    warnRejectedTransition(sessionId, toStatus, validFromStates, null);
+    return false;
+  }
+  const updates = ["status = ?", "updated_at = ?"];
+  const params = [toStatus, (/* @__PURE__ */ new Date()).toISOString()];
+  if (lastError !== void 0) {
+    updates.push("last_error = ?");
+    params.push(lastError);
+  }
+  if (completedAt !== void 0) {
+    updates.push("completed_at = ?");
+    params.push(completedAt);
+  }
+  const placeholders = validFromStates.map(() => "?").join(", ");
+  params.push(sessionId, ...validFromStates);
+  const result = db3.prepare(`
+    UPDATE session_runtime_state
+    SET ${updates.join(", ")}
+    WHERE session_id = ?
+      AND status IN (${placeholders})
+  `).run(...params);
+  if (result.changes > 0) {
+    return true;
+  }
+  const row = db3.prepare("SELECT status FROM session_runtime_state WHERE session_id = ?").get(sessionId);
+  warnRejectedTransition(sessionId, toStatus, validFromStates, row?.status || null);
+  return false;
+}
+function autoNameSession(entry, providerSessionId, firstMessage, cwd, broadcast2, log2) {
   setImmediate(async () => {
     try {
       const binaryPath = resolveClaudeBinary();
@@ -47687,13 +49090,14 @@ User request: ${(firstMessage || "").slice(0, 1e3)}`;
       if (!title) return;
       dbWrite((db3) => {
         db3.prepare(`
-          UPDATE sessions SET title = ? WHERE id = ? AND title_override IS NULL
-        `).run(title, providerSessionId);
+          UPDATE sessions SET title = ?, title_source = 'llm', title_generated_at = ?
+          WHERE id = ? AND title_override IS NULL
+        `).run(title, (/* @__PURE__ */ new Date()).toISOString(), providerSessionId);
       });
-      broadcast("session:titled", { sessionId: providerSessionId, title });
-      log("agent", "info", `auto-named session ${providerSessionId.slice(0, 8)}: "${title}"`);
+      broadcast2("session:titled", { sessionId: providerSessionId, title });
+      log2("agent", "info", `auto-named session ${providerSessionId.slice(0, 8)}: "${title}"`);
     } catch (err) {
-      log("agent", "warn", `auto-name failed: ${err.message}`);
+      log2("agent", "warn", `auto-name failed: ${err.message}`);
     }
   });
 }
@@ -47710,16 +49114,16 @@ function dropResumeMappingsForSession(targetSessionId, resumeSessionIndex) {
     }
   }
 }
-function resolveReusableEntry(resumeSessionId, { agentProcesses, resumeSessionIndex }) {
+function resolveReusableEntry(resumeSessionId, { agentProcesses: agentProcesses2, resumeSessionIndex }) {
   const mappedSessionId = resumeSessionIndex.get(resumeSessionId);
   if (mappedSessionId) {
-    const mappedEntry = agentProcesses.get(mappedSessionId);
+    const mappedEntry = agentProcesses2.get(mappedSessionId);
     if (mappedEntry?.proc && !mappedEntry.proc.killed) {
       return { sessionId: mappedSessionId, entry: mappedEntry };
     }
     resumeSessionIndex.delete(resumeSessionId);
   }
-  for (const [existingId, entry] of agentProcesses.entries()) {
+  for (const [existingId, entry] of agentProcesses2.entries()) {
     const matchesProvider = entry.providerSessionId === resumeSessionId;
     const matchesResume = entry.resumeSessionId === resumeSessionId;
     if ((matchesProvider || matchesResume) && entry.proc && !entry.proc.killed) {
@@ -47732,23 +49136,23 @@ function resolveReusableEntry(resumeSessionId, { agentProcesses, resumeSessionIn
   }
   return null;
 }
-function countAlive(agentProcesses) {
+function countAlive(agentProcesses2) {
   let count = 0;
-  for (const [, entry] of agentProcesses) {
+  for (const [, entry] of agentProcesses2) {
     if (entry.proc && !entry.proc.killed) count++;
   }
   return count;
 }
-function broadcastProcessCount({ broadcast, agentProcesses, maxConcurrent }) {
-  broadcast("agent:process-count", {
-    count: countAlive(agentProcesses),
+function broadcastProcessCount({ broadcast: broadcast2, agentProcesses: agentProcesses2, maxConcurrent }) {
+  broadcast2("agent:process-count", {
+    count: countAlive(agentProcesses2),
     maxConcurrent
   });
 }
 function normalizeHeader(val) {
   return Array.isArray(val) ? val[0] : val || "";
 }
-function buildUserContent(text, images, cwd, log) {
+function buildUserContent(text, images, cwd, log2) {
   if (!images || images.length === 0) return text;
   const imgDir = import_path37.default.join(cwd || import_os16.default.homedir(), ".rudi", "images");
   import_fs37.default.mkdirSync(imgDir, { recursive: true });
@@ -47759,7 +49163,7 @@ function buildUserContent(text, images, cwd, log) {
     const filePath = import_path37.default.join(imgDir, filename);
     import_fs37.default.writeFileSync(filePath, Buffer.from(img.data, "base64"));
     paths.push(filePath);
-    log("agent", "info", `saved pasted image to ${filePath}`, { size: img.data.length, mediaType: img.mediaType });
+    log2("agent", "info", `saved pasted image to ${filePath}`, { size: img.data.length, mediaType: img.mediaType });
   }
   const imageRefs = paths.map((p2) => `[Pasted image: ${p2}]`).join("\n");
   return text ? `${imageRefs}
@@ -47780,7 +49184,7 @@ function getRepoRoot(cwd) {
   const absGitDir = import_path38.default.resolve(cwd, gitCommonDir);
   return import_path38.default.dirname(absGitDir);
 }
-function createSessionWorktree({ repoRoot, currentBranch, shortId, log }) {
+function createSessionWorktree({ repoRoot, currentBranch, shortId, log: log2 }) {
   const safeBranchDir = (currentBranch || "detached").replace(/\//g, "-");
   const worktreesBase = import_path38.default.join(repoRoot, ".rudi", "worktrees");
   let worktreeDir = import_path38.default.join(worktreesBase, safeBranchDir);
@@ -47815,9 +49219,9 @@ function createSessionWorktree({ repoRoot, currentBranch, shortId, log }) {
       worktreePath = worktreeDir;
       worktreeBranch = branchName;
     } else {
-      log("agent", "warn", `worktree dir missing after creation, using shared cwd`, { sessionId: shortId });
+      log2("agent", "warn", `worktree dir missing after creation, using shared cwd`, { sessionId: shortId });
     }
-    log("agent", "info", `worktree created on branch ${branchName}: ${worktreeDir}`, { sessionId: shortId });
+    log2("agent", "info", `worktree created on branch ${branchName}: ${worktreeDir}`, { sessionId: shortId });
     let gitignoreWarning = false;
     try {
       const gitignorePath = import_path38.default.join(repoRoot, ".gitignore");
@@ -47830,18 +49234,18 @@ function createSessionWorktree({ repoRoot, currentBranch, shortId, log }) {
     }
     return { worktreePath, worktreeBranch, gitignoreWarning };
   } catch (wtErr) {
-    log("agent", "warn", `worktree creation failed, using shared cwd: ${wtErr.message}`, { sessionId: shortId });
+    log2("agent", "warn", `worktree creation failed, using shared cwd: ${wtErr.message}`, { sessionId: shortId });
     return { worktreePath: null, worktreeBranch: null, gitignoreWarning: false };
   }
 }
-function restoreSessionWorktree({ resumeSessionId, repoRoot, currentBranch, shortId, log }) {
+function restoreSessionWorktree({ resumeSessionId, repoRoot, currentBranch, shortId, log: log2 }) {
   try {
     const db3 = getDb();
     const row = db3.prepare(
       "SELECT worktree_path, worktree_branch, base_branch FROM session_runtime_state WHERE session_id = ? OR resume_session_id = ?"
     ).get(resumeSessionId, resumeSessionId);
     if (row?.worktree_path && import_fs38.default.existsSync(row.worktree_path)) {
-      log("agent", "info", `resumed into existing worktree: ${row.worktree_path}`, { sessionId: shortId });
+      log2("agent", "info", `resumed into existing worktree: ${row.worktree_path}`, { sessionId: shortId });
       return {
         worktreePath: row.worktree_path,
         worktreeBranch: row.worktree_branch,
@@ -47857,22 +49261,22 @@ function restoreSessionWorktree({ resumeSessionId, repoRoot, currentBranch, shor
           `git worktree add ${JSON.stringify(worktreeDir)} ${row.worktree_branch}`,
           { cwd: repoRoot, stdio: "pipe" }
         );
-        log("agent", "info", `recreated worktree from existing branch: ${worktreeDir}`, { sessionId: shortId });
+        log2("agent", "info", `recreated worktree from existing branch: ${worktreeDir}`, { sessionId: shortId });
         return {
           worktreePath: worktreeDir,
           worktreeBranch: row.worktree_branch,
           baseBranch: row.base_branch || currentBranch
         };
       } catch (recreateErr) {
-        log("agent", "warn", `worktree recreate failed: ${recreateErr.message}`, { sessionId: shortId });
+        log2("agent", "warn", `worktree recreate failed: ${recreateErr.message}`, { sessionId: shortId });
       }
     }
   } catch (dbErr) {
-    log("agent", "warn", `worktree DB lookup failed: ${dbErr.message}`, { sessionId: shortId });
+    log2("agent", "warn", `worktree DB lookup failed: ${dbErr.message}`, { sessionId: shortId });
   }
   return { worktreePath: null, worktreeBranch: null, baseBranch: currentBranch };
 }
-function createChildWorktree({ parentRepoRoot, sanitizedDesc, resolvedBaseRef, shortId, log }) {
+function createChildWorktree({ parentRepoRoot, sanitizedDesc, resolvedBaseRef, shortId, log: log2 }) {
   const worktreesBase = import_path38.default.join(parentRepoRoot, ".rudi", "worktrees");
   import_fs38.default.mkdirSync(worktreesBase, { recursive: true });
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -47895,12 +49299,16 @@ function createChildWorktree({ parentRepoRoot, sanitizedDesc, resolvedBaseRef, s
       } catch {
       }
       if (attempt === 4) {
-        log("agent", "error", `worktree creation failed after 5 attempts: ${wtErr.message}`, { sessionId: shortId });
+        log2("agent", "error", `worktree creation failed after 5 attempts: ${wtErr.message}`, { sessionId: shortId });
         throw new Error("WORKTREE_BRANCH_COLLISION");
       }
     }
   }
 }
+
+// src/commands/agent/spawn-process.js
+var import_fs39 = __toESM(require("fs"), 1);
+var import_child_process19 = require("child_process");
 
 // src/commands/agent/normalizers/claude.js
 var claude_exports2 = {};
@@ -48367,6 +49775,82 @@ function normalizeEvent(provider, rawEvent, normalizer) {
 }
 
 // src/commands/agent/process-io.js
+function _safeStringify(value) {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "{}";
+  }
+}
+function _toNumber(value, fallback = 0) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+function _normalizeCompaction(compaction) {
+  if (!compaction || typeof compaction !== "object") return null;
+  const normalized = {
+    trigger: typeof compaction.trigger === "string" ? compaction.trigger : "unknown",
+    preTokens: _toNumber(compaction.preTokens ?? compaction.pre_tokens),
+    tokensSaved: _toNumber(compaction.tokensSaved ?? compaction.tokens_saved)
+  };
+  const compactedToolIds = compaction.compactedToolIds ?? compaction.compacted_tool_ids;
+  if (Array.isArray(compactedToolIds)) {
+    normalized.compactedToolIds = compactedToolIds.filter((id) => typeof id === "string");
+  }
+  return normalized;
+}
+function _isRuntimeMilestone(event) {
+  if (!event || typeof event !== "object") return false;
+  if (event.type === "result" || event.type === "error") return true;
+  if (event.type === "system" && event.compaction && typeof event.compaction === "object") return true;
+  return false;
+}
+function _persistRuntimeMilestone(sessionId, entry, event, rawEvent) {
+  if (!_isRuntimeMilestone(event)) return;
+  dbWrite((db3) => {
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    if (!Number.isFinite(entry._runtimeSeq)) {
+      const row = db3.prepare("SELECT last_seq FROM session_runtime_state WHERE session_id = ?").get(sessionId);
+      entry._runtimeSeq = Number(row?.last_seq || 0);
+    }
+    const seq = entry._runtimeSeq + 1;
+    entry._runtimeSeq = seq;
+    const payload = {
+      ...event,
+      provider: entry.provider || null,
+      providerSessionId: entry.providerSessionId || event.providerSessionId || null,
+      rawEventType: rawEvent?.type || null
+    };
+    db3.prepare(`
+      INSERT OR REPLACE INTO session_runtime_events (session_id, seq, type, payload_json, ts)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(sessionId, seq, event.type, _safeStringify(payload), now);
+    const compaction = _normalizeCompaction(event.compaction);
+    if (compaction) {
+      db3.prepare(`
+        UPDATE session_runtime_state
+        SET updated_at = ?, last_seq = ?,
+            compaction_count = compaction_count + 1,
+            tokens_saved_total = tokens_saved_total + ?,
+            last_compaction_at = ?,
+            last_compaction_json = ?
+        WHERE session_id = ?
+      `).run(
+        now,
+        seq,
+        compaction.tokensSaved,
+        now,
+        _safeStringify(compaction),
+        sessionId
+      );
+      return;
+    }
+    db3.prepare(`
+      UPDATE session_runtime_state
+      SET updated_at = ?, last_seq = ?
+      WHERE session_id = ?
+    `).run(now, seq, sessionId);
+  });
+}
 function attachStdoutHandler(ctx, sessionId, entry, options = {}) {
   const { onResult, onFirstData, setRunningOnCapture = true } = options;
   const provider = entry.provider || "claude";
@@ -48392,18 +49876,13 @@ function attachStdoutHandler(ctx, sessionId, entry, options = {}) {
           dbWrite((db3) => {
             const now = (/* @__PURE__ */ new Date()).toISOString();
             if (setRunningOnCapture) {
-              db3.prepare(`
-                UPDATE session_runtime_state
-                SET status = 'running', provider_session_id = ?, updated_at = ?
-                WHERE session_id = ?
-              `).run(rawSid, now, sessionId);
-            } else {
-              db3.prepare(`
-                UPDATE session_runtime_state
-                SET provider_session_id = ?, updated_at = ?
-                WHERE session_id = ?
-              `).run(rawSid, now, sessionId);
+              transitionSessionStatus(db3, sessionId, "running");
             }
+            db3.prepare(`
+              UPDATE session_runtime_state
+              SET provider_session_id = ?, updated_at = ?
+              WHERE session_id = ?
+            `).run(rawSid, now, sessionId);
           });
         }
         const results = normalizeEvent(provider, rawEvent, entry._normalizer);
@@ -48442,6 +49921,7 @@ function attachStdoutHandler(ctx, sessionId, entry, options = {}) {
             rawEvent: raw
             // provider-native (for debugging + future upgrades)
           });
+          _persistRuntimeMilestone(sessionId, entry, event, raw);
           if (event.type === "result" && onResult) {
             onResult(event);
           }
@@ -48493,6 +49973,7 @@ function flushStdoutBuffer(ctx, sessionId, entry) {
     }
     for (const { normalized, raw } of results) {
       if (!normalized) continue;
+      _persistRuntimeMilestone(sessionId, entry, normalized, raw);
       ctx.broadcast("agent:event", {
         sessionId,
         provider,
@@ -48504,15 +49985,385 @@ function flushStdoutBuffer(ctx, sessionId, entry) {
   }
 }
 
+// src/commands/agent/spawn-process.js
+function unlinkQuiet(filePath) {
+  if (!filePath) return;
+  try {
+    import_fs39.default.unlinkSync(filePath);
+  } catch {
+  }
+}
+function deriveCostUsd(event) {
+  if (typeof event?.costUsd === "number") return event.costUsd;
+  if (typeof event?.total_cost_usd === "number") return event.total_cost_usd;
+  return null;
+}
+function deriveTurnTokens(entry) {
+  return Math.max(
+    0,
+    Number(entry._turnInputTokens || 0) + Number(entry._turnOutputTokens || 0) + Number(entry._turnCacheReadTokens || 0) + Number(entry._turnCacheCreationTokens || 0)
+  );
+}
+function resetTurnAccumulators(entry) {
+  entry._turnPrompt = "";
+  entry._turnInputTokens = 0;
+  entry._turnOutputTokens = 0;
+  entry._turnCacheReadTokens = 0;
+  entry._turnCacheCreationTokens = 0;
+  entry._turnToolsUsed = [];
+  if (entry._normalizer) entry._normalizer.reset();
+}
+function spawnAgentProcess(ctx, options) {
+  const {
+    log: log2,
+    broadcast: broadcast2,
+    agentProcesses: agentProcesses2,
+    queueSessionsUpdated,
+    resumeSessionIndex,
+    pendingPermissions,
+    sessionAlwaysAllowed
+  } = ctx;
+  const {
+    sessionId,
+    prompt,
+    provider,
+    model,
+    permissionMode = null,
+    systemPrompt = null,
+    providerConfig,
+    binaryPath,
+    args,
+    env,
+    spawnCwd,
+    effectiveCwd,
+    workingDir,
+    repoRoot = null,
+    worktreePath = null,
+    worktreeBranch = null,
+    baseBranch = null,
+    resumeSessionId = null,
+    parentSessionId = null,
+    runGroupId = null,
+    images = null,
+    mcpConfigPath = null,
+    sessionRowMode = "providerSessionId",
+    // 'providerSessionId' | 'existingSession'
+    existingSessionId = null,
+    queueEvent = "result",
+    queueCloseEvent = "process-close",
+    autoNameOnFirstTurn = false,
+    setRunningOnCapture = true,
+    stderrLogSlice = 200,
+    onFirstStdoutData,
+    onFirstStderrData,
+    onTurnResult,
+    onProcessClose,
+    onProcessError,
+    stdinModeOverride = null
+    // 'close' to force-close stdin (e.g. run-group autonomous mode)
+  } = options;
+  const shortId = sessionId.slice(0, 8);
+  let mcpConfigCleaned = false;
+  const maybeCleanupMcpConfig = () => {
+    if (mcpConfigCleaned) return;
+    mcpConfigCleaned = true;
+    unlinkQuiet(mcpConfigPath);
+  };
+  const proc = (0, import_child_process19.spawn)(binaryPath, args, {
+    cwd: spawnCwd,
+    env,
+    stdio: ["pipe", "pipe", "pipe"]
+  });
+  const entry = {
+    proc,
+    provider,
+    providerConfig,
+    providerSessionId: null,
+    resumeSessionId: resumeSessionId || null,
+    parentSessionId: parentSessionId || null,
+    runGroupId: runGroupId || null,
+    stdoutBuffer: "",
+    turnActive: true,
+    startedAt: Date.now(),
+    lastActivityAt: Date.now(),
+    cwd: effectiveCwd,
+    repoRoot,
+    worktreePath,
+    worktreeBranch,
+    baseBranch,
+    permissionMode,
+    systemPrompt,
+    _terminationReason: null,
+    _turnPrompt: prompt,
+    _turnNumber: 1,
+    _turnInputTokens: 0,
+    _turnOutputTokens: 0,
+    _turnCacheReadTokens: 0,
+    _turnCacheCreationTokens: 0,
+    _turnModel: model || null,
+    _turnToolsUsed: []
+  };
+  agentProcesses2.set(sessionId, entry);
+  log2("agent", "info", `process spawned pid=${proc.pid}`, { sessionId: shortId, provider });
+  const stdinMode = stdinModeOverride || providerConfig?.headless?.stdin;
+  if (stdinMode === "pipe" && !stdinModeOverride && hasCapability(providerConfig, "inputStreaming")) {
+    const inputMsg = JSON.stringify({
+      type: "user",
+      message: { role: "user", content: buildUserContent(prompt, images, effectiveCwd, log2) }
+    }) + "\n";
+    if (proc.stdin.writable) {
+      proc.stdin.write(inputMsg);
+      log2("agent", "debug", "wrote first prompt to stdin (stream-json)", { sessionId: shortId });
+    } else {
+      log2("agent", "warn", "stdin not writable, skipping initial prompt write", { sessionId: shortId });
+    }
+  } else if (stdinMode === "close") {
+    proc.stdin.end();
+    log2("agent", "debug", "closed stdin (prompt delivered via args)", { sessionId: shortId });
+  } else if (stdinMode === "pipe") {
+    log2("agent", "debug", "stdin pipe open (prompt delivered via args)", { sessionId: shortId });
+  }
+  attachStdoutHandler(ctx, sessionId, entry, {
+    setRunningOnCapture,
+    onFirstData: onFirstStdoutData,
+    onResult: (event) => {
+      entry.turnActive = false;
+      const costUsd = deriveCostUsd(event);
+      const turnTokens = deriveTurnTokens(entry);
+      const turnNumber = entry._turnNumber;
+      const turnPrompt = entry._turnPrompt || "";
+      const turnModel = entry._turnModel || null;
+      const providerSid = entry.providerSessionId;
+      dbWrite((db3) => {
+        const now = (/* @__PURE__ */ new Date()).toISOString();
+        if (costUsd !== null) {
+          db3.prepare(`
+            UPDATE session_runtime_state
+            SET turn_count = turn_count + 1, cost_total = ?, tokens_total = tokens_total + ?, updated_at = ?
+            WHERE session_id = ?
+          `).run(costUsd, turnTokens, now, sessionId);
+        } else {
+          db3.prepare(`
+            UPDATE session_runtime_state
+            SET turn_count = turn_count + 1, tokens_total = tokens_total + ?, updated_at = ?
+            WHERE session_id = ?
+          `).run(turnTokens, now, sessionId);
+        }
+        if (sessionRowMode === "providerSessionId") {
+          if (!providerSid) return;
+          db3.prepare(`
+            INSERT OR IGNORE INTO sessions
+              (id, provider, provider_session_id, run_group_id, origin, cwd, project_path, model, status, created_at, last_active_at,
+               turn_count, total_cost, total_input_tokens, total_output_tokens)
+            VALUES (?, ?, ?, ?, 'rudi', ?, ?, ?, 'active', ?, ?, 0, 0, 0, 0)
+          `).run(
+            providerSid,
+            provider,
+            providerSid,
+            runGroupId,
+            workingDir,
+            workingDir,
+            turnModel,
+            now,
+            now
+          );
+          db3.prepare(`
+            UPDATE sessions
+            SET last_active_at = ?,
+                run_group_id = COALESCE(run_group_id, ?)
+            WHERE id = ?
+          `).run(now, runGroupId, providerSid);
+          return;
+        }
+        if (sessionRowMode === "existingSession") {
+          const sessionRowId = existingSessionId || sessionId;
+          if (providerSid) {
+            db3.prepare(`
+              UPDATE sessions
+              SET provider_session_id = COALESCE(provider_session_id, ?),
+                  last_active_at = ?,
+                  model = COALESCE(?, model),
+                  run_group_id = COALESCE(run_group_id, ?)
+              WHERE id = ?
+            `).run(providerSid, now, turnModel, runGroupId, sessionRowId);
+          } else {
+            db3.prepare(`
+              UPDATE sessions
+              SET last_active_at = ?,
+                  model = COALESCE(?, model),
+                  run_group_id = COALESCE(run_group_id, ?)
+              WHERE id = ?
+            `).run(now, turnModel, runGroupId, sessionRowId);
+          }
+          if (costUsd !== null) {
+            db3.prepare("UPDATE sessions SET total_cost = ? WHERE id = ?").run(costUsd, sessionRowId);
+          }
+        }
+      });
+      if (autoNameOnFirstTurn && turnNumber === 1 && providerSid) {
+        autoNameSession(entry, providerSid, turnPrompt, workingDir, broadcast2, log2);
+      }
+      if (typeof onTurnResult === "function") {
+        onTurnResult({
+          sessionId,
+          entry,
+          event,
+          turnNumber,
+          turnPrompt,
+          turnModel,
+          providerSessionId: providerSid || null,
+          costUsd,
+          turnTokens,
+          runGroupId
+        });
+      }
+      entry._turnNumber += 1;
+      resetTurnAccumulators(entry);
+      broadcast2("agent:done", { sessionId, exitCode: 0, providerSessionId: entry.providerSessionId });
+      if (runGroupId) {
+        broadcast2("run-group:session-activity", {
+          groupId: runGroupId,
+          sessionId,
+          turnCount: entry._turnNumber,
+          costTotal: costUsd,
+          lastSnippet: null
+          // Snippet extracted by live endpoint
+        });
+      }
+      if (queueSessionsUpdated) {
+        const queuedSessionId = entry.providerSessionId || (sessionRowMode === "existingSession" ? existingSessionId || sessionId : null);
+        queueSessionsUpdated({
+          source: "agent",
+          event: queueEvent,
+          sessionId: queuedSessionId,
+          refreshProjects: false
+        });
+      }
+    }
+  });
+  attachStderrHandler(ctx, sessionId, entry, {
+    logSlice: stderrLogSlice,
+    onFirstData: onFirstStderrData
+  });
+  let finalized = false;
+  const finalizeClose = (exitCode, source = "close") => {
+    if (finalized) return;
+    finalized = true;
+    log2("agent", "info", `process exited code=${exitCode}`, { sessionId: shortId, provider, source });
+    flushStdoutBuffer(ctx, sessionId, entry);
+    const finalStatus = entry._terminationReason || (exitCode === 0 ? "completed" : "error");
+    dbWrite((db3) => {
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      transitionSessionStatus(db3, sessionId, finalStatus, {
+        completedAt: now,
+        lastError: finalStatus === "error" ? `Process exited with code ${exitCode}` : void 0
+      });
+      if (sessionRowMode === "existingSession") {
+        const sessionRowId = existingSessionId || sessionId;
+        db3.prepare(`
+          UPDATE sessions
+          SET ended_at = ?, exit_code = ?, error_code = ?, error_message = ?
+          WHERE id = ?
+        `).run(
+          now,
+          exitCode,
+          exitCode === 0 ? null : entry._terminationReason || "PROCESS_EXIT",
+          exitCode === 0 ? null : `Process exited with code ${exitCode}`,
+          sessionRowId
+        );
+      }
+    });
+    if (entry.turnActive) {
+      broadcast2("agent:done", { sessionId, exitCode, providerSessionId: entry.providerSessionId });
+      if (queueSessionsUpdated) {
+        const queuedSessionId = entry.providerSessionId || (sessionRowMode === "existingSession" ? existingSessionId || sessionId : null);
+        queueSessionsUpdated({
+          source: "agent",
+          event: queueCloseEvent,
+          sessionId: queuedSessionId
+        });
+      }
+    }
+    dropResumeMappingsForSession(sessionId, resumeSessionIndex);
+    for (const [reqId, pending] of pendingPermissions || []) {
+      if (pending.rudiSessionId !== sessionId) continue;
+      const denyDecision = { permissionDecision: "deny", reason: "Session ended" };
+      if (pending.resolve) pending.resolve(denyDecision);
+      else pending.decision = denyDecision;
+      if (pending.timer) clearTimeout(pending.timer);
+      pendingPermissions.delete(reqId);
+    }
+    if (sessionAlwaysAllowed) sessionAlwaysAllowed.delete(sessionId);
+    agentProcesses2.delete(sessionId);
+    broadcastProcessCount(ctx);
+    maybeCleanupMcpConfig();
+    if (typeof onProcessClose === "function") {
+      flushDbWrites();
+      onProcessClose({
+        sessionId,
+        entry,
+        exitCode,
+        finalStatus,
+        providerSessionId: entry.providerSessionId || null,
+        runGroupId
+      });
+    }
+  };
+  proc.on("close", (exitCode) => finalizeClose(exitCode, "close"));
+  proc.on("exit", () => maybeCleanupMcpConfig());
+  proc.stdin.on("error", (err) => {
+    log2("agent", "warn", `stdin error (EPIPE/destroyed): ${err.message}`, { sessionId: shortId });
+  });
+  proc.on("error", (err) => {
+    if (finalized) return;
+    finalized = true;
+    log2("agent", "error", `spawn error: ${err.message}`, { sessionId: shortId, provider });
+    broadcast2("agent:error", { sessionId, error: err.message });
+    dbWrite((db3) => {
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      transitionSessionStatus(db3, sessionId, "error", {
+        lastError: err.message,
+        completedAt: now
+      });
+      if (sessionRowMode === "existingSession") {
+        const sessionRowId = existingSessionId || sessionId;
+        db3.prepare(`
+          UPDATE sessions
+          SET error_code = 'SPAWN_ERROR',
+              error_message = ?,
+              ended_at = ?
+          WHERE id = ?
+        `).run(err.message, now, sessionRowId);
+      }
+    });
+    dropResumeMappingsForSession(sessionId, resumeSessionIndex);
+    if (sessionAlwaysAllowed) sessionAlwaysAllowed.delete(sessionId);
+    agentProcesses2.delete(sessionId);
+    broadcastProcessCount(ctx);
+    maybeCleanupMcpConfig();
+    if (typeof onProcessError === "function") {
+      onProcessError({
+        sessionId,
+        entry,
+        error: err,
+        runGroupId
+      });
+    }
+  });
+  broadcastProcessCount(ctx);
+  return entry;
+}
+
 // src/commands/agent/routes/start.js
+var MAX_AGENT_BODY_SIZE = 50 * 1024 * 1024;
 function buildStartRoute(ctx) {
   const {
     json,
     error,
     readBody,
-    log,
-    broadcast,
-    agentProcesses,
+    log: log2,
+    broadcast: broadcast2,
+    agentProcesses: agentProcesses2,
     queueSessionsUpdated,
     resumeSessionIndex,
     maxConcurrent,
@@ -48521,10 +50372,11 @@ function buildStartRoute(ctx) {
     pendingPermissions,
     sessionAlwaysAllowed
   } = ctx;
+  const pendingStarts = /* @__PURE__ */ new Map();
   return async (req, res, url) => {
     if (req.method !== "POST" || url.pathname !== "/agent/start") return false;
-    const body = await readBody(req);
-    log("agent", "info", "received /agent/start request", { bodyKeys: Object.keys(body), resumeSessionId: body.resumeSessionId || null });
+    const body = await readBody(req, { maxBodySize: MAX_AGENT_BODY_SIZE });
+    log2("agent", "info", "received /agent/start request", { bodyKeys: Object.keys(body), resumeSessionId: body.resumeSessionId || null });
     const {
       prompt,
       provider: requestedProvider,
@@ -48550,10 +50402,10 @@ function buildStartRoute(ctx) {
     if (isChildSession) shouldUseWorktree = true;
     if (!prompt && (!images || images.length === 0)) return error(res, "prompt required");
     if (resumeSessionId) {
-      const reusable = resolveReusableEntry(resumeSessionId, { agentProcesses, resumeSessionIndex });
+      const reusable = resolveReusableEntry(resumeSessionId, { agentProcesses: agentProcesses2, resumeSessionIndex });
       if (reusable) {
         const { sessionId: existingId, entry } = reusable;
-        log("agent", "info", `reusing existing process for resume ${resumeSessionId.slice(0, 8)}`, {
+        log2("agent", "info", `reusing existing process for resume ${resumeSessionId.slice(0, 8)}`, {
           existingSessionId: existingId.slice(0, 8)
         });
         entry.turnActive = true;
@@ -48570,24 +50422,37 @@ function buildStartRoute(ctx) {
             UPDATE session_runtime_state SET updated_at = ? WHERE session_id = ?
           `).run((/* @__PURE__ */ new Date()).toISOString(), existingId);
         });
-        const inputMsg = JSON.stringify({ type: "user", message: { role: "user", content: buildUserContent(prompt, images, entry.cwd, log) } }) + "\n";
-        entry.proc.stdin.write(inputMsg);
-        broadcast("agent:event", {
-          sessionId: existingId,
-          event: { type: "system", message: "Resumed existing process" }
-        });
-        return json(res, {
-          sessionId: existingId,
-          provider: entry.provider,
-          reused: true,
-          cwd: entry.cwd,
-          useWorktree: Boolean(entry.worktreePath)
-        });
+        const inputMsg = JSON.stringify({ type: "user", message: { role: "user", content: buildUserContent(prompt, images, entry.cwd, log2) } }) + "\n";
+        if (!entry.proc.stdin.writable) {
+          log2("agent", "warn", "reused process stdin not writable, cannot resume", { sessionId: existingId.slice(0, 8) });
+        } else {
+          entry.proc.stdin.write(inputMsg);
+          broadcast2("agent:event", {
+            sessionId: existingId,
+            event: { type: "system", message: "Resumed existing process" }
+          });
+          return json(res, {
+            sessionId: existingId,
+            provider: entry.provider,
+            reused: true,
+            cwd: entry.cwd,
+            useWorktree: Boolean(entry.worktreePath)
+          });
+        }
       }
     }
-    const aliveCount = countAlive(agentProcesses);
+    if (resumeSessionId && pendingStarts.has(resumeSessionId)) {
+      log2("agent", "info", "concurrent start for same session, waiting for in-flight request", { resumeSessionId: resumeSessionId.slice(0, 8) });
+      try {
+        const result = await pendingStarts.get(resumeSessionId);
+        return json(res, { ...result, reused: true });
+      } catch (err) {
+        log2("agent", "warn", "in-flight start failed, proceeding with new start", { resumeSessionId: resumeSessionId.slice(0, 8), error: err.message });
+      }
+    }
+    const aliveCount = countAlive(agentProcesses2);
     if (aliveCount >= maxConcurrent) {
-      log("agent", "warn", `max concurrent limit reached (${aliveCount}/${maxConcurrent})`);
+      log2("agent", "warn", `max concurrent limit reached (${aliveCount}/${maxConcurrent})`);
       json(res, {
         error: `Too many active agent processes (${aliveCount}/${maxConcurrent}). Stop an existing session or wait for one to finish.`
       }, 429);
@@ -48595,13 +50460,21 @@ function buildStartRoute(ctx) {
     }
     const binaryPath = resolveProviderBinary(providerConfig);
     if (!binaryPath) {
-      log("agent", "error", `${providerConfig.name} CLI not found`);
+      log2("agent", "error", `${providerConfig.name} CLI not found`);
       return error(res, `${providerConfig.name} CLI not found. Run: rudi install agent:${provider}`, 500);
     }
     const sessionId = import_crypto6.default.randomUUID();
     const shortId = sessionId.slice(0, 8);
     if (resumeSessionId) {
       resumeSessionIndex.set(resumeSessionId, sessionId);
+    }
+    let resolvePending, rejectPending;
+    if (resumeSessionId) {
+      const p2 = new Promise((resolve, reject) => {
+        resolvePending = resolve;
+        rejectPending = reject;
+      });
+      pendingStarts.set(resumeSessionId, p2);
     }
     const canSpawnChildren = getSidecarPort() > 0;
     const fullSystemPrompt = buildSystemPrompt(systemPrompt, { canSpawnChildren });
@@ -48616,16 +50489,16 @@ function buildStartRoute(ctx) {
           `).get(resumeSessionId, resumeSessionId, resumeSessionId);
           resolvedResumeSid = row?.provider_session_id || null;
         } catch (err) {
-          log("agent", "warn", `Failed to look up provider session ID: ${err.message}`, { resumeSessionId: resumeSessionId.slice(0, 8) });
+          log2("agent", "warn", `Failed to look up provider session ID: ${err.message}`, { resumeSessionId: resumeSessionId.slice(0, 8) });
         }
       }
       if (!resolvedResumeSid && resumeSessionId.length > 20) {
         resolvedResumeSid = resumeSessionId;
       }
       if (resolvedResumeSid) {
-        log("agent", "info", `resuming with provider session: ${resolvedResumeSid.slice(0, 8)}`, { resumeSessionId: resumeSessionId.slice(0, 8) });
+        log2("agent", "info", `resuming with provider session: ${resolvedResumeSid.slice(0, 8)}`, { resumeSessionId: resumeSessionId.slice(0, 8) });
       } else {
-        log("agent", "warn", `No provider session ID found for resume, starting fresh session`, { resumeSessionId: resumeSessionId.slice(0, 8) });
+        log2("agent", "warn", `No provider session ID found for resume, starting fresh session`, { resumeSessionId: resumeSessionId.slice(0, 8) });
       }
     }
     let permissionModeKey = null;
@@ -48672,7 +50545,7 @@ function buildStartRoute(ctx) {
         const fallbackKey = modes.agent ? "agent" : Object.keys(modes)[0];
         if (fallbackKey) {
           args.push(...getPermissionArgs(providerConfig, fallbackKey));
-          log("agent", "info", `permission mode '${permissionModeKey}' not available for ${provider}, using '${fallbackKey}'`);
+          log2("agent", "info", `permission mode '${permissionModeKey}' not available for ${provider}, using '${fallbackKey}'`);
         }
       }
     }
@@ -48685,12 +50558,12 @@ function buildStartRoute(ctx) {
     let mcpConfigPath = null;
     if (canSpawnChildren && hasCapability(providerConfig, "mcpConfig")) {
       const spawnShimPath = import_path39.default.join(PATHS.home, "bins", "rudi-spawn");
-      if (import_fs39.default.existsSync(spawnShimPath)) {
+      if (import_fs40.default.existsSync(spawnShimPath)) {
         try {
           let existingMcpServers = {};
           const claudeJsonPath = import_path39.default.join(import_os17.default.homedir(), ".claude.json");
           try {
-            const claudeJson = JSON.parse(import_fs39.default.readFileSync(claudeJsonPath, "utf-8"));
+            const claudeJson = JSON.parse(import_fs40.default.readFileSync(claudeJsonPath, "utf-8"));
             existingMcpServers = claudeJson.mcpServers || {};
           } catch {
           }
@@ -48701,16 +50574,16 @@ function buildStartRoute(ctx) {
             }
           };
           const tmpDir = import_path39.default.join(PATHS.home, "tmp");
-          import_fs39.default.mkdirSync(tmpDir, { recursive: true });
+          import_fs40.default.mkdirSync(tmpDir, { recursive: true });
           mcpConfigPath = import_path39.default.join(tmpDir, `spawn-mcp-${shortId}.json`);
-          import_fs39.default.writeFileSync(mcpConfigPath, JSON.stringify(mergedConfig, null, 2), { mode: 384 });
+          import_fs40.default.writeFileSync(mcpConfigPath, JSON.stringify(mergedConfig, null, 2), { mode: 384 });
           args.push(
             ...expandConditional(providerConfig, "mcpConfig", mcpConfigPath),
             ...expandConditional(providerConfig, "strictMcpConfig", true)
           );
-          log("agent", "info", `injected spawn MCP config: ${mcpConfigPath}`, { sessionId: shortId, serverCount: Object.keys(mergedConfig.mcpServers).length });
+          log2("agent", "info", `injected spawn MCP config: ${mcpConfigPath}`, { sessionId: shortId, serverCount: Object.keys(mergedConfig.mcpServers).length });
         } catch (mcpErr) {
-          log("agent", "warn", `MCP config injection failed: ${mcpErr.message}`, { sessionId: shortId });
+          log2("agent", "warn", `MCP config injection failed: ${mcpErr.message}`, { sessionId: shortId });
         }
       }
     }
@@ -48731,9 +50604,9 @@ function buildStartRoute(ctx) {
     let repoRoot = null;
     let isGitRepo = false;
     try {
-      (0, import_child_process19.execSync)("git rev-parse --is-inside-work-tree", { cwd: workingDir, stdio: "pipe" });
+      (0, import_child_process20.execSync)("git rev-parse --is-inside-work-tree", { cwd: workingDir, stdio: "pipe" });
       repoRoot = getRepoRoot(workingDir);
-      currentBranch = (0, import_child_process19.execSync)("git rev-parse --abbrev-ref HEAD", { cwd: workingDir, stdio: "pipe" }).toString().trim();
+      currentBranch = (0, import_child_process20.execSync)("git rev-parse --abbrev-ref HEAD", { cwd: workingDir, stdio: "pipe" }).toString().trim();
       isGitRepo = true;
     } catch {
       isGitRepo = false;
@@ -48748,7 +50621,7 @@ function buildStartRoute(ctx) {
     if (isGitRepo && repoRoot && currentBranch) {
       if (!resumeSessionId) {
         if (shouldUseWorktree) {
-          const wt2 = createSessionWorktree({ repoRoot, currentBranch, shortId, log });
+          const wt2 = createSessionWorktree({ repoRoot, currentBranch, shortId, log: log2 });
           if (wt2.worktreePath) {
             worktreePath = wt2.worktreePath;
             worktreeBranch = wt2.worktreeBranch;
@@ -48757,7 +50630,7 @@ function buildStartRoute(ctx) {
           }
         }
       } else {
-        const restored = restoreSessionWorktree({ resumeSessionId, repoRoot, currentBranch, shortId, log });
+        const restored = restoreSessionWorktree({ resumeSessionId, repoRoot, currentBranch, shortId, log: log2 });
         if (restored.worktreePath) {
           worktreePath = restored.worktreePath;
           worktreeBranch = restored.worktreeBranch;
@@ -48769,19 +50642,19 @@ function buildStartRoute(ctx) {
     const resolvedUseWorktree = Boolean(worktreePath);
     let spawnCwd = effectiveCwd;
     try {
-      const st2 = import_fs39.default.statSync(spawnCwd);
+      const st2 = import_fs40.default.statSync(spawnCwd);
       if (!st2.isDirectory()) throw new Error("not_a_directory");
     } catch {
       const cwdFallbacks = [workingDir, repoRoot, process.env.HOME, import_os17.default.homedir()].filter((p2) => typeof p2 === "string" && p2.length > 0);
       const fallback = cwdFallbacks.find((p2) => {
         try {
-          return import_fs39.default.statSync(p2).isDirectory();
+          return import_fs40.default.statSync(p2).isDirectory();
         } catch {
           return false;
         }
       });
       if (fallback) {
-        log("agent", "warn", `spawn cwd missing, falling back to: ${fallback}`, {
+        log2("agent", "warn", `spawn cwd missing, falling back to: ${fallback}`, {
           sessionId: shortId,
           missingCwd: effectiveCwd
         });
@@ -48789,7 +50662,7 @@ function buildStartRoute(ctx) {
         effectiveCwd = fallback;
       }
     }
-    log("agent", "info", `spawning ${provider} agent`, {
+    log2("agent", "info", `spawning ${provider} agent`, {
       sessionId: shortId,
       provider,
       binary: binaryPath,
@@ -48803,8 +50676,8 @@ function buildStartRoute(ctx) {
       db3.prepare(`
         INSERT INTO session_runtime_state
           (session_id, status, provider, resume_session_id, cwd, started_at, updated_at,
-           worktree_path, worktree_branch, project_root, base_branch, use_worktree)
-        VALUES (?, 'starting', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           worktree_path, worktree_branch, project_root, base_branch, use_worktree, execution_mode)
+        VALUES (?, 'starting', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         sessionId,
         provider,
@@ -48816,174 +50689,39 @@ function buildStartRoute(ctx) {
         worktreeBranch,
         repoRoot,
         baseBranch,
-        resolvedUseWorktree ? 1 : 0
+        resolvedUseWorktree ? 1 : 0,
+        resolvedUseWorktree ? "worktree" : "shared_cwd"
       );
     });
     try {
-      const proc = (0, import_child_process19.spawn)(binaryPath, args, {
-        cwd: spawnCwd,
-        env,
-        stdio: ["pipe", "pipe", "pipe"]
-      });
-      const entry = {
-        proc,
+      spawnAgentProcess(ctx, {
+        sessionId,
+        prompt,
         provider,
+        model,
+        permissionMode: permissionMode || null,
+        systemPrompt: fullSystemPrompt || null,
         providerConfig,
-        providerSessionId: null,
-        resumeSessionId: resumeSessionId || null,
-        parentSessionId: null,
-        stdoutBuffer: "",
-        turnActive: true,
-        startedAt: Date.now(),
-        lastActivityAt: Date.now(),
-        cwd: effectiveCwd,
+        binaryPath,
+        args,
+        env,
+        spawnCwd,
+        effectiveCwd,
+        workingDir,
         repoRoot,
         worktreePath,
         worktreeBranch,
         baseBranch,
-        _terminationReason: null,
-        _turnPrompt: prompt,
-        _turnNumber: 1,
-        _turnInputTokens: 0,
-        _turnOutputTokens: 0,
-        _turnCacheReadTokens: 0,
-        _turnCacheCreationTokens: 0,
-        _turnModel: model || null,
-        _turnToolsUsed: []
-      };
-      agentProcesses.set(sessionId, entry);
-      log("agent", "info", `process spawned pid=${proc.pid}`, { sessionId: shortId });
-      if (stdinMode === "pipe" && hasCapability(providerConfig, "inputStreaming")) {
-        const inputMsg = JSON.stringify({ type: "user", message: { role: "user", content: buildUserContent(prompt, images, effectiveCwd, log) } }) + "\n";
-        proc.stdin.write(inputMsg);
-        log("agent", "debug", "wrote first prompt to stdin (stream-json)", { sessionId: shortId });
-      } else if (stdinMode === "close") {
-        proc.stdin.end();
-        log("agent", "debug", "closed stdin (prompt delivered via args)", { sessionId: shortId });
-      } else if (stdinMode === "pipe") {
-        log("agent", "debug", "stdin pipe open (prompt delivered via args)", { sessionId: shortId });
-      }
-      attachStdoutHandler(ctx, sessionId, entry, {
+        resumeSessionId: resumeSessionId || null,
+        images,
+        mcpConfigPath,
+        sessionRowMode: "providerSessionId",
+        autoNameOnFirstTurn: true,
         setRunningOnCapture: true,
-        onResult: (event) => {
-          entry.turnActive = false;
-          const costUsd = typeof event.costUsd === "number" ? event.costUsd : typeof event.total_cost_usd === "number" ? event.total_cost_usd : null;
-          const turnNumber = entry._turnNumber;
-          const turnPrompt = entry._turnPrompt || "";
-          const turnModel = entry._turnModel || null;
-          const providerSid = entry.providerSessionId;
-          dbWrite((db3) => {
-            const now = (/* @__PURE__ */ new Date()).toISOString();
-            if (costUsd !== null) {
-              db3.prepare(`
-                UPDATE session_runtime_state
-                SET turn_count = turn_count + 1, cost_total = ?, updated_at = ?
-                WHERE session_id = ?
-              `).run(costUsd, now, sessionId);
-            } else {
-              db3.prepare(`
-                UPDATE session_runtime_state
-                SET turn_count = turn_count + 1, updated_at = ?
-                WHERE session_id = ?
-              `).run(now, sessionId);
-            }
-            if (!providerSid) return;
-            db3.prepare(`
-              INSERT OR IGNORE INTO sessions
-                (id, provider, provider_session_id, origin, cwd, project_path, model, status, created_at, last_active_at,
-                 turn_count, total_cost, total_input_tokens, total_output_tokens)
-              VALUES (?, ?, ?, 'rudi', ?, ?, ?, 'active', ?, ?, 0, 0, 0, 0)
-            `).run(providerSid, provider, providerSid, workingDir, workingDir, turnModel, now, now);
-            db3.prepare(`UPDATE sessions SET last_active_at = ? WHERE id = ?`).run(now, providerSid);
-          });
-          if (turnNumber === 1 && providerSid) {
-            autoNameSession(entry, providerSid, turnPrompt, workingDir, broadcast, log);
-          }
-          entry._turnNumber++;
-          entry._turnPrompt = "";
-          entry._turnInputTokens = 0;
-          entry._turnOutputTokens = 0;
-          entry._turnCacheReadTokens = 0;
-          entry._turnCacheCreationTokens = 0;
-          entry._turnToolsUsed = [];
-          if (entry._normalizer) entry._normalizer.reset();
-          broadcast("agent:done", { sessionId, exitCode: 0, providerSessionId: entry.providerSessionId });
-          queueSessionsUpdated({
-            source: "agent",
-            event: "result",
-            sessionId: entry.providerSessionId || null
-          });
-        }
+        queueEvent: "result",
+        queueCloseEvent: "process-close"
       });
-      attachStderrHandler(ctx, sessionId, entry);
-      proc.on("close", (exitCode) => {
-        log("agent", "info", `process exited code=${exitCode}`, { sessionId: shortId });
-        flushStdoutBuffer(ctx, sessionId, entry);
-        dbWrite((db3) => {
-          const now = (/* @__PURE__ */ new Date()).toISOString();
-          const finalStatus = entry._terminationReason || (exitCode === 0 ? "completed" : "error");
-          db3.prepare(`
-            UPDATE session_runtime_state
-            SET status = ?, completed_at = ?, updated_at = ?
-            WHERE session_id = ?
-          `).run(finalStatus, now, now, sessionId);
-        });
-        if (entry.turnActive) {
-          broadcast("agent:done", { sessionId, exitCode, providerSessionId: entry.providerSessionId });
-          queueSessionsUpdated({
-            source: "agent",
-            event: "process-close",
-            sessionId: entry.providerSessionId || null
-          });
-        }
-        dropResumeMappingsForSession(sessionId, resumeSessionIndex);
-        for (const [reqId, pending] of pendingPermissions) {
-          if (pending.rudiSessionId === sessionId) {
-            const denyDecision = { permissionDecision: "deny", reason: "Session ended" };
-            if (pending.resolve) pending.resolve(denyDecision);
-            else pending.decision = denyDecision;
-            if (pending.timer) clearTimeout(pending.timer);
-            pendingPermissions.delete(reqId);
-          }
-        }
-        sessionAlwaysAllowed.delete(sessionId);
-        agentProcesses.delete(sessionId);
-        broadcastProcessCount(ctx);
-        if (mcpConfigPath) {
-          try {
-            import_fs39.default.unlinkSync(mcpConfigPath);
-          } catch {
-          }
-        }
-      });
-      proc.on("exit", () => {
-        if (mcpConfigPath) {
-          try {
-            import_fs39.default.unlinkSync(mcpConfigPath);
-          } catch {
-          }
-        }
-      });
-      proc.on("error", (err) => {
-        log("agent", "error", `spawn error: ${err.message}`, { sessionId: shortId });
-        broadcast("agent:error", { sessionId, error: err.message });
-        dbWrite((db3) => {
-          db3.prepare(`
-            UPDATE session_runtime_state
-            SET status = 'error', last_error = ?, updated_at = ?
-            WHERE session_id = ?
-          `).run(err.message, (/* @__PURE__ */ new Date()).toISOString(), sessionId);
-        });
-        dropResumeMappingsForSession(sessionId, resumeSessionIndex);
-        agentProcesses.delete(sessionId);
-        if (mcpConfigPath) {
-          try {
-            import_fs39.default.unlinkSync(mcpConfigPath);
-          } catch {
-          }
-        }
-      });
-      json(res, {
+      const responsePayload = {
         sessionId,
         provider,
         cwd: effectiveCwd,
@@ -48994,31 +50732,35 @@ function buildStartRoute(ctx) {
         baseBranch: baseBranch || void 0,
         gitignoreWarning: gitignoreWarning || void 0,
         useWorktree: resolvedUseWorktree
-      });
-      broadcastProcessCount(ctx);
+      };
+      if (resolvePending) resolvePending(responsePayload);
+      json(res, responsePayload);
     } catch (err) {
+      if (rejectPending) rejectPending(err);
       dropResumeMappingsForSession(sessionId, resumeSessionIndex);
       dbWrite((db3) => {
-        db3.prepare(`
-          UPDATE session_runtime_state
-          SET status = 'error', last_error = ?, updated_at = ?
-          WHERE session_id = ?
-        `).run(err.message, (/* @__PURE__ */ new Date()).toISOString(), sessionId);
+        transitionSessionStatus(db3, sessionId, "error", {
+          lastError: err.message,
+          completedAt: (/* @__PURE__ */ new Date()).toISOString()
+        });
       });
-      log("agent", "error", `Failed to spawn: ${err.message}`);
+      log2("agent", "error", `Failed to spawn: ${err.message}`);
       error(res, `Failed to spawn agent: ${err.message}`, 500);
+    } finally {
+      if (resumeSessionId) pendingStarts.delete(resumeSessionId);
     }
     return true;
   };
 }
 
 // src/commands/agent/routes/lifecycle.js
+var MAX_AGENT_BODY_SIZE2 = 50 * 1024 * 1024;
 function buildLifecycleRoutes(ctx) {
-  const { json, error, readBody, log, broadcast, agentProcesses, maxConcurrent } = ctx;
+  const { json, error, readBody, log: log2, broadcast: broadcast2, agentProcesses: agentProcesses2, maxConcurrent } = ctx;
   return async (req, res, url) => {
     if (req.method === "POST" && url.pathname === "/agent/stop") {
-      const body = await readBody(req);
-      const entry = agentProcesses.get(body.sessionId);
+      const body = await readBody(req, { maxBodySize: MAX_AGENT_BODY_SIZE2 });
+      const entry = agentProcesses2.get(body.sessionId);
       if (entry) {
         entry._terminationReason = "stopped";
         entry.proc.kill("SIGTERM");
@@ -49029,19 +50771,19 @@ function buildLifecycleRoutes(ctx) {
           }
         }, 3e3);
         entry.proc.on("close", () => clearTimeout(killTimer));
-        broadcast("agent:stopped", { sessionId: body.sessionId });
+        broadcast2("agent:stopped", { sessionId: body.sessionId });
       }
       json(res, { ok: true });
       return true;
     }
     if (req.method === "POST" && url.pathname === "/agent/send") {
-      const body = await readBody(req);
+      const body = await readBody(req, { maxBodySize: MAX_AGENT_BODY_SIZE2 });
       if (!body.sessionId || !body.message && (!body.images || body.images.length === 0)) return error(res, "sessionId and message required");
-      const entry = agentProcesses.get(body.sessionId);
+      const entry = agentProcesses2.get(body.sessionId);
       if (!entry || !entry.proc || entry.proc.killed) {
         return error(res, "No active process for this session \u2014 start a new one via /agent/start", 400);
       }
-      log("agent", "info", "sending follow-up via stdin", {
+      log2("agent", "info", "sending follow-up via stdin", {
         sessionId: body.sessionId.slice(0, 8),
         prompt: body.message.slice(0, 80)
       });
@@ -49054,7 +50796,10 @@ function buildLifecycleRoutes(ctx) {
         entry._turnCacheReadTokens = 0;
         entry._turnCacheCreationTokens = 0;
         entry._turnToolsUsed = [];
-        const inputMsg = JSON.stringify({ type: "user", message: { role: "user", content: buildUserContent(body.message, body.images, entry.cwd, log) } }) + "\n";
+        const inputMsg = JSON.stringify({ type: "user", message: { role: "user", content: buildUserContent(body.message, body.images, entry.cwd, log2) } }) + "\n";
+        if (!entry.proc.stdin.writable) {
+          return error(res, "Process stdin is no longer writable \u2014 the agent may have exited", 410);
+        }
         entry.proc.stdin.write(inputMsg);
         json(res, { ok: true });
       } catch (err) {
@@ -49065,11 +50810,11 @@ function buildLifecycleRoutes(ctx) {
     if (req.method === "POST" && url.pathname === "/agent/tool-result") {
       const body = await readBody(req);
       if (!body.sessionId || !body.toolUseId) return error(res, "sessionId and toolUseId required");
-      const entry = agentProcesses.get(body.sessionId);
+      const entry = agentProcesses2.get(body.sessionId);
       if (!entry || !entry.proc || entry.proc.killed) {
         return error(res, "No active process for this session", 400);
       }
-      log("agent", "info", "sending tool result via stdin", {
+      log2("agent", "info", "sending tool result via stdin", {
         sessionId: body.sessionId.slice(0, 8),
         toolUseId: body.toolUseId.slice(0, 12)
       });
@@ -49088,6 +50833,9 @@ function buildLifecycleRoutes(ctx) {
           },
           toolUseResult: { questions: body.questions, answers: body.answers }
         });
+        if (!entry.proc.stdin.writable) {
+          return error(res, "Process stdin is no longer writable \u2014 the agent may have exited", 410);
+        }
         entry.proc.stdin.write(payload + "\n");
         json(res, { ok: true });
       } catch (err) {
@@ -49098,7 +50846,7 @@ function buildLifecycleRoutes(ctx) {
     const statusMatch = url.pathname.match(/^\/agent\/status\/([^/]+)$/);
     if (req.method === "GET" && statusMatch) {
       const sessionId = decodeURIComponent(statusMatch[1]);
-      const entry = agentProcesses.get(sessionId);
+      const entry = agentProcesses2.get(sessionId);
       if (entry) {
         json(res, {
           running: true,
@@ -49112,7 +50860,7 @@ function buildLifecycleRoutes(ctx) {
     }
     if (req.method === "GET" && url.pathname === "/agent/sessions") {
       const sessions = [];
-      for (const [sessionId, entry] of agentProcesses) {
+      for (const [sessionId, entry] of agentProcesses2) {
         const alive = !!(entry.proc && !entry.proc.killed);
         sessions.push({
           sessionId,
@@ -49129,7 +50877,7 @@ function buildLifecycleRoutes(ctx) {
     }
     if (req.method === "POST" && url.pathname === "/agent/kill-all") {
       const killed = [];
-      for (const [sessionId, entry] of agentProcesses) {
+      for (const [sessionId, entry] of agentProcesses2) {
         if (entry.proc && !entry.proc.killed) {
           killed.push(sessionId);
           entry._terminationReason = "stopped";
@@ -49141,10 +50889,10 @@ function buildLifecycleRoutes(ctx) {
             }
           }, 3e3);
           entry.proc.on("close", () => clearTimeout(killTimer));
-          broadcast("agent:stopped", { sessionId });
+          broadcast2("agent:stopped", { sessionId });
         }
       }
-      log("agent", "warn", `kill-all: terminated ${killed.length} processes`);
+      log2("agent", "warn", `kill-all: terminated ${killed.length} processes`);
       json(res, { ok: true, killed: killed.length });
       return true;
     }
@@ -49154,19 +50902,19 @@ function buildLifecycleRoutes(ctx) {
 
 // src/commands/agent/routes/spawn-child.js
 var import_os18 = __toESM(require("os"), 1);
-var import_fs40 = __toESM(require("fs"), 1);
+var import_fs41 = __toESM(require("fs"), 1);
 var import_path40 = __toESM(require("path"), 1);
 var import_crypto7 = __toESM(require("crypto"), 1);
-var import_child_process20 = require("child_process");
+var import_child_process21 = require("child_process");
 init_src();
 function buildSpawnChildRoutes(ctx) {
   const {
     json,
     error,
     readBody,
-    log,
-    broadcast,
-    agentProcesses,
+    log: log2,
+    broadcast: broadcast2,
+    agentProcesses: agentProcesses2,
     queueSessionsUpdated,
     resumeSessionIndex,
     maxConcurrent,
@@ -49220,7 +50968,7 @@ function buildSpawnChildRoutes(ctx) {
       if (recentTimestamps.length >= MAX_SPAWNS_PER_WINDOW) {
         return json(res, { error: "SPAWN_RATE_LIMITED", message: `Max ${MAX_SPAWNS_PER_WINDOW} spawns per ${SPAWN_RATE_WINDOW_MS / 1e3}s` }, 429);
       }
-      const parentEntry = agentProcesses.get(parentSessionId);
+      const parentEntry = agentProcesses2.get(parentSessionId);
       if (parentEntry?.parentSessionId) {
         return json(res, { error: "NESTED_CHILD_SPAWN_NOT_SUPPORTED", message: "Children cannot spawn further children" }, 400);
       }
@@ -49236,7 +50984,7 @@ function buildSpawnChildRoutes(ctx) {
       } catch {
       }
       let childCount = 0;
-      for (const [, entry] of agentProcesses) {
+      for (const [, entry] of agentProcesses2) {
         if (entry.parentSessionId === parentSessionId && entry.proc && !entry.proc.killed) {
           childCount++;
         }
@@ -49244,7 +50992,7 @@ function buildSpawnChildRoutes(ctx) {
       if (childCount >= MAX_CHILDREN_PER_PARENT) {
         return json(res, { error: "CHILD_LIMIT_REACHED", message: `Max ${MAX_CHILDREN_PER_PARENT} children per parent`, max: MAX_CHILDREN_PER_PARENT }, 429);
       }
-      const aliveCount = countAlive(agentProcesses);
+      const aliveCount = countAlive(agentProcesses2);
       if (aliveCount >= maxConcurrent) {
         return json(res, { error: "MAX_CONCURRENT_REACHED", message: `Too many active agent processes (${aliveCount}/${maxConcurrent})` }, 429);
       }
@@ -49288,7 +51036,7 @@ function buildSpawnChildRoutes(ctx) {
       let resolvedBaseRef = baseRef || null;
       if (!resolvedBaseRef) {
         try {
-          resolvedBaseRef = (0, import_child_process20.execFileSync)("git", ["rev-parse", "HEAD"], { cwd: parentCwd, stdio: "pipe" }).toString().trim();
+          resolvedBaseRef = (0, import_child_process21.execFileSync)("git", ["rev-parse", "HEAD"], { cwd: parentCwd, stdio: "pipe" }).toString().trim();
         } catch {
           resolvedBaseRef = "HEAD";
         }
@@ -49300,7 +51048,7 @@ function buildSpawnChildRoutes(ctx) {
         return json(res, { error: "INVALID_BASE_REF", message: "baseRef contains invalid characters" }, 400);
       }
       try {
-        (0, import_child_process20.execFileSync)("git", ["rev-parse", "--verify", `${resolvedBaseRef}^{commit}`], { cwd: parentRepoRoot, stdio: "pipe" });
+        (0, import_child_process21.execFileSync)("git", ["rev-parse", "--verify", `${resolvedBaseRef}^{commit}`], { cwd: parentRepoRoot, stdio: "pipe" });
       } catch {
         return json(res, { error: "INVALID_BASE_REF", message: `baseRef '${resolvedBaseRef}' does not resolve to a valid commit` }, 400);
       }
@@ -49315,14 +51063,14 @@ function buildSpawnChildRoutes(ctx) {
       let worktreeBranch = null;
       let worktreePath = null;
       try {
-        const wt2 = createChildWorktree({ parentRepoRoot, sanitizedDesc, resolvedBaseRef, shortId, log });
+        const wt2 = createChildWorktree({ parentRepoRoot, sanitizedDesc, resolvedBaseRef, shortId, log: log2 });
         worktreeBranch = wt2.worktreeBranch;
         worktreePath = wt2.worktreePath;
       } catch (wtErr) {
         return json(res, { error: "WORKTREE_BRANCH_COLLISION", message: "Could not create worktree after 5 attempts" }, 500);
       }
       const nowIso = (/* @__PURE__ */ new Date()).toISOString();
-      log("agent", "info", `spawn-child request`, { origin, provider, parentSessionId: parentSessionId.slice(0, 8) });
+      log2("agent", "info", `spawn-child request`, { origin, provider, parentSessionId: parentSessionId.slice(0, 8) });
       dbWrite((db3) => {
         db3.prepare(`
           INSERT INTO sessions
@@ -49335,8 +51083,8 @@ function buildSpawnChildRoutes(ctx) {
         db3.prepare(`
           INSERT INTO session_runtime_state
             (session_id, status, provider, cwd, started_at, updated_at,
-             worktree_path, worktree_branch, project_root, base_branch, use_worktree)
-          VALUES (?, 'starting', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             worktree_path, worktree_branch, project_root, base_branch, use_worktree, execution_mode)
+          VALUES (?, 'starting', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           childSessionId,
           provider,
@@ -49347,7 +51095,8 @@ function buildSpawnChildRoutes(ctx) {
           worktreeBranch,
           parentRepoRoot,
           parentBaseBranch,
-          1
+          1,
+          "worktree"
         );
       });
       const childSystemPrompt = buildSystemPrompt(null, { canSpawnChildren: false });
@@ -49361,8 +51110,8 @@ function buildSpawnChildRoutes(ctx) {
       if (autoKey) childArgs.push(...getPermissionArgs(providerConfig, autoKey));
       if (hasCapability(providerConfig, "mcpConfig")) {
         const emptyMcpPath = import_path40.default.join(import_os18.default.tmpdir(), "rudi-empty-mcp.json");
-        if (!import_fs40.default.existsSync(emptyMcpPath)) {
-          import_fs40.default.writeFileSync(emptyMcpPath, '{"mcpServers":{}}', { mode: 384 });
+        if (!import_fs41.default.existsSync(emptyMcpPath)) {
+          import_fs41.default.writeFileSync(emptyMcpPath, '{"mcpServers":{}}', { mode: 384 });
         }
         childArgs.push(
           ...expandConditional(providerConfig, "mcpConfig", emptyMcpPath),
@@ -49382,7 +51131,7 @@ function buildSpawnChildRoutes(ctx) {
         childEnv.RUDI_CAN_SPAWN_CHILDREN = "0";
       }
       try {
-        const proc = (0, import_child_process20.spawn)(binaryPath, childArgs, {
+        const proc = (0, import_child_process21.spawn)(binaryPath, childArgs, {
           cwd: worktreePath,
           env: childEnv,
           stdio: ["pipe", "pipe", "pipe"]
@@ -49419,7 +51168,7 @@ function buildSpawnChildRoutes(ctx) {
           _isChild: true,
           _description: sanitizedDesc
         };
-        agentProcesses.set(childSessionId, entry);
+        agentProcesses2.set(childSessionId, entry);
         dbWrite((db3) => {
           db3.prepare(`
             UPDATE session_runtime_state SET status = 'running', updated_at = ? WHERE session_id = ?
@@ -49428,7 +51177,7 @@ function buildSpawnChildRoutes(ctx) {
             UPDATE sessions SET started_at = ? WHERE id = ?
           `).run((/* @__PURE__ */ new Date()).toISOString(), childSessionId);
         });
-        log("agent", "info", `child process spawned pid=${proc.pid}`, {
+        log2("agent", "info", `child process spawned pid=${proc.pid}`, {
           sessionId: shortId,
           parentSessionId: parentSessionId.slice(0, 8),
           worktreeBranch,
@@ -49455,7 +51204,7 @@ function buildSpawnChildRoutes(ctx) {
         const STARTUP_TIMEOUT_MS = 12e4;
         let startupTimer = setTimeout(() => {
           if (entry.turnActive && entry.lastActivityAt === entry.startedAt) {
-            log("agent", "error", `child startup stall \u2014 no output in ${STARTUP_TIMEOUT_MS / 1e3}s`, { sessionId: shortId });
+            log2("agent", "error", `child startup stall \u2014 no output in ${STARTUP_TIMEOUT_MS / 1e3}s`, { sessionId: shortId });
             entry._terminationReason = "startup_stall";
             killWithFallback(proc);
           }
@@ -49463,7 +51212,7 @@ function buildSpawnChildRoutes(ctx) {
         const RUNTIME_TIMEOUT_MS = 15 * 60 * 1e3;
         const runtimeTimer = setTimeout(() => {
           if (entry.proc && !entry.proc.killed) {
-            log("agent", "warn", `child runtime timeout (${RUNTIME_TIMEOUT_MS / 1e3}s)`, { sessionId: shortId });
+            log2("agent", "warn", `child runtime timeout (${RUNTIME_TIMEOUT_MS / 1e3}s)`, { sessionId: shortId });
             entry._terminationReason = "timeout";
             killWithFallback(proc);
           }
@@ -49480,23 +51229,31 @@ function buildSpawnChildRoutes(ctx) {
           onFirstData: (chunk, totalBytes) => {
             clearStartupTimer();
             if (totalBytes <= 2e3) {
-              log("agent", "debug", `child stdout (${chunk.length}b, total=${totalBytes}): ${chunk.toString().slice(0, 200)}`, { sessionId: shortId });
+              log2("agent", "debug", `child stdout (${chunk.length}b, total=${totalBytes}): ${chunk.toString().slice(0, 200)}`, { sessionId: shortId });
             }
           },
           onResult: (event) => {
             entry.turnActive = false;
             const costUsd = typeof event.costUsd === "number" ? event.costUsd : typeof event.total_cost_usd === "number" ? event.total_cost_usd : null;
+            const turnTokens = Math.max(
+              0,
+              Number(entry._turnInputTokens || 0) + Number(entry._turnOutputTokens || 0) + Number(entry._turnCacheReadTokens || 0) + Number(entry._turnCacheCreationTokens || 0)
+            );
             const providerSid = entry.providerSessionId;
             dbWrite((db3) => {
               const now2 = (/* @__PURE__ */ new Date()).toISOString();
               if (costUsd !== null) {
                 db3.prepare(`
-                  UPDATE session_runtime_state SET turn_count = turn_count + 1, cost_total = ?, updated_at = ? WHERE session_id = ?
-                `).run(costUsd, now2, childSessionId);
+                  UPDATE session_runtime_state
+                  SET turn_count = turn_count + 1, cost_total = ?, tokens_total = tokens_total + ?, updated_at = ?
+                  WHERE session_id = ?
+                `).run(costUsd, turnTokens, now2, childSessionId);
               } else {
                 db3.prepare(`
-                  UPDATE session_runtime_state SET turn_count = turn_count + 1, updated_at = ? WHERE session_id = ?
-                `).run(now2, childSessionId);
+                  UPDATE session_runtime_state
+                  SET turn_count = turn_count + 1, tokens_total = tokens_total + ?, updated_at = ?
+                  WHERE session_id = ?
+                `).run(turnTokens, now2, childSessionId);
               }
               if (providerSid) {
                 db3.prepare(`
@@ -49504,8 +51261,13 @@ function buildSpawnChildRoutes(ctx) {
                 `).run(providerSid, now2, costUsd || 0, childSessionId);
               }
             });
-            broadcast("agent:done", { sessionId: childSessionId, exitCode: 0, providerSessionId: entry.providerSessionId });
-            queueSessionsUpdated({ source: "agent", event: "child-result", sessionId: entry.providerSessionId || null });
+            broadcast2("agent:done", { sessionId: childSessionId, exitCode: 0, providerSessionId: entry.providerSessionId });
+            queueSessionsUpdated({
+              source: "agent",
+              event: "child-result",
+              sessionId: entry.providerSessionId || null,
+              refreshProjects: false
+            });
           }
         });
         attachStderrHandler(ctx, childSessionId, entry, {
@@ -49521,7 +51283,7 @@ function buildSpawnChildRoutes(ctx) {
           clearStartupTimer();
           clearTimeout(runtimeTimer);
           try {
-            log("agent", "info", `child process exited code=${exitCode} (${source})`, { sessionId: shortId });
+            log2("agent", "info", `child process exited code=${exitCode} (${source})`, { sessionId: shortId });
             const finalStatus = entry._terminationReason || (exitCode === 0 ? "completed" : "error");
             dbWrite((db3) => {
               const now2 = (/* @__PURE__ */ new Date()).toISOString();
@@ -49533,19 +51295,24 @@ function buildSpawnChildRoutes(ctx) {
               `).run(now2, exitCode, childSessionId);
             });
             if (entry.turnActive) {
-              broadcast("agent:done", { sessionId: childSessionId, exitCode, providerSessionId: entry.providerSessionId });
+              broadcast2("agent:done", { sessionId: childSessionId, exitCode, providerSessionId: entry.providerSessionId });
             }
-            broadcast("sessions:updated", { source: "agent", event: "child-completed", sessionId: childSessionId });
+            broadcast2("sessions:updated", {
+              source: "agent",
+              event: "child-completed",
+              sessionId: childSessionId,
+              refreshProjects: true
+            });
           } catch (cleanupErr) {
-            log("agent", "error", `child cleanup error: ${cleanupErr.message}`, { sessionId: shortId });
+            log2("agent", "error", `child cleanup error: ${cleanupErr.message}`, { sessionId: shortId });
           }
-          agentProcesses.delete(childSessionId);
+          agentProcesses2.delete(childSessionId);
           broadcastProcessCount(ctx);
         };
         proc.on("close", (exitCode) => cleanupChild(exitCode, "close"));
         proc.on("exit", (exitCode) => cleanupChild(exitCode, "exit"));
         proc.on("error", (err) => {
-          log("agent", "error", `child spawn error: ${err.message}`, { sessionId: shortId });
+          log2("agent", "error", `child spawn error: ${err.message}`, { sessionId: shortId });
           clearStartupTimer();
           clearTimeout(runtimeTimer);
           try {
@@ -49559,15 +51326,20 @@ function buildSpawnChildRoutes(ctx) {
               `).run(err.message, now2, childSessionId);
             });
           } catch (dbErr) {
-            log("agent", "error", `child error handler DB write failed: ${dbErr.message}`, { sessionId: shortId });
+            log2("agent", "error", `child error handler DB write failed: ${dbErr.message}`, { sessionId: shortId });
           }
-          broadcast("agent:error", { sessionId: childSessionId, error: err.message });
-          agentProcesses.delete(childSessionId);
+          broadcast2("agent:error", { sessionId: childSessionId, error: err.message });
+          agentProcesses2.delete(childSessionId);
         });
         recentTimestamps.push(now);
         spawnRateMap.set(parentSessionId, recentTimestamps);
         broadcastProcessCount(ctx);
-        broadcast("sessions:updated", { source: "agent", event: "child-spawned", sessionId: childSessionId });
+        broadcast2("sessions:updated", {
+          source: "agent",
+          event: "child-spawned",
+          sessionId: childSessionId,
+          refreshProjects: true
+        });
         json(res, {
           sessionId: childSessionId,
           worktreeBranch,
@@ -49575,11 +51347,11 @@ function buildSpawnChildRoutes(ctx) {
           status: "spawned"
         });
       } catch (spawnErr) {
-        log("agent", "error", `child spawn failed: ${spawnErr.message}`, { sessionId: shortId });
+        log2("agent", "error", `child spawn failed: ${spawnErr.message}`, { sessionId: shortId });
         try {
-          (0, import_child_process20.execFileSync)("git", ["worktree", "remove", "--force", worktreePath], { cwd: parentRepoRoot, stdio: "pipe" });
+          (0, import_child_process21.execFileSync)("git", ["worktree", "remove", "--force", worktreePath], { cwd: parentRepoRoot, stdio: "pipe" });
           try {
-            (0, import_child_process20.execFileSync)("git", ["branch", "-D", "--", worktreeBranch], { cwd: parentRepoRoot, stdio: "pipe" });
+            (0, import_child_process21.execFileSync)("git", ["branch", "-D", "--", worktreeBranch], { cwd: parentRepoRoot, stdio: "pipe" });
           } catch {
           }
         } catch {
@@ -49616,7 +51388,7 @@ function buildSpawnChildRoutes(ctx) {
           ORDER BY s.created_at DESC
         `).all(parentId);
         for (const row of rows) {
-          const liveEntry = agentProcesses.get(row.id);
+          const liveEntry = agentProcesses2.get(row.id);
           const alive = !!(liveEntry?.proc && !liveEntry.proc.killed);
           children.push({
             sessionId: row.id,
@@ -49632,7 +51404,7 @@ function buildSpawnChildRoutes(ctx) {
           });
         }
       } catch (dbErr) {
-        for (const [sessionId, entry] of agentProcesses) {
+        for (const [sessionId, entry] of agentProcesses2) {
           if (entry.parentSessionId === parentId) {
             children.push({
               sessionId,
@@ -49653,11 +51425,11 @@ function buildSpawnChildRoutes(ctx) {
 }
 
 // src/commands/agent/routes/worktree-routes.js
-var import_fs41 = __toESM(require("fs"), 1);
-var import_child_process21 = require("child_process");
+var import_fs42 = __toESM(require("fs"), 1);
+var import_child_process22 = require("child_process");
 var import_path41 = __toESM(require("path"), 1);
 function buildWorktreeRoutes(ctx) {
-  const { json, error, readBody, log } = ctx;
+  const { json, error, readBody, log: log2 } = ctx;
   return async (req, res, url) => {
     if (req.method === "POST" && url.pathname === "/agent/cleanup-worktree") {
       const body = await readBody(req);
@@ -49670,20 +51442,20 @@ function buildWorktreeRoutes(ctx) {
         if (!row?.worktree_path) {
           return json(res, { ok: false, reason: "no_worktree", details: "No worktree associated with this session" });
         }
-        if (!import_fs41.default.existsSync(row.worktree_path)) {
+        if (!import_fs42.default.existsSync(row.worktree_path)) {
           db3.prepare("UPDATE session_runtime_state SET worktree_path = NULL WHERE session_id = ?").run(body.sessionId);
           return json(res, { ok: true });
         }
         const repoDir = row.project_root || import_path41.default.dirname(import_path41.default.dirname(import_path41.default.dirname(row.worktree_path)));
         let uncommitted = "";
         try {
-          uncommitted = (0, import_child_process21.execFileSync)("git", ["status", "--porcelain"], { cwd: row.worktree_path, stdio: "pipe" }).toString().trim();
+          uncommitted = (0, import_child_process22.execFileSync)("git", ["status", "--porcelain"], { cwd: row.worktree_path, stdio: "pipe" }).toString().trim();
         } catch {
         }
         let unmerged = "";
         if (row.worktree_branch && row.base_branch) {
           try {
-            unmerged = (0, import_child_process21.execFileSync)(
+            unmerged = (0, import_child_process22.execFileSync)(
               "git",
               ["log", `${row.base_branch}..${row.worktree_branch}`, "--oneline"],
               { cwd: repoDir, stdio: "pipe" }
@@ -49700,14 +51472,14 @@ ${unmerged}`;
         }
         try {
           const removeArgs = body.force ? ["worktree", "remove", "--force", row.worktree_path] : ["worktree", "remove", row.worktree_path];
-          (0, import_child_process21.execFileSync)("git", removeArgs, { cwd: repoDir, stdio: "pipe" });
+          (0, import_child_process22.execFileSync)("git", removeArgs, { cwd: repoDir, stdio: "pipe" });
         } catch (wtErr) {
           return json(res, { ok: false, reason: "remove_failed", details: wtErr.message });
         }
         let branchRetained = false;
         if (row.worktree_branch && !row.worktree_branch.startsWith("-") && !body.force) {
           try {
-            (0, import_child_process21.execFileSync)("git", ["branch", "-d", "--", row.worktree_branch], { cwd: repoDir, stdio: "pipe" });
+            (0, import_child_process22.execFileSync)("git", ["branch", "-d", "--", row.worktree_branch], { cwd: repoDir, stdio: "pipe" });
           } catch {
             branchRetained = true;
           }
@@ -49716,7 +51488,7 @@ ${unmerged}`;
         }
         db3.prepare("UPDATE session_runtime_state SET worktree_path = NULL WHERE session_id = ?").run(body.sessionId);
         json(res, { ok: true, branchRetained, branch: branchRetained ? row.worktree_branch : null });
-        log("agent", "info", `worktree cleaned up for session ${body.sessionId.slice(0, 8)}`, { branchRetained });
+        log2("agent", "info", `worktree cleaned up for session ${body.sessionId.slice(0, 8)}`, { branchRetained });
       } catch (err) {
         error(res, `Cleanup failed: ${err.message}`, 500);
       }
@@ -49741,16 +51513,2144 @@ ${unmerged}`;
           if (row.worktree_branch.startsWith("-")) {
             return json(res, { ok: false, reason: "invalid_branch", details: "Branch name starts with dash" });
           }
-          (0, import_child_process21.execFileSync)("git", ["branch", "-d", "--", row.worktree_branch], { cwd: repoDir, stdio: "pipe" });
+          (0, import_child_process22.execFileSync)("git", ["branch", "-d", "--", row.worktree_branch], { cwd: repoDir, stdio: "pipe" });
         } catch (brErr) {
           return json(res, { ok: false, reason: "branch_unmerged", details: brErr.message });
         }
         db3.prepare("UPDATE session_runtime_state SET worktree_branch = NULL WHERE session_id = ?").run(body.sessionId);
         json(res, { ok: true });
-        log("agent", "info", `worktree branch deleted for session ${body.sessionId.slice(0, 8)}`, { branch: row.worktree_branch });
+        log2("agent", "info", `worktree branch deleted for session ${body.sessionId.slice(0, 8)}`, { branch: row.worktree_branch });
       } catch (err) {
         error(res, `Branch delete failed: ${err.message}`, 500);
       }
+      return true;
+    }
+    if (req.method === "GET" && url.pathname === "/git/worktrees/status") {
+      const repoPath = url.searchParams.get("path");
+      if (!repoPath) return error(res, "path query param required", 400);
+      try {
+        const rawList = (0, import_child_process22.execFileSync)("git", ["worktree", "list", "--porcelain"], {
+          cwd: repoPath,
+          stdio: "pipe"
+        }).toString();
+        const worktrees = [];
+        let current = {};
+        for (const line of rawList.split("\n")) {
+          if (line.startsWith("worktree ")) {
+            if (current.path) worktrees.push(current);
+            current = { path: line.slice(9).trim() };
+          } else if (line.startsWith("HEAD ")) {
+            current.head = line.slice(5).trim();
+          } else if (line.startsWith("branch ")) {
+            current.branch = line.slice(7).trim().replace("refs/heads/", "");
+          } else if (line === "bare") {
+            current.bare = true;
+          } else if (line === "detached") {
+            current.detached = true;
+          }
+        }
+        if (current.path) worktrees.push(current);
+        const enriched = [];
+        const db3 = getDb();
+        for (const wt2 of worktrees) {
+          const entry = {
+            path: wt2.path,
+            head: wt2.head || null,
+            branch: wt2.branch || null,
+            bare: Boolean(wt2.bare),
+            detached: Boolean(wt2.detached),
+            dirty: false,
+            changedFiles: [],
+            ahead: 0,
+            behind: 0,
+            linkedSessionId: null,
+            linkedSessionStatus: null
+          };
+          if (wt2.bare) {
+            enriched.push(entry);
+            continue;
+          }
+          try {
+            const status = (0, import_child_process22.execFileSync)("git", ["status", "--porcelain"], {
+              cwd: wt2.path,
+              stdio: "pipe"
+            }).toString().trim();
+            if (status) {
+              entry.dirty = true;
+              entry.changedFiles = status.split("\n").map((line) => ({
+                status: line.slice(0, 2).trim(),
+                path: line.slice(3).trim()
+              })).slice(0, 20);
+            }
+          } catch {
+          }
+          if (wt2.branch) {
+            try {
+              const revList = (0, import_child_process22.execFileSync)(
+                "git",
+                ["rev-list", "--left-right", "--count", `${wt2.branch}...origin/${wt2.branch}`],
+                { cwd: wt2.path, stdio: "pipe" }
+              ).toString().trim();
+              const parts = revList.split("	");
+              if (parts.length === 2) {
+                entry.ahead = parseInt(parts[0], 10) || 0;
+                entry.behind = parseInt(parts[1], 10) || 0;
+              }
+            } catch {
+              try {
+                const srs = db3.prepare(
+                  "SELECT base_branch FROM session_runtime_state WHERE worktree_branch = ? LIMIT 1"
+                ).get(wt2.branch);
+                const base = srs?.base_branch || "main";
+                const revList = (0, import_child_process22.execFileSync)(
+                  "git",
+                  ["rev-list", "--left-right", "--count", `${wt2.branch}...${base}`],
+                  { cwd: repoPath, stdio: "pipe" }
+                ).toString().trim();
+                const parts = revList.split("	");
+                if (parts.length === 2) {
+                  entry.ahead = parseInt(parts[0], 10) || 0;
+                  entry.behind = parseInt(parts[1], 10) || 0;
+                }
+              } catch {
+              }
+            }
+          }
+          try {
+            const srs = db3.prepare(
+              "SELECT session_id, status FROM session_runtime_state WHERE worktree_path = ? OR worktree_branch = ?"
+            ).get(wt2.path, wt2.branch);
+            if (srs) {
+              entry.linkedSessionId = srs.session_id;
+              entry.linkedSessionStatus = srs.status;
+            }
+          } catch {
+          }
+          enriched.push(entry);
+        }
+        json(res, { worktrees: enriched });
+      } catch (err) {
+        error(res, `Failed to list worktrees: ${err.message}`, 500);
+      }
+      return true;
+    }
+    const diffBranchMatch = url.pathname.match(/^\/git\/worktrees\/diff\/(.+)$/);
+    if (req.method === "GET" && diffBranchMatch) {
+      const branch = decodeURIComponent(diffBranchMatch[1]);
+      const repoPath = url.searchParams.get("path");
+      const base = url.searchParams.get("base") || "main";
+      if (!repoPath) return error(res, "path query param required", 400);
+      try {
+        const diff = (0, import_child_process22.execFileSync)(
+          "git",
+          ["diff", `${base}...${branch}`],
+          { cwd: repoPath, stdio: "pipe", maxBuffer: 5 * 1024 * 1024 }
+        ).toString();
+        let stat = "";
+        try {
+          stat = (0, import_child_process22.execFileSync)(
+            "git",
+            ["diff", "--stat", `${base}...${branch}`],
+            { cwd: repoPath, stdio: "pipe" }
+          ).toString().trim();
+        } catch {
+        }
+        json(res, { branch, base, diff, stat });
+      } catch (err) {
+        error(res, `Failed to get diff: ${err.message}`, 500);
+      }
+      return true;
+    }
+    return false;
+  };
+}
+
+// src/commands/agent/routes/run-group.js
+var import_os19 = __toESM(require("os"), 1);
+var import_fs43 = __toESM(require("fs"), 1);
+var import_path42 = __toESM(require("path"), 1);
+var import_crypto8 = __toESM(require("crypto"), 1);
+var import_child_process23 = require("child_process");
+init_src();
+
+// src/commands/agent/group-spec.js
+var EXECUTION_MODE_MAP = {
+  worktree: "worktree",
+  shared: "shared_cwd",
+  shared_cwd: "shared_cwd",
+  read_only: "read_only",
+  readonly: "read_only",
+  detached: "detached"
+};
+var COORDINATION_MODE_MAP = {
+  flat: "flat",
+  phased: "phased",
+  supervisor: "supervisor"
+};
+function trimOrNull(value) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+function normalizeStringArray(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => trimOrNull(entry)).filter(Boolean);
+}
+function normalizeIntegerArray(value, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => Number.isInteger(entry) ? entry : null).filter((entry) => entry !== null && entry >= min && entry <= max);
+}
+function normalizeExecutionMode(input, { useWorktree } = {}) {
+  if (typeof input === "string") {
+    const normalized = EXECUTION_MODE_MAP[input.trim().toLowerCase()];
+    if (normalized) return normalized;
+  }
+  return useWorktree === false ? "shared_cwd" : "worktree";
+}
+function normalizeCoordinationMode(input) {
+  if (typeof input === "string") {
+    const normalized = COORDINATION_MODE_MAP[input.trim().toLowerCase()];
+    if (normalized) return normalized;
+  }
+  return "flat";
+}
+function normalizeTaskSpec(task, idx, defaults2 = {}) {
+  if (typeof task === "string") {
+    return {
+      prompt: task.trim(),
+      name: null,
+      provider: defaults2.provider || null,
+      model: defaults2.model || null,
+      role: null,
+      goal: null,
+      deliverable: null,
+      rationale: null,
+      filesTouched: [],
+      dependsOn: [],
+      requiresWrite: null,
+      contextPaths: [],
+      artifactsIn: [],
+      artifactsOut: [],
+      metadata: {}
+    };
+  }
+  if (!task || typeof task !== "object") {
+    return {
+      prompt: "",
+      name: `Task ${idx + 1}`,
+      provider: defaults2.provider || null,
+      model: defaults2.model || null,
+      role: null,
+      goal: null,
+      deliverable: null,
+      rationale: null,
+      filesTouched: [],
+      dependsOn: [],
+      requiresWrite: null,
+      contextPaths: [],
+      artifactsIn: [],
+      artifactsOut: [],
+      metadata: {}
+    };
+  }
+  const metadata = {};
+  for (const [key, value] of Object.entries(task)) {
+    if ([
+      "prompt",
+      "name",
+      "provider",
+      "model",
+      "role",
+      "goal",
+      "deliverable",
+      "rationale",
+      "files_touched",
+      "filesTouched",
+      "depends_on",
+      "dependsOn",
+      "requires_write",
+      "requiresWrite",
+      "context_paths",
+      "contextPaths",
+      "artifacts_in",
+      "artifactsIn",
+      "artifacts_out",
+      "artifactsOut"
+    ].includes(key)) {
+      continue;
+    }
+    metadata[key] = value;
+  }
+  return {
+    prompt: trimOrNull(task.prompt) || "",
+    name: trimOrNull(task.name),
+    provider: trimOrNull(task.provider) || defaults2.provider || null,
+    model: trimOrNull(task.model) || defaults2.model || null,
+    role: trimOrNull(task.role),
+    goal: trimOrNull(task.goal),
+    deliverable: trimOrNull(task.deliverable),
+    rationale: trimOrNull(task.rationale),
+    filesTouched: normalizeStringArray(task.filesTouched ?? task.files_touched),
+    dependsOn: normalizeIntegerArray(task.dependsOn ?? task.depends_on),
+    requiresWrite: typeof (task.requiresWrite ?? task.requires_write) === "boolean" ? task.requiresWrite ?? task.requires_write : null,
+    contextPaths: normalizeStringArray(task.contextPaths ?? task.context_paths),
+    artifactsIn: normalizeStringArray(task.artifactsIn ?? task.artifacts_in),
+    artifactsOut: normalizeStringArray(task.artifactsOut ?? task.artifacts_out),
+    metadata
+  };
+}
+function normalizeGroupTasks(body, defaults2 = {}) {
+  const rawTasks = Array.isArray(body?.tasks) ? body.tasks : Array.isArray(body?.prompts) ? body.prompts : [];
+  return rawTasks.map((task, idx) => normalizeTaskSpec(task, idx, defaults2)).filter((task) => task.prompt.length > 0);
+}
+function buildPhasePlan(tasks, sequentialPhases) {
+  const indices = tasks.map((_2, idx) => idx);
+  if (!Array.isArray(sequentialPhases) || sequentialPhases.length === 0) {
+    return indices.length > 0 ? [indices] : [];
+  }
+  const seen = /* @__PURE__ */ new Set();
+  const phases = [];
+  for (const phase of sequentialPhases) {
+    if (!Array.isArray(phase)) continue;
+    const normalized = [];
+    for (const rawIdx of phase) {
+      if (!Number.isInteger(rawIdx)) continue;
+      if (rawIdx < 0 || rawIdx >= tasks.length) continue;
+      if (seen.has(rawIdx)) continue;
+      seen.add(rawIdx);
+      normalized.push(rawIdx);
+    }
+    if (normalized.length > 0) phases.push(normalized);
+  }
+  const remainder = indices.filter((idx) => !seen.has(idx));
+  if (remainder.length > 0) phases.push(remainder);
+  return phases;
+}
+
+// src/commands/agent/group-scheduler.js
+function normalizePhasePlan(phasePlan, taskCount) {
+  if (Array.isArray(phasePlan) && phasePlan.length > 0) {
+    return phasePlan.filter((phase) => Array.isArray(phase)).map((phase) => phase.filter((idx) => Number.isInteger(idx) && idx >= 0 && idx < taskCount)).filter((phase) => phase.length > 0);
+  }
+  return taskCount > 0 ? [Array.from({ length: taskCount }, (_2, idx) => idx)] : [];
+}
+function parseRunGroupConfig(configJson) {
+  if (typeof configJson !== "string" || configJson.trim().length === 0) {
+    return { tasks: [], phasePlan: [], coordinationMode: "flat" };
+  }
+  try {
+    const parsed = JSON.parse(configJson);
+    return {
+      ...parsed,
+      tasks: Array.isArray(parsed?.tasks) ? parsed.tasks : [],
+      phasePlan: normalizePhasePlan(parsed?.phasePlan, Array.isArray(parsed?.tasks) ? parsed.tasks.length : 0),
+      coordinationMode: typeof parsed?.coordinationMode === "string" ? parsed.coordinationMode : "flat"
+    };
+  } catch {
+    return { tasks: [], phasePlan: [], coordinationMode: "flat" };
+  }
+}
+function getEffectivePhasePlan({ coordinationMode, phasePlan, tasks }) {
+  const normalized = normalizePhasePlan(phasePlan, tasks.length);
+  if (coordinationMode !== "phased") {
+    return tasks.length > 0 ? [Array.from({ length: tasks.length }, (_2, idx) => idx)] : [];
+  }
+  return normalized;
+}
+function evaluatePhaseExecution({ coordinationMode, tasks, phasePlan, runtimeStatusBySessionId }) {
+  const effectivePhasePlan = getEffectivePhasePlan({ coordinationMode, phasePlan, tasks });
+  const runtimeMap = runtimeStatusBySessionId instanceof Map ? runtimeStatusBySessionId : new Map(Object.entries(runtimeStatusBySessionId || {}));
+  for (let phaseIndex = 0; phaseIndex < effectivePhasePlan.length; phaseIndex += 1) {
+    const phaseTaskIndices = effectivePhasePlan[phaseIndex];
+    const phaseTasks = phaseTaskIndices.map((taskIndex) => tasks[taskIndex]).filter(Boolean);
+    if (phaseTasks.length === 0) continue;
+    const pendingTasks = [];
+    let hasActive = false;
+    let hasFailure = false;
+    let hasStopped = false;
+    for (const task of phaseTasks) {
+      const status = runtimeMap.get(task.sessionId) || null;
+      if (!status) {
+        pendingTasks.push(task);
+        continue;
+      }
+      if (status === "starting" || status === "running") {
+        hasActive = true;
+        continue;
+      }
+      if (status === "error" || status === "crashed") {
+        hasFailure = true;
+        continue;
+      }
+      if (status === "stopped") {
+        hasStopped = true;
+      }
+    }
+    if (pendingTasks.length > 0) {
+      return {
+        action: "launch",
+        phaseIndex,
+        tasks: pendingTasks
+      };
+    }
+    if (hasActive) {
+      return {
+        action: "wait",
+        phaseIndex,
+        tasks: []
+      };
+    }
+    if (hasFailure || hasStopped) {
+      const blockedTasks = [];
+      for (let downstreamPhase = phaseIndex + 1; downstreamPhase < effectivePhasePlan.length; downstreamPhase += 1) {
+        for (const taskIndex of effectivePhasePlan[downstreamPhase]) {
+          const task = tasks[taskIndex];
+          if (!task) continue;
+          if (runtimeMap.get(task.sessionId)) continue;
+          blockedTasks.push(task);
+        }
+      }
+      return {
+        action: blockedTasks.length > 0 ? "block" : "wait",
+        phaseIndex,
+        tasks: blockedTasks,
+        reason: hasStopped ? "phase_stopped" : "phase_failed"
+      };
+    }
+  }
+  return {
+    action: "complete",
+    phaseIndex: effectivePhasePlan.length > 0 ? effectivePhasePlan.length - 1 : -1,
+    tasks: []
+  };
+}
+function normalizeRunGroupStatus({
+  currentStatus,
+  sessionCount,
+  launchedCount,
+  doneCount,
+  completedCount,
+  failedCount,
+  stoppedCount
+}) {
+  const totalSessions = Number(sessionCount || 0);
+  const launchedSessions = Number(launchedCount || 0);
+  const doneSessions = Number(doneCount || 0);
+  const completedSessions = Number(completedCount || 0);
+  const failedSessions = Number(failedCount || 0);
+  const stoppedSessions = Number(stoppedCount || 0);
+  if (currentStatus === "stopped") return "stopped";
+  if (totalSessions === 0) return "pending";
+  if (launchedSessions === 0) return "pending";
+  if (doneSessions < totalSessions) return "running";
+  if (failedSessions > 0 && completedSessions > 0) return "partial";
+  if (failedSessions > 0) return "failed";
+  if (stoppedSessions > 0) return "stopped";
+  return "completed";
+}
+function deriveRunGroupSessionStatus({ alive, runtimeStatus, sessionStatus, groupStatus }) {
+  if (alive) return "running";
+  if (runtimeStatus) return runtimeStatus;
+  if (groupStatus === "stopped") return "stopped";
+  if (sessionStatus === "active") return "pending";
+  return sessionStatus || "unknown";
+}
+
+// src/commands/agent/routes/run-group.js
+var TERMINAL_GROUP_STATUSES = /* @__PURE__ */ new Set(["completed", "partial", "failed", "stopped"]);
+function detectGitContext(workingDir) {
+  try {
+    (0, import_child_process23.execSync)("git rev-parse --is-inside-work-tree", { cwd: workingDir, stdio: "pipe" });
+    return {
+      isGitRepo: true,
+      repoRoot: getRepoRoot(workingDir),
+      currentBranch: (0, import_child_process23.execSync)("git rev-parse --abbrev-ref HEAD", { cwd: workingDir, stdio: "pipe" }).toString().trim()
+    };
+  } catch {
+    return {
+      isGitRepo: false,
+      repoRoot: null,
+      currentBranch: null
+    };
+  }
+}
+function appendContextArgs(args, providerConfig, contextPaths) {
+  const normalized = [...new Set(
+    (Array.isArray(contextPaths) ? contextPaths : []).map((entry) => typeof entry === "string" ? entry.trim() : "").filter(Boolean)
+  )];
+  if (normalized.length === 0) return;
+  const addDirsArgs = expandConditional(providerConfig, "addDirs", normalized);
+  if (addDirsArgs.length > 0) {
+    args.push(...addDirsArgs);
+    return;
+  }
+  for (const contextPath of normalized) {
+    const addDirArgs = expandConditional(providerConfig, "addDir", contextPath);
+    if (addDirArgs.length > 0) {
+      args.push(...addDirArgs);
+    }
+  }
+}
+function resolvePermissionModeKey(permissionMode, providerConfig) {
+  const modeMap = {
+    bypassPermissions: "bypassPermissions",
+    plan: "plan",
+    acceptEdits: "acceptEdits",
+    delegate: "delegate",
+    dontAsk: "dontAsk",
+    default: "default",
+    fullAuto: "agent",
+    dangerous: "dangerous",
+    approve: "approve",
+    readonly: "readonly",
+    fullAccess: "fullAccess"
+  };
+  const requested = permissionMode || "bypassPermissions";
+  const mapped = modeMap[requested] || requested;
+  const modes = providerConfig?.headless?.permissionModes || {};
+  if (modes[mapped]) return mapped;
+  return modes.agent ? "agent" : Object.keys(modes)[0];
+}
+function defaultPermissionModeForExecution(executionMode, providerConfig) {
+  const modes = providerConfig?.headless?.permissionModes || {};
+  if (executionMode === "read_only") {
+    if (modes.readonly) return "readonly";
+    if (modes.plan) return "plan";
+    if (modes.default) return "default";
+  }
+  return null;
+}
+function loadRunGroup(groupId) {
+  const db3 = getDb();
+  const group = db3.prepare("SELECT * FROM run_groups WHERE id = ?").get(groupId);
+  if (!group) return null;
+  return {
+    ...group,
+    config: parseRunGroupConfig(group.config_json)
+  };
+}
+function createTaskRuntimeStatusMap(db3, groupId) {
+  const rows = db3.prepare(`
+    SELECT s.id AS session_id, srs.status AS runtime_status
+    FROM sessions s
+    LEFT JOIN session_runtime_state srs ON srs.session_id = s.id
+    WHERE s.run_group_id = ?
+  `).all(groupId);
+  return new Map(rows.filter((row) => row.runtime_status).map((row) => [row.session_id, row.runtime_status]));
+}
+function markRunGroupTasksStopped(db3, group, tasks, reason) {
+  if (!Array.isArray(tasks) || tasks.length === 0) return [];
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  const insertRuntime = db3.prepare(`
+    INSERT OR IGNORE INTO session_runtime_state
+      (session_id, status, provider, cwd, started_at, updated_at, completed_at,
+       last_error, project_root, base_branch, use_worktree, execution_mode)
+    VALUES (?, 'stopped', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const updateSession = db3.prepare(`
+    UPDATE sessions
+    SET ended_at = COALESCE(ended_at, ?),
+        error_code = COALESCE(error_code, 'GROUP_BLOCKED'),
+        error_message = COALESCE(error_message, ?)
+    WHERE id = ?
+  `);
+  const blockedSessionIds = [];
+  for (const task of tasks) {
+    const runtimeResult = insertRuntime.run(
+      task.sessionId,
+      task.provider || group.provider,
+      group.project_path || group.workspace_root || process.cwd(),
+      now,
+      now,
+      now,
+      reason,
+      group.workspace_root || group.project_path || process.cwd(),
+      group.base_branch || null,
+      group.execution_mode === "worktree" ? 1 : 0,
+      group.execution_mode || "shared_cwd"
+    );
+    if (runtimeResult.changes > 0) {
+      blockedSessionIds.push(task.sessionId);
+    }
+    updateSession.run(now, reason, task.sessionId);
+  }
+  return blockedSessionIds;
+}
+function refreshRunGroupAggregates(db3, groupId) {
+  const stats = db3.prepare(`
+    SELECT
+      COUNT(*) AS session_count,
+      SUM(CASE WHEN srs.session_id IS NOT NULL THEN 1 ELSE 0 END) AS launched_count,
+      SUM(CASE WHEN COALESCE(srs.status, '') = 'completed' THEN 1 ELSE 0 END) AS completed_count,
+      SUM(CASE WHEN COALESCE(srs.status, '') IN ('error', 'crashed') THEN 1 ELSE 0 END) AS failed_count,
+      SUM(CASE WHEN COALESCE(srs.status, '') = 'stopped' THEN 1 ELSE 0 END) AS stopped_count,
+      SUM(CASE WHEN COALESCE(srs.status, '') IN ('completed', 'error', 'stopped', 'crashed') THEN 1 ELSE 0 END) AS done_count,
+      COALESCE(SUM(COALESCE(srs.cost_total, s.total_cost, 0)), 0) AS total_cost,
+      COALESCE(SUM(COALESCE(
+        srs.tokens_total,
+        (COALESCE(s.total_input_tokens, 0) + COALESCE(s.total_output_tokens, 0)),
+        0
+      )), 0) AS total_tokens
+    FROM sessions s
+    LEFT JOIN session_runtime_state srs ON srs.session_id = s.id
+    WHERE s.run_group_id = ?
+  `).get(groupId) || {
+    session_count: 0,
+    launched_count: 0,
+    completed_count: 0,
+    failed_count: 0,
+    stopped_count: 0,
+    done_count: 0,
+    total_cost: 0,
+    total_tokens: 0
+  };
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  db3.prepare(`
+    UPDATE run_groups
+    SET session_count = ?,
+        completed_count = ?,
+        failed_count = ?,
+        total_cost = ?,
+        total_tokens = ?,
+        updated_at = ?
+    WHERE id = ?
+  `).run(
+    Number(stats.session_count || 0),
+    Number(stats.completed_count || 0),
+    Number(stats.failed_count || 0),
+    Number(stats.total_cost || 0),
+    Number(stats.total_tokens || 0),
+    now,
+    groupId
+  );
+  const group = db3.prepare("SELECT * FROM run_groups WHERE id = ?").get(groupId);
+  if (!group) return null;
+  const nextStatus = normalizeRunGroupStatus({
+    currentStatus: group.status,
+    sessionCount: stats.session_count,
+    launchedCount: stats.launched_count,
+    doneCount: stats.done_count,
+    completedCount: stats.completed_count,
+    failedCount: stats.failed_count,
+    stoppedCount: stats.stopped_count
+  });
+  const isDone = Number(stats.done_count || 0) >= Number(stats.session_count || 0) && Number(stats.session_count || 0) > 0;
+  const completedAt = isDone && TERMINAL_GROUP_STATUSES.has(nextStatus) ? group.completed_at || now : null;
+  db3.prepare(`
+    UPDATE run_groups
+    SET status = ?,
+        completed_at = ?,
+        updated_at = ?
+    WHERE id = ?
+  `).run(nextStatus, completedAt, now, groupId);
+  return db3.prepare("SELECT * FROM run_groups WHERE id = ?").get(groupId);
+}
+function launchRunGroupTask(ctx, group, task, settledFn) {
+  const {
+    log: log2,
+    broadcast: broadcast2,
+    getSidecarPort,
+    getSidecarToken
+  } = ctx;
+  const db3 = getDb();
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  const workingDir = group.project_path || process.cwd();
+  const repoRoot = group.workspace_root || workingDir;
+  const baseBranch = group.base_branch || null;
+  const sessionId = task.sessionId;
+  const shortId = sessionId.slice(0, 8);
+  const runtimeInsert = db3.prepare(`
+    INSERT OR IGNORE INTO session_runtime_state
+      (session_id, status, provider, cwd, started_at, updated_at,
+       project_root, base_branch, use_worktree, execution_mode)
+    VALUES (?, 'starting', ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    sessionId,
+    task.provider,
+    workingDir,
+    now,
+    now,
+    repoRoot,
+    baseBranch,
+    group.execution_mode === "worktree" ? 1 : 0,
+    group.execution_mode
+  );
+  if (runtimeInsert.changes === 0) {
+    return { started: false, skipped: true, sessionId };
+  }
+  let providerConfig;
+  let binaryPath;
+  let worktreePath = null;
+  let worktreeBranch = null;
+  let effectiveCwd = workingDir;
+  let spawnCwd = workingDir;
+  let gitignoreWarning = false;
+  let mcpConfigPath = null;
+  try {
+    providerConfig = loadProviderConfig(task.provider || group.provider || "claude");
+    binaryPath = resolveProviderBinary(providerConfig);
+    if (!binaryPath) {
+      throw new Error(`${providerConfig.name} CLI not found. Run: rudi install agent:${task.provider}`);
+    }
+    if (group.execution_mode === "worktree") {
+      const wt2 = createSessionWorktree({
+        repoRoot,
+        currentBranch: baseBranch,
+        shortId,
+        log: log2
+      });
+      if (wt2.worktreePath) {
+        worktreePath = wt2.worktreePath;
+        worktreeBranch = wt2.worktreeBranch;
+        effectiveCwd = wt2.worktreePath;
+        spawnCwd = wt2.worktreePath;
+        gitignoreWarning = Boolean(wt2.gitignoreWarning);
+      }
+    }
+    try {
+      const st2 = import_fs43.default.statSync(spawnCwd);
+      if (!st2.isDirectory()) throw new Error("not_a_directory");
+    } catch {
+      spawnCwd = workingDir;
+      effectiveCwd = workingDir;
+    }
+    db3.prepare(`
+      UPDATE session_runtime_state
+      SET cwd = ?,
+          updated_at = ?,
+          worktree_path = ?,
+          worktree_branch = ?,
+          project_root = ?,
+          base_branch = ?,
+          use_worktree = ?,
+          execution_mode = ?
+      WHERE session_id = ?
+    `).run(
+      effectiveCwd,
+      now,
+      worktreePath,
+      worktreeBranch,
+      repoRoot,
+      baseBranch,
+      worktreePath ? 1 : 0,
+      group.execution_mode,
+      sessionId
+    );
+    db3.prepare(`
+      UPDATE sessions
+      SET cwd = ?,
+          project_path = ?,
+          git_branch = ?,
+          model = COALESCE(?, model),
+          started_at = COALESCE(started_at, ?),
+          last_active_at = ?,
+          ended_at = NULL,
+          error_code = NULL,
+          error_message = NULL
+      WHERE id = ?
+    `).run(
+      effectiveCwd,
+      workingDir,
+      worktreeBranch || baseBranch || null,
+      task.model,
+      now,
+      now,
+      sessionId
+    );
+    const canSpawnChildren = getSidecarPort() > 0;
+    const fullSystemPrompt = buildSystemPrompt(group.config.systemPrompt, { canSpawnChildren });
+    const argOptions = { prompt: task.prompt, model: task.model };
+    if (hasCapability(providerConfig, "systemPrompt") && fullSystemPrompt) {
+      argOptions.systemPrompt = fullSystemPrompt;
+    }
+    argOptions.outputFormat = "stream-json";
+    const args = buildArgs(providerConfig, argOptions);
+    appendContextArgs(args, providerConfig, task.contextPaths);
+    const effectivePermissionMode = group.permission_mode || defaultPermissionModeForExecution(group.execution_mode, providerConfig);
+    const permissionModeKey = resolvePermissionModeKey(effectivePermissionMode, providerConfig);
+    if (permissionModeKey) {
+      args.push(...getPermissionArgs(providerConfig, permissionModeKey));
+    }
+    if (canSpawnChildren && hasCapability(providerConfig, "subagents")) {
+      args.push("--allowed-tools", "mcp__rudi-spawn__spawn_child,mcp__rudi-spawn__list_children");
+    }
+    if (canSpawnChildren && hasCapability(providerConfig, "mcpConfig")) {
+      const spawnShimPath = import_path42.default.join(PATHS.home, "bins", "rudi-spawn");
+      if (import_fs43.default.existsSync(spawnShimPath)) {
+        let existingMcpServers = {};
+        const claudeJsonPath = import_path42.default.join(import_os19.default.homedir(), ".claude.json");
+        try {
+          const claudeJson = JSON.parse(import_fs43.default.readFileSync(claudeJsonPath, "utf-8"));
+          existingMcpServers = claudeJson.mcpServers || {};
+        } catch {
+        }
+        const mergedConfig = {
+          mcpServers: {
+            ...existingMcpServers,
+            "rudi-spawn": { command: spawnShimPath, args: [] }
+          }
+        };
+        const tmpDir = import_path42.default.join(PATHS.home, "tmp");
+        import_fs43.default.mkdirSync(tmpDir, { recursive: true });
+        mcpConfigPath = import_path42.default.join(tmpDir, `run-group-mcp-${shortId}.json`);
+        import_fs43.default.writeFileSync(mcpConfigPath, JSON.stringify(mergedConfig, null, 2), { mode: 384 });
+        args.push(
+          ...expandConditional(providerConfig, "mcpConfig", mcpConfigPath),
+          ...expandConditional(providerConfig, "strictMcpConfig", true)
+        );
+      }
+    }
+    const configEnv = buildEnv2(providerConfig, process.env);
+    const env = { ...process.env, ...configEnv };
+    if (getSidecarPort() > 0) {
+      env.RUDI_SIDECAR_URL = `http://127.0.0.1:${getSidecarPort()}`;
+      env.RUDI_SIDECAR_TOKEN = getSidecarToken();
+      env.RUDI_SESSION_ID = sessionId;
+      env.RUDI_CAN_SPAWN_CHILDREN = "1";
+    }
+    spawnAgentProcess(ctx, {
+      sessionId,
+      prompt: task.prompt,
+      provider: task.provider,
+      model: task.model,
+      permissionMode: effectivePermissionMode,
+      systemPrompt: fullSystemPrompt || null,
+      providerConfig,
+      binaryPath,
+      args,
+      env,
+      spawnCwd,
+      effectiveCwd,
+      workingDir,
+      repoRoot,
+      worktreePath,
+      worktreeBranch,
+      baseBranch,
+      runGroupId: group.id,
+      mcpConfigPath,
+      stdinModeOverride: "close",
+      sessionRowMode: "existingSession",
+      existingSessionId: sessionId,
+      autoNameOnFirstTurn: false,
+      queueEvent: "run-group-result",
+      queueCloseEvent: "run-group-close",
+      onProcessClose: ({ finalStatus }) => {
+        settledFn(group.id, sessionId, finalStatus);
+      },
+      onProcessError: () => {
+        settledFn(group.id, sessionId, "error");
+      }
+    });
+    if (gitignoreWarning) {
+      log2("agent", "warn", "run-group worktree created but .rudi/ is not in .gitignore", {
+        groupId: group.id,
+        sessionId: shortId
+      });
+    }
+    return { started: true, sessionId };
+  } catch (spawnErr) {
+    const errIso = (/* @__PURE__ */ new Date()).toISOString();
+    transitionSessionStatus(db3, sessionId, "error", {
+      lastError: spawnErr.message,
+      completedAt: errIso
+    });
+    db3.prepare(`
+      UPDATE sessions
+      SET error_code = 'SPAWN_FAILED', error_message = ?, ended_at = ?
+      WHERE id = ?
+    `).run(spawnErr.message, errIso, sessionId);
+    if (mcpConfigPath) {
+      try {
+        import_fs43.default.unlinkSync(mcpConfigPath);
+      } catch {
+      }
+    }
+    broadcast2("run-group:session-done", { groupId: group.id, sessionId, status: "error" });
+    return { started: false, sessionId, error: spawnErr.message };
+  }
+}
+function maybeAdvanceRunGroup(ctx, groupId, { settledFn } = {}) {
+  const db3 = getDb();
+  const log2 = ctx.log || (() => {
+  });
+  const startedSessionIds = [];
+  const blockedSessionIds = [];
+  const errors = [];
+  let startedPhaseIndex = null;
+  for (let iteration = 0; iteration < 8; iteration += 1) {
+    const group = loadRunGroup(groupId);
+    if (!group) break;
+    const runtimeStatusBySessionId = createTaskRuntimeStatusMap(db3, groupId);
+    if (group.status === "stopped") {
+      const pendingTasks = group.config.tasks.filter((task) => !runtimeStatusBySessionId.has(task.sessionId));
+      const blocked = markRunGroupTasksStopped(db3, group, pendingTasks, "Blocked after group stop");
+      blockedSessionIds.push(...blocked);
+      refreshRunGroupAggregates(db3, groupId);
+      break;
+    }
+    const evaluation = evaluatePhaseExecution({
+      coordinationMode: group.coordination_mode,
+      tasks: group.config.tasks,
+      phasePlan: group.config.phasePlan,
+      runtimeStatusBySessionId
+    });
+    if (evaluation.action === "launch") {
+      const launchedThisPass = [];
+      for (const task of evaluation.tasks) {
+        const result = launchRunGroupTask(ctx, group, task, settledFn);
+        if (result.started) {
+          launchedThisPass.push(result.sessionId);
+          startedSessionIds.push(result.sessionId);
+        } else if (result.error) {
+          errors.push({ sessionId: result.sessionId, message: result.error });
+        }
+      }
+      refreshRunGroupAggregates(db3, groupId);
+      if (launchedThisPass.length > 0) {
+        startedPhaseIndex = evaluation.phaseIndex;
+        if (group.coordination_mode === "phased") {
+          ctx.broadcast("run-group:phase-started", {
+            groupId,
+            phaseIndex: evaluation.phaseIndex,
+            sessionIds: launchedThisPass
+          });
+        }
+        break;
+      }
+      continue;
+    }
+    if (evaluation.action === "block") {
+      const reason = evaluation.reason === "phase_stopped" ? `Blocked after phase ${evaluation.phaseIndex + 1} stopped` : `Blocked after phase ${evaluation.phaseIndex + 1} failed`;
+      const blocked = markRunGroupTasksStopped(db3, group, evaluation.tasks, reason);
+      blockedSessionIds.push(...blocked);
+      refreshRunGroupAggregates(db3, groupId);
+      if (blocked.length > 0) {
+        log2("agent", "warn", "blocked downstream run-group phase after upstream failure", {
+          groupId,
+          phaseIndex: evaluation.phaseIndex,
+          blockedCount: blocked.length
+        });
+      }
+      continue;
+    }
+    break;
+  }
+  const refreshedGroup = refreshRunGroupAggregates(db3, groupId);
+  return {
+    group: refreshedGroup,
+    startedSessionIds,
+    blockedSessionIds,
+    errors,
+    startedPhaseIndex
+  };
+}
+async function createRunGroupFromRequest(ctx, body, opts = {}) {
+  const {
+    log: log2,
+    broadcast: broadcast2,
+    agentProcesses: agentProcesses2,
+    maxConcurrent
+  } = ctx;
+  const requestedProvider = typeof body.provider === "string" ? body.provider : "claude";
+  const requestedModel = typeof body.model === "string" ? body.model : null;
+  const requestedPermissionMode = typeof body.permissionMode === "string" ? body.permissionMode : null;
+  const requestedSystemPrompt = typeof body.systemPrompt === "string" ? body.systemPrompt : null;
+  const requestedName = typeof body.name === "string" && body.name.trim().length > 0 ? body.name.trim() : null;
+  const requestedCoordinationMode = normalizeCoordinationMode(body.coordinationMode ?? body.coordination_mode);
+  const executionMode = normalizeExecutionMode(body.executionMode ?? body.execution_mode, {
+    useWorktree: body.useWorktree
+  });
+  const useWorktree = executionMode === "worktree";
+  const tasks = normalizeGroupTasks(body, {
+    provider: requestedProvider,
+    model: requestedModel
+  }).map((task) => ({
+    ...task,
+    provider: task.provider || requestedProvider,
+    model: task.model || requestedModel
+  }));
+  const rawPhasePlan = buildPhasePlan(tasks, body.sequentialPhases ?? body.sequential_phases);
+  const coordinationMode = requestedCoordinationMode === "supervisor" ? "flat" : requestedCoordinationMode;
+  const phasePlan = coordinationMode === "phased" ? rawPhasePlan : tasks.length > 0 ? [Array.from({ length: tasks.length }, (_2, idx) => idx)] : [];
+  if (tasks.length < 2 || tasks.length > 10) {
+    return { error: "run-group requires between 2 and 10 tasks", statusCode: 400 };
+  }
+  if (countAlive(agentProcesses2) + tasks.length > maxConcurrent) {
+    return {
+      error: "MAX_CONCURRENT_REACHED",
+      message: `Too many active agent processes for requested group (${countAlive(agentProcesses2)} + ${tasks.length} > ${maxConcurrent})`,
+      statusCode: 429
+    };
+  }
+  const workingDir = body.cwd || process.env.PWD || process.cwd();
+  const gitContext = detectGitContext(workingDir);
+  const repoRoot = gitContext.repoRoot;
+  const currentBranch = gitContext.currentBranch;
+  const requestedBaseBranch = typeof body.baseBranch === "string" && body.baseBranch.trim().length > 0 ? body.baseBranch.trim() : null;
+  if (useWorktree && !gitContext.isGitRepo) {
+    return { error: "worktree execution_mode requires a git repository cwd", statusCode: 400 };
+  }
+  if (requestedBaseBranch && !gitContext.isGitRepo) {
+    return { error: "baseBranch requires a git repository cwd", statusCode: 400 };
+  }
+  if (executionMode === "read_only" && tasks.some((task) => task.requiresWrite === true)) {
+    return { error: "read_only execution_mode cannot include tasks with requires_write=true", statusCode: 400 };
+  }
+  const baseBranch = requestedBaseBranch || currentBranch || null;
+  for (const [idx, task] of tasks.entries()) {
+    let providerConfig;
+    try {
+      providerConfig = loadProviderConfig(task.provider);
+    } catch (configErr) {
+      return { error: `task ${idx + 1}: ${configErr.message}`, statusCode: 400 };
+    }
+    const binaryPath = resolveProviderBinary(providerConfig);
+    if (!binaryPath) {
+      return { error: `task ${idx + 1}: ${providerConfig.name} CLI not found. Run: rudi install agent:${task.provider}`, statusCode: 500 };
+    }
+  }
+  const groupId = import_crypto8.default.randomUUID();
+  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+  const db3 = getDb();
+  if (requestedCoordinationMode === "supervisor") {
+    log2("agent", "warn", "supervisor coordination requested; falling back to flat execution for this run-group", {
+      groupId
+    });
+  }
+  function onGroupSessionSettled(gId, sId, status) {
+    let updated = null;
+    try {
+      updated = maybeAdvanceRunGroup(ctx, gId, { settledFn }).group;
+    } catch (err) {
+      log2("agent", "warn", `run-group aggregate refresh failed: ${err.message}`, { groupId: gId });
+      return;
+    }
+    broadcast2("run-group:session-done", { groupId: gId, sessionId: sId, status });
+    if (updated?.completed_at && TERMINAL_GROUP_STATUSES.has(updated.status)) {
+      broadcast2("run-group:completed", {
+        groupId: gId,
+        status: updated.status,
+        completedCount: Number(updated.completed_count || 0),
+        failedCount: Number(updated.failed_count || 0)
+      });
+    }
+  }
+  const settledFn = opts.onGroupSessionSettled || onGroupSessionSettled;
+  db3.prepare(`
+    INSERT INTO run_groups (
+      id, name, status, project_path, base_branch, execution_mode, coordination_mode, requires_git, workspace_root,
+      provider, model, permission_mode,
+      session_count, completed_count, failed_count, total_cost, total_tokens,
+      config_json, created_at, started_at, completed_at, updated_at
+    ) VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0, ?, ?, NULL, NULL, ?)
+  `).run(
+    groupId,
+    requestedName,
+    workingDir,
+    baseBranch,
+    executionMode,
+    coordinationMode,
+    useWorktree ? 1 : 0,
+    repoRoot || workingDir,
+    requestedProvider,
+    requestedModel,
+    requestedPermissionMode,
+    tasks.length,
+    JSON.stringify({
+      tasks: tasks.map((task, taskIndex) => ({
+        sessionId: import_crypto8.default.randomUUID(),
+        taskIndex,
+        phaseIndex: phasePlan.findIndex((phase) => phase.includes(taskIndex)),
+        name: task.name,
+        provider: task.provider,
+        model: task.model,
+        prompt: task.prompt,
+        role: task.role,
+        goal: task.goal,
+        deliverable: task.deliverable,
+        rationale: task.rationale,
+        filesTouched: task.filesTouched,
+        dependsOn: task.dependsOn,
+        requiresWrite: task.requiresWrite,
+        contextPaths: task.contextPaths,
+        artifactsIn: task.artifactsIn,
+        artifactsOut: task.artifactsOut,
+        metadata: task.metadata
+      })),
+      executionMode,
+      coordinationMode,
+      requestedCoordinationMode,
+      phasePlan,
+      systemPrompt: requestedSystemPrompt
+    }),
+    nowIso,
+    nowIso
+  );
+  const groupConfig = parseRunGroupConfig(
+    db3.prepare("SELECT config_json FROM run_groups WHERE id = ?").get(groupId)?.config_json
+  );
+  const plannedSessionIds = groupConfig.tasks.map((task) => task.sessionId);
+  for (const [index, task] of groupConfig.tasks.entries()) {
+    const taskName = task.name || task.role || `Task ${index + 1}`;
+    const createdAt = new Date(Date.now() + index).toISOString();
+    db3.prepare(`
+      INSERT INTO sessions (
+        id, provider, provider_session_id, project_id, run_group_id,
+        origin, title, title_override, snippet, status, model,
+        cwd, project_path, git_branch,
+        created_at, last_active_at, started_at,
+        session_type, turn_count, total_cost, total_input_tokens, total_output_tokens, total_duration_ms
+      ) VALUES (
+        ?, ?, NULL, NULL, ?,
+        'rudi', ?, ?, '', 'active', ?,
+        ?, ?, ?,
+        ?, ?, NULL,
+        'main', 0, 0, 0, 0, 0
+      )
+    `).run(
+      task.sessionId,
+      task.provider,
+      groupId,
+      taskName,
+      taskName,
+      task.model,
+      workingDir,
+      workingDir,
+      baseBranch,
+      createdAt,
+      createdAt
+    );
+  }
+  db3.prepare(`
+    UPDATE run_groups
+    SET session_count = ?, started_at = ?, updated_at = ?
+    WHERE id = ?
+  `).run(tasks.length, nowIso, nowIso, groupId);
+  const launchResult = maybeAdvanceRunGroup(ctx, groupId, { settledFn });
+  const refreshed = launchResult.group || refreshRunGroupAggregates(db3, groupId);
+  if (launchResult.startedSessionIds.length > 0) {
+    broadcast2("run-group:started", {
+      groupId,
+      sessionIds: plannedSessionIds,
+      activeSessionIds: launchResult.startedSessionIds
+    });
+  } else if (refreshed?.completed_at && TERMINAL_GROUP_STATUSES.has(refreshed.status)) {
+    broadcast2("run-group:completed", {
+      groupId,
+      status: refreshed.status,
+      completedCount: Number(refreshed.completed_count || 0),
+      failedCount: Number(refreshed.failed_count || 0)
+    });
+  }
+  return {
+    groupId,
+    status: refreshed?.status || "pending",
+    sessionIds: plannedSessionIds,
+    startedSessionIds: launchResult.startedSessionIds,
+    errors: launchResult.errors
+  };
+}
+function buildRunGroupRoutes(ctx) {
+  const { json, error, readBody } = ctx;
+  return async (req, res, url) => {
+    if (req.method === "POST" && url.pathname === "/agent/run-group") {
+      const body = await readBody(req);
+      const result = await createRunGroupFromRequest(ctx, body);
+      if (result.error) {
+        if (result.statusCode === 429) {
+          return json(res, { error: result.error, message: result.message }, 429);
+        }
+        return error(res, result.error, result.statusCode || 400);
+      }
+      json(res, result, result.sessionIds.length > 0 ? 200 : 500);
+      return true;
+    }
+    if (req.method === "GET" && url.pathname === "/agent/run-groups") {
+      const db3 = getDb();
+      let sql = "SELECT * FROM run_groups WHERE 1=1";
+      const params = [];
+      const projectPath = url.searchParams.get("projectPath");
+      const status = url.searchParams.get("status");
+      const limit2 = Number.parseInt(url.searchParams.get("limit") || "", 10);
+      const offset = Number.parseInt(url.searchParams.get("offset") || "", 10);
+      if (projectPath) {
+        sql += " AND project_path = ?";
+        params.push(projectPath);
+      }
+      if (status) {
+        sql += " AND status = ?";
+        params.push(status);
+      }
+      sql += " ORDER BY created_at DESC";
+      if (Number.isFinite(limit2) && limit2 > 0) {
+        sql += " LIMIT ?";
+        params.push(limit2);
+      }
+      if (Number.isFinite(offset) && offset > 0) {
+        sql += " OFFSET ?";
+        params.push(offset);
+      }
+      const groups = db3.prepare(sql).all(...params);
+      json(res, { groups });
+      return true;
+    }
+    const stopMatch = url.pathname.match(/^\/agent\/run-group\/([^/]+)\/stop$/);
+    if (req.method === "POST" && stopMatch) {
+      const groupId = decodeURIComponent(stopMatch[1]);
+      const db3 = getDb();
+      const sessions = db3.prepare(`
+        SELECT id FROM sessions WHERE run_group_id = ?
+      `).all(groupId);
+      let stopped = 0;
+      for (const row of sessions) {
+        const entry = agentProcesses.get(row.id);
+        if (!entry || !entry.proc || entry.proc.killed) continue;
+        entry._terminationReason = "stopped";
+        entry.proc.kill("SIGTERM");
+        const killTimer = setTimeout(() => {
+          try {
+            entry.proc.kill("SIGKILL");
+          } catch {
+          }
+        }, 3e3);
+        entry.proc.on("close", () => clearTimeout(killTimer));
+        stopped++;
+      }
+      db3.prepare(`
+        UPDATE run_groups
+        SET status = 'stopped',
+            updated_at = ?
+        WHERE id = ?
+      `).run((/* @__PURE__ */ new Date()).toISOString(), groupId);
+      const refreshed = maybeAdvanceRunGroup(ctx, groupId, {
+        settledFn: () => {
+        }
+      }).group || refreshRunGroupAggregates(db3, groupId);
+      broadcast("run-group:stopped", { groupId });
+      json(res, {
+        ok: true,
+        groupId,
+        stopped,
+        status: refreshed?.status || "stopped"
+      });
+      return true;
+    }
+    const detailMatch = url.pathname.match(/^\/agent\/run-group\/([^/]+)$/);
+    if (req.method === "GET" && detailMatch) {
+      const groupId = decodeURIComponent(detailMatch[1]);
+      const db3 = getDb();
+      const refreshed = refreshRunGroupAggregates(db3, groupId);
+      if (!refreshed) return error(res, "Run group not found", 404);
+      const sessions = db3.prepare(`
+        SELECT
+          s.id,
+          s.provider,
+          s.provider_session_id,
+          s.title,
+          s.title_override,
+          s.model,
+          s.cwd,
+          s.status AS session_status,
+          s.started_at,
+          s.ended_at,
+          s.exit_code,
+          s.error_code,
+          s.error_message,
+          s.created_at,
+          s.last_active_at,
+          s.turn_count,
+          s.total_cost,
+          srs.status AS runtime_status,
+          srs.turn_count AS runtime_turn_count,
+          srs.cost_total AS runtime_cost_total,
+          srs.tokens_total AS runtime_tokens_total,
+          srs.last_error AS runtime_last_error,
+          srs.worktree_path,
+          srs.worktree_branch,
+          srs.base_branch,
+          srs.completed_at
+        FROM sessions s
+        LEFT JOIN session_runtime_state srs ON srs.session_id = s.id
+        WHERE s.run_group_id = ?
+        ORDER BY s.created_at ASC
+      `).all(groupId);
+      const sessionDetails = sessions.map((row) => {
+        const live = agentProcesses.get(row.id);
+        const alive = Boolean(live?.proc && !live.proc.killed);
+        return {
+          ...row,
+          status: deriveRunGroupSessionStatus({
+            alive,
+            runtimeStatus: row.runtime_status,
+            sessionStatus: row.session_status,
+            groupStatus: refreshed.status
+          }),
+          alive,
+          turn_active: Boolean(live?.turnActive),
+          pid: live?.proc?.pid || null
+        };
+      });
+      json(res, { group: refreshed, sessions: sessionDetails });
+      return true;
+    }
+    const liveMatch = url.pathname.match(/^\/agent\/run-group\/([^/]+)\/live$/);
+    if (req.method === "GET" && liveMatch) {
+      const groupId = decodeURIComponent(liveMatch[1]);
+      const db3 = getDb();
+      const group = refreshRunGroupAggregates(db3, groupId);
+      if (!group) return error(res, "Run group not found", 404);
+      const sessions = db3.prepare(`
+        SELECT
+          s.id,
+          s.title,
+          s.title_override,
+          s.status AS session_status,
+          srs.status AS runtime_status,
+          srs.turn_count AS runtime_turn_count,
+          srs.cost_total AS runtime_cost_total,
+          srs.tokens_total AS runtime_tokens_total,
+          srs.last_error AS runtime_last_error,
+          srs.worktree_branch
+        FROM sessions s
+        LEFT JOIN session_runtime_state srs ON srs.session_id = s.id
+        WHERE s.run_group_id = ?
+        ORDER BY s.created_at ASC
+      `).all(groupId);
+      const liveData = sessions.map((row) => {
+        const entry = agentProcesses.get(row.id);
+        const alive = Boolean(entry?.proc && !entry.proc.killed);
+        const status = deriveRunGroupSessionStatus({
+          alive,
+          runtimeStatus: row.runtime_status,
+          sessionStatus: row.session_status,
+          groupStatus: group.status
+        });
+        let lastSnippet = null;
+        try {
+          const lastEvent = db3.prepare(`
+            SELECT payload FROM session_runtime_events
+            WHERE session_id = ? AND event_type IN ('assistant', 'result')
+            ORDER BY seq DESC LIMIT 1
+          `).get(row.id);
+          if (lastEvent?.payload) {
+            const parsed = JSON.parse(lastEvent.payload);
+            const textBlocks = (parsed.content || []).filter((b2) => b2.type === "text");
+            if (textBlocks.length > 0) {
+              lastSnippet = textBlocks[textBlocks.length - 1].text?.slice(0, 200) || null;
+            }
+          }
+        } catch {
+        }
+        return {
+          sessionId: row.id,
+          name: row.title_override || row.title || row.id.slice(0, 8),
+          status,
+          alive,
+          turnCount: Number(row.runtime_turn_count || 0),
+          costTotal: Number(row.runtime_cost_total || 0),
+          tokensTotal: Number(row.runtime_tokens_total || 0),
+          lastError: row.runtime_last_error || null,
+          lastSnippet,
+          worktreeBranch: row.worktree_branch || null
+        };
+      });
+      json(res, {
+        groupId,
+        status: group.status,
+        sessions: liveData
+      });
+      return true;
+    }
+    const diffsMatch = url.pathname.match(/^\/agent\/run-group\/([^/]+)\/diffs$/);
+    if (req.method === "GET" && diffsMatch) {
+      const groupId = decodeURIComponent(diffsMatch[1]);
+      const db3 = getDb();
+      const group = db3.prepare("SELECT * FROM run_groups WHERE id = ?").get(groupId);
+      if (!group) return error(res, "Run group not found", 404);
+      if (group.execution_mode !== "worktree") {
+        return error(res, "Diffs are only available for worktree execution_mode", 400);
+      }
+      const sessions = db3.prepare(`
+        SELECT s.id, srs.worktree_branch, srs.base_branch, srs.project_root
+        FROM sessions s
+        LEFT JOIN session_runtime_state srs ON srs.session_id = s.id
+        WHERE s.run_group_id = ?
+      `).all(groupId);
+      const diffs = [];
+      for (const row of sessions) {
+        if (!row.worktree_branch || !row.base_branch || !row.project_root) {
+          diffs.push({
+            sessionId: row.id,
+            branch: row.worktree_branch || "unknown",
+            files: 0,
+            insertions: 0,
+            deletions: 0,
+            error: "Missing branch or project root info"
+          });
+          continue;
+        }
+        try {
+          const stat = (0, import_child_process23.execFileSync)(
+            "git",
+            ["diff", "--stat", `${row.base_branch}...${row.worktree_branch}`],
+            { cwd: row.project_root, stdio: "pipe" }
+          ).toString().trim();
+          let files = 0;
+          let insertions = 0;
+          let deletions = 0;
+          const summaryLine = stat.split("\n").pop() || "";
+          const filesMatch = summaryLine.match(/(\d+)\s+files?\s+changed/);
+          const insertionsMatch = summaryLine.match(/(\d+)\s+insertions?\(\+\)/);
+          const deletionsMatch = summaryLine.match(/(\d+)\s+deletions?\(-\)/);
+          if (filesMatch) files = parseInt(filesMatch[1], 10);
+          if (insertionsMatch) insertions = parseInt(insertionsMatch[1], 10);
+          if (deletionsMatch) deletions = parseInt(deletionsMatch[1], 10);
+          diffs.push({
+            sessionId: row.id,
+            branch: row.worktree_branch,
+            files,
+            insertions,
+            deletions
+          });
+        } catch (diffErr) {
+          diffs.push({
+            sessionId: row.id,
+            branch: row.worktree_branch,
+            files: 0,
+            insertions: 0,
+            deletions: 0,
+            error: diffErr.message
+          });
+        }
+      }
+      json(res, { diffs });
+      return true;
+    }
+    const mergeMatch = url.pathname.match(/^\/agent\/run-group\/([^/]+)\/merge$/);
+    if (req.method === "POST" && mergeMatch) {
+      const groupId = decodeURIComponent(mergeMatch[1]);
+      const body = await readBody(req);
+      const sessionIds = Array.isArray(body.sessionIds) ? body.sessionIds : [];
+      const targetBranch = typeof body.targetBranch === "string" ? body.targetBranch.trim() : null;
+      if (sessionIds.length === 0) {
+        return error(res, "sessionIds required", 400);
+      }
+      const db3 = getDb();
+      const group = db3.prepare("SELECT * FROM run_groups WHERE id = ?").get(groupId);
+      if (!group) return error(res, "Run group not found", 404);
+      if (group.execution_mode !== "worktree") {
+        return error(res, "Merge is only available for worktree execution_mode", 400);
+      }
+      const mergeTo = targetBranch || group.base_branch || "main";
+      const results = [];
+      for (const sessionId of sessionIds) {
+        const row = db3.prepare(`
+          SELECT srs.worktree_branch, srs.project_root
+          FROM session_runtime_state srs
+          WHERE srs.session_id = ?
+        `).get(sessionId);
+        if (!row?.worktree_branch || !row?.project_root) {
+          results.push({ sessionId, branch: row?.worktree_branch || "unknown", ok: false, error: "Missing branch info" });
+          continue;
+        }
+        try {
+          (0, import_child_process23.execFileSync)("git", ["checkout", mergeTo], { cwd: row.project_root, stdio: "pipe" });
+          (0, import_child_process23.execFileSync)(
+            "git",
+            ["merge", "--no-ff", "-m", `Merge run-group session ${sessionId.slice(0, 8)} (${row.worktree_branch})`, row.worktree_branch],
+            { cwd: row.project_root, stdio: "pipe" }
+          );
+          results.push({ sessionId, branch: row.worktree_branch, ok: true });
+          log("agent", "info", `merged ${row.worktree_branch} into ${mergeTo}`, { groupId, sessionId: sessionId.slice(0, 8) });
+        } catch (mergeErr) {
+          let conflictFiles = [];
+          try {
+            const status = (0, import_child_process23.execFileSync)("git", ["status", "--porcelain"], { cwd: row.project_root, stdio: "pipe" }).toString();
+            conflictFiles = status.split("\n").filter((line) => line.startsWith("UU") || line.startsWith("AA") || line.startsWith("DD")).map((line) => line.slice(3).trim());
+          } catch {
+          }
+          try {
+            (0, import_child_process23.execFileSync)("git", ["merge", "--abort"], { cwd: row.project_root, stdio: "pipe" });
+          } catch {
+          }
+          results.push({
+            sessionId,
+            branch: row.worktree_branch,
+            ok: false,
+            error: mergeErr.message,
+            conflictFiles
+          });
+          log("agent", "warn", `merge conflict for ${row.worktree_branch}`, { groupId, sessionId: sessionId.slice(0, 8), conflictFiles });
+        }
+      }
+      json(res, { results });
+      return true;
+    }
+    const cleanupMatch = url.pathname.match(/^\/agent\/run-group\/([^/]+)\/cleanup$/);
+    if (req.method === "POST" && cleanupMatch) {
+      const groupId = decodeURIComponent(cleanupMatch[1]);
+      const body = await readBody(req);
+      const deleteBranches = body.deleteBranches === true;
+      const db3 = getDb();
+      const group = db3.prepare("SELECT * FROM run_groups WHERE id = ?").get(groupId);
+      if (!group) return error(res, "Run group not found", 404);
+      if (group.execution_mode !== "worktree") {
+        return error(res, "Cleanup is only available for worktree execution_mode", 400);
+      }
+      const sessions = db3.prepare(`
+        SELECT s.id, srs.worktree_path, srs.worktree_branch, srs.project_root
+        FROM sessions s
+        LEFT JOIN session_runtime_state srs ON srs.session_id = s.id
+        WHERE s.run_group_id = ?
+      `).all(groupId);
+      let cleaned = 0;
+      const errors = [];
+      for (const row of sessions) {
+        if (!row.worktree_path) continue;
+        try {
+          const repoDir = row.project_root || import_path42.default.dirname(import_path42.default.dirname(import_path42.default.dirname(row.worktree_path)));
+          if (import_fs43.default.existsSync(row.worktree_path)) {
+            (0, import_child_process23.execFileSync)("git", ["worktree", "remove", "--force", row.worktree_path], {
+              cwd: repoDir,
+              stdio: "pipe"
+            });
+          }
+          if (deleteBranches && row.worktree_branch && !row.worktree_branch.startsWith("-")) {
+            try {
+              (0, import_child_process23.execFileSync)("git", ["branch", "-D", "--", row.worktree_branch], {
+                cwd: repoDir,
+                stdio: "pipe"
+              });
+            } catch {
+            }
+          }
+          db3.prepare("UPDATE session_runtime_state SET worktree_path = NULL WHERE session_id = ?").run(row.id);
+          cleaned++;
+        } catch (cleanErr) {
+          errors.push({ sessionId: row.id, error: cleanErr.message });
+        }
+      }
+      json(res, { ok: errors.length === 0, cleaned, errors });
+      log("agent", "info", `run-group cleanup: ${cleaned} worktrees`, { groupId, errors: errors.length });
+      return true;
+    }
+    return false;
+  };
+}
+
+// src/commands/agent/routes/orchestrate.js
+var import_crypto9 = __toESM(require("crypto"), 1);
+var import_fs45 = __toESM(require("fs"), 1);
+var import_path44 = __toESM(require("path"), 1);
+init_src();
+
+// src/commands/agent/orchestrate-synthesis.js
+var import_fs44 = __toESM(require("fs"), 1);
+var import_path43 = __toESM(require("path"), 1);
+function synthesizeCodebaseMap(artifactDir) {
+  const structurePath = import_path43.default.join(artifactDir, "structure.md");
+  const patternsPath = import_path43.default.join(artifactDir, "patterns.md");
+  const gitPath = import_path43.default.join(artifactDir, "git-context.md");
+  const structure = readFileOrDefault(structurePath, "No structure analysis available.");
+  const patterns = readFileOrDefault(patternsPath, "No patterns analysis available.");
+  const gitContext = readFileOrDefault(gitPath, "No git context available.");
+  const sections = [
+    "# Codebase Map",
+    "",
+    "Generated by RUDI Orchestration Phase 0 explorers.",
+    "",
+    "---",
+    "",
+    "## Project Structure",
+    "",
+    structure.trim(),
+    "",
+    "---",
+    "",
+    "## Code Patterns & Conventions",
+    "",
+    patterns.trim(),
+    "",
+    "---",
+    "",
+    "## Git Context",
+    "",
+    gitContext.trim(),
+    "",
+    "---",
+    "",
+    "## Builder Notes",
+    "",
+    '- Follow established patterns from the "Code Patterns" section',
+    "- Respect import conventions and file structure",
+    '- Check "Git Context" for work-in-progress before modifying files',
+    "- If this is a new project, establish conventions consistent with the tech stack"
+  ];
+  return sections.join("\n");
+}
+function readFileOrDefault(filePath, defaultContent) {
+  try {
+    return import_fs44.default.readFileSync(filePath, "utf-8");
+  } catch (err) {
+    return defaultContent;
+  }
+}
+
+// src/commands/agent/routes/orchestrate.js
+var ORCHESTRATION_PLAN_SCHEMA = JSON.stringify({
+  type: "object",
+  required: ["tasks", "summary"],
+  properties: {
+    summary: { type: "string", description: "1-2 sentence description of the plan" },
+    tasks: {
+      type: "array",
+      minItems: 2,
+      maxItems: 8,
+      items: {
+        type: "object",
+        required: ["name", "prompt"],
+        properties: {
+          name: { type: "string", description: "Short task label (e.g. 'auth-middleware')" },
+          prompt: { type: "string", description: "Full task brief for the agent" },
+          provider: { type: "string", enum: ["claude", "codex"], default: "claude" },
+          model: { type: "string", description: "Model alias (opus, sonnet, haiku)" },
+          role: { type: "string", description: "Team role (e.g. 'reviewer', 'implementer', 'researcher')" },
+          goal: { type: "string", description: "What this task is trying to achieve" },
+          deliverable: { type: "string", description: "Expected output or artifact from this task" },
+          files_touched: { type: "array", items: { type: "string" }, description: "Files this task will modify" },
+          depends_on: { type: "array", items: { type: "integer" }, description: "Indices of tasks that must complete first" },
+          requires_write: { type: "boolean", description: "Whether this task needs write access to the workspace" },
+          artifacts_in: { type: "array", items: { type: "string" }, description: "Artifacts this task expects as inputs" },
+          artifacts_out: { type: "array", items: { type: "string" }, description: "Artifacts this task should produce" },
+          rationale: { type: "string", description: "Why this task exists and why this provider/model" }
+        }
+      }
+    },
+    sequential_phases: {
+      type: "array",
+      description: "Optional phase ordering. Each phase is an array of task indices that run in parallel.",
+      items: {
+        type: "array",
+        items: { type: "integer" }
+      }
+    }
+  }
+});
+function buildOrchestrateRoutes(ctx) {
+  const {
+    json,
+    error,
+    readBody,
+    log: log2,
+    broadcast: broadcast2,
+    agentProcesses: agentProcesses2,
+    getSidecarPort,
+    getSidecarToken
+  } = ctx;
+  async function spawnExplorerAgents({ orchestrationId, artifactDir, workingDir, requestedProvider, providerConfig, binaryPath }) {
+    const explorerConfigs = [
+      {
+        name: "structure",
+        title: "Explorer: Structure",
+        outputFile: import_path44.default.join(artifactDir, "structure.md"),
+        promptBuilder: buildStructureExplorerPrompt
+      },
+      {
+        name: "patterns",
+        title: "Explorer: Patterns",
+        outputFile: import_path44.default.join(artifactDir, "patterns.md"),
+        promptBuilder: buildPatternsExplorerPrompt
+      },
+      {
+        name: "git",
+        title: "Explorer: Git Context",
+        outputFile: import_path44.default.join(artifactDir, "git-context.md"),
+        promptBuilder: buildGitExplorerPrompt
+      }
+    ];
+    const db3 = getDb();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const getSidecarPort2 = ctx.getSidecarPort;
+    const getSidecarToken2 = ctx.getSidecarToken;
+    const configEnv = buildEnv2(providerConfig, process.env);
+    const baseEnv = { ...process.env, ...configEnv };
+    if (getSidecarPort2() > 0) {
+      baseEnv.RUDI_SIDECAR_URL = `http://127.0.0.1:${getSidecarPort2()}`;
+      baseEnv.RUDI_SIDECAR_TOKEN = getSidecarToken2();
+    }
+    const explorerPromises = explorerConfigs.map((config) => {
+      return new Promise((resolve, reject) => {
+        const sessionId = import_crypto9.default.randomUUID();
+        const prompt = config.promptBuilder(workingDir, config.outputFile);
+        db3.prepare(`
+          INSERT INTO sessions (
+            id, provider, provider_session_id, project_id, run_group_id,
+            origin, title, title_override, snippet, status, model,
+            cwd, project_path, git_branch,
+            created_at, last_active_at, started_at,
+            session_type, turn_count, total_cost, total_input_tokens, total_output_tokens, total_duration_ms
+          ) VALUES (
+            ?, ?, NULL, NULL, NULL,
+            'rudi', ?, ?, '', 'active', ?,
+            ?, ?, NULL,
+            ?, ?, ?,
+            'explorer', 0, 0, 0, 0, 0
+          )
+        `).run(
+          sessionId,
+          requestedProvider,
+          config.title,
+          config.title,
+          "haiku",
+          workingDir,
+          workingDir,
+          now,
+          now,
+          now
+        );
+        db3.prepare(`
+          INSERT INTO session_runtime_state
+            (session_id, status, provider, cwd, started_at, updated_at, use_worktree, execution_mode)
+          VALUES (?, 'starting', ?, ?, ?, ?, 0, 'read_only')
+        `).run(sessionId, requestedProvider, workingDir, now, now);
+        const argOptions = {
+          prompt,
+          model: "haiku",
+          outputFormat: "stream-json",
+          maxTurns: 5
+        };
+        const args = buildArgs(providerConfig, argOptions);
+        const modes = providerConfig?.headless?.permissionModes || {};
+        const permKey = modes.bypassPermissions ? "bypassPermissions" : modes.agent ? "agent" : Object.keys(modes)[0];
+        if (permKey) {
+          args.push(...getPermissionArgs(providerConfig, permKey));
+        }
+        const env = { ...baseEnv, RUDI_SESSION_ID: sessionId };
+        try {
+          spawnAgentProcess(ctx, {
+            sessionId,
+            prompt,
+            provider: requestedProvider,
+            model: "haiku",
+            permissionMode: "bypassPermissions",
+            providerConfig,
+            binaryPath,
+            args,
+            env,
+            spawnCwd: workingDir,
+            effectiveCwd: workingDir,
+            workingDir,
+            stdinModeOverride: "close",
+            sessionRowMode: "existingSession",
+            existingSessionId: sessionId,
+            autoNameOnFirstTurn: false,
+            onProcessClose: ({ finalStatus }) => {
+              if (finalStatus === "completed") {
+                log2("agent", "info", `Explorer ${config.name} completed`, {
+                  orchestrationId: orchestrationId.slice(0, 8)
+                });
+                resolve({ name: config.name, status: "completed" });
+              } else {
+                log2("agent", "warn", `Explorer ${config.name} failed: ${finalStatus}`, {
+                  orchestrationId: orchestrationId.slice(0, 8)
+                });
+                reject(new Error(`Explorer ${config.name} failed: ${finalStatus}`));
+              }
+            },
+            onProcessError: (err) => {
+              log2("agent", "error", `Explorer ${config.name} error: ${err.message}`, {
+                orchestrationId: orchestrationId.slice(0, 8)
+              });
+              reject(err);
+            }
+          });
+        } catch (spawnErr) {
+          reject(spawnErr);
+        }
+      });
+    });
+    const results = await Promise.allSettled(explorerPromises);
+    const succeeded = results.filter((r2) => r2.status === "fulfilled").length;
+    const failed = results.filter((r2) => r2.status === "rejected").length;
+    log2("agent", "info", `Explorers completed: ${succeeded} succeeded, ${failed} failed`, {
+      orchestrationId: orchestrationId.slice(0, 8)
+    });
+    const codebaseMapContent = synthesizeCodebaseMap(artifactDir);
+    const codebaseMapPath = import_path44.default.join(artifactDir, "codebase-map.md");
+    import_fs45.default.writeFileSync(codebaseMapPath, codebaseMapContent, "utf-8");
+    log2("agent", "info", "Codebase map synthesized", {
+      orchestrationId: orchestrationId.slice(0, 8),
+      path: codebaseMapPath
+    });
+    return codebaseMapPath;
+  }
+  return async (req, res, url) => {
+    if (req.method === "POST" && url.pathname === "/agent/orchestrate") {
+      const body = await readBody(req);
+      const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+      if (!prompt) {
+        return error(res, "prompt is required", 400);
+      }
+      const requestedProvider = typeof body.provider === "string" ? body.provider : "claude";
+      const requestedModel = typeof body.model === "string" ? body.model : null;
+      const workingDir = body.cwd || process.env.PWD || process.cwd();
+      let providerConfig;
+      try {
+        providerConfig = loadProviderConfig(requestedProvider);
+      } catch (configErr) {
+        return error(res, configErr.message, 400);
+      }
+      const binaryPath = resolveProviderBinary(providerConfig);
+      if (!binaryPath) {
+        return error(res, `${providerConfig.name} CLI not found. Run: rudi install agent:${requestedProvider}`, 500);
+      }
+      const orchestrationId = import_crypto9.default.randomUUID();
+      const plannerSessionId = import_crypto9.default.randomUUID();
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      const db3 = getDb();
+      db3.prepare(`
+        INSERT INTO orchestration_plans (
+          id, status, prompt, provider, model, plan_json, planner_session_id,
+          run_group_id, project_path, created_at, completed_at, updated_at
+        ) VALUES (?, 'planning', ?, ?, ?, NULL, ?, NULL, ?, ?, NULL, ?)
+      `).run(
+        orchestrationId,
+        prompt,
+        requestedProvider,
+        requestedModel,
+        plannerSessionId,
+        workingDir,
+        now,
+        now
+      );
+      const artifactDir = import_path44.default.join(PATHS.home, ".rudi", "tmp", `orchestration-${orchestrationId}`);
+      try {
+        import_fs45.default.mkdirSync(artifactDir, { recursive: true });
+      } catch (mkdirErr) {
+        return error(res, `Failed to create artifact directory: ${mkdirErr.message}`, 500);
+      }
+      let codebaseMapPath = null;
+      try {
+        codebaseMapPath = await spawnExplorerAgents({
+          orchestrationId,
+          artifactDir,
+          workingDir,
+          requestedProvider,
+          providerConfig,
+          binaryPath
+        });
+      } catch (explorerErr) {
+        log2("agent", "warn", `Explorer phase failed: ${explorerErr.message}`, {
+          orchestrationId: orchestrationId.slice(0, 8)
+        });
+      }
+      const orchestratorPrompt = buildOrchestratorPrompt(prompt);
+      const argOptions = {
+        prompt,
+        model: requestedModel,
+        outputFormat: "stream-json",
+        maxTurns: 20,
+        jsonSchema: ORCHESTRATION_PLAN_SCHEMA
+      };
+      if (hasCapability(providerConfig, "systemPrompt") && orchestratorPrompt) {
+        argOptions.systemPrompt = orchestratorPrompt;
+      }
+      const args = buildArgs(providerConfig, argOptions);
+      if (codebaseMapPath) {
+        const addDirsArgs = expandConditional(providerConfig, "addDirs", [codebaseMapPath]);
+        if (addDirsArgs.length > 0) {
+          args.push(...addDirsArgs);
+        } else {
+          const addDirArgs = expandConditional(providerConfig, "addDir", codebaseMapPath);
+          if (addDirArgs.length > 0) args.push(...addDirArgs);
+        }
+      }
+      const modes = providerConfig?.headless?.permissionModes || {};
+      const permKey = modes.bypassPermissions ? "bypassPermissions" : modes.agent ? "agent" : Object.keys(modes)[0];
+      if (permKey) {
+        args.push(...getPermissionArgs(providerConfig, permKey));
+      }
+      const configEnv = buildEnv2(providerConfig, process.env);
+      const env = { ...process.env, ...configEnv };
+      if (getSidecarPort() > 0) {
+        env.RUDI_SIDECAR_URL = `http://127.0.0.1:${getSidecarPort()}`;
+        env.RUDI_SIDECAR_TOKEN = getSidecarToken();
+        env.RUDI_SESSION_ID = plannerSessionId;
+      }
+      db3.prepare(`
+        INSERT INTO sessions (
+          id, provider, provider_session_id, project_id, run_group_id,
+          origin, title, title_override, snippet, status, model,
+          cwd, project_path, git_branch,
+          created_at, last_active_at, started_at,
+          session_type, turn_count, total_cost, total_input_tokens, total_output_tokens, total_duration_ms
+        ) VALUES (
+          ?, ?, NULL, NULL, NULL,
+          'rudi', ?, ?, '', 'active', ?,
+          ?, ?, NULL,
+          ?, ?, ?,
+          'main', 0, 0, 0, 0, 0
+        )
+      `).run(
+        plannerSessionId,
+        requestedProvider,
+        `Orchestrator: ${prompt.slice(0, 80)}`,
+        `Orchestrator: ${prompt.slice(0, 80)}`,
+        requestedModel,
+        workingDir,
+        workingDir,
+        now,
+        now,
+        now
+      );
+      db3.prepare(`
+        INSERT INTO session_runtime_state
+          (session_id, status, provider, cwd, started_at, updated_at, use_worktree, execution_mode)
+        VALUES (?, 'starting', ?, ?, ?, ?, 0, 'read_only')
+      `).run(plannerSessionId, requestedProvider, workingDir, now, now);
+      let capturedStructuredOutput = null;
+      try {
+        spawnAgentProcess(ctx, {
+          sessionId: plannerSessionId,
+          prompt,
+          provider: requestedProvider,
+          model: requestedModel,
+          permissionMode: "bypassPermissions",
+          systemPrompt: orchestratorPrompt,
+          providerConfig,
+          binaryPath,
+          args,
+          env,
+          spawnCwd: workingDir,
+          effectiveCwd: workingDir,
+          workingDir,
+          stdinModeOverride: "close",
+          sessionRowMode: "existingSession",
+          existingSessionId: plannerSessionId,
+          autoNameOnFirstTurn: false,
+          queueEvent: "orchestrate-result",
+          queueCloseEvent: "orchestrate-close",
+          onTurnResult: (event) => {
+            if (event.structuredOutput) {
+              capturedStructuredOutput = event.structuredOutput;
+            }
+          },
+          onProcessClose: ({ finalStatus }) => {
+            const closeNow = (/* @__PURE__ */ new Date()).toISOString();
+            const db22 = getDb();
+            if (finalStatus === "completed" && capturedStructuredOutput) {
+              const planJson = typeof capturedStructuredOutput === "string" ? capturedStructuredOutput : JSON.stringify(capturedStructuredOutput);
+              db22.prepare(`
+                UPDATE orchestration_plans
+                SET status = 'ready', plan_json = ?, updated_at = ?, completed_at = ?
+                WHERE id = ?
+              `).run(planJson, closeNow, closeNow, orchestrationId);
+              broadcast2("orchestration:plan-ready", {
+                orchestrationId,
+                plannerSessionId,
+                plan: capturedStructuredOutput
+              });
+              log2("agent", "info", "orchestration plan ready", {
+                orchestrationId: orchestrationId.slice(0, 8)
+              });
+            } else {
+              let errorMessage;
+              if (finalStatus === "completed") {
+                errorMessage = "Planner completed but didn't produce a valid plan structure";
+              } else if (finalStatus === "error") {
+                errorMessage = "Planner process crashed";
+              } else if (finalStatus === "stopped") {
+                errorMessage = "Planner process was stopped";
+              } else {
+                errorMessage = `Planning failed (${finalStatus})`;
+              }
+              try {
+                db22.prepare("ALTER TABLE orchestration_plans ADD COLUMN error_message TEXT").run();
+              } catch {
+              }
+              db22.prepare(`
+                UPDATE orchestration_plans
+                SET status = 'failed', error_message = ?, updated_at = ?, completed_at = ?
+                WHERE id = ?
+              `).run(errorMessage, closeNow, closeNow, orchestrationId);
+              broadcast2("orchestration:plan-failed", {
+                orchestrationId,
+                plannerSessionId,
+                reason: errorMessage
+              });
+              log2("agent", "warn", "orchestration planning failed", {
+                orchestrationId: orchestrationId.slice(0, 8),
+                finalStatus,
+                errorMessage
+              });
+            }
+          },
+          onProcessError: () => {
+            const errNow = (/* @__PURE__ */ new Date()).toISOString();
+            const db22 = getDb();
+            const errorMessage = "Failed to start planner process \u2014 check that CLI is installed";
+            try {
+              db22.prepare("ALTER TABLE orchestration_plans ADD COLUMN error_message TEXT").run();
+            } catch {
+            }
+            db22.prepare(`
+              UPDATE orchestration_plans
+              SET status = 'failed', error_message = ?, updated_at = ?, completed_at = ?
+              WHERE id = ?
+            `).run(errorMessage, errNow, errNow, orchestrationId);
+            broadcast2("orchestration:plan-failed", {
+              orchestrationId,
+              plannerSessionId,
+              reason: errorMessage
+            });
+          }
+        });
+      } catch (spawnErr) {
+        const errIso = (/* @__PURE__ */ new Date()).toISOString();
+        db3.prepare(`
+          UPDATE orchestration_plans
+          SET status = 'failed', updated_at = ?, completed_at = ?
+          WHERE id = ?
+        `).run(errIso, errIso, orchestrationId);
+        return error(res, `Failed to spawn planner: ${spawnErr.message}`, 500);
+      }
+      json(res, {
+        orchestrationId,
+        plannerSessionId,
+        status: "planning"
+      });
+      return true;
+    }
+    const detailMatch = url.pathname.match(/^\/agent\/orchestration\/([^/]+)$/);
+    if (req.method === "GET" && detailMatch) {
+      const id = decodeURIComponent(detailMatch[1]);
+      const db3 = getDb();
+      const row = db3.prepare("SELECT * FROM orchestration_plans WHERE id = ?").get(id);
+      if (!row) return error(res, "Orchestration not found", 404);
+      let parsedPlan = null;
+      if (row.plan_json) {
+        try {
+          parsedPlan = JSON.parse(row.plan_json);
+        } catch {
+          parsedPlan = null;
+        }
+      }
+      json(res, {
+        orchestration: {
+          ...row,
+          parsed_plan: parsedPlan
+        }
+      });
+      return true;
+    }
+    const executeMatch = url.pathname.match(/^\/agent\/orchestration\/([^/]+)\/execute$/);
+    if (req.method === "POST" && executeMatch) {
+      const id = decodeURIComponent(executeMatch[1]);
+      const body = await readBody(req);
+      const db3 = getDb();
+      const row = db3.prepare("SELECT * FROM orchestration_plans WHERE id = ?").get(id);
+      if (!row) return error(res, "Orchestration not found", 404);
+      if (row.status !== "ready") {
+        return error(res, `Cannot execute: orchestration status is '${row.status}', expected 'ready'`, 400);
+      }
+      let parsedPlan = null;
+      let tasks;
+      if (Array.isArray(body.tasks) && body.tasks.length > 0) {
+        tasks = body.tasks;
+      } else if (row.plan_json) {
+        try {
+          parsedPlan = JSON.parse(row.plan_json);
+          tasks = parsedPlan.tasks;
+        } catch {
+          return error(res, "Failed to parse stored plan", 500);
+        }
+      } else {
+        return error(res, "No tasks available to execute", 400);
+      }
+      if (!Array.isArray(tasks) || tasks.length < 2) {
+        return error(res, "At least 2 tasks required", 400);
+      }
+      const execNow = (/* @__PURE__ */ new Date()).toISOString();
+      db3.prepare(`
+        UPDATE orchestration_plans SET status = 'executing', updated_at = ? WHERE id = ?
+      `).run(execNow, id);
+      const artifactDir = import_path44.default.join(PATHS.home, ".rudi", "tmp", `orchestration-${id}`);
+      const codebaseMapPath = import_path44.default.join(artifactDir, "codebase-map.md");
+      const hasCodebaseMap = import_fs45.default.existsSync(codebaseMapPath);
+      const runGroupBody = {
+        name: `Orchestration: ${row.prompt.slice(0, 60)}`,
+        provider: row.provider || "claude",
+        model: row.model,
+        cwd: row.project_path || process.env.PWD || process.cwd(),
+        coordinationMode: Array.isArray(parsedPlan?.sequential_phases) && parsedPlan.sequential_phases.length > 0 ? "phased" : "flat",
+        sequentialPhases: Array.isArray(parsedPlan?.sequential_phases) ? parsedPlan.sequential_phases : void 0,
+        tasks: tasks.map((t2) => ({
+          prompt: t2.prompt,
+          name: t2.name || null,
+          provider: t2.provider || row.provider || "claude",
+          model: t2.model || row.model || null,
+          role: t2.role || null,
+          goal: t2.goal || null,
+          deliverable: t2.deliverable || null,
+          rationale: t2.rationale || null,
+          files_touched: Array.isArray(t2.files_touched) ? t2.files_touched : void 0,
+          depends_on: Array.isArray(t2.depends_on) ? t2.depends_on : void 0,
+          requires_write: typeof t2.requires_write === "boolean" ? t2.requires_write : void 0,
+          artifacts_in: Array.isArray(t2.artifacts_in) ? t2.artifacts_in : void 0,
+          artifacts_out: Array.isArray(t2.artifacts_out) ? t2.artifacts_out : void 0,
+          contextPaths: hasCodebaseMap ? [codebaseMapPath] : void 0
+        }))
+      };
+      const result = await createRunGroupFromRequest(ctx, runGroupBody);
+      if (result.error) {
+        const failNow = (/* @__PURE__ */ new Date()).toISOString();
+        db3.prepare(`
+          UPDATE orchestration_plans SET status = 'failed', updated_at = ? WHERE id = ?
+        `).run(failNow, id);
+        if (result.statusCode === 429) {
+          return json(res, { error: result.error, message: result.message }, 429);
+        }
+        return error(res, result.error, result.statusCode || 500);
+      }
+      const linkNow = (/* @__PURE__ */ new Date()).toISOString();
+      db3.prepare(`
+        UPDATE orchestration_plans
+        SET run_group_id = ?, status = 'executing', updated_at = ?
+        WHERE id = ?
+      `).run(result.groupId, linkNow, id);
+      json(res, {
+        groupId: result.groupId,
+        sessionIds: result.sessionIds,
+        status: result.status
+      });
+      return true;
+    }
+    const cancelMatch = url.pathname.match(/^\/agent\/orchestration\/([^/]+)\/cancel$/);
+    if (req.method === "POST" && cancelMatch) {
+      const id = decodeURIComponent(cancelMatch[1]);
+      const db3 = getDb();
+      const row = db3.prepare("SELECT * FROM orchestration_plans WHERE id = ?").get(id);
+      if (!row) return error(res, "Orchestration not found", 404);
+      if (row.status === "planning" && row.planner_session_id) {
+        const entry = agentProcesses2.get(row.planner_session_id);
+        if (entry?.proc && !entry.proc.killed) {
+          entry._terminationReason = "cancelled";
+          entry.proc.kill("SIGTERM");
+          setTimeout(() => {
+            try {
+              entry.proc.kill("SIGKILL");
+            } catch {
+            }
+          }, 3e3);
+        }
+      }
+      const cancelNow = (/* @__PURE__ */ new Date()).toISOString();
+      db3.prepare(`
+        UPDATE orchestration_plans
+        SET status = 'cancelled', updated_at = ?, completed_at = ?
+        WHERE id = ?
+      `).run(cancelNow, cancelNow, id);
+      json(res, { ok: true });
       return true;
     }
     return false;
@@ -49759,12 +53659,12 @@ ${unmerged}`;
 
 // src/commands/agent/index.js
 function createAgentHandler({
-  log,
-  broadcast,
+  log: log2,
+  broadcast: broadcast2,
   json,
   error,
   readBody,
-  agentProcesses,
+  agentProcesses: agentProcesses2,
   queueSessionsUpdated,
   resumeSessionIndex = /* @__PURE__ */ new Map(),
   maxConcurrent = 6,
@@ -49777,13 +53677,14 @@ function createAgentHandler({
   const MAX_CHILDREN_PER_PARENT = 5;
   const pendingPermissions = /* @__PURE__ */ new Map();
   const sessionAlwaysAllowed = /* @__PURE__ */ new Map();
+  const groupAlwaysAllowed = /* @__PURE__ */ new Map();
   const ctx = {
-    log,
-    broadcast,
+    log: log2,
+    broadcast: broadcast2,
     json,
     error,
     readBody,
-    agentProcesses,
+    agentProcesses: agentProcesses2,
     queueSessionsUpdated,
     resumeSessionIndex,
     maxConcurrent,
@@ -49791,43 +53692,46 @@ function createAgentHandler({
     getSidecarToken,
     pendingPermissions,
     sessionAlwaysAllowed,
+    groupAlwaysAllowed,
     spawnRateMap,
     MAX_SPAWNS_PER_WINDOW,
     SPAWN_RATE_WINDOW_MS,
     MAX_CHILDREN_PER_PARENT
   };
   try {
-    ensurePermissionHook(log);
+    ensurePermissionHook(log2);
   } catch (err) {
-    log("agent", "warn", `ensurePermissionHook failed: ${err.message}`);
+    log2("agent", "warn", `ensurePermissionHook failed: ${err.message}`);
   }
   const routeStart = buildStartRoute(ctx);
   const routeLifecycle = buildLifecycleRoutes(ctx);
   const routePermissions = buildPermissionRoutes(ctx);
   const routeSpawnChild = buildSpawnChildRoutes(ctx);
   const routeWorktree = buildWorktreeRoutes(ctx);
+  const routeRunGroup = buildRunGroupRoutes(ctx);
+  const routeOrchestrate = buildOrchestrateRoutes(ctx);
   return async function handleAgent(req, res, url) {
-    return await routeStart(req, res, url) || await routeLifecycle(req, res, url) || await routePermissions(req, res, url) || await routeWorktree(req, res, url) || await routeSpawnChild(req, res, url) || false;
+    return await routeStart(req, res, url) || await routeLifecycle(req, res, url) || await routePermissions(req, res, url) || await routeWorktree(req, res, url) || await routeRunGroup(req, res, url) || await routeOrchestrate(req, res, url) || await routeSpawnChild(req, res, url) || false;
   };
 }
 
 // src/commands/agent/idle-reaper.js
 function createIdleReaper({
-  agentProcesses,
-  broadcast,
-  log,
+  agentProcesses: agentProcesses2,
+  broadcast: broadcast2,
+  log: log2,
   idleTimeoutMs = 10 * 60 * 1e3,
   // 10 min default
   maxConcurrent = 6
 }) {
   const interval = setInterval(() => {
     const now = Date.now();
-    for (const [sessionId, entry] of agentProcesses.entries()) {
+    for (const [sessionId, entry] of agentProcesses2.entries()) {
       if (!entry.proc || entry.proc.killed) continue;
       if (entry.turnActive) continue;
       const idle = now - (entry.lastActivityAt || entry.startedAt || now);
       if (idle > idleTimeoutMs) {
-        log("agent", "warn", `idle reaper: killing session ${sessionId.slice(0, 8)} (idle ${Math.round(idle / 1e3)}s)`);
+        log2("agent", "warn", `idle reaper: killing session ${sessionId.slice(0, 8)} (idle ${Math.round(idle / 1e3)}s)`);
         entry._terminationReason = "stopped";
         entry.proc.kill("SIGTERM");
         const killTimer = setTimeout(() => {
@@ -49837,7 +53741,7 @@ function createIdleReaper({
           }
         }, 3e3);
         entry.proc.on("close", () => clearTimeout(killTimer));
-        broadcast("agent:stopped", { sessionId });
+        broadcast2("agent:stopped", { sessionId });
       }
     }
   }, 3e4);
@@ -49845,11 +53749,11 @@ function createIdleReaper({
 }
 
 // src/commands/serve/sessions.js
-var import_fs45 = __toESM(require("fs"), 1);
-var import_promises9 = __toESM(require("fs/promises"), 1);
-var import_path48 = __toESM(require("path"), 1);
-var import_os21 = __toESM(require("os"), 1);
-var import_child_process22 = require("child_process");
+var import_fs49 = __toESM(require("fs"), 1);
+var import_promises10 = __toESM(require("fs/promises"), 1);
+var import_path53 = __toESM(require("path"), 1);
+var import_os22 = __toESM(require("os"), 1);
+var import_child_process25 = require("child_process");
 
 // src/commands/sessions/providers/common.js
 function stripSystemXml(text) {
@@ -50260,12 +54164,12 @@ function parseSessionMessagesFromJsonl(content, provider = "claude") {
 }
 
 // src/commands/sessions/constants.js
-var import_path42 = __toESM(require("path"), 1);
-var import_os19 = __toESM(require("os"), 1);
-var CLAUDE_ROOT_DIR = import_path42.default.join(import_os19.default.homedir(), ".claude");
-var CLAUDE_PROJECTS_DIR = import_path42.default.join(CLAUDE_ROOT_DIR, "projects");
-var CODEX_ROOT_DIR = import_path42.default.join(import_os19.default.homedir(), ".codex");
-var CODEX_SESSIONS_DIR = import_path42.default.join(CODEX_ROOT_DIR, "sessions");
+var import_path45 = __toESM(require("path"), 1);
+var import_os20 = __toESM(require("os"), 1);
+var CLAUDE_ROOT_DIR = import_path45.default.join(import_os20.default.homedir(), ".claude");
+var CLAUDE_PROJECTS_DIR = import_path45.default.join(CLAUDE_ROOT_DIR, "projects");
+var CODEX_ROOT_DIR = import_path45.default.join(import_os20.default.homedir(), ".codex");
+var CODEX_SESSIONS_DIR = import_path45.default.join(CODEX_ROOT_DIR, "sessions");
 var SESSION_CWD_SCAN_BYTES = 2 * 1024 * 1024;
 var SESSION_CWD_SCAN_LINES = 400;
 var MAX_SESSION_INDEX_SCAN_BYTES = 65536;
@@ -50280,12 +54184,12 @@ function cacheSessionFileHint(sessionId, provider, filePath) {
 }
 
 // src/commands/sessions/providers/codex/discovery.js
-var import_fs42 = __toESM(require("fs"), 1);
+var import_fs46 = __toESM(require("fs"), 1);
 var import_promises2 = __toESM(require("fs/promises"), 1);
-var import_path43 = __toESM(require("path"), 1);
+var import_path46 = __toESM(require("path"), 1);
 var import_readline3 = require("readline");
 function deriveCodexSessionIdFromFilename(filePathOrName) {
-  const fileName = import_path43.default.basename(String(filePathOrName || ""));
+  const fileName = import_path46.default.basename(String(filePathOrName || ""));
   if (!fileName) return "";
   const base = fileName.endsWith(".jsonl") ? fileName.slice(0, -6) : fileName;
   const match = base.match(UUID_SUFFIX_RE);
@@ -50309,7 +54213,7 @@ async function readCodexSessionMeta(filePath, maxLines = CODEX_META_SCAN_LINES) 
   let rl = null;
   let linesRead = 0;
   try {
-    stream = import_fs42.default.createReadStream(filePath, { encoding: "utf-8" });
+    stream = import_fs46.default.createReadStream(filePath, { encoding: "utf-8" });
     rl = (0, import_readline3.createInterface)({ input: stream, crlfDelay: Infinity });
     for await (const line of rl) {
       linesRead += 1;
@@ -50328,7 +54232,7 @@ async function readCodexSessionMeta(filePath, maxLines = CODEX_META_SCAN_LINES) 
         if (!meta.sessionId && typeof obj.payload.id === "string") {
           meta.sessionId = obj.payload.id;
         }
-        if (!meta.cwd && typeof obj.payload.cwd === "string" && import_path43.default.isAbsolute(obj.payload.cwd)) {
+        if (!meta.cwd && typeof obj.payload.cwd === "string" && import_path46.default.isAbsolute(obj.payload.cwd)) {
           meta.cwd = obj.payload.cwd;
         }
         if (!meta.model && typeof obj.payload.model === "string") {
@@ -50339,7 +54243,7 @@ async function readCodexSessionMeta(filePath, maxLines = CODEX_META_SCAN_LINES) 
         }
       }
       if (obj?.type === "turn_context" && obj?.payload && typeof obj.payload === "object") {
-        if (!meta.cwd && typeof obj.payload.cwd === "string" && import_path43.default.isAbsolute(obj.payload.cwd)) {
+        if (!meta.cwd && typeof obj.payload.cwd === "string" && import_path46.default.isAbsolute(obj.payload.cwd)) {
           meta.cwd = obj.payload.cwd;
         }
         if (!meta.model && typeof obj.payload.model === "string") {
@@ -50400,11 +54304,11 @@ async function findCodexSessionFile(sessionId, { scanDirForSessionFile: scanDirF
 
 // src/commands/sessions/discovery.js
 var import_promises4 = __toESM(require("fs/promises"), 1);
-var import_path45 = __toESM(require("path"), 1);
+var import_path48 = __toESM(require("path"), 1);
 
 // src/commands/sessions/providers/claude/discovery.js
 var import_promises3 = __toESM(require("fs/promises"), 1);
-var import_path44 = __toESM(require("path"), 1);
+var import_path47 = __toESM(require("path"), 1);
 async function findClaudeSessionFile(sessionId) {
   const hint = SESSION_FILE_HINTS.get(sessionId);
   if (hint?.provider === "claude" && hint?.filePath) {
@@ -50422,7 +54326,7 @@ async function findClaudeSessionFile(sessionId) {
     return null;
   }
   for (const projDir of projectDirs) {
-    const indexPath = import_path44.default.join(CLAUDE_PROJECTS_DIR, projDir, "sessions-index.json");
+    const indexPath = import_path47.default.join(CLAUDE_PROJECTS_DIR, projDir, "sessions-index.json");
     try {
       const indexContent = await import_promises3.default.readFile(indexPath, "utf-8");
       const index = JSON.parse(indexContent);
@@ -50438,7 +54342,7 @@ async function findClaudeSessionFile(sessionId) {
     }
   }
   for (const projDir of projectDirs) {
-    const filePath = import_path44.default.join(CLAUDE_PROJECTS_DIR, projDir, `${sessionId}.jsonl`);
+    const filePath = import_path47.default.join(CLAUDE_PROJECTS_DIR, projDir, `${sessionId}.jsonl`);
     try {
       await import_promises3.default.access(filePath);
       cacheSessionFileHint(sessionId, "claude", filePath);
@@ -50459,7 +54363,7 @@ async function scanDirForSessionFile(baseDir, sessionIdOrMatcher, maxDepth = 4) 
     try {
       const entries = await import_promises4.default.readdir(dir, { withFileTypes: true });
       for (const entry of entries) {
-        const fullPath = import_path45.default.join(dir, entry.name);
+        const fullPath = import_path48.default.join(dir, entry.name);
         if (entry.isFile() && matcher(entry.name, fullPath)) return fullPath;
         if (entry.isDirectory() && depth < maxDepth) {
           queue.push({ dir: fullPath, depth: depth + 1 });
@@ -50483,7 +54387,7 @@ async function collectJsonlFiles(baseDir, maxDepth = 6) {
       continue;
     }
     for (const entry of entries) {
-      const fullPath = import_path45.default.join(dir, entry.name);
+      const fullPath = import_path48.default.join(dir, entry.name);
       if (entry.isFile() && entry.name.endsWith(".jsonl")) {
         files.push(fullPath);
       } else if (entry.isDirectory() && depth < maxDepth) {
@@ -50499,16 +54403,16 @@ function extractSessionCwdFromJsonlChunk(content) {
   for (const line of lines) {
     try {
       const entry = JSON.parse(line);
-      if (typeof entry?.cwd === "string" && import_path45.default.isAbsolute(entry.cwd)) {
+      if (typeof entry?.cwd === "string" && import_path48.default.isAbsolute(entry.cwd)) {
         return entry.cwd;
       }
-      if (typeof entry?.payload?.cwd === "string" && import_path45.default.isAbsolute(entry.payload.cwd)) {
+      if (typeof entry?.payload?.cwd === "string" && import_path48.default.isAbsolute(entry.payload.cwd)) {
         return entry.payload.cwd;
       }
-      if (entry?.type === "session_meta" && typeof entry?.payload?.cwd === "string" && import_path45.default.isAbsolute(entry.payload.cwd)) {
+      if (entry?.type === "session_meta" && typeof entry?.payload?.cwd === "string" && import_path48.default.isAbsolute(entry.payload.cwd)) {
         return entry.payload.cwd;
       }
-      if (entry?.type === "turn_context" && typeof entry?.payload?.cwd === "string" && import_path45.default.isAbsolute(entry.payload.cwd)) {
+      if (entry?.type === "turn_context" && typeof entry?.payload?.cwd === "string" && import_path48.default.isAbsolute(entry.payload.cwd)) {
         return entry.payload.cwd;
       }
     } catch {
@@ -50560,7 +54464,7 @@ async function decodeProjectDirFromFilesystem(projDir) {
       return null;
     }
   }
-  let cursor = import_path45.default.join(import_path45.default.sep, tokens[0]);
+  let cursor = import_path48.default.join(import_path48.default.sep, tokens[0]);
   if (!await isExistingDirectory(cursor)) {
     if (/^[A-Za-z]:$/.test(tokens[0])) {
       cursor = `${tokens[0]}\\`;
@@ -50589,7 +54493,7 @@ async function decodeProjectDirFromFilesystem(projDir) {
       matchedName = single;
       matchedEnd = index + 1;
     }
-    cursor = import_path45.default.join(cursor, matchedName);
+    cursor = import_path48.default.join(cursor, matchedName);
     index = matchedEnd;
     if (index < tokens.length && !await isExistingDirectory(cursor)) {
       return null;
@@ -50620,8 +54524,8 @@ async function readSessionSnippet(filePath, provider = "claude") {
       } catch {
         continue;
       }
-      if (!cwd && typeof obj?.cwd === "string" && import_path45.default.isAbsolute(obj.cwd)) cwd = obj.cwd;
-      if (!cwd && typeof obj?.payload?.cwd === "string" && import_path45.default.isAbsolute(obj.payload.cwd)) cwd = obj.payload.cwd;
+      if (!cwd && typeof obj?.cwd === "string" && import_path48.default.isAbsolute(obj.cwd)) cwd = obj.cwd;
+      if (!cwd && typeof obj?.payload?.cwd === "string" && import_path48.default.isAbsolute(obj.payload.cwd)) cwd = obj.payload.cwd;
       if (!model && typeof obj?.message?.model === "string") model = obj.message.model;
       if (!model && typeof obj?.model === "string") model = obj.model;
       if (!model && typeof obj?.payload?.model === "string") model = obj.payload.model;
@@ -50738,11 +54642,11 @@ async function findSessionFileEntry(sessionId, lookup = {}) {
 
 // src/commands/sessions/db.js
 var import_promises5 = __toESM(require("fs/promises"), 1);
-var import_path46 = __toESM(require("path"), 1);
-var import_os20 = __toESM(require("os"), 1);
+var import_path49 = __toESM(require("path"), 1);
+var import_os21 = __toESM(require("os"), 1);
 var WATCHER_DB_DEBOUNCE_MS = 1e4;
 var RECONCILE_INTERVAL_MS = 6e4;
-function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjectsReady }) {
+function createSessionsDbModule({ log: log2, resolveDb: resolveDb2, caches, onProjectsReady }) {
   const { diffStatsCache, gitStatusCache, sessionPathMap, GIT_STATUS_TTL_MS } = caches;
   let useDbSpine = false;
   let _reconcileInterval = null;
@@ -50752,7 +54656,7 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
     const db3 = resolveDb2 ? resolveDb2() : null;
     if (!db3) return;
     const start = Date.now();
-    const claudeDir = import_path46.default.join(import_os20.default.homedir(), ".claude", "projects");
+    const claudeDir = import_path49.default.join(import_os21.default.homedir(), ".claude", "projects");
     let added = 0, updated = 0, pruned = 0, fsCount = 0;
     const fsSessionIds = /* @__PURE__ */ new Set();
     const claudeFsIds = /* @__PURE__ */ new Set();
@@ -50766,17 +54670,17 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
     try {
       const projectDirs = await import_promises5.default.readdir(claudeDir);
       for (const projDir of projectDirs) {
-        const projPath = import_path46.default.join(claudeDir, projDir);
+        const projPath = import_path49.default.join(claudeDir, projDir);
         let stat;
         try {
           stat = await import_promises5.default.stat(projPath);
         } catch (err) {
-          log("sessions", "warn", `[reconcile] stat failed for ${projPath}: ${err.message}`);
+          log2("sessions", "warn", `[reconcile] stat failed for ${projPath}: ${err.message}`);
           continue;
         }
         if (!stat.isDirectory()) continue;
         let projectPath = null;
-        const indexPath = import_path46.default.join(projPath, "sessions-index.json");
+        const indexPath = import_path49.default.join(projPath, "sessions-index.json");
         let indexEntries = null;
         try {
           const indexContent = await import_promises5.default.readFile(indexPath, "utf-8");
@@ -50803,7 +54707,7 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
         try {
           files = await import_promises5.default.readdir(projPath);
         } catch (err) {
-          log("sessions", "warn", `[reconcile] readdir failed for ${projPath}: ${err.message}`);
+          log2("sessions", "warn", `[reconcile] readdir failed for ${projPath}: ${err.message}`);
           continue;
         }
         for (const file of files) {
@@ -50812,7 +54716,7 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
           fsSessionIds.add(sessionId);
           claudeFsIds.add(sessionId);
           fsCount++;
-          const fullPath = import_path46.default.join(projPath, file);
+          const fullPath = import_path49.default.join(projPath, file);
           let fstat;
           try {
             fstat = await import_promises5.default.stat(fullPath);
@@ -50830,6 +54734,7 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
           const lastActive = new Date(modified) > new Date(fileMtime) ? modified : fileMtime;
           let snippet = firstPrompt;
           let snippetBranch = gitBranch;
+          let snippetModel = null;
           if (!snippet) {
             const cached = existingSnippets.get(sessionId);
             if (cached?.snippet) {
@@ -50840,41 +54745,49 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
                 const s2 = await readSessionSnippet(fullPath);
                 snippet = s2.firstPrompt || null;
                 if (!snippetBranch) snippetBranch = s2.gitBranch || null;
+                if (!snippetModel) snippetModel = s2.model || null;
               } catch {
               }
             }
           }
           const existed = db3.prepare("SELECT 1 FROM sessions WHERE id = ?").get(sessionId);
-          db3.prepare(`
-            INSERT INTO sessions
-              (id, provider, provider_session_id, origin, origin_native_file,
-               title, snippet, cwd, project_path, git_branch,
-               status, created_at, last_active_at, turn_count)
-            VALUES (?, 'claude', ?, 'provider-import', ?,
-                    ?, ?, ?, ?, ?,
-                    'active', ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-              project_path = COALESCE(excluded.project_path, sessions.project_path),
-              title = COALESCE(sessions.title, excluded.title),
-              snippet = COALESCE(sessions.snippet, excluded.snippet),
-              git_branch = COALESCE(excluded.git_branch, sessions.git_branch),
-              origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
-              last_active_at = MAX(sessions.last_active_at, excluded.last_active_at),
-              status = 'active',
-              deleted_at = NULL
-          `).run(
-            sessionId,
-            sessionId,
-            fullPath,
-            title,
-            snippet,
-            projectPath,
-            projectPath,
-            snippetBranch,
-            created,
-            lastActive,
-            messageCount
-          );
+          try {
+            db3.prepare(`
+              INSERT INTO sessions
+                (id, provider, provider_session_id, origin, origin_native_file,
+                 title, snippet, cwd, project_path, git_branch, model,
+                 status, created_at, last_active_at, turn_count)
+              VALUES (?, 'claude', ?, 'provider-import', ?,
+                      ?, ?, ?, ?, ?, ?,
+                      'active', ?, ?, ?)
+              ON CONFLICT(id) DO UPDATE SET
+                project_path = COALESCE(excluded.project_path, sessions.project_path),
+                title = COALESCE(sessions.title, excluded.title),
+                snippet = COALESCE(sessions.snippet, excluded.snippet),
+                git_branch = COALESCE(excluded.git_branch, sessions.git_branch),
+                model = COALESCE(excluded.model, sessions.model),
+                origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
+                last_active_at = MAX(sessions.last_active_at, excluded.last_active_at),
+                status = 'active',
+                deleted_at = NULL
+            `).run(
+              sessionId,
+              sessionId,
+              fullPath,
+              title,
+              snippet,
+              projectPath,
+              projectPath,
+              snippetBranch,
+              snippetModel,
+              created,
+              lastActive,
+              messageCount
+            );
+          } catch (dbErr) {
+            log2?.("sessions", "warn", `[reconcile.claude] INSERT failed: ${dbErr.message}`, { sessionId, filePath: fullPath });
+            continue;
+          }
           if (existed) updated++;
           else added++;
         }
@@ -50901,6 +54814,7 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
           const lastActive = new Date(modified) > new Date(fileMtime) ? modified : fileMtime;
           let snippet = firstPrompt;
           let snippetBranch = gitBranch;
+          let snippetModel = null;
           if (!snippet) {
             const cached = existingSnippets.get(sessionId);
             if (cached?.snippet) {
@@ -50911,43 +54825,168 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
                 const s2 = await readSessionSnippet(extPath);
                 snippet = s2.firstPrompt || null;
                 if (!snippetBranch) snippetBranch = s2.gitBranch || null;
+                if (!snippetModel) snippetModel = s2.model || null;
               } catch {
               }
             }
           }
           const existed = db3.prepare("SELECT 1 FROM sessions WHERE id = ?").get(sessionId);
-          db3.prepare(`
-            INSERT INTO sessions
-              (id, provider, provider_session_id, origin, origin_native_file,
-               title, snippet, cwd, project_path, git_branch,
-               status, created_at, last_active_at, turn_count)
-            VALUES (?, 'claude', ?, 'provider-import', ?,
-                    ?, ?, ?, ?, ?,
-                    'active', ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-              project_path = COALESCE(excluded.project_path, sessions.project_path),
-              title = COALESCE(sessions.title, excluded.title),
-              snippet = COALESCE(sessions.snippet, excluded.snippet),
-              git_branch = COALESCE(excluded.git_branch, sessions.git_branch),
-              origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
-              last_active_at = MAX(sessions.last_active_at, excluded.last_active_at),
-              status = 'active',
-              deleted_at = NULL
-          `).run(
-            sessionId,
-            sessionId,
-            extPath,
-            title,
-            snippet,
-            projectPath,
-            projectPath,
-            snippetBranch,
-            created,
-            lastActive,
-            messageCount
-          );
+          try {
+            db3.prepare(`
+              INSERT INTO sessions
+                (id, provider, provider_session_id, origin, origin_native_file,
+                 title, snippet, cwd, project_path, git_branch, model,
+                 status, created_at, last_active_at, turn_count)
+              VALUES (?, 'claude', ?, 'provider-import', ?,
+                      ?, ?, ?, ?, ?, ?,
+                      'active', ?, ?, ?)
+              ON CONFLICT(id) DO UPDATE SET
+                project_path = COALESCE(excluded.project_path, sessions.project_path),
+                title = COALESCE(sessions.title, excluded.title),
+                snippet = COALESCE(sessions.snippet, excluded.snippet),
+                git_branch = COALESCE(excluded.git_branch, sessions.git_branch),
+                model = COALESCE(excluded.model, sessions.model),
+                origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
+                last_active_at = MAX(sessions.last_active_at, excluded.last_active_at),
+                status = 'active',
+                deleted_at = NULL
+            `).run(
+              sessionId,
+              sessionId,
+              extPath,
+              title,
+              snippet,
+              projectPath,
+              projectPath,
+              snippetBranch,
+              snippetModel,
+              created,
+              lastActive,
+              messageCount
+            );
+          } catch (dbErr) {
+            log2?.("sessions", "warn", `[reconcile.crossdir] INSERT failed: ${dbErr.message}`, { sessionId, filePath: extPath });
+            continue;
+          }
           if (existed) updated++;
           else added++;
+        }
+      }
+    } catch {
+    }
+    try {
+      const projDirs2 = await import_promises5.default.readdir(import_path49.default.join(import_os21.default.homedir(), ".claude", "projects"));
+      for (const projDir of projDirs2) {
+        const projPath = import_path49.default.join(import_os21.default.homedir(), ".claude", "projects", projDir);
+        let stat2;
+        try {
+          stat2 = await import_promises5.default.stat(projPath);
+        } catch {
+          continue;
+        }
+        if (!stat2.isDirectory()) continue;
+        let projectPath = await decodeProjectDirFromFilesystem(projDir);
+        if (!projectPath) {
+          projectPath = "/" + projDir.replace(/-/g, "/").replace(/^\//, "");
+        }
+        let entries;
+        try {
+          entries = await import_promises5.default.readdir(projPath);
+        } catch {
+          continue;
+        }
+        for (const entry of entries) {
+          if (!entry.match(/^[0-9a-f]{8}-/)) continue;
+          const subagentsDir = import_path49.default.join(projPath, entry, "subagents");
+          let subFiles;
+          try {
+            subFiles = await import_promises5.default.readdir(subagentsDir);
+          } catch {
+            continue;
+          }
+          for (const subFile of subFiles) {
+            if (!subFile.startsWith("agent-") || !subFile.endsWith(".jsonl")) continue;
+            const agentSessionId = subFile.slice(0, -6);
+            const fullPath = import_path49.default.join(subagentsDir, subFile);
+            const existing = db3.prepare(
+              "SELECT parent_session_id, cwd FROM sessions WHERE id = ?"
+            ).get(agentSessionId);
+            if (existing?.parent_session_id && existing?.cwd) {
+              fsSessionIds.add(agentSessionId);
+              claudeFsIds.add(agentSessionId);
+              continue;
+            }
+            let fstat;
+            try {
+              fstat = await import_promises5.default.stat(fullPath);
+            } catch {
+              continue;
+            }
+            let snippet = null;
+            let snippetCwd = null;
+            let snippetModel = null;
+            let snippetBranch = null;
+            try {
+              const s2 = await readSessionSnippet(fullPath);
+              snippet = s2.firstPrompt || null;
+              snippetCwd = s2.cwd || null;
+              snippetModel = s2.model || null;
+              snippetBranch = s2.gitBranch || null;
+            } catch {
+            }
+            fsSessionIds.add(agentSessionId);
+            claudeFsIds.add(agentSessionId);
+            fsCount++;
+            try {
+              db3.prepare(`
+                INSERT INTO sessions
+                  (id, provider, provider_session_id, origin, origin_native_file,
+                   snippet, cwd, project_path, git_branch, model,
+                   parent_session_id, agent_id, is_sidechain, session_type,
+                   status, created_at, last_active_at)
+                VALUES (?, 'claude', ?, 'provider-import', ?,
+                        ?, ?, ?, ?, ?,
+                        ?, ?, 1, 'task',
+                        'active', ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                  cwd = COALESCE(excluded.cwd, sessions.cwd),
+                  project_path = COALESCE(excluded.project_path, sessions.project_path),
+                  git_branch = COALESCE(excluded.git_branch, sessions.git_branch),
+                  model = COALESCE(excluded.model, sessions.model),
+                  parent_session_id = COALESCE(excluded.parent_session_id, sessions.parent_session_id),
+                  agent_id = COALESCE(excluded.agent_id, sessions.agent_id),
+                  is_sidechain = COALESCE(excluded.is_sidechain, sessions.is_sidechain),
+                  session_type = COALESCE(excluded.session_type, sessions.session_type),
+                  snippet = COALESCE(sessions.snippet, excluded.snippet),
+                  origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
+                  last_active_at = MAX(sessions.last_active_at, excluded.last_active_at),
+                  status = 'active',
+                  deleted_at = NULL
+              `).run(
+                agentSessionId,
+                agentSessionId,
+                fullPath,
+                snippet,
+                snippetCwd || null,
+                projectPath,
+                snippetBranch || null,
+                snippetModel || null,
+                entry,
+                // parent session UUID = the directory name
+                subFile.slice(6, -6),
+                // agent ID = strip "agent-" prefix and ".jsonl" suffix
+                fstat.birthtime.toISOString(),
+                fstat.mtime.toISOString()
+              );
+            } catch (dbErr) {
+              log2?.("sessions", "warn", `[reconcile.subagent] INSERT failed: ${dbErr.message}`, { sessionId: agentSessionId, filePath: fullPath, parentSessionId: entry });
+              continue;
+            }
+            if (existing) updated++;
+            else {
+              added++;
+            }
+          }
         }
       }
     } catch {
@@ -50980,36 +55019,41 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
           } catch {
           }
         }
-        const projectPath = cwd || await inferProjectPathFromSessionFile(filePath) || import_os20.default.homedir();
+        const projectPath = cwd || await inferProjectPathFromSessionFile(filePath) || import_os21.default.homedir();
         cacheSessionFileHint(sessionId, "codex", filePath);
         const existed = db3.prepare(
           "SELECT 1 FROM sessions WHERE provider = ? AND (id = ? OR provider_session_id = ?)"
         ).get("codex", sessionId, sessionId);
-        db3.prepare(`
-          INSERT INTO sessions
-            (id, provider, provider_session_id, origin, origin_native_file,
-             snippet, cwd, project_path,
-             status, created_at, last_active_at)
-          VALUES (?, 'codex', ?, 'provider-import', ?,
-                  ?, ?, ?,
-                  'active', ?, ?)
-          ON CONFLICT(id) DO UPDATE SET
-            project_path = COALESCE(excluded.project_path, sessions.project_path),
-            snippet = COALESCE(sessions.snippet, excluded.snippet),
-            origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
-            last_active_at = MAX(sessions.last_active_at, excluded.last_active_at),
-            status = 'active',
-            deleted_at = NULL
-        `).run(
-          sessionId,
-          sessionId,
-          filePath,
-          snippet,
-          cwd || projectPath,
-          projectPath,
-          fstat.birthtime.toISOString(),
-          fstat.mtime.toISOString()
-        );
+        try {
+          db3.prepare(`
+            INSERT INTO sessions
+              (id, provider, provider_session_id, origin, origin_native_file,
+               snippet, cwd, project_path,
+               status, created_at, last_active_at)
+            VALUES (?, 'codex', ?, 'provider-import', ?,
+                    ?, ?, ?,
+                    'active', ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              project_path = COALESCE(excluded.project_path, sessions.project_path),
+              snippet = COALESCE(sessions.snippet, excluded.snippet),
+              origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
+              last_active_at = MAX(sessions.last_active_at, excluded.last_active_at),
+              status = 'active',
+              deleted_at = NULL
+          `).run(
+            sessionId,
+            sessionId,
+            filePath,
+            snippet,
+            cwd || projectPath,
+            projectPath,
+            fstat.birthtime.toISOString(),
+            fstat.mtime.toISOString()
+          );
+        } catch (dbErr) {
+          log2?.("sessions", "warn", `[reconcile.codex] INSERT failed: ${dbErr.message}`, { sessionId, filePath });
+          continue;
+        }
         if (existed) updated++;
         else added++;
       }
@@ -51055,13 +55099,13 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
       WHERE session_id IN (SELECT id FROM sessions WHERE status = 'deleted')
     `).run().changes;
     if (purgedDeletedTurns > 0) {
-      log("sessions", "info", `[reconcile] purged ${purgedDeletedTurns} turns from deleted sessions`);
+      log2("sessions", "info", `[reconcile] purged ${purgedDeletedTurns} turns from deleted sessions`);
     }
     const duration = Date.now() - start;
     const dbCount = db3.prepare(
       `SELECT COUNT(*) as c FROM sessions WHERE status != 'deleted'`
     ).get().c;
-    log(
+    log2(
       "sessions",
       "info",
       `[reconcile] DB=${dbCount} fs=${fsCount} added=${added} pruned=${pruned} updated=${updated} duration=${duration}ms`
@@ -51070,14 +55114,14 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
   async function periodicReconcile() {
     const db3 = resolveDb2 ? resolveDb2() : null;
     if (!db3) return;
-    const claudeDir = import_path46.default.join(import_os20.default.homedir(), ".claude", "projects");
+    const claudeDir = import_path49.default.join(import_os21.default.homedir(), ".claude", "projects");
     try {
       const projectDirs = await import_promises5.default.readdir(claudeDir);
       const dbIds = new Set(
         db3.prepare(`SELECT id FROM sessions WHERE provider = 'claude' AND status != 'deleted'`).all().map((r2) => r2.id)
       );
       for (const projDir of projectDirs) {
-        const projPath = import_path46.default.join(claudeDir, projDir);
+        const projPath = import_path49.default.join(claudeDir, projDir);
         let stat;
         try {
           stat = await import_promises5.default.stat(projPath);
@@ -51092,7 +55136,7 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
           continue;
         }
         let projectPath = null;
-        const indexPath = import_path46.default.join(projPath, "sessions-index.json");
+        const indexPath = import_path49.default.join(projPath, "sessions-index.json");
         let indexEntries = null;
         let indexChanged = false;
         try {
@@ -51114,13 +55158,16 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
           projectPath = "/" + projDir.replace(/-/g, "/").replace(/^\//, "");
         }
         if (indexChanged && indexEntries) {
+          const titleGeneratedAt = (/* @__PURE__ */ new Date()).toISOString();
           const titleStmt = db3.prepare(
-            `UPDATE sessions SET title = ?, project_path = COALESCE(project_path, ?)
+            `UPDATE sessions SET title = ?, title_source = COALESCE(title_source, 'cli'),
+             title_generated_at = COALESCE(title_generated_at, ?),
+             project_path = COALESCE(project_path, ?)
              WHERE id = ? AND title_override IS NULL`
           );
           for (const e2 of indexEntries) {
             if (e2.summary && e2.sessionId) {
-              titleStmt.run(e2.summary, projectPath, e2.sessionId);
+              titleStmt.run(e2.summary, titleGeneratedAt, projectPath, e2.sessionId);
             }
           }
         }
@@ -51128,7 +55175,7 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
           if (!file.endsWith(".jsonl")) continue;
           const sessionId = file.slice(0, -6);
           if (dbIds.has(sessionId)) continue;
-          const fullPath = import_path46.default.join(projPath, file);
+          const fullPath = import_path49.default.join(projPath, file);
           let fstat;
           try {
             fstat = await import_promises5.default.stat(fullPath);
@@ -51188,16 +55235,18 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
             db3.prepare(`
               INSERT OR IGNORE INTO sessions
                 (id, provider, provider_session_id, origin, origin_native_file,
-                 title, snippet, cwd, project_path, git_branch,
+                 title, title_source, title_generated_at, snippet, cwd, project_path, git_branch,
                  status, created_at, last_active_at)
               VALUES (?, 'claude', ?, 'provider-import', ?,
-                      ?, ?, ?, ?, ?,
+                      ?, ?, ?, ?, ?, ?, ?,
                       'active', ?, ?)
             `).run(
               sessionId,
               sessionId,
               extPath,
               entry.summary || null,
+              entry.summary ? "cli" : null,
+              entry.summary ? entry.created || fstat.birthtime.toISOString() : null,
               snippet,
               projectPath,
               projectPath,
@@ -51240,7 +55289,7 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
           if (!cwd) cwd = s2.cwd || null;
         } catch {
         }
-        const projectPath = cwd || await inferProjectPathFromSessionFile(filePath) || import_os20.default.homedir();
+        const projectPath = cwd || await inferProjectPathFromSessionFile(filePath) || import_os21.default.homedir();
         cacheSessionFileHint(sessionId, "codex", filePath);
         db3.prepare(`
           INSERT OR IGNORE INTO sessions
@@ -51277,14 +55326,32 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
       WHERE status != 'deleted'
       ORDER BY last_active_at DESC
     `).all();
+    const parentProjectPaths = /* @__PURE__ */ new Map();
+    for (const row of rows) {
+      if (!row.parent_session_id) {
+        parentProjectPaths.set(row.id, row.project_path || row.cwd || "unknown");
+      }
+    }
     const projectMap = /* @__PURE__ */ new Map();
     for (const row of rows) {
-      const pp = row.project_path || row.cwd || "unknown";
+      let pp;
+      if (row.parent_session_id) {
+        pp = parentProjectPaths.get(row.parent_session_id) || row.project_path || row.cwd || null;
+      } else {
+        pp = row.project_path || row.cwd || null;
+      }
+      if (!pp && row.origin_native_file) {
+        const projMatch = row.origin_native_file.match(/\.claude\/projects\/([^/]+)\//);
+        if (projMatch) {
+          pp = "/" + projMatch[1].replace(/-/g, "/").replace(/^\//, "");
+        }
+      }
+      if (!pp) pp = "unknown";
       const sessionId = row.provider_session_id || row.id;
       if (!projectMap.has(pp)) {
         projectMap.set(pp, {
           path: pp.replace(/\//g, "-").replace(/^-/, ""),
-          name: import_path46.default.basename(pp),
+          name: import_path49.default.basename(pp),
           originalPath: pp,
           sessions: [],
           gitStatus: null
@@ -51312,6 +55379,7 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
       if (row.parent_session_id) session.parentSessionId = row.parent_session_id;
       if (row.is_sidechain) session.isSidechain = true;
       if (row.session_type && row.session_type !== "main") session.sessionType = row.session_type;
+      if (row.model) session.model = row.model;
       const cached = diffStatsCache.get(sessionId) || diffStatsCache.get(row.id);
       if (cached) session.diffStats = cached.diffStats;
       if (row.origin_native_file) {
@@ -51327,21 +55395,21 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
       proj.sessions.push(session);
     }
     let projects = [...projectMap.values()];
-    const worktreeMarker = "/.rudi/worktrees/";
+    const worktreeRe = /[/.](?:rudi|claude(?:-worktrees)?|codex)\/worktrees?\//;
     const mergedProjects = [];
     const parentMap = /* @__PURE__ */ new Map();
     for (const proj of projects) {
       const op = proj.originalPath || "";
-      const wtIdx = op.indexOf(worktreeMarker);
-      if (wtIdx !== -1) {
-        const realRoot = op.slice(0, wtIdx);
+      const wtMatch = op.match(worktreeRe);
+      if (wtMatch) {
+        const realRoot = op.slice(0, wtMatch.index).replace(/\/+$/, "");
         if (parentMap.has(realRoot)) {
           mergedProjects[parentMap.get(realRoot)].sessions.push(...proj.sessions);
         } else {
           parentMap.set(realRoot, mergedProjects.length);
           mergedProjects.push({
             ...proj,
-            name: import_path46.default.basename(realRoot),
+            name: import_path49.default.basename(realRoot),
             originalPath: realRoot
           });
         }
@@ -51366,6 +55434,16 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
       const cachedGit = gitStatusCache.get(proj.originalPath);
       if (cachedGit && Date.now() - cachedGit.fetchedAt < GIT_STATUS_TTL_MS) {
         proj.gitStatus = cachedGit.gitStatus;
+      }
+    }
+    const nameCount = /* @__PURE__ */ new Map();
+    for (const proj of mergedProjects) {
+      nameCount.set(proj.name, (nameCount.get(proj.name) || 0) + 1);
+    }
+    for (const proj of mergedProjects) {
+      if (nameCount.get(proj.name) > 1 && proj.originalPath) {
+        const parent = import_path49.default.basename(import_path49.default.dirname(proj.originalPath));
+        proj.name = `${parent}/${proj.name}`;
       }
     }
     mergedProjects.sort((a2, b2) => {
@@ -51407,7 +55485,7 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
         }
         let projectPath = null;
         if (provider === "claude" && projectDir) {
-          const indexPath = import_path46.default.join(CLAUDE_PROJECTS_DIR, projectDir, "sessions-index.json");
+          const indexPath = import_path49.default.join(CLAUDE_PROJECTS_DIR, projectDir, "sessions-index.json");
           try {
             const indexContent = await import_promises5.default.readFile(indexPath, "utf-8");
             const index = JSON.parse(indexContent);
@@ -51470,20 +55548,20 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
         `).run(nowIso, provider, existing.id);
       }
     } catch (err) {
-      log("sessions", "warn", `watcher DB upsert failed for ${resolvedSessionId}: ${err.message}`);
+      log2("sessions", "warn", `watcher DB upsert failed for ${resolvedSessionId}: ${err.message}`);
     }
   }
   function startPeriodicReconcile() {
     if (_reconcileInterval) return;
     _reconcileInterval = setInterval(() => {
       periodicReconcile().catch((err) => {
-        log("sessions", "warn", `periodic reconcile failed: ${err.message}`);
+        log2("sessions", "warn", `periodic reconcile failed: ${err.message}`);
       });
     }, RECONCILE_INTERVAL_MS);
   }
   function enableDbSpine() {
     useDbSpine = true;
-    log("sessions", "info", "DB-as-spine enabled for sidebar queries");
+    log2("sessions", "info", "DB-as-spine enabled for sidebar queries");
   }
   function isDbSpineEnabled() {
     return useDbSpine;
@@ -51506,14 +55584,15 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
 }
 
 // src/commands/sessions/tail.js
-var import_fs43 = __toESM(require("fs"), 1);
+var import_fs47 = __toESM(require("fs"), 1);
 var import_promises6 = __toESM(require("fs/promises"), 1);
 var MAX_FOLLOWED_SESSIONS = 10;
 var TAIL_FALLBACK_INTERVAL_MS = 5e3;
 var TAIL_IDLE_TIMEOUT_MS = 5 * 60 * 1e3;
-function createSessionsTailModule({ log, broadcast, findSessionFile }) {
+function createSessionsTailModule({ log: log2, broadcast: broadcast2, findSessionFile }) {
   const followedSessions = /* @__PURE__ */ new Map();
   const clientFollows = /* @__PURE__ */ new WeakMap();
+  const pendingFollows = /* @__PURE__ */ new Set();
   let tailFallbackTimer = null;
   function createParserState() {
     return {
@@ -51838,13 +55917,13 @@ function createSessionsTailModule({ log, broadcast, findSessionFile }) {
             entry.provider || "claude"
           );
           if (newMessages.length > 0) {
-            broadcast("session:lines-added", {
+            broadcast2("session:lines-added", {
               sessionId: entry.sessionId,
               messages: newMessages
             });
           }
           if (toolUpdates.length > 0) {
-            broadcast("session:tool-updated", {
+            broadcast2("session:tool-updated", {
               sessionId: entry.sessionId,
               updates: toolUpdates
             });
@@ -51854,14 +55933,14 @@ function createSessionsTailModule({ log, broadcast, findSessionFile }) {
         await fd.close();
       }
     } catch (err) {
-      log("sessions", "warn", `tail error for ${entry.sessionId}: ${err.message}`);
+      log2("sessions", "warn", `tail error for ${entry.sessionId}: ${err.message}`);
     } finally {
       entry.tailQueued = false;
     }
   }
   function startFileWatcher(entry) {
     try {
-      entry.watcher = import_fs43.default.watch(entry.filePath, () => {
+      entry.watcher = import_fs47.default.watch(entry.filePath, () => {
         setImmediate(() => tailSession(entry));
       });
       entry.watcher.on("error", () => {
@@ -51874,7 +55953,7 @@ function createSessionsTailModule({ log, broadcast, findSessionFile }) {
         }
       });
     } catch (err) {
-      log("sessions", "warn", `failed to watch ${entry.filePath}: ${err.message}`);
+      log2("sessions", "warn", `failed to watch ${entry.filePath}: ${err.message}`);
     }
   }
   function stopFollowEntry(sessionId) {
@@ -51892,7 +55971,7 @@ function createSessionsTailModule({ log, broadcast, findSessionFile }) {
     const { sessionId, fromOffset } = data || {};
     if (!sessionId || typeof sessionId !== "string") return;
     if (!followedSessions.has(sessionId) && followedSessions.size >= MAX_FOLLOWED_SESSIONS) {
-      log("sessions", "warn", `follow limit reached (${MAX_FOLLOWED_SESSIONS}), rejecting ${sessionId}`);
+      log2("sessions", "warn", `follow limit reached (${MAX_FOLLOWED_SESSIONS}), rejecting ${sessionId}`);
       try {
         ws.send(JSON.stringify({
           type: "session:follow-error",
@@ -51907,46 +55986,76 @@ function createSessionsTailModule({ log, broadcast, findSessionFile }) {
     }
     const clientSet = clientFollows.get(ws);
     if (followedSessions.has(sessionId)) {
-      const entry2 = followedSessions.get(sessionId);
+      const entry = followedSessions.get(sessionId);
       if (!clientSet.has(sessionId)) {
-        entry2.subscriberCount++;
+        entry.subscriberCount++;
         clientSet.add(sessionId);
       }
-      log("sessions", "debug", `follow: existing ${sessionId} (subscribers: ${entry2.subscriberCount})`);
+      log2("sessions", "debug", `follow: existing ${sessionId} (subscribers: ${entry.subscriberCount})`);
       return;
     }
-    const found = await findSessionFile(sessionId);
-    if (!found?.filePath) {
-      log("sessions", "warn", `follow: session file not found for ${sessionId}`);
-      try {
-        ws.send(JSON.stringify({
-          type: "session:follow-error",
-          data: { sessionId, error: "not_found" }
-        }));
-      } catch {
+    if (pendingFollows.has(sessionId)) {
+      log2("sessions", "debug", `follow: waiting for pending setup of ${sessionId}`);
+      const waitForSetup = () => new Promise((resolve) => {
+        const check = () => {
+          if (!pendingFollows.has(sessionId)) {
+            resolve();
+          } else {
+            setTimeout(check, 50);
+          }
+        };
+        setTimeout(check, 50);
+      });
+      await waitForSetup();
+      if (followedSessions.has(sessionId)) {
+        const entry = followedSessions.get(sessionId);
+        if (!clientSet.has(sessionId)) {
+          entry.subscriberCount++;
+          clientSet.add(sessionId);
+        }
+        log2("sessions", "debug", `follow: joined after setup ${sessionId} (subscribers: ${entry.subscriberCount})`);
+        return;
       }
-      return;
+      log2("sessions", "warn", `follow: setup failed for ${sessionId}, retrying`);
     }
-    const entry = {
-      sessionId,
-      provider: found.provider || "claude",
-      filePath: found.filePath,
-      byteOffset: typeof fromOffset === "number" && fromOffset > 0 ? fromOffset : 0,
-      partialLine: "",
-      parserState: createParserState(),
-      subscriberCount: 1,
-      watcher: null,
-      lastGrowth: Date.now(),
-      tailQueued: false
-    };
-    followedSessions.set(sessionId, entry);
-    clientSet.add(sessionId);
-    startFileWatcher(entry);
-    if (!tailFallbackTimer) {
-      tailFallbackTimer = setInterval(tailFallbackTick, TAIL_FALLBACK_INTERVAL_MS);
+    pendingFollows.add(sessionId);
+    let found;
+    try {
+      found = await findSessionFile(sessionId);
+      if (!found?.filePath) {
+        log2("sessions", "warn", `follow: session file not found for ${sessionId}`);
+        try {
+          ws.send(JSON.stringify({
+            type: "session:follow-error",
+            data: { sessionId, error: "not_found" }
+          }));
+        } catch {
+        }
+        return;
+      }
+      const entry = {
+        sessionId,
+        provider: found.provider || "claude",
+        filePath: found.filePath,
+        byteOffset: typeof fromOffset === "number" && fromOffset > 0 ? fromOffset : 0,
+        partialLine: "",
+        parserState: createParserState(),
+        subscriberCount: 1,
+        watcher: null,
+        lastGrowth: Date.now(),
+        tailQueued: false
+      };
+      followedSessions.set(sessionId, entry);
+      clientSet.add(sessionId);
+      startFileWatcher(entry);
+      if (!tailFallbackTimer) {
+        tailFallbackTimer = setInterval(tailFallbackTick, TAIL_FALLBACK_INTERVAL_MS);
+      }
+      setImmediate(() => tailSession(entry));
+      log2("sessions", "info", `follow: started ${sessionId} from offset ${entry.byteOffset}`);
+    } finally {
+      pendingFollows.delete(sessionId);
     }
-    setImmediate(() => tailSession(entry));
-    log("sessions", "info", `follow: started ${sessionId} from offset ${entry.byteOffset}`);
   }
   function handleSessionUnfollow(ws, data) {
     const { sessionId } = data || {};
@@ -51959,9 +56068,9 @@ function createSessionsTailModule({ log, broadcast, findSessionFile }) {
     entry.subscriberCount--;
     if (entry.subscriberCount <= 0) {
       stopFollowEntry(sessionId);
-      log("sessions", "info", `unfollow: stopped ${sessionId} (no subscribers)`);
+      log2("sessions", "info", `unfollow: stopped ${sessionId} (no subscribers)`);
     } else {
-      log("sessions", "debug", `unfollow: ${sessionId} (subscribers: ${entry.subscriberCount})`);
+      log2("sessions", "debug", `unfollow: ${sessionId} (subscribers: ${entry.subscriberCount})`);
     }
     if (followedSessions.size === 0 && tailFallbackTimer) {
       clearInterval(tailFallbackTimer);
@@ -51977,7 +56086,7 @@ function createSessionsTailModule({ log, broadcast, findSessionFile }) {
       entry.subscriberCount--;
       if (entry.subscriberCount <= 0) {
         stopFollowEntry(sessionId);
-        log("sessions", "debug", `ws disconnect: stopped following ${sessionId}`);
+        log2("sessions", "debug", `ws disconnect: stopped following ${sessionId}`);
       }
     }
     if (followedSessions.size === 0 && tailFallbackTimer) {
@@ -51989,8 +56098,8 @@ function createSessionsTailModule({ log, broadcast, findSessionFile }) {
     const now = Date.now();
     for (const [sessionId, entry] of followedSessions) {
       if (now - entry.lastGrowth > TAIL_IDLE_TIMEOUT_MS) {
-        log("sessions", "info", `idle cleanup: ${sessionId} (no growth for ${TAIL_IDLE_TIMEOUT_MS / 1e3}s)`);
-        broadcast("session:follow-ended", { sessionId, reason: "idle" });
+        log2("sessions", "info", `idle cleanup: ${sessionId} (no growth for ${TAIL_IDLE_TIMEOUT_MS / 1e3}s)`);
+        broadcast2("session:follow-ended", { sessionId, reason: "idle" });
         stopFollowEntry(sessionId);
         continue;
       }
@@ -52051,13 +56160,149 @@ async function readByteRange(filePath, startByte, endByte) {
 }
 
 // src/commands/sessions/ingester.js
-var import_fs44 = __toESM(require("fs"), 1);
+var import_fs48 = __toESM(require("fs"), 1);
 var import_promises8 = __toESM(require("fs/promises"), 1);
-var import_path47 = __toESM(require("path"), 1);
-var import_crypto8 = __toESM(require("crypto"), 1);
+var import_path50 = __toESM(require("path"), 1);
+var import_crypto10 = __toESM(require("crypto"), 1);
 var REWIND_BYTES = 256 * 1024;
 var DEFAULT_RECONCILE_INTERVAL_MS = 6e4;
 var MAX_ERROR_HISTORY = 100;
+var _pricingCache = null;
+var _pricingCacheAge = 0;
+var PRICING_CACHE_TTL_MS = 5 * 6e4;
+function _getPricingMap(db3) {
+  const now = Date.now();
+  if (_pricingCache && now - _pricingCacheAge < PRICING_CACHE_TTL_MS) return _pricingCache;
+  try {
+    _pricingCache = db3.prepare(`
+      SELECT
+        provider,
+        model_pattern,
+        COALESCE(input_cost_per_mtok, 0) as input_cost,
+        COALESCE(output_cost_per_mtok, 0) as output_cost,
+        COALESCE(cache_read_cost_per_mtok, 0) as cache_read_cost,
+        COALESCE(cache_write_cost_per_mtok, 0) as cache_write_cost
+      FROM model_pricing
+      ORDER BY (provider IS NOT NULL) DESC, LENGTH(model_pattern) DESC, effective_from DESC
+    `).all();
+    _pricingCacheAge = now;
+  } catch {
+    _pricingCache = _pricingCache || [];
+  }
+  return _pricingCache;
+}
+function _computeCost(pricing, provider, model, inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens) {
+  if (!model || !inputTokens && !outputTokens && !cacheReadTokens && !cacheCreationTokens) return null;
+  const entry = pricing.find((p2) => {
+    if (p2.provider !== null && p2.provider !== provider) return false;
+    const re2 = new RegExp("^" + p2.model_pattern.replace(/%/g, ".*").replace(/_/g, ".") + "$");
+    return re2.test(model);
+  });
+  if (!entry) return null;
+  const baseInput = Math.max((inputTokens || 0) - (cacheReadTokens || 0) - (cacheCreationTokens || 0), 0);
+  return baseInput * entry.input_cost / 1e6 + (outputTokens || 0) * entry.output_cost / 1e6 + (cacheReadTokens || 0) * entry.cache_read_cost / 1e6 + (cacheCreationTokens || 0) * entry.cache_write_cost / 1e6;
+}
+var CANONICAL_TOOL_NAMES = {
+  claude: {
+    Read: "file_read",
+    Edit: "file_edit",
+    Write: "file_write",
+    NotebookEdit: "notebook_edit",
+    Grep: "search_content",
+    Glob: "search_files",
+    Bash: "shell",
+    WebFetch: "web_fetch",
+    WebSearch: "web_search",
+    LSP: "lsp",
+    Task: "agent_spawn",
+    AskUserQuestion: "ask_user"
+  },
+  codex: {
+    file_read: "file_read",
+    file_edit: "file_edit",
+    file_write: "file_write",
+    apply_patch: "file_edit",
+    shell: "shell",
+    exec_command: "shell",
+    shell_command: "shell",
+    write_stdin: "shell",
+    grep: "search_content",
+    glob: "search_files"
+  },
+  gemini: {
+    read_file: "file_read",
+    edit_file: "file_edit",
+    create_file: "file_write",
+    run_terminal_command: "shell",
+    search_files: "search_content",
+    list_files: "search_files"
+  }
+};
+var FILE_PATH_KEYS = {
+  claude: { Read: "file_path", Edit: "file_path", Write: "file_path", NotebookEdit: "notebook_path", Grep: "path", LSP: "filePath", Glob: "path" },
+  codex: { file_read: "path", file_edit: "path", file_write: "path" },
+  gemini: { read_file: "target_file", edit_file: "target_file", create_file: "target_file" }
+};
+var INPUT_PREVIEW_KEYS = {
+  claude: {
+    Read: "file_path",
+    Edit: "file_path",
+    Write: "file_path",
+    NotebookEdit: "notebook_path",
+    Bash: "command",
+    Grep: "pattern",
+    Glob: "pattern",
+    WebFetch: "url",
+    WebSearch: "query",
+    Task: "description"
+  },
+  codex: {
+    file_read: "path",
+    file_edit: "path",
+    file_write: "path",
+    apply_patch: "apply_patch",
+    shell: ["command", "cmd"],
+    shell_command: ["command", "cmd"],
+    exec_command: ["cmd", "command"],
+    write_stdin: "chars",
+    grep: "pattern",
+    glob: "pattern"
+  },
+  gemini: { run_terminal_command: "command", search_files: "pattern" }
+};
+function _resolveCanonical(provider, toolName) {
+  return CANONICAL_TOOL_NAMES[provider]?.[toolName] || "mcp";
+}
+function _extractPreview(input, keys) {
+  if (!input || !keys) return null;
+  const candidates = Array.isArray(keys) ? keys : [keys];
+  for (const key of candidates) {
+    if (typeof input[key] === "string") {
+      return input[key].slice(0, 300);
+    }
+  }
+  return null;
+}
+function _extractPatchFilePath(patchText) {
+  if (typeof patchText !== "string" || patchText.length === 0) return null;
+  const moved = patchText.match(/^\*\*\* Move to: (.+)$/m);
+  if (moved?.[1]) return moved[1].trim();
+  const fileMatch = patchText.match(/^\*\*\* (?:Update|Add|Delete) File: (.+)$/m);
+  return fileMatch?.[1]?.trim() || null;
+}
+function _extractFilePath(provider, toolName, input) {
+  const key = FILE_PATH_KEYS[provider]?.[toolName];
+  let filePath = null;
+  if (key && input) {
+    const v2 = input[key];
+    if (typeof v2 === "string") filePath = v2;
+  }
+  if (!filePath && provider === "codex" && toolName === "apply_patch" && input) {
+    filePath = _extractPatchFilePath(input.apply_patch);
+  }
+  const inputPreview = _extractPreview(input, INPUT_PREVIEW_KEYS[provider]?.[toolName]);
+  return { filePath, inputPreview };
+}
 function _toIso(v2) {
   if (!v2) return (/* @__PURE__ */ new Date()).toISOString();
   const d2 = new Date(v2);
@@ -52074,7 +56319,7 @@ function _inferProvider(filePath, providerHint) {
 }
 function _deriveSessionId(filePath, provider, sessionIdHint) {
   if (sessionIdHint && typeof sessionIdHint === "string") return sessionIdHint;
-  const filename = import_path47.default.basename(filePath || "");
+  const filename = import_path50.default.basename(filePath || "");
   if (!filename.endsWith(".jsonl")) return null;
   if (provider === "codex") {
     return deriveCodexSessionIdFromFilename(filename) || filename.slice(0, -6);
@@ -52082,7 +56327,7 @@ function _deriveSessionId(filePath, provider, sessionIdHint) {
   return filename.slice(0, -6);
 }
 function _hashTurnId(sessionId, provider, userText, userTimestamp = "") {
-  const h2 = import_crypto8.default.createHash("sha256");
+  const h2 = import_crypto10.default.createHash("sha256");
   h2.update(`${sessionId}${provider}${userTimestamp || ""}${userText || ""}`);
   return `${provider}-h-${h2.digest("hex").slice(0, 40)}`;
 }
@@ -52099,6 +56344,33 @@ function _extractUserTurnKey(entry, provider = "claude") {
   }
   const ts = typeof entry?.timestamp === "string" ? entry.timestamp : "";
   return `${ts}${text}`;
+}
+function _normalizeCompactionMetadata(compaction) {
+  if (!compaction || typeof compaction !== "object") return null;
+  const normalized = {
+    trigger: typeof compaction.trigger === "string" ? compaction.trigger : "unknown",
+    preTokens: Number.isFinite(compaction.preTokens ?? compaction.pre_tokens) ? Number(compaction.preTokens ?? compaction.pre_tokens) : 0,
+    tokensSaved: Number.isFinite(compaction.tokensSaved ?? compaction.tokens_saved) ? Number(compaction.tokensSaved ?? compaction.tokens_saved) : 0
+  };
+  const compactedToolIds = compaction.compactedToolIds ?? compaction.compacted_tool_ids;
+  if (Array.isArray(compactedToolIds)) {
+    normalized.compactedToolIds = compactedToolIds.filter((id) => typeof id === "string");
+  }
+  return normalized;
+}
+function _extractCompactionMetadataFromEntry(entry) {
+  const normalized = _normalizeCompactionMetadata(
+    entry?.compaction || entry?.microcompactMetadata || entry?.compactMetadata
+  );
+  if (normalized) return normalized;
+  if (entry?.isCompactSummary === true) {
+    return {
+      trigger: "auto",
+      source: "claude_compact_summary",
+      isCompactSummary: true
+    };
+  }
+  return null;
 }
 function _extractRawMetadata(content, provider) {
   const turnIdByKey = /* @__PURE__ */ new Map();
@@ -52128,6 +56400,7 @@ function _extractRawMetadata(content, provider) {
     const cls = classifyEntry(entry, provider);
     if (cls === "user-turn") {
       flushCurrent();
+      const compactMeta = provider === "claude" ? _extractCompactionMetadataFromEntry(entry) : null;
       currentMeta = {
         model: provider === "codex" ? codexSessionModel : null,
         permissionMode: null,
@@ -52135,10 +56408,12 @@ function _extractRawMetadata(content, provider) {
         outputTokens: 0,
         cacheReadTokens: 0,
         cacheCreationTokens: 0,
+        contextTokens: null,
         serviceTier: null,
         durationMs: null,
         finishReason: null,
-        cost: null
+        cost: null,
+        compactMetadata: compactMeta ? JSON.stringify(compactMeta) : null
       };
       const key = _extractUserTurnKey(entry, provider);
       let providerTurnId = null;
@@ -52164,6 +56439,8 @@ function _extractRawMetadata(content, provider) {
           currentMeta.outputTokens += (usage.output_tokens || 0) + (usage.reasoning_output_tokens || 0);
           currentMeta.inputTokens += usage.input_tokens || 0;
           currentMeta.cacheReadTokens += usage.cached_input_tokens || 0;
+          const ctxTotal = (usage.input_tokens || 0) + (usage.cached_input_tokens || 0);
+          currentMeta.contextTokens = Math.max(currentMeta.contextTokens || 0, ctxTotal);
         }
       }
       if (entry?.type === "event_msg" && entry?.payload?.type === "turn_aborted") {
@@ -52181,6 +56458,8 @@ function _extractRawMetadata(content, provider) {
         currentMeta.inputTokens += (usage.input_tokens || 0) + cacheRead + cacheCreation;
         currentMeta.cacheReadTokens += cacheRead;
         currentMeta.cacheCreationTokens += cacheCreation;
+        const contextTotal = (usage.input_tokens || 0) + cacheRead + cacheCreation;
+        currentMeta.contextTokens = Math.max(currentMeta.contextTokens || 0, contextTotal);
         if (typeof usage.service_tier === "string") currentMeta.serviceTier = usage.service_tier;
       }
       if (entry?.type === "system" && entry?.subtype === "turn_duration" && Number.isFinite(entry?.durationMs)) {
@@ -52192,30 +56471,51 @@ function _extractRawMetadata(content, provider) {
       if (entry?.type === "result" && typeof entry?.cost_usd === "number") {
         currentMeta.cost = entry.cost_usd;
       }
+      const compaction = _extractCompactionMetadataFromEntry(entry);
+      if (compaction) {
+        currentMeta.compactMetadata = JSON.stringify(compaction);
+      }
     }
   }
   flushCurrent();
   return { turnIdByKey, turnMeta };
 }
-function _normalizeToolData(toolCalls) {
+function _normalizeToolData(toolCalls, provider) {
   if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
-    return { toolsUsed: null, toolResults: null };
+    return { toolsUsed: null, toolResults: null, toolCallRows: [] };
   }
   const toolsUsed = [];
   const toolResults = [];
+  const toolCallRows = [];
   for (const tc of toolCalls) {
     if (tc?.name) toolsUsed.push(tc.name);
     if (!tc?.id) continue;
     toolResults.push({
       id: tc.id,
       name: tc.name || null,
+      input: tc.input || null,
       status: tc.status || null,
       result: tc.result || null
+    });
+    const success = tc.status === "error" ? 0 : 1;
+    const resultStr = typeof tc.result === "string" ? tc.result : null;
+    const inputStr = tc.input ? JSON.stringify(tc.input) : null;
+    const extracted = _extractFilePath(provider, tc.name, tc.input);
+    toolCallRows.push({
+      id: tc.id,
+      toolName: tc.name,
+      canonicalName: _resolveCanonical(provider, tc.name),
+      filePath: extracted.filePath,
+      success,
+      errorMessage: !success && resultStr ? resultStr.slice(0, 500) : null,
+      inputPreview: extracted.inputPreview || (inputStr ? inputStr.slice(0, 300) : null),
+      outputPreview: success && resultStr ? resultStr.slice(0, 300) : null
     });
   }
   return {
     toolsUsed: toolsUsed.length > 0 ? JSON.stringify([...new Set(toolsUsed)]) : null,
-    toolResults: toolResults.length > 0 ? JSON.stringify(toolResults) : null
+    toolResults: toolResults.length > 0 ? JSON.stringify(toolResults) : null,
+    toolCallRows
   };
 }
 function _pairMessagesIntoTurns(messages, { sessionId, provider, turnIdByKey, turnMeta }) {
@@ -52241,15 +56541,17 @@ function _pairMessagesIntoTurns(messages, { sessionId, provider, turnIdByKey, tu
     const key = `${pendingUser.timestamp || ""}${userContent}`;
     const storedId = turnIdByKey.get(key) || null;
     const providerTurnId = storedId || _hashTurnId(sessionId, provider, userContent, pendingUser.timestamp);
-    const toolData = _normalizeToolData(msg.toolCalls);
+    const toolData = _normalizeToolData(msg.toolCalls, provider);
     const meta = turnMeta[turnIdx] || {};
     turns.push({
       providerTurnId,
+      uuid: storedId || null,
       userMessage: userContent || null,
       assistantResponse: assistantContent || null,
       thinking: thinking || null,
       toolsUsed: toolData.toolsUsed,
       toolResults: toolData.toolResults,
+      toolCallRows: toolData.toolCallRows,
       ts: _toIso(pendingUser.timestamp || msg.timestamp),
       tsMs: new Date(_toIso(pendingUser.timestamp || msg.timestamp)).getTime(),
       model: meta.model ?? null,
@@ -52258,9 +56560,11 @@ function _pairMessagesIntoTurns(messages, { sessionId, provider, turnIdByKey, tu
       outputTokens: meta.outputTokens ?? null,
       cacheReadTokens: meta.cacheReadTokens ?? null,
       cacheCreationTokens: meta.cacheCreationTokens ?? null,
+      contextTokens: meta.contextTokens ?? null,
       cost: meta.cost ?? null,
       durationMs: meta.durationMs ?? null,
-      finishReason: meta.finishReason ?? null
+      finishReason: meta.finishReason ?? null,
+      compactMetadata: meta.compactMetadata ?? null
     });
     pendingUser = null;
     turnIdx++;
@@ -52329,13 +56633,98 @@ function _upsertFilePosition(db3, {
     now
   );
 }
-function _ensureSessionRow(db3, { sessionId, provider, filePath }) {
+async function _extractAgentMeta(text, filePath, provider) {
+  if (provider !== "claude") return null;
+  const basename3 = import_path50.default.basename(filePath);
+  if (!basename3.startsWith("agent-")) return null;
+  try {
+    const lines = text.split("\n");
+    const firstLine = lines[0];
+    if (!firstLine) return null;
+    const header = JSON.parse(firstLine);
+    let model = null;
+    for (let i2 = 1; i2 < Math.min(lines.length, 5); i2++) {
+      if (!lines[i2]) continue;
+      try {
+        const entry = JSON.parse(lines[i2]);
+        if (entry?.message?.model) {
+          model = entry.message.model;
+          break;
+        }
+      } catch {
+      }
+    }
+    let projectPath = null;
+    const projMatch = filePath.match(/\.claude\/projects\/([^/]+)\//);
+    if (projMatch) {
+      projectPath = await decodeProjectDirFromFilesystem(projMatch[1]);
+      if (!projectPath) {
+        projectPath = "/" + projMatch[1].replace(/-/g, "/").replace(/^\//, "");
+      }
+    }
+    return {
+      cwd: header.cwd || null,
+      projectPath,
+      gitBranch: header.gitBranch || null,
+      parentSessionId: header.sessionId || null,
+      agentId: header.agentId || null,
+      isSidechain: header.isSidechain ? 1 : 0,
+      sessionType: "task",
+      model
+    };
+  } catch {
+    return null;
+  }
+}
+function _ensureSessionRow(db3, { sessionId, provider, filePath, agentMeta }) {
   const now = (/* @__PURE__ */ new Date()).toISOString();
-  db3.prepare(`
-    INSERT OR IGNORE INTO sessions
-      (id, provider, provider_session_id, origin, origin_native_file, status, created_at, last_active_at)
-    VALUES (?, ?, ?, 'provider-import', ?, 'active', ?, ?)
-  `).run(sessionId, provider, sessionId, filePath, now, now);
+  const existing = db3.prepare(
+    `SELECT id FROM sessions WHERE provider = ? AND provider_session_id = ? AND status != 'deleted' LIMIT 1`
+  ).get(provider, sessionId);
+  const rowId = existing ? existing.id : sessionId;
+  if (agentMeta) {
+    db3.prepare(`
+      INSERT INTO sessions
+        (id, provider, provider_session_id, origin, origin_native_file,
+         cwd, project_path, git_branch, parent_session_id, agent_id,
+         is_sidechain, session_type, model, status, created_at, last_active_at)
+      VALUES (?, ?, ?, 'provider-import', ?,
+              ?, ?, ?, ?, ?,
+              ?, ?, ?, 'active', ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        cwd = COALESCE(excluded.cwd, sessions.cwd),
+        project_path = COALESCE(excluded.project_path, sessions.project_path),
+        git_branch = COALESCE(excluded.git_branch, sessions.git_branch),
+        parent_session_id = COALESCE(excluded.parent_session_id, sessions.parent_session_id),
+        agent_id = COALESCE(excluded.agent_id, sessions.agent_id),
+        is_sidechain = COALESCE(excluded.is_sidechain, sessions.is_sidechain),
+        session_type = COALESCE(excluded.session_type, sessions.session_type),
+        model = COALESCE(excluded.model, sessions.model),
+        origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
+        status = 'active'
+    `).run(
+      rowId,
+      provider,
+      sessionId,
+      filePath,
+      agentMeta.cwd || null,
+      agentMeta.projectPath || null,
+      agentMeta.gitBranch || null,
+      agentMeta.parentSessionId || null,
+      agentMeta.agentId || null,
+      agentMeta.isSidechain ?? null,
+      agentMeta.sessionType || null,
+      agentMeta.model || null,
+      now,
+      now
+    );
+  } else {
+    db3.prepare(`
+      INSERT OR IGNORE INTO sessions
+        (id, provider, provider_session_id, origin, origin_native_file, status, created_at, last_active_at)
+      VALUES (?, ?, ?, 'provider-import', ?, 'active', ?, ?)
+    `).run(rowId, provider, sessionId, filePath, now, now);
+  }
 }
 function _recomputeSessionAggregates(db3, sessionId) {
   const agg = db3.prepare(`
@@ -52345,7 +56734,8 @@ function _recomputeSessionAggregates(db3, sessionId) {
       COALESCE(SUM(duration_ms), 0) as total_duration_ms,
       COALESCE(SUM(input_tokens), 0) as total_input_tokens,
       COALESCE(SUM(output_tokens), 0) as total_output_tokens,
-      MAX(ts) as last_active_at
+      MAX(ts) as last_active_at,
+      MIN(ts) as first_ts
     FROM turns
     WHERE session_id = ?
   `).get(sessionId);
@@ -52356,7 +56746,9 @@ function _recomputeSessionAggregates(db3, sessionId) {
       total_duration_ms = ?,
       total_input_tokens = ?,
       total_output_tokens = ?,
-      last_active_at = COALESCE(?, last_active_at)
+      last_active_at = COALESCE(?, last_active_at),
+      started_at = COALESCE(started_at, ?),
+      model = COALESCE(model, (SELECT model FROM turns WHERE session_id = ? AND model IS NOT NULL ORDER BY turn_number DESC LIMIT 1))
     WHERE id = ?
   `).run(
     agg?.turn_count || 0,
@@ -52365,6 +56757,8 @@ function _recomputeSessionAggregates(db3, sessionId) {
     agg?.total_input_tokens || 0,
     agg?.total_output_tokens || 0,
     agg?.last_active_at || null,
+    agg?.first_ts || null,
+    sessionId,
     sessionId
   );
 }
@@ -52375,7 +56769,7 @@ function _recordError(state, errData) {
   }
 }
 function createSessionsIngesterModule({
-  log,
+  log: log2,
   resolveDb: resolveDb2,
   paths = {},
   reconcileIntervalMs = DEFAULT_RECONCILE_INTERVAL_MS
@@ -52405,24 +56799,24 @@ function createSessionsIngesterModule({
   };
   async function _collectFiles() {
     const files = [];
-    if (import_fs44.default.existsSync(dirs.claudeProjectsDir)) {
+    if (import_fs48.default.existsSync(dirs.claudeProjectsDir)) {
       const claudeFiles = await collectJsonlFiles(dirs.claudeProjectsDir, 4);
       for (const filePath of claudeFiles) {
         files.push({
           filePath,
           provider: "claude",
-          sessionId: import_path47.default.basename(filePath, ".jsonl")
+          sessionId: import_path50.default.basename(filePath, ".jsonl")
         });
       }
     }
-    if (import_fs44.default.existsSync(dirs.codexSessionsDir)) {
+    if (import_fs48.default.existsSync(dirs.codexSessionsDir)) {
       const codexFiles = await collectJsonlFiles(dirs.codexSessionsDir, 6);
       for (const filePath of codexFiles) {
-        const fname = import_path47.default.basename(filePath);
+        const fname = import_path50.default.basename(filePath);
         files.push({
           filePath,
           provider: "codex",
-          sessionId: deriveCodexSessionIdFromFilename(fname) || import_path47.default.basename(filePath, ".jsonl")
+          sessionId: deriveCodexSessionIdFromFilename(fname) || import_path50.default.basename(filePath, ".jsonl")
         });
       }
     }
@@ -52534,11 +56928,27 @@ function createSessionsIngesterModule({
       turnIdByKey,
       turnMeta
     });
+    const agentMeta = await _extractAgentMeta(text, filePath, provider);
+    const pricing = _getPricingMap(db3);
+    for (const turn of turns) {
+      if (turn.cost == null && turn.model && (turn.inputTokens || turn.outputTokens)) {
+        turn.cost = _computeCost(
+          pricing,
+          provider,
+          turn.model,
+          turn.inputTokens,
+          turn.outputTokens,
+          turn.cacheReadTokens,
+          turn.cacheCreationTokens
+        );
+      }
+    }
     let turnsAdded = 0;
     let turnsUpdated = 0;
     const tx = db3.transaction(() => {
-      _ensureSessionRow(db3, { sessionId, provider, filePath });
+      _ensureSessionRow(db3, { sessionId, provider, filePath, agentMeta });
       if (reset) {
+        db3.prepare("DELETE FROM tool_calls WHERE session_id = ?").run(sessionId);
         db3.prepare("DELETE FROM turns WHERE session_id = ?").run(sessionId);
       }
       const selectExisting = db3.prepare(`
@@ -52553,12 +56963,12 @@ function createSessionsIngesterModule({
       `);
       const insertTurn = db3.prepare(`
         INSERT INTO turns (
-          id, session_id, provider, provider_session_id, provider_turn_id, turn_number,
+          id, session_id, provider, provider_session_id, provider_turn_id, uuid, turn_number,
           user_message, assistant_response, thinking, model, permission_mode,
-          input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
+          input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, context_tokens,
           cost, duration_ms, finish_reason,
-          tools_used, tool_results, kind, ts, ts_ms
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'message', ?, ?)
+          tools_used, tool_results, compact_metadata, kind, ts, ts_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'message', ?, ?)
       `);
       const updateTurn = db3.prepare(`
         UPDATE turns SET
@@ -52571,19 +56981,29 @@ function createSessionsIngesterModule({
           output_tokens = ?,
           cache_read_tokens = ?,
           cache_creation_tokens = ?,
+          context_tokens = ?,
           cost = ?,
           duration_ms = ?,
           finish_reason = ?,
           tools_used = ?,
           tool_results = ?,
+          compact_metadata = ?,
+          uuid = COALESCE(?, uuid),
           ts = ?,
           ts_ms = ?
         WHERE id = ?
       `);
+      const insertToolCall = db3.prepare(`
+        INSERT OR IGNORE INTO tool_calls (id, session_id, turn_id, provider, tool_name, canonical_name, file_path, success, error_message, input_preview, output_preview, ts_ms)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      const deleteToolCallsForTurn = db3.prepare("DELETE FROM tool_calls WHERE turn_id = ?");
       let nextTurnNumber = Number(getMaxTurn.get(sessionId)?.max_turn || 0) + 1;
       for (const turn of turns) {
         const existing = selectExisting.get(sessionId, turn.providerTurnId);
+        let turnId;
         if (existing?.id) {
+          turnId = existing.id;
           updateTurn.run(
             turn.userMessage,
             turn.assistantResponse,
@@ -52594,23 +57014,29 @@ function createSessionsIngesterModule({
             turn.outputTokens,
             turn.cacheReadTokens,
             turn.cacheCreationTokens,
+            turn.contextTokens,
             turn.cost,
             turn.durationMs,
             turn.finishReason,
             turn.toolsUsed,
             turn.toolResults,
+            turn.compactMetadata,
+            turn.uuid,
             turn.ts,
             turn.tsMs,
             existing.id
           );
+          deleteToolCallsForTurn.run(turnId);
           turnsUpdated++;
         } else {
+          turnId = import_crypto10.default.randomUUID();
           insertTurn.run(
-            import_crypto8.default.randomUUID(),
+            turnId,
             sessionId,
             provider,
             sessionId,
             turn.providerTurnId,
+            turn.uuid,
             nextTurnNumber++,
             turn.userMessage,
             turn.assistantResponse,
@@ -52621,15 +57047,33 @@ function createSessionsIngesterModule({
             turn.outputTokens,
             turn.cacheReadTokens,
             turn.cacheCreationTokens,
+            turn.contextTokens,
             turn.cost,
             turn.durationMs,
             turn.finishReason,
             turn.toolsUsed,
             turn.toolResults,
+            turn.compactMetadata,
             turn.ts,
             turn.tsMs
           );
           turnsAdded++;
+        }
+        for (const tc of turn.toolCallRows) {
+          insertToolCall.run(
+            tc.id,
+            sessionId,
+            turnId,
+            provider,
+            tc.toolName,
+            tc.canonicalName,
+            tc.filePath,
+            tc.success,
+            tc.errorMessage,
+            tc.inputPreview,
+            tc.outputPreview,
+            turn.tsMs || 0
+          );
         }
       }
       _upsertFilePosition(db3, {
@@ -52649,7 +57093,7 @@ function createSessionsIngesterModule({
       state.totalFilesIngested += 1;
       state.totalTurnsAdded += turnsAdded;
       state.totalTurnsUpdated += turnsUpdated;
-      log?.("sessions", "debug", "[ingester.file] ingested", {
+      log2?.("sessions", "debug", "[ingester.file] ingested", {
         sessionId: _shortSid(sessionId),
         provider,
         turnsAdded,
@@ -52759,7 +57203,7 @@ function createSessionsIngesterModule({
         errors,
         durationMs: Date.now() - t0
       };
-      log?.("sessions", "info", "[ingester.repair] done", summary);
+      log2?.("sessions", "info", "[ingester.repair] done", summary);
       return summary;
     })().catch((err) => {
       const errData = {
@@ -52767,7 +57211,7 @@ function createSessionsIngesterModule({
         at: (/* @__PURE__ */ new Date()).toISOString()
       };
       _recordError(state, errData);
-      log?.("sessions", "warn", `[ingester.repair] failed: ${errData.error}`);
+      log2?.("sessions", "warn", `[ingester.repair] failed: ${errData.error}`);
       return { skipped: true, reason: "error", ...errData };
     }).finally(() => {
       state.repairInFlight = null;
@@ -52788,7 +57232,7 @@ function createSessionsIngesterModule({
         at: (/* @__PURE__ */ new Date()).toISOString()
       };
       _recordError(state, errData);
-      log?.("sessions", "warn", `[ingester.file] failed: ${errData.error}`, errData);
+      log2?.("sessions", "warn", `[ingester.file] failed: ${errData.error}`, errData);
       return { skipped: true, reason: "error", ...errData };
     }).finally(() => {
       state.inFlight.delete(key);
@@ -52820,7 +57264,7 @@ function createSessionsIngesterModule({
       }
     }
     state.lastReconcileAt = (/* @__PURE__ */ new Date()).toISOString();
-    log?.("sessions", "info", "[ingester.reconcile] done", {
+    log2?.("sessions", "info", "[ingester.reconcile] done", {
       filesScanned: files.length,
       filesIngested,
       turnsAdded,
@@ -52923,7 +57367,7 @@ function createSessionsIngesterModule({
         errors,
         durationMs: Date.now() - t0
       };
-      log?.("sessions", "info", "[ingester.backfill] done", summary);
+      log2?.("sessions", "info", "[ingester.backfill] done", summary);
       return summary;
     })().catch((err) => {
       const errData = {
@@ -52931,7 +57375,7 @@ function createSessionsIngesterModule({
         at: (/* @__PURE__ */ new Date()).toISOString()
       };
       _recordError(state, errData);
-      log?.("sessions", "warn", `[ingester.backfill] failed: ${errData.error}`);
+      log2?.("sessions", "warn", `[ingester.backfill] failed: ${errData.error}`);
       return { skipped: true, reason: "error", ...errData };
     }).finally(() => {
       state.backfillInFlight = null;
@@ -52948,7 +57392,7 @@ function createSessionsIngesterModule({
           at: (/* @__PURE__ */ new Date()).toISOString()
         };
         _recordError(state, errData);
-        log?.("sessions", "warn", `[ingester.reconcile] failed: ${errData.error}`);
+        log2?.("sessions", "warn", `[ingester.reconcile] failed: ${errData.error}`);
       });
     }, reconcileIntervalMs);
   }
@@ -52987,10 +57431,977 @@ function createSessionsIngesterModule({
   };
 }
 
+// src/commands/sessions/title-backfill.js
+var import_path51 = __toESM(require("path"), 1);
+var import_child_process24 = require("child_process");
+var DEFAULT_MAX_LLM_CONCURRENCY = 5;
+var DEFAULT_LLM_TIMEOUT_MS = 45e3;
+var DEFAULT_LLM_DELAY_MS = 500;
+var DEFAULT_MAX_ATTEMPTS = 2;
+var DEFAULT_RETRY_BASE_DELAY_MS = 1500;
+var MAX_ATTEMPT_TIMEOUT_MS = 9e4;
+var RETRYABLE_FAILURE_TYPES = /* @__PURE__ */ new Set(["timeout", "nonzero_exit", "empty_output", "parse_error", "spawn_error"]);
+function clampInteger(value, fallback, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(parsed, min), max);
+}
+function resolveEnrichmentRuntimeConfig(overrides = {}) {
+  return {
+    maxConcurrency: clampInteger(
+      overrides.maxConcurrency ?? process.env.RUDI_ENRICHMENT_MAX_CONCURRENCY ?? process.env.RUDI_TITLE_BACKFILL_MAX_CONCURRENCY,
+      DEFAULT_MAX_LLM_CONCURRENCY,
+      { min: 1, max: 20 }
+    ),
+    timeoutMs: clampInteger(
+      overrides.timeoutMs ?? process.env.RUDI_ENRICHMENT_TIMEOUT_MS ?? process.env.RUDI_TITLE_BACKFILL_TIMEOUT_MS,
+      DEFAULT_LLM_TIMEOUT_MS,
+      { min: 5e3, max: MAX_ATTEMPT_TIMEOUT_MS }
+    ),
+    delayMs: clampInteger(
+      overrides.delayMs ?? process.env.RUDI_ENRICHMENT_DELAY_MS ?? process.env.RUDI_TITLE_BACKFILL_DELAY_MS,
+      DEFAULT_LLM_DELAY_MS,
+      { min: 0, max: 6e4 }
+    ),
+    maxAttempts: clampInteger(
+      overrides.maxAttempts ?? process.env.RUDI_ENRICHMENT_MAX_ATTEMPTS ?? process.env.RUDI_TITLE_BACKFILL_MAX_ATTEMPTS,
+      DEFAULT_MAX_ATTEMPTS,
+      { min: 1, max: 5 }
+    ),
+    retryBaseDelayMs: clampInteger(
+      overrides.retryBaseDelayMs ?? process.env.RUDI_ENRICHMENT_RETRY_BASE_DELAY_MS ?? process.env.RUDI_TITLE_BACKFILL_RETRY_BASE_DELAY_MS,
+      DEFAULT_RETRY_BASE_DELAY_MS,
+      { min: 0, max: 6e4 }
+    )
+  };
+}
+function getAttemptTimeoutMs(baseTimeoutMs, attempt) {
+  return Math.min(baseTimeoutMs + (Math.max(1, attempt) - 1) * 15e3, MAX_ATTEMPT_TIMEOUT_MS);
+}
+function getRetryDelayMs(attempt, retryBaseDelayMs) {
+  return retryBaseDelayMs * Math.max(1, 2 ** (Math.max(1, attempt) - 1));
+}
+function shouldRetryEnrichmentFailure(failureType, attempt, maxAttempts) {
+  return attempt < maxAttempts && RETRYABLE_FAILURE_TYPES.has(failureType);
+}
+function createFailureCounts() {
+  return {
+    timeout: 0,
+    nonzero_exit: 0,
+    empty_output: 0,
+    parse_error: 0,
+    spawn_error: 0,
+    missing_binary: 0,
+    write_error: 0,
+    unknown: 0
+  };
+}
+function incrementFailureCount(failureCounts, failureType) {
+  const key = Object.prototype.hasOwnProperty.call(failureCounts, failureType) ? failureType : "unknown";
+  failureCounts[key] += 1;
+}
+function _findUnenrichedSessions(db3, { minTurns = 1 } = {}) {
+  return db3.prepare(`
+    SELECT s.id, s.snippet, s.cwd, s.project_path, s.model, s.turn_count,
+           s.session_type, s.parent_session_id
+    FROM sessions s
+    WHERE s.status != 'deleted'
+      AND s.enriched_at IS NULL
+      AND COALESCE(s.turn_count, 0) >= ?
+      AND (
+        s.snippet IS NOT NULL AND TRIM(s.snippet) != ''
+        OR EXISTS (SELECT 1 FROM turns t WHERE t.session_id = s.id LIMIT 1)
+      )
+    ORDER BY s.last_active_at DESC
+  `).all(minTurns);
+}
+function _getFirstMessage(db3, sessionId, snippet) {
+  const turn = db3.prepare(`
+    SELECT user_message FROM turns
+    WHERE session_id = ? AND turn_number = 1 AND user_message IS NOT NULL AND TRIM(user_message) != ''
+    LIMIT 1
+  `).get(sessionId);
+  if (turn?.user_message) return turn.user_message;
+  return snippet || null;
+}
+function _getSampleTurns(db3, sessionId) {
+  const turns = db3.prepare(`
+    SELECT turn_number, user_message, assistant_response
+    FROM turns WHERE session_id = ? ORDER BY turn_number LIMIT 3
+  `).all(sessionId);
+  return turns.map((t2) => {
+    const user = (t2.user_message || "").slice(0, 300);
+    const asst = (t2.assistant_response || "").slice(0, 300);
+    return `Turn ${t2.turn_number}:
+  User: ${user}
+  Assistant: ${asst}`;
+  }).join("\n");
+}
+function writeEnrichment(db3, sessionId, { title, description, tags }) {
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  const normalizedTags = Array.isArray(tags) ? tags : [];
+  const tx = db3.transaction(() => {
+    const update = db3.prepare(`
+      UPDATE sessions
+      SET title = COALESCE(title_override, title, ?),
+          description = ?,
+          title_source = COALESCE(title_source, 'llm'),
+          title_generated_at = COALESCE(title_generated_at, ?),
+          enriched_at = ?
+      WHERE id = ? AND enriched_at IS NULL
+    `).run(title, description, now, now, sessionId);
+    if (update.changes === 0) return false;
+    if (normalizedTags.length === 0) return true;
+    const insertTag = db3.prepare("INSERT OR IGNORE INTO tags (name) VALUES (?)");
+    const getTag = db3.prepare("SELECT id FROM tags WHERE name = ?");
+    const linkTag = db3.prepare("INSERT OR IGNORE INTO session_tags (session_id, tag_id) VALUES (?, ?)");
+    for (const tag of normalizedTags) {
+      insertTag.run(tag);
+      const tagRow = getTag.get(tag);
+      if (!tagRow?.id) {
+        throw new Error(`tag lookup failed for ${tag}`);
+      }
+      linkTag.run(sessionId, tagRow.id);
+    }
+    return true;
+  });
+  return tx();
+}
+function parseEnrichmentResponse(responseText, log2) {
+  let jsonStr = responseText.trim();
+  const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenceMatch) {
+    jsonStr = fenceMatch[1].trim();
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch {
+    log2?.("sessions", "debug", `[enrichment] JSON parse failed: ${jsonStr.slice(0, 200)}`);
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    log2?.("sessions", "debug", "[enrichment] response is not an object");
+    return null;
+  }
+  const title = typeof parsed.title === "string" ? parsed.title.trim().replace(/['"]+$/g, "").replace(/^['"]+/g, "").slice(0, 100) : null;
+  const description = typeof parsed.description === "string" ? parsed.description.trim().slice(0, 500) : null;
+  const tags = Array.isArray(parsed.tags) ? parsed.tags.filter((t2) => typeof t2 === "string" && t2.trim().length > 0).slice(0, 5).map((t2) => t2.trim().toLowerCase().replace(/[^a-z0-9-_/ ]/g, "").slice(0, 30)).filter((t2) => t2.length > 0) : [];
+  if (!title && !description) {
+    log2?.("sessions", "debug", "[enrichment] no title or description in response");
+    return null;
+  }
+  return { title, description, tags };
+}
+function buildEnrichmentPrompt(firstMessage, sampleTurns, { cwd, model, sessionType, parentSessionId }, { compact = false } = {}) {
+  const projectName = import_path51.default.basename(cwd || "");
+  const isSubagent = sessionType === "task" || !!parentSessionId;
+  const contextHint = isSubagent ? "This is a subagent/task spawned by a parent session. Describe what subtask it performed." : "";
+  const normalizedFirstMessage = compact ? (firstMessage || "").slice(0, 400) : (firstMessage || "").slice(0, 800);
+  const normalizedSampleTurns = compact ? "" : sampleTurns;
+  return [
+    "Analyze this coding session. Return ONLY valid JSON with no markdown fences:",
+    '{"title": "3-7 word title", "description": "1-2 sentence summary of what was done", "tags": ["tag1", "tag2", "tag3"]}',
+    "",
+    "Rules:",
+    "- title: 3-7 words, imperative or descriptive, no quotes",
+    "- description: 1-2 sentences, past tense, what was accomplished",
+    '- tags: 1-5 lowercase tags categorizing the work (e.g. "bug-fix", "refactor", "ui", "api", "testing")',
+    compact ? "- keep the response concise and infer from the request if needed" : "",
+    "",
+    contextHint,
+    `Project: ${projectName}`,
+    `Working directory: ${cwd || "unknown"}`,
+    `Model: ${model || "unknown"}`,
+    `User request: ${normalizedFirstMessage}`,
+    normalizedSampleTurns ? `
+Sample turns:
+${normalizedSampleTurns}` : ""
+  ].filter(Boolean).join("\n");
+}
+async function _runClaudeEnrichment(prompt, { timeoutMs }, log2) {
+  const binaryPath = resolveClaudeBinary();
+  if (!binaryPath) {
+    log2?.("sessions", "warn", "[enrichment] no claude binary");
+    return { enrichment: null, failureType: "missing_binary" };
+  }
+  return new Promise((resolve) => {
+    const child = (0, import_child_process24.spawn)(binaryPath, [
+      "-p",
+      prompt,
+      "--model",
+      "haiku",
+      "--no-session-persistence",
+      "--max-turns",
+      "1",
+      "--output-format",
+      "json"
+    ], { stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    let hardKillTimer = null;
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      log2?.("sessions", "warn", `[enrichment] LLM timeout after ${timeoutMs}ms`);
+      try {
+        child.kill("SIGTERM");
+      } catch {
+      }
+      hardKillTimer = setTimeout(() => {
+        try {
+          child.kill("SIGKILL");
+        } catch {
+        }
+      }, 1e3);
+      hardKillTimer.unref?.();
+    }, timeoutMs);
+    child.on("close", (code, signal) => {
+      clearTimeout(timer);
+      if (hardKillTimer) clearTimeout(hardKillTimer);
+      if (timedOut) {
+        log2?.("sessions", "debug", `[enrichment] haiku timeout exit=${code} signal=${signal || "none"} stderr=${stderr.slice(0, 200)}`);
+        resolve({ enrichment: null, failureType: "timeout", exitCode: code, signal, stderr });
+        return;
+      }
+      if (code !== 0) {
+        log2?.("sessions", "debug", `[enrichment] haiku exit=${code} signal=${signal || "none"} stderr=${stderr.slice(0, 200)}`);
+        resolve({ enrichment: null, failureType: "nonzero_exit", exitCode: code, signal, stderr });
+        return;
+      }
+      if (!stdout.trim()) {
+        log2?.("sessions", "debug", `[enrichment] empty stdout stderr=${stderr.slice(0, 200)}`);
+        resolve({ enrichment: null, failureType: "empty_output", exitCode: code, signal, stderr });
+        return;
+      }
+      try {
+        const cliOutput = JSON.parse(stdout);
+        const resultText = (cliOutput.result || "").trim();
+        const enrichment2 = parseEnrichmentResponse(resultText, log2);
+        if (enrichment2) {
+          resolve({ enrichment: enrichment2, failureType: null, exitCode: code, signal: signal || null });
+          return;
+        }
+      } catch {
+      }
+      const enrichment = parseEnrichmentResponse(stdout, log2);
+      if (enrichment) {
+        resolve({ enrichment, failureType: null, exitCode: code, signal: signal || null });
+        return;
+      }
+      resolve({
+        enrichment: null,
+        failureType: "parse_error",
+        exitCode: code,
+        signal: signal || null,
+        stderr
+      });
+    });
+    child.on("error", (err) => {
+      clearTimeout(timer);
+      if (hardKillTimer) clearTimeout(hardKillTimer);
+      log2?.("sessions", "warn", `[enrichment] spawn error: ${err.message}`);
+      resolve({ enrichment: null, failureType: "spawn_error", errorMessage: err.message });
+    });
+  });
+}
+async function _generateEnrichment(firstMessage, sampleTurns, context, runtimeConfig, log2) {
+  let lastFailureType = "unknown";
+  let attempts = 0;
+  for (let attempt = 1; attempt <= runtimeConfig.maxAttempts; attempt++) {
+    attempts = attempt;
+    const compact = attempt > 1;
+    const prompt = buildEnrichmentPrompt(firstMessage, sampleTurns, context, { compact });
+    const timeoutMs = getAttemptTimeoutMs(runtimeConfig.timeoutMs, attempt);
+    const result = await _runClaudeEnrichment(prompt, { timeoutMs }, log2);
+    if (result.enrichment) {
+      return {
+        enrichment: result.enrichment,
+        failureType: null,
+        attempts,
+        retries: attempts - 1
+      };
+    }
+    lastFailureType = result.failureType || "unknown";
+    if (!shouldRetryEnrichmentFailure(lastFailureType, attempt, runtimeConfig.maxAttempts)) {
+      break;
+    }
+    const delayMs = getRetryDelayMs(attempt, runtimeConfig.retryBaseDelayMs);
+    log2?.(
+      "sessions",
+      "warn",
+      `[enrichment] retrying after ${lastFailureType} (attempt ${attempt}/${runtimeConfig.maxAttempts}, delay=${delayMs}ms)`
+    );
+    await _sleep(delayMs);
+  }
+  return {
+    enrichment: null,
+    failureType: lastFailureType,
+    attempts,
+    retries: Math.max(0, attempts - 1)
+  };
+}
+function _sleep(ms) {
+  return new Promise((r2) => setTimeout(r2, ms));
+}
+function createTitleBackfillModule({ log: log2, resolveDb: resolveDb2, broadcast: broadcast2 }) {
+  const state = {
+    backfillInFlight: null,
+    lastRunAt: null,
+    lastResult: null,
+    enriched: 0,
+    errors: 0,
+    total: 0,
+    retries: 0,
+    succeededAfterRetry: 0,
+    processed: 0,
+    failureCounts: createFailureCounts(),
+    lastConfig: resolveEnrichmentRuntimeConfig()
+  };
+  async function backfillTitles({ llm = true, minTurns = 1, ...runtimeOverrides } = {}) {
+    if (state.backfillInFlight) return state.backfillInFlight;
+    const p2 = _run({ llm, minTurns, runtimeOverrides });
+    state.backfillInFlight = p2;
+    return p2.finally(() => {
+      state.backfillInFlight = null;
+    });
+  }
+  async function _run({ llm, minTurns, runtimeOverrides }) {
+    const db3 = resolveDb2 ? resolveDb2() : null;
+    if (!db3) return { skipped: true, reason: "db_unavailable" };
+    const runtimeConfig = resolveEnrichmentRuntimeConfig(runtimeOverrides);
+    state.lastConfig = runtimeConfig;
+    const t0 = Date.now();
+    const unenriched = _findUnenrichedSessions(db3, { minTurns });
+    if (unenriched.length === 0) {
+      const result2 = {
+        total: 0,
+        enriched: 0,
+        errors: 0,
+        skipped: 0,
+        retries: 0,
+        succeededAfterRetry: 0,
+        failureCounts: createFailureCounts(),
+        durationMs: 0,
+        config: runtimeConfig
+      };
+      state.lastRunAt = (/* @__PURE__ */ new Date()).toISOString();
+      state.lastResult = result2;
+      log2?.("sessions", "info", `[enrichment] no unenriched sessions (minTurns=${minTurns})`);
+      return result2;
+    }
+    state.total = unenriched.length;
+    state.enriched = 0;
+    state.errors = 0;
+    state.retries = 0;
+    state.succeededAfterRetry = 0;
+    state.processed = 0;
+    state.failureCounts = createFailureCounts();
+    log2?.(
+      "sessions",
+      "info",
+      `[enrichment] starting: ${unenriched.length} sessions (minTurns=${minTurns}, workers=${runtimeConfig.maxConcurrency}, timeout=${runtimeConfig.timeoutMs}ms, attempts=${runtimeConfig.maxAttempts})`
+    );
+    const sessions = [];
+    let noMessage = 0;
+    for (const sess of unenriched) {
+      const firstMessage = _getFirstMessage(db3, sess.id, sess.snippet);
+      if (firstMessage) {
+        const sampleTurns = _getSampleTurns(db3, sess.id);
+        sessions.push({ ...sess, _firstMessage: firstMessage, _sampleTurns: sampleTurns });
+      } else {
+        noMessage++;
+      }
+    }
+    state.total = sessions.length;
+    if (!llm || sessions.length === 0) {
+      const result2 = {
+        total: unenriched.length,
+        enriched: 0,
+        errors: 0,
+        skipped: noMessage,
+        retries: 0,
+        succeededAfterRetry: 0,
+        failureCounts: createFailureCounts(),
+        durationMs: Date.now() - t0,
+        config: runtimeConfig
+      };
+      state.lastRunAt = (/* @__PURE__ */ new Date()).toISOString();
+      state.lastResult = result2;
+      log2?.("sessions", "info", `[enrichment] llm disabled or no messages, skipped ${noMessage}`);
+      return result2;
+    }
+    log2?.("sessions", "info", `[enrichment] generating enrichments for ${sessions.length} sessions (${noMessage} skipped, no message)`);
+    let cursor = 0;
+    const next = () => cursor < sessions.length ? sessions[cursor++] : null;
+    const worker = async (workerId) => {
+      let sess;
+      while ((sess = next()) !== null) {
+        try {
+          const cwd = sess.cwd || sess.project_path || "";
+          const result2 = await _generateEnrichment(
+            sess._firstMessage,
+            sess._sampleTurns,
+            { cwd, model: sess.model, sessionType: sess.session_type, parentSessionId: sess.parent_session_id },
+            runtimeConfig,
+            log2
+          );
+          state.retries += result2.retries;
+          if (result2.enrichment) {
+            const wrote = writeEnrichment(db3, sess.id, result2.enrichment);
+            if (wrote) {
+              state.enriched++;
+              if (result2.retries > 0) state.succeededAfterRetry++;
+              broadcast2?.("session:enriched", {
+                sessionId: sess.id,
+                title: result2.enrichment.title,
+                description: result2.enrichment.description,
+                tags: result2.enrichment.tags,
+                refreshProjects: false
+              });
+            }
+          } else {
+            state.errors++;
+            incrementFailureCount(state.failureCounts, result2.failureType);
+            log2?.(
+              "sessions",
+              "warn",
+              `[enrichment] worker ${workerId} failed on ${sess.id} after ${result2.attempts} attempt(s): ${result2.failureType || "unknown"}`
+            );
+          }
+        } catch (err) {
+          state.errors++;
+          incrementFailureCount(state.failureCounts, "write_error");
+          log2?.("sessions", "warn", `[enrichment] worker ${workerId} error on ${sess.id}: ${err.message}`);
+        } finally {
+          state.processed++;
+          if (state.processed % 25 === 0 || state.processed === sessions.length) {
+            log2?.(
+              "sessions",
+              "info",
+              `[enrichment] progress: ${state.processed}/${sessions.length} processed, ${state.enriched} enriched, ${state.errors} errors, ${state.retries} retries`
+            );
+          }
+        }
+        await _sleep(runtimeConfig.delayMs);
+      }
+    };
+    const workerCount = Math.min(runtimeConfig.maxConcurrency, sessions.length);
+    const workers = [];
+    for (let i2 = 0; i2 < workerCount; i2++) {
+      workers.push(worker(i2));
+    }
+    await Promise.all(workers);
+    const result = {
+      total: unenriched.length,
+      enriched: state.enriched,
+      errors: state.errors,
+      skipped: noMessage,
+      retries: state.retries,
+      succeededAfterRetry: state.succeededAfterRetry,
+      failureCounts: { ...state.failureCounts },
+      durationMs: Date.now() - t0,
+      config: runtimeConfig
+    };
+    state.lastRunAt = (/* @__PURE__ */ new Date()).toISOString();
+    state.lastResult = result;
+    log2?.(
+      "sessions",
+      "info",
+      `[enrichment] done: ${state.enriched} enriched, ${state.errors} errors, ${noMessage} skipped, ${state.retries} retries (${result.durationMs}ms)`
+    );
+    return result;
+  }
+  function getStats2() {
+    return {
+      running: !!state.backfillInFlight,
+      lastRunAt: state.lastRunAt,
+      lastResult: state.lastResult,
+      config: state.lastConfig,
+      progress: state.backfillInFlight ? {
+        enriched: state.enriched,
+        errors: state.errors,
+        total: state.total,
+        processed: state.processed,
+        retries: state.retries,
+        succeededAfterRetry: state.succeededAfterRetry,
+        failureCounts: { ...state.failureCounts }
+      } : null
+    };
+  }
+  return { backfillTitles, getStats: getStats2 };
+}
+
+// src/commands/sessions/metadata-backfill.js
+var import_promises9 = __toESM(require("fs/promises"), 1);
+var import_path52 = __toESM(require("path"), 1);
+var HEADER_SCAN_BYTES = 8192;
+function _findSessionsNeedingMetadata(db3) {
+  return db3.prepare(`
+    SELECT id, origin_native_file
+    FROM sessions
+    WHERE status != 'deleted'
+      AND (id LIKE 'agent-%' OR session_type = 'task')
+      AND (
+        cwd IS NULL
+        OR parent_session_id IS NULL
+        OR model IS NULL
+        OR project_path IS NULL
+      )
+    ORDER BY last_active_at DESC
+  `).all();
+}
+async function _walkAgentFiles() {
+  const results = [];
+  const claudeProjectsDir = CLAUDE_PROJECTS_DIR;
+  let projDirs;
+  try {
+    projDirs = await import_promises9.default.readdir(claudeProjectsDir);
+  } catch {
+    return results;
+  }
+  for (const projDir of projDirs) {
+    const projPath = import_path52.default.join(claudeProjectsDir, projDir);
+    let stat;
+    try {
+      stat = await import_promises9.default.stat(projPath);
+    } catch {
+      continue;
+    }
+    if (!stat.isDirectory()) continue;
+    let entries;
+    try {
+      entries = await import_promises9.default.readdir(projPath);
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (entry.startsWith("agent-") && entry.endsWith(".jsonl")) {
+        results.push({
+          filePath: import_path52.default.join(projPath, entry),
+          sessionId: entry.slice(0, -6),
+          parentSessionId: null,
+          // will be read from JSONL header
+          agentId: entry.slice(6, -6),
+          projDir
+        });
+        continue;
+      }
+      if (!entry.match(/^[0-9a-f]{8}-/)) continue;
+      const subagentsDir = import_path52.default.join(projPath, entry, "subagents");
+      let subFiles;
+      try {
+        subFiles = await import_promises9.default.readdir(subagentsDir);
+      } catch {
+        continue;
+      }
+      for (const subFile of subFiles) {
+        if (!subFile.startsWith("agent-") || !subFile.endsWith(".jsonl")) continue;
+        results.push({
+          filePath: import_path52.default.join(subagentsDir, subFile),
+          sessionId: subFile.slice(0, -6),
+          // "agent-a3a6f79"
+          parentSessionId: entry,
+          // UUID dir name
+          agentId: subFile.slice(6, -6),
+          // "a3a6f79"
+          projDir
+        });
+      }
+    }
+  }
+  return results;
+}
+async function _enrichFromFile(filePath) {
+  let fd;
+  try {
+    fd = await import_promises9.default.open(filePath, "r");
+    const buffer = Buffer.alloc(HEADER_SCAN_BYTES);
+    const { bytesRead } = await fd.read(buffer, 0, buffer.length, 0);
+    await fd.close();
+    fd = null;
+    if (!bytesRead) return null;
+    const text = buffer.toString("utf-8", 0, bytesRead);
+    const lines = text.split("\n").filter(Boolean);
+    let cwd = null;
+    let gitBranch = null;
+    let isSidechain = null;
+    let model = null;
+    let parentSessionId = null;
+    let agentId = null;
+    if (lines.length > 0) {
+      try {
+        const first = JSON.parse(lines[0]);
+        if (typeof first.cwd === "string") cwd = first.cwd;
+        if (typeof first.gitBranch === "string") gitBranch = first.gitBranch;
+        if (typeof first.isSidechain === "boolean") isSidechain = first.isSidechain ? 1 : 0;
+        if (typeof first.sessionId === "string") parentSessionId = first.sessionId;
+        if (typeof first.agentId === "string") agentId = first.agentId;
+      } catch {
+      }
+    }
+    if (lines.length > 1) {
+      try {
+        const second = JSON.parse(lines[1]);
+        if (typeof second?.message?.model === "string") model = second.message.model;
+      } catch {
+      }
+    }
+    if (!model) {
+      for (let i2 = 2; i2 < Math.min(lines.length, 10); i2++) {
+        try {
+          const entry = JSON.parse(lines[i2]);
+          if (typeof entry?.message?.model === "string") {
+            model = entry.message.model;
+            break;
+          }
+        } catch {
+        }
+      }
+    }
+    return { cwd, gitBranch, isSidechain, model, parentSessionId, agentId };
+  } catch {
+    return null;
+  } finally {
+    try {
+      await fd?.close();
+    } catch {
+    }
+  }
+}
+async function _deriveProjectPath(projDir) {
+  const decoded = await decodeProjectDirFromFilesystem(projDir);
+  if (decoded) return decoded;
+  return "/" + projDir.replace(/-/g, "/").replace(/^\//, "");
+}
+function _updateSessionMetadata(db3, sessionId, meta) {
+  return db3.prepare(`
+    UPDATE sessions SET
+      cwd = COALESCE(?, cwd),
+      project_path = COALESCE(?, project_path),
+      git_branch = COALESCE(?, git_branch),
+      parent_session_id = COALESCE(?, parent_session_id),
+      agent_id = COALESCE(?, agent_id),
+      is_sidechain = COALESCE(?, is_sidechain),
+      session_type = COALESCE(?, session_type),
+      model = COALESCE(?, model)
+    WHERE id = ?
+  `).run(
+    meta.cwd || null,
+    meta.projectPath || null,
+    meta.gitBranch || null,
+    meta.parentSessionId || null,
+    meta.agentId || null,
+    meta.isSidechain ?? null,
+    meta.sessionType || null,
+    meta.model || null,
+    sessionId
+  );
+}
+function createMetadataBackfillModule({ log: log2, resolveDb: resolveDb2, broadcast: broadcast2 }) {
+  const state = {
+    backfillInFlight: null,
+    lastRunAt: null,
+    lastResult: null,
+    enriched: 0,
+    errors: 0,
+    total: 0
+  };
+  async function backfillMetadata() {
+    if (state.backfillInFlight) return state.backfillInFlight;
+    const p2 = _run();
+    state.backfillInFlight = p2;
+    return p2.finally(() => {
+      state.backfillInFlight = null;
+    });
+  }
+  async function _run() {
+    const db3 = resolveDb2 ? resolveDb2() : null;
+    if (!db3) return { skipped: true, reason: "db_unavailable" };
+    const t0 = Date.now();
+    state.enriched = 0;
+    state.errors = 0;
+    const agentFiles = await _walkAgentFiles();
+    log2?.("sessions", "info", `[metadata-backfill] found ${agentFiles.length} agent files on disk`);
+    const fileMap = /* @__PURE__ */ new Map();
+    for (const af of agentFiles) {
+      fileMap.set(af.sessionId, af);
+    }
+    const needsMeta = _findSessionsNeedingMetadata(db3);
+    const dbIds = new Set(
+      db3.prepare(`SELECT id FROM sessions WHERE id LIKE 'agent-%'`).all().map((r2) => r2.id)
+    );
+    const orphans = agentFiles.filter((af) => !dbIds.has(af.sessionId));
+    state.total = needsMeta.length + orphans.length;
+    log2?.(
+      "sessions",
+      "info",
+      `[metadata-backfill] ${needsMeta.length} sessions need enrichment, ${orphans.length} orphan agent files`
+    );
+    for (const sess of needsMeta) {
+      try {
+        const af = fileMap.get(sess.id);
+        const filePath = af?.filePath || sess.origin_native_file;
+        if (!filePath) {
+          state.errors++;
+          continue;
+        }
+        const enriched = await _enrichFromFile(filePath);
+        if (!enriched) {
+          state.errors++;
+          continue;
+        }
+        const projectPath = af ? await _deriveProjectPath(af.projDir) : null;
+        _updateSessionMetadata(db3, sess.id, {
+          cwd: enriched.cwd,
+          projectPath,
+          gitBranch: enriched.gitBranch,
+          parentSessionId: af?.parentSessionId || enriched.parentSessionId || null,
+          agentId: af?.agentId || enriched.agentId || null,
+          isSidechain: enriched.isSidechain,
+          sessionType: "task",
+          model: enriched.model
+        });
+        state.enriched++;
+      } catch (err) {
+        state.errors++;
+        log2?.("sessions", "debug", `[metadata-backfill] error enriching ${sess.id}: ${err.message}`);
+      }
+    }
+    for (const af of orphans) {
+      try {
+        const enriched = await _enrichFromFile(af.filePath);
+        const projectPath = await _deriveProjectPath(af.projDir);
+        let fstat;
+        try {
+          fstat = await import_promises9.default.stat(af.filePath);
+        } catch {
+          continue;
+        }
+        db3.prepare(`
+          INSERT INTO sessions
+            (id, provider, provider_session_id, origin, origin_native_file,
+             cwd, project_path, git_branch, model,
+             parent_session_id, agent_id, is_sidechain, session_type,
+             status, created_at, last_active_at)
+          VALUES (?, 'claude', ?, 'provider-import', ?,
+                  ?, ?, ?, ?,
+                  ?, ?, 1, 'task',
+                  'active', ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            cwd = COALESCE(excluded.cwd, sessions.cwd),
+            project_path = COALESCE(excluded.project_path, sessions.project_path),
+            git_branch = COALESCE(excluded.git_branch, sessions.git_branch),
+            model = COALESCE(excluded.model, sessions.model),
+            parent_session_id = COALESCE(excluded.parent_session_id, sessions.parent_session_id),
+            agent_id = COALESCE(excluded.agent_id, sessions.agent_id),
+            is_sidechain = COALESCE(excluded.is_sidechain, sessions.is_sidechain),
+            session_type = COALESCE(excluded.session_type, sessions.session_type),
+            status = 'active',
+            deleted_at = NULL
+        `).run(
+          af.sessionId,
+          af.sessionId,
+          af.filePath,
+          enriched?.cwd || null,
+          projectPath,
+          enriched?.gitBranch || null,
+          enriched?.model || null,
+          af.parentSessionId,
+          af.agentId,
+          fstat.birthtime.toISOString(),
+          fstat.mtime.toISOString()
+        );
+        state.enriched++;
+      } catch (err) {
+        state.errors++;
+        log2?.("sessions", "debug", `[metadata-backfill] error inserting orphan ${af.sessionId}: ${err.message}`);
+      }
+    }
+    const result = {
+      total: state.total,
+      enriched: state.enriched,
+      errors: state.errors,
+      skipped: state.total - state.enriched - state.errors,
+      durationMs: Date.now() - t0
+    };
+    state.lastRunAt = (/* @__PURE__ */ new Date()).toISOString();
+    state.lastResult = result;
+    log2?.(
+      "sessions",
+      "info",
+      `[metadata-backfill] done: ${state.enriched} enriched, ${state.errors} errors (${result.durationMs}ms)`
+    );
+    broadcast2?.("session:metadata-backfill", result);
+    return result;
+  }
+  function getStats2() {
+    return {
+      running: !!state.backfillInFlight,
+      lastRunAt: state.lastRunAt,
+      lastResult: state.lastResult,
+      progress: state.backfillInFlight ? { enriched: state.enriched, errors: state.errors, total: state.total } : null
+    };
+  }
+  return { backfillMetadata, getStats: getStats2 };
+}
+
 // src/commands/serve/sessions.js
 var SESSIONS_UPDATE_DEBOUNCE_MS = 350;
 var SESSIONS_WATCH_RETRY_MS = 1e4;
 var SESSIONS_PROJECTS_CACHE_TTL_MS = 8e3;
+var MAX_SESSION_SEARCH_LIMIT = 50;
+function prepareSessionSearchFtsQuery(query) {
+  const cleaned = String(query || "").replace(/['"]/g, "").replace(/[()]/g, "").replace(/[-]/g, " ").replace(/[*]/g, "").trim();
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '""';
+  if (words.length === 1) return `"${words[0]}"*`;
+  return words.map((w2) => `"${w2}"*`).join(" ");
+}
+function mergeSessionSearchRows(db3, titleRows, turnRows, limit2) {
+  const scoreBySession = /* @__PURE__ */ new Map();
+  const titleBySession = /* @__PURE__ */ new Map();
+  const turnsBySession = /* @__PURE__ */ new Map();
+  titleRows.forEach((row, idx) => {
+    const base = scoreBySession.get(row.sessionId) || 0;
+    scoreBySession.set(row.sessionId, base + (1e4 - idx));
+    titleBySession.set(row.sessionId, {
+      titleMatch: row.titleMatch || void 0,
+      snippetMatch: row.snippetMatch || void 0
+    });
+  });
+  turnRows.forEach((row, idx) => {
+    const base = scoreBySession.get(row.sessionId) || 0;
+    scoreBySession.set(row.sessionId, base + (1e3 - idx));
+    const existing = turnsBySession.get(row.sessionId) || [];
+    if (existing.length < 3) {
+      existing.push({
+        turnNumber: row.turnNumber,
+        userHighlighted: row.userHighlighted || void 0,
+        assistantHighlighted: row.assistantHighlighted || void 0
+      });
+      turnsBySession.set(row.sessionId, existing);
+    }
+  });
+  const sessionIds = [...scoreBySession.keys()];
+  if (sessionIds.length === 0) return [];
+  const placeholders = sessionIds.map(() => "?").join(", ");
+  const rows = db3.prepare(`
+    SELECT
+      id as sessionId,
+      title,
+      provider,
+      cwd,
+      project_path as projectPath,
+      last_active_at as lastActiveAt,
+      COALESCE(turn_count, 0) as turnCount
+    FROM sessions
+    WHERE id IN (${placeholders}) AND status != 'deleted'
+  `).all(...sessionIds);
+  const rowById = new Map(rows.map((r2) => [r2.sessionId, r2]));
+  const sortedIds = sessionIds.filter((id) => rowById.has(id)).sort((a2, b2) => {
+    const scoreDiff = (scoreBySession.get(b2) || 0) - (scoreBySession.get(a2) || 0);
+    if (scoreDiff !== 0) return scoreDiff;
+    const aTs = new Date(rowById.get(a2)?.lastActiveAt || 0).getTime();
+    const bTs = new Date(rowById.get(b2)?.lastActiveAt || 0).getTime();
+    return bTs - aTs;
+  }).slice(0, limit2);
+  return sortedIds.map((id) => {
+    const meta = rowById.get(id) || {};
+    const title = titleBySession.get(id) || {};
+    return {
+      sessionId: id,
+      title: meta.title || null,
+      provider: meta.provider || "claude",
+      cwd: meta.cwd || null,
+      projectPath: meta.projectPath || null,
+      lastActiveAt: meta.lastActiveAt || null,
+      turnCount: meta.turnCount || 0,
+      titleMatch: title.titleMatch,
+      snippetMatch: title.snippetMatch,
+      turnMatches: turnsBySession.get(id) || []
+    };
+  });
+}
+function searchSessionsInDb(db3, query, { limit: limit2 = 20, provider } = {}) {
+  const normalizedLimit = Math.min(Math.max(Number(limit2) || 20, 1), MAX_SESSION_SEARCH_LIMIT);
+  const ftsQuery = prepareSessionSearchFtsQuery(query);
+  const providerClause = provider ? " AND s.provider = ?" : "";
+  try {
+    const titleParams = provider ? [ftsQuery, provider, normalizedLimit * 4] : [ftsQuery, normalizedLimit * 4];
+    const turnParams = provider ? [ftsQuery, provider, normalizedLimit * 20] : [ftsQuery, normalizedLimit * 20];
+    const titleRows = db3.prepare(`
+      SELECT
+        s.id as sessionId,
+        highlight(sessions_fts, 1, '<mark>', '</mark>') as titleMatch,
+        highlight(sessions_fts, 2, '<mark>', '</mark>') as snippetMatch,
+        bm25(sessions_fts) as rank
+      FROM sessions_fts
+      JOIN sessions s ON sessions_fts.session_id = s.id
+      WHERE sessions_fts MATCH ?
+        AND s.status != 'deleted'
+        ${providerClause}
+      ORDER BY rank
+      LIMIT ?
+    `).all(...titleParams);
+    const turnRows = db3.prepare(`
+      SELECT
+        t.session_id as sessionId,
+        t.turn_number as turnNumber,
+        highlight(turns_fts, 0, '<mark>', '</mark>') as userHighlighted,
+        highlight(turns_fts, 1, '<mark>', '</mark>') as assistantHighlighted,
+        bm25(turns_fts) as rank
+      FROM turns_fts
+      JOIN turns t ON turns_fts.rowid = t.rowid
+      JOIN sessions s ON t.session_id = s.id
+      WHERE turns_fts MATCH ?
+        AND s.status != 'deleted'
+        ${providerClause}
+      ORDER BY rank
+      LIMIT ?
+    `).all(...turnParams);
+    return mergeSessionSearchRows(db3, titleRows, turnRows, normalizedLimit);
+  } catch {
+    const like = `%${query}%`;
+    const titleParams = provider ? [like, like, provider, normalizedLimit * 4] : [like, like, normalizedLimit * 4];
+    const turnParams = provider ? [like, like, provider, normalizedLimit * 20] : [like, like, normalizedLimit * 20];
+    const titleRows = db3.prepare(`
+      SELECT
+        s.id as sessionId,
+        s.title as titleMatch,
+        s.snippet as snippetMatch,
+        0 as rank
+      FROM sessions s
+      WHERE s.status != 'deleted'
+        AND (s.title LIKE ? OR s.snippet LIKE ?)
+        ${providerClause}
+      ORDER BY s.last_active_at DESC
+      LIMIT ?
+    `).all(...titleParams);
+    const turnRows = db3.prepare(`
+      SELECT
+        t.session_id as sessionId,
+        t.turn_number as turnNumber,
+        t.user_message as userHighlighted,
+        t.assistant_response as assistantHighlighted,
+        0 as rank
+      FROM turns t
+      JOIN sessions s ON t.session_id = s.id
+      WHERE s.status != 'deleted'
+        AND (t.user_message LIKE ? OR t.assistant_response LIKE ?)
+        ${providerClause}
+      ORDER BY t.ts DESC
+      LIMIT ?
+    `).all(...turnParams);
+    return mergeSessionSearchRows(db3, titleRows, turnRows, normalizedLimit);
+  }
+}
 function countLines(str2) {
   if (!str2 || str2 === "") return 0;
   return str2.split("\n").length;
@@ -53029,7 +58440,7 @@ async function readSessionMessages(sessionId, lookup = {}) {
     throw new Error(`Session not found: ${sessionId}`);
   }
   const { provider, filePath } = found;
-  const content = await import_promises9.default.readFile(filePath, "utf-8");
+  const content = await import_promises10.default.readFile(filePath, "utf-8");
   const messages = parseSessionMessagesFromJsonl2(content, provider);
   const byteOffset = Buffer.byteLength(content, "utf-8");
   const usage = extractUsageFromJsonl(content, provider);
@@ -53074,20 +58485,50 @@ function decodeCursor(token) {
     throw new Error("Invalid cursor");
   }
 }
+function _toNumberOrUndefined(value) {
+  return Number.isFinite(value) ? Number(value) : void 0;
+}
+function _parseJsonObjectOrUndefined(raw) {
+  if (typeof raw !== "string" || !raw) return void 0;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : void 0;
+  } catch {
+    return void 0;
+  }
+}
 function _turnToMessages(turn) {
   const msgs = [];
+  const baseMeta = {
+    turnNumber: Number.isInteger(turn.turn_number) ? turn.turn_number : void 0,
+    providerTurnId: typeof turn.provider_turn_id === "string" ? turn.provider_turn_id : void 0,
+    uuid: typeof turn.uuid === "string" ? turn.uuid : void 0,
+    permissionMode: typeof turn.permission_mode === "string" ? turn.permission_mode : void 0
+  };
   if (turn.user_message) {
     msgs.push({
       role: "user",
       content: turn.user_message,
-      timestamp: turn.ts || void 0
+      timestamp: turn.ts || void 0,
+      ...baseMeta
     });
   }
   if (turn.assistant_response || turn.thinking || turn.tool_results) {
     const assistantMsg = {
       role: "assistant",
       content: turn.assistant_response || "",
-      timestamp: turn.ts || void 0
+      timestamp: turn.ts || void 0,
+      ...baseMeta,
+      model: typeof turn.model === "string" ? turn.model : void 0,
+      inputTokens: _toNumberOrUndefined(turn.input_tokens),
+      outputTokens: _toNumberOrUndefined(turn.output_tokens),
+      cacheReadTokens: _toNumberOrUndefined(turn.cache_read_tokens),
+      cacheCreationTokens: _toNumberOrUndefined(turn.cache_creation_tokens),
+      contextTokens: _toNumberOrUndefined(turn.context_tokens),
+      costUsd: _toNumberOrUndefined(turn.cost),
+      durationMs: _toNumberOrUndefined(turn.duration_ms),
+      finishReason: typeof turn.finish_reason === "string" ? turn.finish_reason : void 0,
+      compactMetadata: _parseJsonObjectOrUndefined(turn.compact_metadata)
     };
     if (turn.thinking) {
       assistantMsg.thinking = turn.thinking;
@@ -53254,7 +58695,7 @@ async function readSessionDiffs(sessionId, lookup = {}) {
   if (provider !== "claude") {
     return [];
   }
-  const content = await import_promises9.default.readFile(filePath, "utf-8");
+  const content = await import_promises10.default.readFile(filePath, "utf-8");
   const lines = content.trim().split("\n").filter(Boolean);
   const diffs = [];
   for (const line of lines) {
@@ -53297,17 +58738,17 @@ async function readSessionDiffs(sessionId, lookup = {}) {
 async function enumerateSessions() {
   const sessions = [];
   try {
-    const projectDirs = await import_promises9.default.readdir(CLAUDE_PROJECTS_DIR);
+    const projectDirs = await import_promises10.default.readdir(CLAUDE_PROJECTS_DIR);
     for (const projDir of projectDirs) {
-      const projPath = import_path48.default.join(CLAUDE_PROJECTS_DIR, projDir);
-      const stat = await import_promises9.default.stat(projPath);
+      const projPath = import_path53.default.join(CLAUDE_PROJECTS_DIR, projDir);
+      const stat = await import_promises10.default.stat(projPath);
       if (!stat.isDirectory()) continue;
-      const files = await import_promises9.default.readdir(projPath);
+      const files = await import_promises10.default.readdir(projPath);
       for (const file of files) {
         if (!file.endsWith(".jsonl")) continue;
         const sessionId = file.replace(".jsonl", "");
-        const filePath = import_path48.default.join(projPath, file);
-        const fstat = await import_promises9.default.stat(filePath);
+        const filePath = import_path53.default.join(projPath, file);
+        const fstat = await import_promises10.default.stat(filePath);
         cacheSessionFileHint(sessionId, "claude", filePath);
         sessions.push({
           id: sessionId,
@@ -53329,7 +58770,7 @@ async function enumerateSessions() {
       if (!sessionId) continue;
       let fstat;
       try {
-        fstat = await import_promises9.default.stat(filePath);
+        fstat = await import_promises10.default.stat(filePath);
       } catch {
         continue;
       }
@@ -53337,7 +58778,7 @@ async function enumerateSessions() {
       sessions.push({
         id: sessionId,
         provider: "codex",
-        projectPath: meta.cwd || import_path48.default.dirname(filePath),
+        projectPath: meta.cwd || import_path53.default.dirname(filePath),
         messageCount: 0,
         createdAt: fstat.birthtime.toISOString(),
         updatedAt: fstat.mtime.toISOString()
@@ -53366,7 +58807,14 @@ function shouldBroadcastSessionUpdate(watchRoot, relPath) {
   if (!inProjects) return false;
   return normalized.endsWith(".jsonl") || normalized.endsWith("sessions-index.json") || normalized === "projects" || normalized.startsWith("projects/");
 }
-function createSessionsModule({ log, broadcast, json, error, readBody, getProjectGitStatus: getProjectGitStatus2, resolveDb: resolveDb2 }) {
+function shouldRefreshProjectsForSessionUpdate(watchRoot, relPath) {
+  const normalized = String(relPath || "").replace(/\\/g, "/");
+  if (!normalized) return true;
+  if (normalized.endsWith("sessions-index.json")) return true;
+  if (normalized.endsWith(".jsonl")) return false;
+  return true;
+}
+function createSessionsModule({ log: log2, broadcast: broadcast2, json, error, readBody, getProjectGitStatus: getProjectGitStatus2, resolveDb: resolveDb2 }) {
   const sessionsProjectsCache = {
     value: null,
     fetchedAt: 0,
@@ -53396,7 +58844,7 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
   async function computeSessionDiffStatsAsync(sessionJsonlPath) {
     if (!sessionJsonlPath) return null;
     try {
-      const stat = await import_promises9.default.stat(sessionJsonlPath);
+      const stat = await import_promises10.default.stat(sessionJsonlPath);
       if (stat.size === 0) return null;
       const tailSize = 256 * 1024;
       const startByte = Math.max(0, stat.size - tailSize);
@@ -53434,13 +58882,13 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
   function getProjectGitStatusAsync(projectPath) {
     return new Promise((resolve) => {
       if (!projectPath) return resolve(null);
-      const gitDir = import_path48.default.join(projectPath, ".git");
+      const gitDir = import_path53.default.join(projectPath, ".git");
       try {
-        if (!import_fs45.default.existsSync(gitDir)) return resolve(null);
+        if (!import_fs49.default.existsSync(gitDir)) return resolve(null);
       } catch {
         return resolve(null);
       }
-      (0, import_child_process22.execFile)("git", ["status", "--porcelain=v2", "--branch"], {
+      (0, import_child_process25.execFile)("git", ["status", "--porcelain=v2", "--branch"], {
         cwd: projectPath,
         encoding: "utf-8",
         timeout: 2e3,
@@ -53511,7 +58959,7 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
     }, ENRICHMENT_DEBOUNCE_MS);
   }
   const dbModule = createSessionsDbModule({
-    log,
+    log: log2,
     resolveDb: resolveDb2,
     caches: { diffStatsCache: _diffStatsCache, gitStatusCache: _gitStatusCache, sessionPathMap: _sessionPathMap, GIT_STATUS_TTL_MS },
     onProjectsReady: _scheduleEnrichment
@@ -53525,7 +58973,7 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
     isDbSpineEnabled
   } = dbModule;
   const ingesterModule = createSessionsIngesterModule({
-    log,
+    log: log2,
     resolveDb: resolveDb2
   });
   const {
@@ -53536,9 +58984,27 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
     startPeriodicReconcile: startTurnIngestReconcile,
     getStats: getTurnIngestStats
   } = ingesterModule;
+  const titleBackfillModule = createTitleBackfillModule({
+    log: log2,
+    resolveDb: resolveDb2,
+    broadcast: broadcast2
+  });
+  const {
+    backfillTitles: backfillSessionTitles,
+    getStats: getTitleBackfillStats
+  } = titleBackfillModule;
+  const metadataBackfillModule = createMetadataBackfillModule({
+    log: log2,
+    resolveDb: resolveDb2,
+    broadcast: broadcast2
+  });
+  const {
+    backfillMetadata: backfillSessionMetadata,
+    getStats: getMetadataBackfillStats
+  } = metadataBackfillModule;
   const tailModule = createSessionsTailModule({
-    log,
-    broadcast,
+    log: log2,
+    broadcast: broadcast2,
     findSessionFile: (sid) => findSessionFileEntry(sid, { resolveDb: resolveDb2 })
   });
   function invalidateSessionsProjectsCache() {
@@ -53548,7 +59014,10 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
     sessionsProjectsCache.inFlight = null;
   }
   function queueSessionsUpdated(data = {}) {
-    invalidateSessionsProjectsCache();
+    const wantsRefresh = data.refreshProjects !== false;
+    if (wantsRefresh) {
+      invalidateSessionsProjectsCache();
+    }
     if (data.sessionId) {
       if (!pendingSessionIds) pendingSessionIds = /* @__PURE__ */ new Set();
       pendingSessionIds.add(data.sessionId);
@@ -53556,6 +59025,7 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
     pendingSessionsUpdate = {
       ...pendingSessionsUpdate,
       ...data,
+      refreshProjects: pendingSessionsUpdate?.refreshProjects === true || wantsRefresh,
       ts: (/* @__PURE__ */ new Date()).toISOString()
     };
     clearTimeout(sessionsUpdateDebounceTimer);
@@ -53572,24 +59042,24 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
       pendingSessionsUpdate = null;
       pendingSessionIds = null;
       sessionsUpdateDebounceTimer = null;
-      broadcast("sessions:updated", payload);
+      broadcast2("sessions:updated", payload);
     }, SESSIONS_UPDATE_DEBOUNCE_MS);
   }
   function startSessionsWatcher() {
     if (sessionsWatcher) return;
     const watcherSpecs = [];
-    if (import_fs45.default.existsSync(CLAUDE_PROJECTS_DIR)) {
+    if (import_fs49.default.existsSync(CLAUDE_PROJECTS_DIR)) {
       watcherSpecs.push({ provider: "claude", rootPath: CLAUDE_PROJECTS_DIR });
-    } else if (import_fs45.default.existsSync(CLAUDE_ROOT_DIR)) {
+    } else if (import_fs49.default.existsSync(CLAUDE_ROOT_DIR)) {
       watcherSpecs.push({ provider: "claude", rootPath: CLAUDE_ROOT_DIR });
     }
-    if (import_fs45.default.existsSync(CODEX_SESSIONS_DIR)) {
+    if (import_fs49.default.existsSync(CODEX_SESSIONS_DIR)) {
       watcherSpecs.push({ provider: "codex", rootPath: CODEX_SESSIONS_DIR });
-    } else if (import_fs45.default.existsSync(CODEX_ROOT_DIR)) {
+    } else if (import_fs49.default.existsSync(CODEX_ROOT_DIR)) {
       watcherSpecs.push({ provider: "codex", rootPath: CODEX_ROOT_DIR });
     }
     if (watcherSpecs.length === 0) {
-      log("sessions", "debug", "sessions watcher skipped (no provider session directories found)");
+      log2("sessions", "debug", "sessions watcher skipped (no provider session directories found)");
       if (!sessionsWatcherRetryTimer) {
         sessionsWatcherRetryTimer = setTimeout(() => {
           sessionsWatcherRetryTimer = null;
@@ -53602,7 +59072,7 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
     for (const spec of watcherSpecs) {
       const { provider, rootPath } = spec;
       try {
-        const watcher = import_fs45.default.watch(rootPath, { recursive: true }, (eventType, filename) => {
+        const watcher = import_fs49.default.watch(rootPath, { recursive: true }, (eventType, filename) => {
           const relPath = typeof filename === "string" ? filename : "";
           if (!relPath) {
             queueSessionsUpdated({
@@ -53610,17 +59080,19 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
               provider,
               event: eventType,
               path: rootPath,
+              refreshProjects: true,
               missingFilename: true
             });
             return;
           }
           if (!shouldBroadcastSessionUpdate(rootPath, relPath)) return;
-          const fullPath = import_path48.default.join(rootPath, relPath);
+          const fullPath = import_path53.default.join(rootPath, relPath);
           const updateData = {
             source: "watcher",
             provider,
             event: eventType,
-            path: fullPath
+            path: fullPath,
+            refreshProjects: shouldRefreshProjectsForSessionUpdate(rootPath, relPath)
           };
           const normalized = relPath.replace(/\\/g, "/");
           if (normalized.endsWith(".jsonl")) {
@@ -53656,6 +59128,7 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
                   queueSessionsUpdated({
                     source: "watcher-new",
                     sessionId: result.sessionId,
+                    refreshProjects: true,
                     newSession: {
                       sessionId: result.sessionId,
                       provider: result.provider,
@@ -53674,9 +59147,9 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
           queueSessionsUpdated(updateData);
         });
         watchers.push({ watcher, rootPath, provider });
-        log("sessions", "info", `watching ${rootPath} for ${provider} session updates`);
+        log2("sessions", "info", `watching ${rootPath} for ${provider} session updates`);
       } catch (err) {
-        log("sessions", "warn", `failed to watch sessions path: ${err.message}`, { rootPath, provider });
+        log2("sessions", "warn", `failed to watch sessions path: ${err.message}`, { rootPath, provider });
       }
     }
     if (watchers.length === 0) {
@@ -53691,17 +59164,17 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
     sessionsWatcher = { watchers };
   }
   async function enumerateProjectsWithSessions() {
-    const claudeDir = import_path48.default.join(import_os21.default.homedir(), ".claude", "projects");
+    const claudeDir = import_path53.default.join(import_os22.default.homedir(), ".claude", "projects");
     const projects = [];
     async function processProject(projDir) {
-      const projPath = import_path48.default.join(claudeDir, projDir);
-      const stat = await import_promises9.default.stat(projPath);
+      const projPath = import_path53.default.join(claudeDir, projDir);
+      const stat = await import_promises10.default.stat(projPath);
       if (!stat.isDirectory()) return null;
       let sessions = [];
       let originalPath = null;
-      const indexPath = import_path48.default.join(projPath, "sessions-index.json");
+      const indexPath = import_path53.default.join(projPath, "sessions-index.json");
       try {
-        const indexContent = await import_promises9.default.readFile(indexPath, "utf-8");
+        const indexContent = await import_promises10.default.readFile(indexPath, "utf-8");
         const index = JSON.parse(indexContent);
         originalPath = index.originalPath || null;
         if (Array.isArray(index.entries)) {
@@ -53711,12 +59184,12 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
           for (let ei = 0; ei < index.entries.length; ei += ENTRY_BATCH) {
             const batch = index.entries.slice(ei, ei + ENTRY_BATCH);
             const results = await Promise.all(batch.map(async (entry) => {
-              const fullPath = entry.fullPath || import_path48.default.join(projPath, `${entry.sessionId}.jsonl`);
+              const fullPath = entry.fullPath || import_path53.default.join(projPath, `${entry.sessionId}.jsonl`);
               let modified = entry.modified || "";
               const indexAge = modified ? now - new Date(modified).getTime() : Infinity;
               if (indexAge > STALE_THRESHOLD_MS) {
                 try {
-                  const fstat = await import_promises9.default.stat(fullPath);
+                  const fstat = await import_promises10.default.stat(fullPath);
                   const fileMtime = fstat.mtime.toISOString();
                   if (!modified || new Date(fileMtime) > new Date(modified)) {
                     modified = fileMtime;
@@ -53745,14 +59218,14 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
           }
         }
         const indexedIds = new Set(sessions.map((s2) => s2.sessionId));
-        const files = await import_promises9.default.readdir(projPath);
+        const files = await import_promises10.default.readdir(projPath);
         for (const file of files) {
           if (!file.endsWith(".jsonl")) continue;
           const sessionId = file.replace(".jsonl", "");
           if (indexedIds.has(sessionId)) continue;
-          const filePath = import_path48.default.join(projPath, file);
+          const filePath = import_path53.default.join(projPath, file);
           try {
-            const fstat = await import_promises9.default.stat(filePath);
+            const fstat = await import_promises10.default.stat(filePath);
             const snippet = await readSessionSnippet(filePath);
             sessions.push({
               sessionId,
@@ -53771,13 +59244,13 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
           }
         }
       } catch {
-        const files = await import_promises9.default.readdir(projPath);
+        const files = await import_promises10.default.readdir(projPath);
         for (const file of files) {
           if (!file.endsWith(".jsonl")) continue;
           const sessionId = file.replace(".jsonl", "");
-          const filePath = import_path48.default.join(projPath, file);
+          const filePath = import_path53.default.join(projPath, file);
           try {
-            const fstat = await import_promises9.default.stat(filePath);
+            const fstat = await import_promises10.default.stat(filePath);
             const snippet = await readSessionSnippet(filePath);
             sessions.push({
               sessionId,
@@ -53798,17 +59271,19 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
       }
       if (sessions.length === 0) return null;
       sessions.sort((a2, b2) => new Date(b2.modified).getTime() - new Date(a2.modified).getTime());
-      let inferredOriginalPath = null;
-      for (const session of sessions) {
-        if (!session.fullPath) continue;
-        const inferredPath = await inferProjectPathFromSessionFile(session.fullPath);
-        if (inferredPath) {
-          inferredOriginalPath = inferredPath;
-          break;
+      if (!originalPath) {
+        let inferredOriginalPath = null;
+        for (const session of sessions) {
+          if (!session.fullPath) continue;
+          const inferredPath = await inferProjectPathFromSessionFile(session.fullPath);
+          if (inferredPath) {
+            inferredOriginalPath = inferredPath;
+            break;
+          }
         }
-      }
-      if (inferredOriginalPath) {
-        originalPath = inferredOriginalPath;
+        if (inferredOriginalPath) {
+          originalPath = inferredOriginalPath;
+        }
       }
       let decodedPath = null;
       if (!originalPath) {
@@ -53818,7 +59293,7 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
         decodedPath = "/" + projDir.replace(/-/g, "/").replace(/^\//, "");
       }
       const displayPath = originalPath || decodedPath;
-      const name = import_path48.default.basename(displayPath);
+      const name = import_path53.default.basename(displayPath);
       for (const session of sessions) {
         if (session.fullPath) {
           _sessionPathMap.set(session.sessionId, session.fullPath);
@@ -53839,7 +59314,7 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
       };
     }
     try {
-      const projectDirs = await import_promises9.default.readdir(claudeDir);
+      const projectDirs = await import_promises10.default.readdir(claudeDir);
       const CONCURRENCY = 8;
       for (let i2 = 0; i2 < projectDirs.length; i2 += CONCURRENCY) {
         const batch = projectDirs.slice(i2, i2 + CONCURRENCY);
@@ -53859,7 +59334,7 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
         const batchRows = await Promise.all(batch.map(async (filePath) => {
           let fstat;
           try {
-            fstat = await import_promises9.default.stat(filePath);
+            fstat = await import_promises10.default.stat(filePath);
           } catch {
             return null;
           }
@@ -53867,7 +59342,7 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
           const sessionId = meta.sessionId || deriveCodexSessionIdFromFilename(filePath);
           if (!sessionId) return null;
           const snippet = await readSessionSnippet(filePath, "codex");
-          const projectPath = meta.cwd || snippet.cwd || await inferProjectPathFromSessionFile(filePath) || import_os21.default.homedir();
+          const projectPath = meta.cwd || snippet.cwd || await inferProjectPathFromSessionFile(filePath) || import_os22.default.homedir();
           cacheSessionFileHint(sessionId, "codex", filePath);
           _sessionPathMap.set(sessionId, filePath);
           return {
@@ -53893,7 +59368,7 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
           const encoded = projectPath.replace(/^\//, "").replace(/\//g, "-") || "-";
           codexProjectMap.set(projectPath, {
             path: encoded,
-            name: import_path48.default.basename(projectPath) || projectPath,
+            name: import_path53.default.basename(projectPath) || projectPath,
             originalPath: projectPath,
             sessions: [],
             gitStatus: null
@@ -53927,7 +59402,7 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
             const chunk = allSessionIds.slice(i2, i2 + 400);
             const placeholders = chunk.map(() => "?").join(",");
             const rows = db3.prepare(`
-              SELECT id, provider, provider_session_id, title, title_override, total_cost, total_input_tokens, total_output_tokens, turn_count,
+              SELECT id, provider, provider_session_id, title, title_override, description, total_cost, total_input_tokens, total_output_tokens, turn_count,
                      parent_session_id, is_sidechain, session_type, origin_native_file
               FROM sessions
               WHERE status != 'deleted'
@@ -53946,6 +59421,7 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
               if (!row) continue;
               const display = row.title_override || row.title;
               if (display) s2.dbTitle = display;
+              if (row.description) s2.description = row.description;
               if (row.total_cost > 0) s2.totalCost = row.total_cost;
               if (row.total_input_tokens > 0) s2.totalInputTokens = row.total_input_tokens;
               if (row.total_output_tokens > 0) s2.totalOutputTokens = row.total_output_tokens;
@@ -53956,9 +59432,32 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
               if (!s2.originNativeFile && row.origin_native_file) s2.originNativeFile = row.origin_native_file;
             }
           }
+          const tagMap = /* @__PURE__ */ new Map();
+          for (let i2 = 0; i2 < allSessionIds.length; i2 += 400) {
+            const chunk = allSessionIds.slice(i2, i2 + 400);
+            const placeholders = chunk.map(() => "?").join(",");
+            try {
+              const tagRows = db3.prepare(`
+                SELECT st.session_id, t.name
+                FROM session_tags st JOIN tags t ON st.tag_id = t.id
+                WHERE st.session_id IN (${placeholders})
+              `).all(...chunk);
+              for (const tr2 of tagRows) {
+                if (!tagMap.has(tr2.session_id)) tagMap.set(tr2.session_id, []);
+                tagMap.get(tr2.session_id).push(tr2.name);
+              }
+            } catch {
+            }
+          }
+          for (const proj of projects) {
+            for (const s2 of proj.sessions) {
+              const tags = tagMap.get(s2.sessionId);
+              if (tags && tags.length > 0) s2.tags = tags;
+            }
+          }
         }
       } catch (err) {
-        log("sessions", "warn", `DB title merge failed: ${err.message}`);
+        log2("sessions", "warn", `DB title merge failed: ${err.message}`);
       }
     }
     const worktreeMarker = "/.rudi/worktrees/";
@@ -53973,7 +59472,7 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
           const parent = mergedProjects[parentMap.get(realRoot)];
           parent.sessions.push(...proj.sessions);
         } else {
-          const realName = import_path48.default.basename(realRoot);
+          const realName = import_path53.default.basename(realRoot);
           parentMap.set(realRoot, mergedProjects.length);
           mergedProjects.push({
             ...proj,
@@ -53997,6 +59496,18 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
       proj.sessions.sort(
         (a2, b2) => new Date(b2.modified).getTime() - new Date(a2.modified).getTime()
       );
+    }
+    const nameCount = /* @__PURE__ */ new Map();
+    for (const proj of mergedProjects) {
+      nameCount.set(proj.name, (nameCount.get(proj.name) || 0) + 1);
+    }
+    for (const proj of mergedProjects) {
+      if (nameCount.get(proj.name) > 1 && proj.originalPath) {
+        const parent = import_path53.default.basename(import_path53.default.dirname(proj.originalPath));
+        if (parent && parent !== "." && parent !== "/") {
+          proj.name = `${parent}/${proj.name}`;
+        }
+      }
     }
     mergedProjects.sort((a2, b2) => {
       const aTime = a2.sessions[0]?.modified || "";
@@ -54058,6 +59569,29 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
       }
       return true;
     }
+    if (req.method === "GET" && url.pathname === "/sessions/search") {
+      const q2 = (url.searchParams.get("q") || "").trim();
+      if (!q2) {
+        json(res, { results: [] });
+        return true;
+      }
+      const limitRaw = Number.parseInt(url.searchParams.get("limit") || "20", 10);
+      const limit2 = Number.isFinite(limitRaw) ? limitRaw : 20;
+      const providerRaw = (url.searchParams.get("provider") || "").trim();
+      const provider = ["claude", "codex", "gemini", "ollama"].includes(providerRaw) ? providerRaw : void 0;
+      const db3 = resolveDb2 ? resolveDb2() : null;
+      if (!db3) {
+        json(res, { results: [] });
+        return true;
+      }
+      try {
+        const results = searchSessionsInDb(db3, q2, { limit: limit2, provider });
+        json(res, { results });
+      } catch (err) {
+        error(res, err?.message || "Search failed", 500);
+      }
+      return true;
+    }
     const msgMatch = url.pathname.match(/^\/sessions\/([^/]+)\/messages$/);
     if (req.method === "GET" && msgMatch) {
       const sessionId = decodeURIComponent(msgMatch[1]);
@@ -54084,7 +59618,7 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
             }
           }
           if (!paginationOpts.cursor && (result.messages?.length || 0) === 0 && (result.totalTurns || 0) === 0) {
-            log("sessions", "debug", "DB messages empty on initial page after warmup", {
+            log2("sessions", "debug", "DB messages empty on initial page after warmup", {
               sessionId: sessionId.slice(0, 8)
             });
           }
@@ -54156,11 +59690,11 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
                   usage.totalInputTokens,
                   usage.totalOutputTokens
                 );
-                log("sessions", "info", "lazy backfill: created DB row", { sessionId: sessionId.slice(0, 8) });
+                log2("sessions", "info", "lazy backfill: created DB row", { sessionId: sessionId.slice(0, 8) });
               }
             }
           } catch (dbErr) {
-            log("sessions", "warn", "lazy backfill failed", { error: dbErr.message });
+            log2("sessions", "warn", "lazy backfill failed", { error: dbErr.message });
           }
         }
       } catch (err) {
@@ -54178,6 +59712,46 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
         json(res, { diffs });
       } catch (err) {
         error(res, err.message, 404);
+      }
+      return true;
+    }
+    const subagentsMatch = url.pathname.match(/^\/sessions\/([^/]+)\/subagents$/);
+    if (req.method === "GET" && subagentsMatch) {
+      const sessionId = decodeURIComponent(subagentsMatch[1]);
+      const db3 = resolveDb2 ? resolveDb2() : null;
+      if (!db3) return error(res, "database not available", 503);
+      try {
+        const rows = db3.prepare(`
+          SELECT id, agent_id, session_type, model, status,
+                 total_cost, total_input_tokens, total_output_tokens, turn_count,
+                 snippet, created_at, last_active_at
+          FROM sessions
+          WHERE parent_session_id = ?
+          ORDER BY created_at ASC
+        `).all(sessionId);
+        const subagents = rows.map((r2) => ({
+          sessionId: r2.id,
+          agentId: r2.agent_id || "",
+          sessionType: r2.session_type || "task",
+          model: r2.model || "",
+          status: r2.status || "active",
+          totalCost: r2.total_cost || 0,
+          totalInputTokens: r2.total_input_tokens || 0,
+          totalOutputTokens: r2.total_output_tokens || 0,
+          turnCount: r2.turn_count || 0,
+          snippet: r2.snippet || "",
+          createdAt: r2.created_at || "",
+          lastActiveAt: r2.last_active_at || ""
+        }));
+        const aggregated = {
+          totalCost: subagents.reduce((s2, a2) => s2 + a2.totalCost, 0),
+          totalInputTokens: subagents.reduce((s2, a2) => s2 + a2.totalInputTokens, 0),
+          totalOutputTokens: subagents.reduce((s2, a2) => s2 + a2.totalOutputTokens, 0),
+          count: subagents.length
+        };
+        json(res, { subagents, aggregated });
+      } catch (err) {
+        error(res, err.message, 500);
       }
       return true;
     }
@@ -54210,11 +59784,13 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
           VALUES (?, ?, ?, 'provider-import', 'active', ?, ?)
         `).run(targetSessionId, provider, sessionId, now, now);
         db3.prepare(`
-          UPDATE sessions SET title_override = ? WHERE id = ?
-        `).run(title, targetSessionId);
+          UPDATE sessions
+          SET title = ?, title_override = ?, title_source = 'user', title_generated_at = ?
+          WHERE id = ?
+        `).run(title, title, now, targetSessionId);
         json(res, { ok: true, title });
       } catch (err) {
-        log("sessions", "warn", `title update failed: ${err.message}`);
+        log2("sessions", "warn", `title update failed: ${err.message}`);
         json(res, { ok: true, title });
       }
       return true;
@@ -54267,12 +59843,16 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
     startTurnIngestReconcile,
     enableDbSpine,
     isDbSpineEnabled,
-    getTurnIngestStats
+    getTurnIngestStats,
+    backfillSessionTitles,
+    getTitleBackfillStats,
+    backfillSessionMetadata,
+    getMetadataBackfillStats
   };
 }
 
 // src/commands/serve/ctx.js
-var import_crypto9 = __toESM(require("crypto"), 1);
+var import_crypto11 = __toESM(require("crypto"), 1);
 var import_url = require("url");
 var LOG_MAX = 500;
 var SSE_CLIENT_CAP = 50;
@@ -54299,7 +59879,7 @@ function createInfrastructure() {
   function getSseClients() {
     return _sseClients;
   }
-  function log(source, level, message, data) {
+  function log2(source, level, message, data) {
     const entry = {
       ts: Date.now(),
       time: (/* @__PURE__ */ new Date()).toISOString().slice(11, 23),
@@ -54329,10 +59909,10 @@ function createInfrastructure() {
       }
     }
   }
-  function broadcast(type, data) {
+  function broadcast2(type, data) {
     if (!_wss) return;
     const msg = JSON.stringify({ type, data });
-    log("ws", "debug", `broadcast ${type}`, { type, sessionId: data?.sessionId });
+    log2("ws", "debug", `broadcast ${type}`, { type, sessionId: data?.sessionId });
     _wss.clients.forEach((client) => {
       if (client.readyState === 1) {
         client.send(msg);
@@ -54348,17 +59928,77 @@ function createInfrastructure() {
     json(res, { error: message }, status);
     return true;
   }
-  async function readBody(req) {
-    const chunks = [];
-    for await (const chunk of req) chunks.push(chunk);
-    return JSON.parse(Buffer.concat(chunks).toString());
+  const DEFAULT_MAX_BODY_SIZE = 10 * 1024 * 1024;
+  const BODY_READ_TIMEOUT = 3e4;
+  async function readBody(req, options = {}) {
+    const maxBodySize = Number.isFinite(options.maxBodySize) && options.maxBodySize > 0 ? options.maxBodySize : DEFAULT_MAX_BODY_SIZE;
+    const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs > 0 ? options.timeoutMs : BODY_READ_TIMEOUT;
+    return new Promise((resolve, reject) => {
+      const chunks = [];
+      let size = 0;
+      let settled = false;
+      function resolveOnce(value) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      }
+      function rejectOnce(err) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        reject(err);
+      }
+      const timer = setTimeout(() => {
+        try {
+          req.destroy();
+        } catch {
+        }
+        const err = new Error("Request body read timed out");
+        err.statusCode = 408;
+        rejectOnce(err);
+      }, timeoutMs);
+      req.on("data", (chunk) => {
+        size += chunk.length;
+        if (size > maxBodySize) {
+          try {
+            req.destroy();
+          } catch {
+          }
+          const err = new Error("Request body too large");
+          err.statusCode = 413;
+          rejectOnce(err);
+          return;
+        }
+        chunks.push(chunk);
+      });
+      req.on("end", () => {
+        if (settled) return;
+        try {
+          resolveOnce(JSON.parse(Buffer.concat(chunks).toString()));
+        } catch {
+          const parseErr = new Error("Invalid JSON in request body");
+          parseErr.statusCode = 400;
+          rejectOnce(parseErr);
+        }
+      });
+      req.on("error", (err) => {
+        rejectOnce(err);
+      });
+    });
   }
   function generateToken() {
-    return import_crypto9.default.randomBytes(32).toString("hex");
+    return import_crypto11.default.randomBytes(32).toString("hex");
   }
   function checkAuth4(req) {
     const headerToken = req.headers["x-rudi-token"];
     if (headerToken === _token) return true;
+    if (headerToken === "same-origin") {
+      const host = req.headers.host || "";
+      if (host.startsWith("127.0.0.1") || host.startsWith("localhost")) {
+        return true;
+      }
+    }
     const url = new import_url.URL(req.url, `http://localhost`);
     if (url.searchParams.get("token") === _token) return true;
     return false;
@@ -54372,8 +60012,8 @@ function createInfrastructure() {
     getLogs,
     getSseClients,
     // Functions
-    log,
-    broadcast,
+    log: log2,
+    broadcast: broadcast2,
     json,
     error,
     readBody,
@@ -54385,10 +60025,10 @@ function createInfrastructure() {
 }
 
 // src/commands/serve/startup.js
-var import_fs46 = __toESM(require("fs"), 1);
-var import_path49 = __toESM(require("path"), 1);
-var import_child_process23 = require("child_process");
-function runStartupTasks({ log }) {
+var import_fs50 = __toESM(require("fs"), 1);
+var import_path54 = __toESM(require("path"), 1);
+var import_child_process26 = require("child_process");
+function runStartupTasks({ log: log2 }) {
   try {
     initSchema();
   } catch (err) {
@@ -54396,19 +60036,112 @@ function runStartupTasks({ log }) {
   }
   try {
     const db3 = getDb();
-    const stale = db3.prepare(`
-      UPDATE session_runtime_state
-      SET status = 'crashed', updated_at = ?
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const affectedGroups = db3.prepare(`
+      SELECT DISTINCT s.run_group_id
+      FROM session_runtime_state srs
+      JOIN sessions s ON s.id = srs.session_id
+      WHERE srs.status IN ('starting', 'running')
+        AND s.run_group_id IS NOT NULL
+    `).all().map((r2) => r2.run_group_id);
+    const staleRows = db3.prepare(`
+      SELECT session_id
+      FROM session_runtime_state
       WHERE status IN ('starting', 'running')
-    `).run((/* @__PURE__ */ new Date()).toISOString());
-    if (stale.changes > 0) {
-      log("serve", "info", `Marked ${stale.changes} stale session(s) as crashed`);
+    `).all();
+    let staleCount = 0;
+    for (const row of staleRows) {
+      if (transitionSessionStatus(db3, row.session_id, "crashed")) {
+        staleCount += 1;
+      }
+    }
+    if (staleCount > 0) {
+      log2("serve", "info", `Marked ${staleCount} stale session(s) as crashed`);
+    }
+    for (const groupId of affectedGroups) {
+      const stats = db3.prepare(`
+        SELECT
+          COUNT(*) AS session_count,
+          SUM(CASE WHEN COALESCE(srs.status, '') = 'completed' THEN 1 ELSE 0 END) AS completed_count,
+          SUM(CASE WHEN COALESCE(srs.status, '') IN ('error', 'crashed') THEN 1 ELSE 0 END) AS failed_count,
+          SUM(CASE WHEN COALESCE(srs.status, '') IN ('completed', 'error', 'stopped', 'crashed') THEN 1 ELSE 0 END) AS done_count,
+          COALESCE(SUM(COALESCE(srs.cost_total, s.total_cost, 0)), 0) AS total_cost,
+          COALESCE(SUM(COALESCE(srs.tokens_total, (COALESCE(s.total_input_tokens, 0) + COALESCE(s.total_output_tokens, 0)), 0)), 0) AS total_tokens
+        FROM sessions s
+        LEFT JOIN session_runtime_state srs ON srs.session_id = s.id
+        WHERE s.run_group_id = ?
+      `).get(groupId);
+      if (!stats) continue;
+      const doneCount = Number(stats.done_count || 0);
+      const sessionCount = Number(stats.session_count || 0);
+      const failedCount = Number(stats.failed_count || 0);
+      const completedCount = Number(stats.completed_count || 0);
+      let finalStatus = "running";
+      if (doneCount >= sessionCount && sessionCount > 0) {
+        if (failedCount > 0 && completedCount > 0) finalStatus = "partial";
+        else if (failedCount > 0) finalStatus = "failed";
+        else finalStatus = "completed";
+      }
+      db3.prepare(`
+        UPDATE run_groups
+        SET session_count = ?, completed_count = ?, failed_count = ?,
+            total_cost = ?, total_tokens = ?, updated_at = ?
+        WHERE id = ?
+      `).run(
+        sessionCount,
+        completedCount,
+        failedCount,
+        Number(stats.total_cost || 0),
+        Number(stats.total_tokens || 0),
+        now,
+        groupId
+      );
+      if (doneCount >= sessionCount && sessionCount > 0) {
+        db3.prepare(`
+          UPDATE run_groups
+          SET status = ?, completed_at = COALESCE(completed_at, ?)
+          WHERE id = ?
+        `).run(finalStatus, now, groupId);
+      }
+      log2("serve", "info", `Refreshed run_group ${groupId.slice(0, 8)} aggregates (status=${finalStatus})`);
+    }
+    const stuckGroups = db3.prepare(`
+      SELECT rg.id FROM run_groups rg
+      WHERE rg.status = 'running'
+        AND rg.session_count > 0
+        AND NOT EXISTS (
+          SELECT 1 FROM sessions s
+          LEFT JOIN session_runtime_state srs ON srs.session_id = s.id
+          WHERE s.run_group_id = rg.id
+            AND COALESCE(srs.status, 'pending') NOT IN ('completed', 'error', 'stopped', 'crashed')
+        )
+    `).all();
+    for (const { id: groupId } of stuckGroups) {
+      const stats = db3.prepare(`
+        SELECT
+          COUNT(*) AS session_count,
+          SUM(CASE WHEN srs.status = 'completed' THEN 1 ELSE 0 END) AS completed_count,
+          SUM(CASE WHEN srs.status IN ('error', 'crashed') THEN 1 ELSE 0 END) AS failed_count
+        FROM sessions s
+        LEFT JOIN session_runtime_state srs ON srs.session_id = s.id
+        WHERE s.run_group_id = ?
+      `).get(groupId);
+      if (!stats) continue;
+      const cc = Number(stats.completed_count || 0);
+      const fc = Number(stats.failed_count || 0);
+      let status = fc > 0 && cc > 0 ? "partial" : fc > 0 ? "failed" : "completed";
+      db3.prepare(`
+        UPDATE run_groups
+        SET completed_count = ?, failed_count = ?, status = ?, completed_at = COALESCE(completed_at, ?), updated_at = ?
+        WHERE id = ?
+      `).run(cc, fc, status, now, now, groupId);
+      log2("serve", "info", `Fixed stuck run_group ${groupId.slice(0, 8)} \u2192 ${status}`);
     }
   } catch (err) {
     console.warn("[serve] Failed to sweep stale sessions:", err.message);
   }
   try {
-    const psOutput = (0, import_child_process23.execSync)("ps -axo pid=,ppid=,command=", {
+    const psOutput = (0, import_child_process26.execSync)("ps -axo pid=,ppid=,command=", {
       encoding: "utf-8",
       timeout: 3e3
     });
@@ -54422,7 +60155,7 @@ function runStartupTasks({ log }) {
       };
     }).filter((entry) => entry && entry.ppid <= 1 && entry.command.includes("claude") && entry.command.includes("--output-format stream-json") && entry.command.includes("--input-format stream-json")).map((entry) => entry.pid);
     if (orphanPids.length > 0) {
-      log("serve", "warn", `Killing ${orphanPids.length} orphaned Claude CLI process(es)`, { pids: orphanPids });
+      log2("serve", "warn", `Killing ${orphanPids.length} orphaned Claude CLI process(es)`, { pids: orphanPids });
       for (const pid of orphanPids) {
         try {
           process.kill(pid, "SIGTERM");
@@ -54431,7 +60164,7 @@ function runStartupTasks({ log }) {
       }
       for (const pid of orphanPids) {
         try {
-          const alive = (0, import_child_process23.execSync)(`ps -p ${pid} -o pid=`, {
+          const alive = (0, import_child_process26.execSync)(`ps -p ${pid} -o pid=`, {
             encoding: "utf-8",
             timeout: 500
           }).trim();
@@ -54456,20 +60189,20 @@ function runStartupTasks({ log }) {
         AND status IN ('completed', 'error', 'stopped', 'crashed')
     `).all();
     for (const row of orphans) {
-      if (!row.worktree_path || !import_fs46.default.existsSync(row.worktree_path)) {
+      if (!row.worktree_path || !import_fs50.default.existsSync(row.worktree_path)) {
         db3.prepare("UPDATE session_runtime_state SET worktree_path = NULL WHERE session_id = ?").run(row.session_id);
         continue;
       }
       try {
-        const uncommitted = (0, import_child_process23.execSync)("git status --porcelain", { cwd: row.worktree_path, stdio: "pipe" }).toString().trim();
+        const uncommitted = (0, import_child_process26.execSync)("git status --porcelain", { cwd: row.worktree_path, stdio: "pipe" }).toString().trim();
         if (uncommitted) {
-          log("serve", "warn", `orphan worktree has uncommitted changes, skipping: ${row.worktree_path}`);
+          log2("serve", "warn", `orphan worktree has uncommitted changes, skipping: ${row.worktree_path}`);
           continue;
         }
         let unmerged = "";
         if (row.worktree_branch && row.base_branch && row.project_root) {
           try {
-            unmerged = (0, import_child_process23.execSync)(
+            unmerged = (0, import_child_process26.execSync)(
               `git log ${row.base_branch}..${row.worktree_branch} --oneline`,
               { cwd: row.project_root, stdio: "pipe" }
             ).toString().trim();
@@ -54477,31 +60210,31 @@ function runStartupTasks({ log }) {
           }
         }
         if (unmerged) {
-          log("serve", "warn", `orphan worktree has unmerged commits, skipping: ${row.worktree_path}`);
+          log2("serve", "warn", `orphan worktree has unmerged commits, skipping: ${row.worktree_path}`);
           continue;
         }
-        const repoDir = row.project_root || import_path49.default.dirname(import_path49.default.dirname(import_path49.default.dirname(row.worktree_path)));
-        (0, import_child_process23.execSync)(`git worktree remove ${JSON.stringify(row.worktree_path)}`, { cwd: repoDir, stdio: "pipe" });
+        const repoDir = row.project_root || import_path54.default.dirname(import_path54.default.dirname(import_path54.default.dirname(row.worktree_path)));
+        (0, import_child_process26.execSync)(`git worktree remove ${JSON.stringify(row.worktree_path)}`, { cwd: repoDir, stdio: "pipe" });
         if (row.worktree_branch) {
           try {
-            (0, import_child_process23.execSync)(`git branch -d ${row.worktree_branch}`, { cwd: repoDir, stdio: "pipe" });
+            (0, import_child_process26.execSync)(`git branch -d ${row.worktree_branch}`, { cwd: repoDir, stdio: "pipe" });
           } catch {
           }
         }
         db3.prepare("UPDATE session_runtime_state SET worktree_path = NULL, worktree_branch = NULL WHERE session_id = ?").run(row.session_id);
-        log("serve", "info", `cleaned up orphan worktree: ${row.worktree_path}`);
+        log2("serve", "info", `cleaned up orphan worktree: ${row.worktree_path}`);
       } catch (err) {
-        log("serve", "warn", `orphan worktree cleanup failed for ${row.worktree_path}: ${err.message}`);
+        log2("serve", "warn", `orphan worktree cleanup failed for ${row.worktree_path}: ${err.message}`);
       }
     }
   } catch (err) {
-    log("serve", "warn", `orphan worktree cleanup sweep failed: ${err.message}`);
+    log2("serve", "warn", `orphan worktree cleanup sweep failed: ${err.message}`);
   }
 }
 
 // src/commands/serve/routes/logs.js
 function buildLogsRoutes(ctx) {
-  const { json, error, readBody, log, getLogs, getSseClients, SSE_CLIENT_CAP: SSE_CLIENT_CAP2 } = ctx;
+  const { json, error, readBody, log: log2, getLogs, getSseClients, SSE_CLIENT_CAP: SSE_CLIENT_CAP2 } = ctx;
   async function handle(req, res, url) {
     if (req.method === "GET" && url.pathname === "/logs") {
       const limit2 = parseInt(url.searchParams.get("limit") || "50", 10);
@@ -54516,7 +60249,7 @@ function buildLogsRoutes(ctx) {
     }
     if (req.method === "POST" && url.pathname === "/logs") {
       const body = await readBody(req);
-      log(body.source || "frontend", body.level || "info", body.message || "", body.data);
+      log2(body.source || "frontend", body.level || "info", body.message || "", body.data);
       json(res, { ok: true });
       return true;
     }
@@ -54550,12 +60283,13 @@ function buildLogsRoutes(ctx) {
 }
 
 // src/commands/serve/routes/fs.js
-var import_fs47 = __toESM(require("fs"), 1);
-var import_promises10 = __toESM(require("fs/promises"), 1);
-var import_path50 = __toESM(require("path"), 1);
+var import_fs51 = __toESM(require("fs"), 1);
+var import_promises11 = __toESM(require("fs/promises"), 1);
+var import_path55 = __toESM(require("path"), 1);
 var FS_READDIR_CACHE_TTL_MS = 1200;
+var MAX_FS_WRITE_BODY_SIZE = 50 * 1024 * 1024;
 function buildFsRoutes(ctx) {
-  const { json, error, readBody, log, broadcast } = ctx;
+  const { json, error, readBody, log: log2, broadcast: broadcast2 } = ctx;
   const fsWatchers = /* @__PURE__ */ new Map();
   const fsReaddirCache = /* @__PURE__ */ new Map();
   const fsReaddirInFlight = /* @__PURE__ */ new Map();
@@ -54580,12 +60314,12 @@ function buildFsRoutes(ctx) {
     }
     const generationAtStart = fsReaddirCacheGeneration;
     const request = (async () => {
-      const names = await import_promises10.default.readdir(dirPath);
+      const names = await import_promises11.default.readdir(dirPath);
       const entries = await Promise.all(
         names.filter((n2) => showHidden || !n2.startsWith(".")).map(async (name) => {
-          const fullPath = import_path50.default.join(dirPath, name);
+          const fullPath = import_path55.default.join(dirPath, name);
           try {
-            const stat = await import_promises10.default.stat(fullPath);
+            const stat = await import_promises11.default.stat(fullPath);
             return {
               name,
               path: fullPath,
@@ -54618,7 +60352,7 @@ function buildFsRoutes(ctx) {
       const filePath = url.searchParams.get("path");
       if (!filePath) return error(res, "path required");
       try {
-        const content = await import_promises10.default.readFile(filePath, "utf-8");
+        const content = await import_promises11.default.readFile(filePath, "utf-8");
         json(res, { content });
       } catch (err) {
         error(res, err.message, 404);
@@ -54626,11 +60360,11 @@ function buildFsRoutes(ctx) {
       return true;
     }
     if (req.method === "POST" && pathname === "/fs/write") {
-      const body = await readBody(req);
+      const body = await readBody(req, { maxBodySize: MAX_FS_WRITE_BODY_SIZE });
       if (!body.path || body.content === void 0) return error(res, "path and content required");
       try {
-        await import_promises10.default.mkdir(import_path50.default.dirname(body.path), { recursive: true });
-        await import_promises10.default.writeFile(body.path, body.content, "utf-8");
+        await import_promises11.default.mkdir(import_path55.default.dirname(body.path), { recursive: true });
+        await import_promises11.default.writeFile(body.path, body.content, "utf-8");
         invalidateFsReaddirCache();
         json(res, { ok: true });
       } catch (err) {
@@ -54639,12 +60373,12 @@ function buildFsRoutes(ctx) {
       return true;
     }
     if (req.method === "POST" && pathname === "/fs/write-binary") {
-      const body = await readBody(req);
+      const body = await readBody(req, { maxBodySize: MAX_FS_WRITE_BODY_SIZE });
       if (!body.path || body.base64 === void 0) return error(res, "path and base64 required");
       try {
-        await import_promises10.default.mkdir(import_path50.default.dirname(body.path), { recursive: true });
+        await import_promises11.default.mkdir(import_path55.default.dirname(body.path), { recursive: true });
         const buffer = Buffer.from(body.base64, "base64");
-        await import_promises10.default.writeFile(body.path, buffer);
+        await import_promises11.default.writeFile(body.path, buffer);
         invalidateFsReaddirCache();
         json(res, { ok: true });
       } catch (err) {
@@ -54668,9 +60402,9 @@ function buildFsRoutes(ctx) {
       const filePath = url.searchParams.get("path");
       if (!filePath) return error(res, "path required");
       try {
-        const stat = await import_promises10.default.stat(filePath);
+        const stat = await import_promises11.default.stat(filePath);
         json(res, {
-          name: import_path50.default.basename(filePath),
+          name: import_path55.default.basename(filePath),
           path: filePath,
           isDirectory: stat.isDirectory(),
           isFile: stat.isFile(),
@@ -54686,8 +60420,8 @@ function buildFsRoutes(ctx) {
       const filePath = url.searchParams.get("path");
       if (!filePath) return error(res, "path required");
       try {
-        const stat = await import_promises10.default.stat(filePath);
-        const ext = import_path50.default.extname(filePath).toLowerCase();
+        const stat = await import_promises11.default.stat(filePath);
+        const ext = import_path55.default.extname(filePath).toLowerCase();
         const mimeTypes = {
           ".png": "image/png",
           ".jpg": "image/jpeg",
@@ -54719,7 +60453,7 @@ function buildFsRoutes(ctx) {
           "Cache-Control": "public, max-age=5",
           "ETag": etag
         });
-        import_fs47.default.createReadStream(filePath).pipe(res);
+        import_fs51.default.createReadStream(filePath).pipe(res);
       } catch (err) {
         error(res, err.message, 404);
       }
@@ -54729,7 +60463,7 @@ function buildFsRoutes(ctx) {
       const body = await readBody(req);
       if (!body.path) return error(res, "path required");
       try {
-        await import_promises10.default.mkdir(body.path, { recursive: true });
+        await import_promises11.default.mkdir(body.path, { recursive: true });
         invalidateFsReaddirCache();
         json(res, { ok: true });
       } catch (err) {
@@ -54741,7 +60475,7 @@ function buildFsRoutes(ctx) {
       const body = await readBody(req);
       if (!body.path) return error(res, "path required");
       try {
-        await import_promises10.default.rm(body.path, { recursive: true });
+        await import_promises11.default.rm(body.path, { recursive: true });
         invalidateFsReaddirCache();
         json(res, { ok: true });
       } catch (err) {
@@ -54753,7 +60487,7 @@ function buildFsRoutes(ctx) {
       const body = await readBody(req);
       if (!body.oldPath || !body.newPath) return error(res, "oldPath and newPath required");
       try {
-        await import_promises10.default.rename(body.oldPath, body.newPath);
+        await import_promises11.default.rename(body.oldPath, body.newPath);
         invalidateFsReaddirCache();
         json(res, { ok: true });
       } catch (err) {
@@ -54770,20 +60504,20 @@ function buildFsRoutes(ctx) {
         return true;
       }
       try {
-        const watcher = import_fs47.default.watch(watchPath, { recursive: true }, (eventType, filename) => {
+        const watcher = import_fs51.default.watch(watchPath, { recursive: true }, (eventType, filename) => {
           if (!filename) return;
           const entry = fsWatchers.get(watchPath);
           if (!entry) return;
           clearTimeout(entry.debounceTimer);
           entry.debounceTimer = setTimeout(() => {
-            const fullPath = import_path50.default.join(watchPath, filename);
-            const dirPath = import_path50.default.dirname(fullPath);
+            const fullPath = import_path55.default.join(watchPath, filename);
+            const dirPath = import_path55.default.dirname(fullPath);
             invalidateFsReaddirCache();
-            broadcast("fs:change", { event: eventType, path: fullPath, dir: dirPath });
+            broadcast2("fs:change", { event: eventType, path: fullPath, dir: dirPath });
           }, 100);
         });
         fsWatchers.set(watchPath, { watcher, debounceTimer: null });
-        log("fs", "info", `watching ${watchPath}`);
+        log2("fs", "info", `watching ${watchPath}`);
         json(res, { ok: true });
       } catch (err) {
         error(res, err.message, 500);
@@ -54798,7 +60532,7 @@ function buildFsRoutes(ctx) {
         clearTimeout(entry.debounceTimer);
         entry.watcher.close();
         fsWatchers.delete(body.path);
-        log("fs", "info", `unwatched ${body.path}`);
+        log2("fs", "info", `unwatched ${body.path}`);
       }
       json(res, { ok: true });
       return true;
@@ -54819,13 +60553,13 @@ function buildFsRoutes(ctx) {
 }
 
 // src/commands/serve/routes/auth.js
-var import_fs48 = __toESM(require("fs"), 1);
-var import_path51 = __toESM(require("path"), 1);
-var import_os22 = __toESM(require("os"), 1);
-var import_child_process24 = require("child_process");
+var import_fs52 = __toESM(require("fs"), 1);
+var import_path56 = __toESM(require("path"), 1);
+var import_os23 = __toESM(require("os"), 1);
+var import_child_process27 = require("child_process");
 init_src();
 function buildAuthRoutes(ctx) {
-  const { json, error, readBody, log } = ctx;
+  const { json, error, readBody, log: log2 } = ctx;
   async function handle(req, res, url) {
     if (req.method === "GET" && url.pathname === "/auth/status") {
       const provider = url.searchParams.get("provider") || "claude";
@@ -54847,10 +60581,10 @@ function buildAuthRoutes(ctx) {
       const body = await readBody(req);
       if (body.apiKey || body.oauthToken) {
         try {
-          const envPath = import_path51.default.join(PATHS.home, ".env");
+          const envPath = import_path56.default.join(PATHS.home, ".env");
           let content = "";
-          if (import_fs48.default.existsSync(envPath)) {
-            content = import_fs48.default.readFileSync(envPath, "utf-8");
+          if (import_fs52.default.existsSync(envPath)) {
+            content = import_fs52.default.readFileSync(envPath, "utf-8");
           }
           if (body.oauthToken) {
             content = content.replace(/^CLAUDE_CODE_OAUTH_TOKEN=.*$/m, "").trim();
@@ -54858,28 +60592,28 @@ function buildAuthRoutes(ctx) {
 CLAUDE_CODE_OAUTH_TOKEN=${body.oauthToken}
 `;
             process.env.CLAUDE_CODE_OAUTH_TOKEN = body.oauthToken;
-            log("auth", "info", "OAuth token saved to .env");
+            log2("auth", "info", "OAuth token saved to .env");
           } else {
             content = content.replace(/^ANTHROPIC_API_KEY=.*$/m, "").trim();
             content += `
 ANTHROPIC_API_KEY=${body.apiKey}
 `;
             process.env.ANTHROPIC_API_KEY = body.apiKey;
-            log("auth", "info", "API key saved to .env");
+            log2("auth", "info", "API key saved to .env");
           }
-          import_fs48.default.writeFileSync(envPath, content.trim() + "\n");
+          import_fs52.default.writeFileSync(envPath, content.trim() + "\n");
           json(res, { ok: true });
         } catch (err) {
-          log("auth", "error", `Failed to save credential: ${err.message}`);
+          log2("auth", "error", `Failed to save credential: ${err.message}`);
           error(res, `Failed to save credential: ${err.message}`, 500);
         }
       } else {
         const binaryPath = resolveClaudeBinary();
-        if (binaryPath && import_os22.default.platform() === "darwin") {
+        if (binaryPath && import_os23.default.platform() === "darwin") {
           try {
-            const helperPath = import_path51.default.join(PATHS.home, ".login-helper.sh");
-            const envPath = import_path51.default.join(PATHS.home, ".env");
-            const captureFile = import_path51.default.join(PATHS.home, ".setup-token-output");
+            const helperPath = import_path56.default.join(PATHS.home, ".login-helper.sh");
+            const envPath = import_path56.default.join(PATHS.home, ".env");
+            const captureFile = import_path56.default.join(PATHS.home, ".setup-token-output");
             const script = [
               "#!/bin/bash",
               `CAPTURE="${captureFile}"`,
@@ -54901,12 +60635,12 @@ ANTHROPIC_API_KEY=${body.apiKey}
               '  echo "  $CAPTURE"',
               "fi"
             ].join("\n");
-            import_fs48.default.writeFileSync(helperPath, script, { mode: 493 });
-            (0, import_child_process24.execSync)(`osascript -e 'tell application "Terminal" to do script "${helperPath}"'`, { stdio: "pipe" });
-            log("auth", "info", "Launched login helper in Terminal.app");
+            import_fs52.default.writeFileSync(helperPath, script, { mode: 493 });
+            (0, import_child_process27.execSync)(`osascript -e 'tell application "Terminal" to do script "${helperPath}"'`, { stdio: "pipe" });
+            log2("auth", "info", "Launched login helper in Terminal.app");
             json(res, { ok: true, launched: true });
           } catch (err) {
-            log("auth", "warn", `Failed to launch login helper: ${err.message}`);
+            log2("auth", "warn", `Failed to launch login helper: ${err.message}`);
             json(res, { ok: true, message: `Run 'claude setup-token' in a terminal to authenticate` });
           }
         } else {
@@ -55000,21 +60734,21 @@ function buildProjectRoutes(ctx) {
 }
 
 // src/commands/serve/routes/notes.js
-var import_promises11 = __toESM(require("fs/promises"), 1);
-var import_path52 = __toESM(require("path"), 1);
-var import_crypto10 = __toESM(require("crypto"), 1);
+var import_promises12 = __toESM(require("fs/promises"), 1);
+var import_path57 = __toESM(require("path"), 1);
+var import_crypto12 = __toESM(require("crypto"), 1);
 init_src();
-var NOTES_DIR = import_path52.default.join(PATHS.home, "notes");
+var NOTES_DIR = import_path57.default.join(PATHS.home, "notes");
 function buildNotesRoutes(ctx) {
   const { json, error, readBody } = ctx;
   async function handle(req, res, url) {
-    await import_promises11.default.mkdir(NOTES_DIR, { recursive: true });
+    await import_promises12.default.mkdir(NOTES_DIR, { recursive: true });
     if (req.method === "GET" && url.pathname === "/notes") {
       try {
-        const files = await import_promises11.default.readdir(NOTES_DIR);
+        const files = await import_promises12.default.readdir(NOTES_DIR);
         const notes = await Promise.all(
           files.filter((f2) => f2.endsWith(".json")).map(async (f2) => {
-            const content = await import_promises11.default.readFile(import_path52.default.join(NOTES_DIR, f2), "utf-8");
+            const content = await import_promises12.default.readFile(import_path57.default.join(NOTES_DIR, f2), "utf-8");
             return JSON.parse(content);
           })
         );
@@ -55028,20 +60762,20 @@ function buildNotesRoutes(ctx) {
     if (req.method === "POST" && url.pathname === "/notes") {
       const body = await readBody(req);
       if (!body.title) return error(res, "title required");
-      const id = import_crypto10.default.randomUUID();
+      const id = import_crypto12.default.randomUUID();
       const now = (/* @__PURE__ */ new Date()).toISOString();
       const note = { id, title: body.title, content: body.content || "", createdAt: now, updatedAt: now };
-      await import_promises11.default.writeFile(import_path52.default.join(NOTES_DIR, `${id}.json`), JSON.stringify(note, null, 2));
+      await import_promises12.default.writeFile(import_path57.default.join(NOTES_DIR, `${id}.json`), JSON.stringify(note, null, 2));
       json(res, note, 201);
       return true;
     }
     const match = url.pathname.match(/^\/notes\/([^/]+)$/);
     if (match) {
       const id = decodeURIComponent(match[1]);
-      const filePath = import_path52.default.join(NOTES_DIR, `${id}.json`);
+      const filePath = import_path57.default.join(NOTES_DIR, `${id}.json`);
       if (req.method === "GET") {
         try {
-          const content = await import_promises11.default.readFile(filePath, "utf-8");
+          const content = await import_promises12.default.readFile(filePath, "utf-8");
           json(res, JSON.parse(content));
         } catch {
           error(res, "Note not found", 404);
@@ -55050,7 +60784,7 @@ function buildNotesRoutes(ctx) {
       }
       if (req.method === "POST") {
         try {
-          const existing = JSON.parse(await import_promises11.default.readFile(filePath, "utf-8"));
+          const existing = JSON.parse(await import_promises12.default.readFile(filePath, "utf-8"));
           const body = await readBody(req);
           const updated = {
             ...existing,
@@ -55058,7 +60792,7 @@ function buildNotesRoutes(ctx) {
             id,
             updatedAt: (/* @__PURE__ */ new Date()).toISOString()
           };
-          await import_promises11.default.writeFile(filePath, JSON.stringify(updated, null, 2));
+          await import_promises12.default.writeFile(filePath, JSON.stringify(updated, null, 2));
           json(res, updated);
         } catch {
           error(res, "Note not found", 404);
@@ -55067,7 +60801,7 @@ function buildNotesRoutes(ctx) {
       }
       if (req.method === "DELETE") {
         try {
-          await import_promises11.default.rm(filePath);
+          await import_promises12.default.rm(filePath);
           json(res, { ok: true });
         } catch {
           error(res, "Note not found", 404);
@@ -55081,7 +60815,7 @@ function buildNotesRoutes(ctx) {
 }
 
 // src/commands/serve/routes/shell.js
-var import_child_process25 = require("child_process");
+var import_child_process28 = require("child_process");
 function buildShellRoutes(ctx) {
   const { json, error, readBody } = ctx;
   async function handle(req, res, url) {
@@ -55091,7 +60825,7 @@ function buildShellRoutes(ctx) {
         error(res, "path required");
         return true;
       }
-      const child = (0, import_child_process25.spawn)("open", ["-R", body.path], { detached: true, stdio: "ignore" });
+      const child = (0, import_child_process28.spawn)("open", ["-R", body.path], { detached: true, stdio: "ignore" });
       child.unref();
       json(res, { ok: true });
       return true;
@@ -55119,7 +60853,7 @@ function buildShellRoutes(ctx) {
           break;
         case "finder":
           cmd = "open";
-          args = [p2];
+          args = ["-R", p2];
           break;
         case "xcode":
           cmd = "open";
@@ -55149,7 +60883,7 @@ function buildShellRoutes(ctx) {
           return true;
       }
       console.log(`[shell/open] ${cmd} ${args.join(" ")}`);
-      const child = (0, import_child_process25.spawn)(cmd, args, { detached: true, stdio: "pipe" });
+      const child = (0, import_child_process28.spawn)(cmd, args, { detached: true, stdio: "pipe" });
       child.stderr.on("data", (d2) => console.error(`[shell/open] stderr: ${d2}`));
       child.on("error", (err) => console.error(`[shell/open] spawn error:`, err));
       child.unref();
@@ -55163,7 +60897,7 @@ function buildShellRoutes(ctx) {
 
 // src/commands/serve/routes/terminal.js
 function buildTerminalRoutes(ctx) {
-  const { json, error, readBody, broadcast } = ctx;
+  const { json, error, readBody, broadcast: broadcast2 } = ctx;
   const terminalSessions = /* @__PURE__ */ new Map();
   const pendingTerminalOpens = /* @__PURE__ */ new Set();
   let ptyModulePromise = null;
@@ -55233,13 +60967,13 @@ function buildTerminalRoutes(ctx) {
         terminalSessions.set(sessionKey, entry);
         proc.onData((data) => {
           entry.buffer.append(data);
-          broadcast("terminal:data", { sessionKey, data });
+          broadcast2("terminal:data", { sessionKey, data });
         });
         proc.onExit(({ exitCode }) => {
           if (terminalSessions.get(sessionKey)?.proc === proc) {
             terminalSessions.delete(sessionKey);
           }
-          broadcast("terminal:exit", { sessionKey, code: typeof exitCode === "number" ? exitCode : null });
+          broadcast2("terminal:exit", { sessionKey, code: typeof exitCode === "number" ? exitCode : null });
         });
         return json(res, { ok: true, sessionKey, reused: false });
       } catch (err) {
@@ -55305,10 +61039,10 @@ function buildTerminalRoutes(ctx) {
 }
 
 // src/commands/serve/routes/suggest.js
-var import_os23 = __toESM(require("os"), 1);
-var import_child_process26 = require("child_process");
+var import_os24 = __toESM(require("os"), 1);
+var import_child_process29 = require("child_process");
 function buildSuggestRoutes(ctx) {
-  const { json, error, readBody, log } = ctx;
+  const { json, error, readBody, log: log2 } = ctx;
   let _activeSuggestProcess = null;
   async function handleSuggest(req, res, url) {
     if (req.method !== "POST" || url.pathname !== "/agent/suggest") return false;
@@ -55334,9 +61068,9 @@ function buildSuggestRoutes(ctx) {
     const cwd = typeof body.cwd === "string" ? body.cwd : null;
     if (cwd) {
       try {
-        const statusOut = (0, import_child_process26.execSync)("git status --porcelain", { cwd, stdio: "pipe", timeout: 3e3 }).toString().trim();
-        const logOut = (0, import_child_process26.execSync)("git log --oneline -5 2>/dev/null", { cwd, stdio: "pipe", timeout: 3e3 }).toString().trim();
-        const branchOut = (0, import_child_process26.execSync)("git branch --show-current 2>/dev/null", { cwd, stdio: "pipe", timeout: 3e3 }).toString().trim();
+        const statusOut = (0, import_child_process29.execSync)("git status --porcelain", { cwd, stdio: "pipe", timeout: 3e3 }).toString().trim();
+        const logOut = (0, import_child_process29.execSync)("git log --oneline -5 2>/dev/null", { cwd, stdio: "pipe", timeout: 3e3 }).toString().trim();
+        const branchOut = (0, import_child_process29.execSync)("git branch --show-current 2>/dev/null", { cwd, stdio: "pipe", timeout: 3e3 }).toString().trim();
         const parts = [];
         if (branchOut) parts.push(`Branch: ${branchOut}`);
         if (statusOut) parts.push(`Uncommitted changes:
@@ -55356,7 +61090,7 @@ ${parts.join("\n")}`;
 Assistant message:
 ${lastMessage}${gitContext}`;
     try {
-      const child = (0, import_child_process26.spawn)(binaryPath, [
+      const child = (0, import_child_process29.spawn)(binaryPath, [
         "-p",
         prompt,
         "--model",
@@ -55366,7 +61100,7 @@ ${lastMessage}${gitContext}`;
         "1",
         "--output-format",
         "json"
-      ], { stdio: ["ignore", "pipe", "pipe"], timeout: 1e4, cwd: cwd || import_os23.default.tmpdir() });
+      ], { stdio: ["ignore", "pipe", "pipe"], timeout: 1e4, cwd: cwd || import_os24.default.tmpdir() });
       _activeSuggestProcess = child;
       let stdout = "";
       child.stdout.on("data", (chunk) => {
@@ -55407,7 +61141,7 @@ ${lastMessage}${gitContext}`;
       }
       json(res, { suggestions: suggestions.slice(0, 4) });
     } catch (err) {
-      log("suggest", "warn", `suggestion failed: ${err.message}`);
+      log2("suggest", "warn", `suggestion failed: ${err.message}`);
       _activeSuggestProcess = null;
       json(res, { suggestions: [] });
     }
@@ -55434,7 +61168,7 @@ User request: ${firstMessage}
 
 Title:`;
     try {
-      const child = (0, import_child_process26.spawn)(binaryPath, [
+      const child = (0, import_child_process29.spawn)(binaryPath, [
         "-p",
         prompt,
         "--model",
@@ -55444,7 +61178,7 @@ Title:`;
         "1",
         "--output-format",
         "json"
-      ], { stdio: ["ignore", "pipe", "pipe"], timeout: 1e4, cwd: import_os23.default.tmpdir() });
+      ], { stdio: ["ignore", "pipe", "pipe"], timeout: 1e4, cwd: import_os24.default.tmpdir() });
       let stdout = "";
       child.stdout.on("data", (chunk) => {
         stdout += chunk;
@@ -55473,7 +61207,7 @@ Title:`;
       const title = (parsed.result || "").trim();
       json(res, { title });
     } catch (err) {
-      log("name-session", "warn", `naming failed: ${err.message}`);
+      log2("name-session", "warn", `naming failed: ${err.message}`);
       json(res, { title: "" });
     }
     return true;
@@ -55500,7 +61234,7 @@ Task: ${prompt}
 
 Branch name:`;
     try {
-      const child = (0, import_child_process26.spawn)(binaryPath, [
+      const child = (0, import_child_process29.spawn)(binaryPath, [
         "-p",
         systemPrompt,
         "--model",
@@ -55510,7 +61244,7 @@ Branch name:`;
         "1",
         "--output-format",
         "json"
-      ], { stdio: ["ignore", "pipe", "pipe"], timeout: 1e4, cwd: import_os23.default.tmpdir() });
+      ], { stdio: ["ignore", "pipe", "pipe"], timeout: 1e4, cwd: import_os24.default.tmpdir() });
       let stdout = "";
       let stderr = "";
       child.stdout.on("data", (chunk) => {
@@ -55521,7 +61255,7 @@ Branch name:`;
       });
       const exitCode = await new Promise((resolve) => {
         const timer = setTimeout(() => {
-          log("generate-branch-name", "warn", "timeout \u2014 killing process");
+          log2("generate-branch-name", "warn", "timeout \u2014 killing process");
           try {
             child.kill();
           } catch {
@@ -55533,22 +61267,22 @@ Branch name:`;
         });
         child.on("error", (e2) => {
           clearTimeout(timer);
-          log("generate-branch-name", "warn", `spawn error: ${e2.message}`);
+          log2("generate-branch-name", "warn", `spawn error: ${e2.message}`);
           resolve(1);
         });
       });
-      log("generate-branch-name", "info", `exit=${exitCode} stdout=${stdout.length}b stderr=${stderr.slice(0, 200)}`);
+      log2("generate-branch-name", "info", `exit=${exitCode} stdout=${stdout.length}b stderr=${stderr.slice(0, 200)}`);
       if (exitCode !== 0 || !stdout) {
         json(res, { branchName: "" });
         return true;
       }
       const parsed = JSON.parse(stdout);
       const raw = (parsed.result || "").trim();
-      log("generate-branch-name", "info", `raw="${raw}"`);
+      log2("generate-branch-name", "info", `raw="${raw}"`);
       const branchName = raw.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
       json(res, { branchName });
     } catch (err) {
-      log("generate-branch-name", "warn", `generation failed: ${err.message}`);
+      log2("generate-branch-name", "warn", `generation failed: ${err.message}`);
       json(res, { branchName: "" });
     }
     return true;
@@ -55573,7 +61307,7 @@ Branch name:`;
 
 // src/commands/serve/routes/providers.js
 function buildProviderRoutes(ctx) {
-  const { json, error, log } = ctx;
+  const { json, error, log: log2 } = ctx;
   async function handle(req, res, url) {
     if (req.method !== "GET" || url.pathname !== "/agent/providers") return false;
     try {
@@ -55592,7 +61326,7 @@ function buildProviderRoutes(ctx) {
       });
       json(res, { providers });
     } catch (err) {
-      log("agent", "error", `Failed to load providers: ${err.message}`);
+      log2("agent", "error", `Failed to load providers: ${err.message}`);
       error(res, `Failed to load providers: ${err.message}`, 500);
     }
     return true;
@@ -55600,12 +61334,978 @@ function buildProviderRoutes(ctx) {
   return { handle };
 }
 
+// src/commands/serve/routes/analytics.js
+var import_fs53 = require("fs");
+var import_path58 = require("path");
+var import_os25 = require("os");
+function buildAnalyticsRoutes(ctx) {
+  const { json, error } = ctx;
+  function handle(req, res, url) {
+    if (req.method !== "GET") return false;
+    if (!isDatabaseInitialized()) {
+      return error(res, "Database not initialized", 503), true;
+    }
+    const db3 = getDb();
+    const params = url.searchParams;
+    if (url.pathname === "/analytics/tools") {
+      const sessionId = params.get("session_id");
+      const canonical = params.get("canonical");
+      const limit2 = Math.min(parseInt(params.get("limit") || "50", 10), 200);
+      let sql = `
+        SELECT
+          canonical_name,
+          tool_name,
+          COUNT(*) as call_count,
+          SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as success_count,
+          SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as error_count,
+          AVG(duration_ms) as avg_duration_ms
+        FROM tool_calls
+        WHERE 1=1
+      `;
+      const binds = [];
+      if (sessionId) {
+        sql += ` AND session_id = ?`;
+        binds.push(sessionId);
+      }
+      if (canonical) {
+        sql += ` AND canonical_name = ?`;
+        binds.push(canonical);
+      }
+      sql += ` GROUP BY canonical_name, tool_name ORDER BY call_count DESC LIMIT ?`;
+      binds.push(limit2);
+      const rows = db3.prepare(sql).all(...binds);
+      json(res, { tools: rows });
+      return true;
+    }
+    if (url.pathname === "/analytics/tools/files") {
+      const sessionId = params.get("session_id");
+      const limit2 = Math.min(parseInt(params.get("limit") || "30", 10), 100);
+      let sql = `
+        SELECT
+          file_path,
+          COUNT(*) as touch_count,
+          COUNT(DISTINCT canonical_name) as tool_types,
+          GROUP_CONCAT(DISTINCT canonical_name) as tools_used,
+          SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as error_count
+        FROM tool_calls
+        WHERE file_path IS NOT NULL
+      `;
+      const binds = [];
+      if (sessionId) {
+        sql += ` AND session_id = ?`;
+        binds.push(sessionId);
+      }
+      sql += ` GROUP BY file_path ORDER BY touch_count DESC LIMIT ?`;
+      binds.push(limit2);
+      const rows = db3.prepare(sql).all(...binds);
+      json(res, { files: rows });
+      return true;
+    }
+    if (url.pathname === "/analytics/tools/timeline") {
+      const sessionId = params.get("session_id");
+      if (!sessionId) {
+        return error(res, "session_id required"), true;
+      }
+      const limit2 = Math.min(parseInt(params.get("limit") || "200", 10), 500);
+      const rows = db3.prepare(`
+        SELECT
+          id, turn_id, tool_name, canonical_name, file_path,
+          success, error_message, duration_ms,
+          input_preview, output_preview, ts_ms
+        FROM tool_calls
+        WHERE session_id = ?
+        ORDER BY ts_ms ASC
+        LIMIT ?
+      `).all(sessionId, limit2);
+      json(res, { timeline: rows });
+      return true;
+    }
+    if (url.pathname === "/analytics/tools/errors") {
+      const sessionId = params.get("session_id");
+      const limit2 = Math.min(parseInt(params.get("limit") || "50", 10), 200);
+      let sql = `
+        SELECT
+          id, session_id, turn_id, tool_name, canonical_name,
+          file_path, error_message, input_preview, ts_ms
+        FROM tool_calls
+        WHERE success = 0
+      `;
+      const binds = [];
+      if (sessionId) {
+        sql += ` AND session_id = ?`;
+        binds.push(sessionId);
+      }
+      sql += ` ORDER BY ts_ms DESC LIMIT ?`;
+      binds.push(limit2);
+      const rows = db3.prepare(sql).all(...binds);
+      json(res, { errors: rows });
+      return true;
+    }
+    if (url.pathname === "/analytics/session-summary") {
+      const sessionId = params.get("session_id");
+      if (!sessionId) {
+        return error(res, "session_id required"), true;
+      }
+      const session = db3.prepare(`
+        SELECT
+          id, provider, title, status, model,
+          turn_count, total_cost, total_input_tokens, total_output_tokens, total_duration_ms,
+          created_at, last_active_at
+        FROM sessions
+        WHERE id = ?
+      `).get(sessionId);
+      if (!session) {
+        return error(res, "Session not found", 404), true;
+      }
+      const toolBreakdown = db3.prepare(`
+        SELECT
+          canonical_name,
+          COUNT(*) as count,
+          SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as error_count
+        FROM tool_calls
+        WHERE session_id = ?
+        GROUP BY canonical_name
+        ORDER BY count DESC
+      `).all(sessionId);
+      const fileBreakdown = db3.prepare(`
+        SELECT
+          file_path,
+          SUM(CASE WHEN canonical_name = 'file_read' THEN 1 ELSE 0 END) as read_count,
+          SUM(CASE WHEN canonical_name = 'file_edit' THEN 1 ELSE 0 END) as edit_count,
+          SUM(CASE WHEN canonical_name = 'file_write' THEN 1 ELSE 0 END) as write_count
+        FROM tool_calls
+        WHERE session_id = ? AND file_path IS NOT NULL
+        GROUP BY file_path
+        ORDER BY (read_count + edit_count + write_count) DESC
+      `).all(sessionId);
+      const topErrors = db3.prepare(`
+        SELECT
+          tool_name,
+          error_message,
+          COUNT(*) as count
+        FROM tool_calls
+        WHERE session_id = ? AND success = 0
+        GROUP BY tool_name, error_message
+        ORDER BY count DESC
+        LIMIT 10
+      `).all(sessionId);
+      json(res, {
+        session: {
+          id: session.id,
+          provider: session.provider,
+          title: session.title,
+          status: session.status,
+          model: session.model,
+          total_turns: session.turn_count,
+          total_cost: session.total_cost,
+          total_input_tokens: session.total_input_tokens,
+          total_output_tokens: session.total_output_tokens,
+          total_duration_ms: session.total_duration_ms,
+          created_at: session.created_at,
+          last_active_at: session.last_active_at
+        },
+        tool_breakdown: toolBreakdown,
+        file_breakdown: fileBreakdown,
+        top_errors: topErrors
+      });
+      return true;
+    }
+    if (url.pathname === "/analytics/overview") {
+      const totalSessions = db3.prepare(`SELECT COUNT(*) as count FROM sessions`).get().count;
+      const totalCost = db3.prepare(`SELECT SUM(total_cost) as sum FROM sessions`).get().sum || 0;
+      const totalToolCalls = db3.prepare(`SELECT COUNT(*) as count FROM tool_calls`).get().count;
+      const sessionsByProvider = db3.prepare(`
+        SELECT
+          provider,
+          COUNT(*) as count,
+          SUM(total_cost) as total_cost
+        FROM sessions
+        GROUP BY provider
+        ORDER BY count DESC
+      `).all();
+      const toolUsage = db3.prepare(`
+        SELECT
+          canonical_name,
+          COUNT(*) as count,
+          CAST(SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) AS REAL) / COUNT(*) as success_rate
+        FROM tool_calls
+        GROUP BY canonical_name
+        ORDER BY count DESC
+        LIMIT 15
+      `).all();
+      const recentSessions = db3.prepare(`
+        SELECT
+          id, title, provider, total_cost, turn_count, created_at
+        FROM sessions
+        ORDER BY created_at DESC
+        LIMIT 10
+      `).all();
+      json(res, {
+        total_sessions: totalSessions,
+        total_cost: totalCost,
+        total_tool_calls: totalToolCalls,
+        sessions_by_provider: sessionsByProvider,
+        tool_usage_by_canonical: toolUsage,
+        recent_sessions: recentSessions
+      });
+      return true;
+    }
+    if (url.pathname === "/analytics/daily-activity") {
+      const days = parseInt(params.get("days") || "30", 10);
+      if (isNaN(days) || days < 1 || days > 365) {
+        return error(res, "days must be integer 1-365", 400), true;
+      }
+      const rows = db3.prepare(`
+        SELECT
+          DATE(last_active_at) as date,
+          provider,
+          COUNT(*) as sessions,
+          SUM(turn_count) as turns,
+          SUM(total_cost) as cost
+        FROM sessions
+        WHERE last_active_at > datetime('now', ?)
+          AND status != 'deleted'
+        GROUP BY DATE(last_active_at), provider
+        ORDER BY date DESC, provider
+      `).all(`-${days} days`);
+      json(res, { activity: rows });
+      return true;
+    }
+    if (url.pathname === "/analytics/cost-breakdown") {
+      const byProvider = db3.prepare(`
+        SELECT provider, SUM(total_cost) as cost, COUNT(*) as sessions
+        FROM sessions WHERE status != 'deleted'
+        GROUP BY provider ORDER BY cost DESC
+      `).all();
+      const byMonth = db3.prepare(`
+        SELECT strftime('%Y-%m', last_active_at) as month,
+               SUM(total_cost) as cost, SUM(turn_count) as turns
+        FROM sessions WHERE status != 'deleted'
+        GROUP BY strftime('%Y-%m', last_active_at)
+        ORDER BY month DESC LIMIT 12
+      `).all();
+      const totalRow = db3.prepare(`
+        SELECT SUM(total_cost) as total FROM sessions WHERE status != 'deleted'
+      `).get();
+      json(res, {
+        total: totalRow?.total || 0,
+        byProvider: byProvider.reduce((acc, r2) => {
+          acc[r2.provider] = { cost: r2.cost || 0, sessions: r2.sessions };
+          return acc;
+        }, {}),
+        byMonth
+      });
+      return true;
+    }
+    if (url.pathname === "/analytics/stats") {
+      const period = params.get("period") || "month";
+      const validPeriods = { day: "-1 day", week: "-7 days", month: "-30 days", year: "-365 days" };
+      if (!validPeriods[period]) {
+        return error(res, "period must be day|week|month|year", 400), true;
+      }
+      const offset = validPeriods[period];
+      const stats = db3.prepare(`
+        SELECT COUNT(*) as sessions, SUM(turn_count) as turns,
+               SUM(total_cost) as cost, SUM(total_input_tokens) as input_tokens,
+               SUM(total_output_tokens) as output_tokens
+        FROM sessions WHERE last_active_at > datetime('now', ?) AND status != 'deleted'
+      `).get(offset);
+      json(res, {
+        period,
+        sessions: stats?.sessions || 0,
+        turns: stats?.turns || 0,
+        cost: stats?.cost || 0,
+        inputTokens: stats?.input_tokens || 0,
+        outputTokens: stats?.output_tokens || 0
+      });
+      return true;
+    }
+    if (url.pathname === "/analytics/cost-timeline") {
+      const sessionId = params.get("session_id");
+      if (!sessionId) {
+        return error(res, "session_id required", 400), true;
+      }
+      const turns = db3.prepare(`
+        SELECT turn_number, model, cost, input_tokens, output_tokens,
+               cache_read_tokens, cache_creation_tokens, ts_ms
+        FROM turns WHERE session_id = ? ORDER BY turn_number ASC
+      `).all(sessionId);
+      let totalInput = 0, totalCacheRead = 0;
+      for (const t2 of turns) {
+        totalInput += t2.input_tokens || 0;
+        totalCacheRead += t2.cache_read_tokens || 0;
+      }
+      const cacheEfficiency = totalInput + totalCacheRead > 0 ? totalCacheRead / (totalInput + totalCacheRead) : 0;
+      json(res, { turns, cacheEfficiency });
+      return true;
+    }
+    if (url.pathname === "/analytics/stats-cache") {
+      const cachePath = (0, import_path58.join)((0, import_os25.homedir)(), ".claude", "stats-cache.json");
+      if (!(0, import_fs53.existsSync)(cachePath)) {
+        return error(res, "Stats cache not found", 404), true;
+      }
+      try {
+        const data = JSON.parse((0, import_fs53.readFileSync)(cachePath, "utf-8"));
+        json(res, data);
+      } catch (e2) {
+        return error(res, "Failed to read stats cache", 500), true;
+      }
+      return true;
+    }
+    return false;
+  }
+  return { handle };
+}
+
+// src/commands/serve/routes/plans.js
+var import_node_fs3 = require("node:fs");
+var import_node_path = require("node:path");
+var import_node_os2 = require("node:os");
+function buildPlansRoutes(ctx) {
+  const { json, error } = ctx;
+  const plansDir = (0, import_node_path.join)((0, import_node_os2.homedir)(), ".claude", "plans");
+  function extractTitle(content) {
+    const match = content.match(/^#\s+(.+)$/m);
+    return match ? match[1].trim() : null;
+  }
+  function handle(req, res, url) {
+    if (req.method !== "GET") return false;
+    if (url.pathname === "/plans") {
+      if (!(0, import_node_fs3.existsSync)(plansDir)) {
+        json(res, { plans: [] });
+        return true;
+      }
+      try {
+        const files = (0, import_node_fs3.readdirSync)(plansDir).filter((f2) => f2.endsWith(".md"));
+        const plans = files.map((f2) => {
+          const filePath = (0, import_node_path.join)(plansDir, f2);
+          const stat = (0, import_node_fs3.statSync)(filePath);
+          const id = f2.replace(/\.md$/, "");
+          let title = id;
+          try {
+            const content = (0, import_node_fs3.readFileSync)(filePath, "utf-8");
+            const extracted = extractTitle(content);
+            if (extracted) title = extracted;
+          } catch {
+          }
+          return {
+            id,
+            title,
+            createdAt: stat.mtime.toISOString(),
+            sizeBytes: stat.size
+          };
+        });
+        plans.sort((a2, b2) => new Date(b2.createdAt) - new Date(a2.createdAt));
+        json(res, { plans });
+      } catch (e2) {
+        error(res, "Failed to read plans directory", 500);
+      }
+      return true;
+    }
+    if (url.pathname.startsWith("/plans/")) {
+      const id = url.pathname.slice("/plans/".length);
+      if (!id || !/^[a-z0-9-]+$/.test(id)) {
+        error(res, "Invalid plan ID", 400);
+        return true;
+      }
+      const filePath = (0, import_node_path.join)(plansDir, `${id}.md`);
+      if (!(0, import_node_fs3.existsSync)(filePath)) {
+        error(res, "Plan not found", 404);
+        return true;
+      }
+      try {
+        const content = (0, import_node_fs3.readFileSync)(filePath, "utf-8");
+        const stat = (0, import_node_fs3.statSync)(filePath);
+        const title = extractTitle(content) || id;
+        json(res, {
+          id,
+          title,
+          content,
+          createdAt: stat.mtime.toISOString(),
+          sizeBytes: stat.size
+        });
+      } catch (e2) {
+        error(res, "Failed to read plan", 500);
+      }
+      return true;
+    }
+    return false;
+  }
+  return { handle };
+}
+
+// src/commands/serve/routes/packages.js
+var import_crypto13 = __toESM(require("crypto"), 1);
+var fs57 = __toESM(require("fs/promises"), 1);
+var fsSync3 = __toESM(require("fs"), 1);
+var import_path59 = __toESM(require("path"), 1);
+var import_child_process30 = require("child_process");
+init_src4();
+var VALID_KINDS = /* @__PURE__ */ new Set(["stack", "prompt", "runtime", "binary", "agent"]);
+var SECRET_NAME_RE = /^[A-Z][A-Z0-9_]*$/;
+var JOB_TTL_MS = 10 * 60 * 1e3;
+var MAX_QUERY_LENGTH = 200;
+var defaultDeps = {
+  addStack,
+  getMaskedSecrets,
+  getSecret,
+  hasSecret,
+  installPackage,
+  listPackages,
+  readRudiConfig,
+  removeSecret,
+  removeStack,
+  resolvePackage,
+  searchPackages,
+  setSecret,
+  updateSecretStatus
+};
+function normalizeKind(rawKind) {
+  const kind2 = typeof rawKind === "string" ? rawKind.trim() : "";
+  if (!kind2) return null;
+  return VALID_KINDS.has(kind2) ? kind2 : null;
+}
+function projectPackage(pkg, fallbackKind = null) {
+  const kind2 = pkg.kind || fallbackKind || null;
+  return {
+    id: pkg.id || (kind2 && pkg.name ? `${kind2}:${pkg.name}` : null),
+    kind: kind2,
+    name: pkg.name || null,
+    description: pkg.description || "",
+    version: pkg.version || null,
+    category: pkg.category || null,
+    tags: Array.isArray(pkg.tags) ? pkg.tags : [],
+    requires: pkg.requires || null
+  };
+}
+function projectInstalledStacks(config) {
+  const stacks = {};
+  for (const [stackId, stackConfig] of Object.entries(config?.stacks || {})) {
+    stacks[stackId] = {
+      version: stackConfig.version || null,
+      installedAt: stackConfig.installedAt || null,
+      secrets: Array.isArray(stackConfig.secrets) ? stackConfig.secrets : []
+    };
+  }
+  return stacks;
+}
+async function loadManifest3(installPath) {
+  const manifestPath = import_path59.default.join(installPath, "manifest.json");
+  try {
+    const content = await fs57.readFile(manifestPath, "utf-8");
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
+}
+function getBundledBinary2(runtime, binary) {
+  const platform = process.platform;
+  const rudiHome = process.env.RUDI_HOME || import_path59.default.join(process.env.HOME || process.env.USERPROFILE || "", ".rudi");
+  if (runtime === "node") {
+    const npmPath = platform === "win32" ? import_path59.default.join(rudiHome, "runtimes", "node", "npm.cmd") : import_path59.default.join(rudiHome, "runtimes", "node", "bin", "npm");
+    if (fsSync3.existsSync(npmPath)) return npmPath;
+  }
+  if (runtime === "python") {
+    const pipPath = platform === "win32" ? import_path59.default.join(rudiHome, "runtimes", "python", "Scripts", "pip.exe") : import_path59.default.join(rudiHome, "runtimes", "python", "bin", "pip3");
+    if (fsSync3.existsSync(pipPath)) return pipPath;
+  }
+  return binary;
+}
+function getStackRuntime2(manifest) {
+  return manifest?.runtime || manifest?.mcp?.runtime || "node";
+}
+function getStackCommand2(manifest) {
+  let command = manifest?.command;
+  if ((!command || command.length === 0) && manifest?.mcp?.command) {
+    const mcpArgs = manifest.mcp.args || [];
+    command = [manifest.mcp.command, ...mcpArgs];
+  }
+  return command;
+}
+function getNodeProjectInfo2(stackPath) {
+  const candidates = [stackPath, import_path59.default.join(stackPath, "node")];
+  for (const root of candidates) {
+    const packageJsonPath = import_path59.default.join(root, "package.json");
+    if (!fsSync3.existsSync(packageJsonPath)) continue;
+    try {
+      const content = fsSync3.readFileSync(packageJsonPath, "utf-8");
+      const packageJson = JSON.parse(content);
+      return { root, packageJsonPath, packageJson };
+    } catch (error) {
+      return { root, packageJsonPath, error: error.message };
+    }
+  }
+  return null;
+}
+function getManifestSecrets2(manifest) {
+  return manifest?.requires?.secrets || manifest?.secrets || [];
+}
+function getSecretName2(secret) {
+  if (typeof secret === "string") return secret;
+  return secret?.name || secret?.key;
+}
+function getStackEntryPoint2(stackPath, manifest) {
+  const command = getStackCommand2(manifest);
+  if (!command || command.length === 0) {
+    return { entryArg: null, entryPath: null, error: "No command defined in manifest" };
+  }
+  const skipCommands = [
+    "node",
+    "python",
+    "python3",
+    "npx",
+    "deno",
+    "bun",
+    "tsx",
+    "ts-node",
+    "tsm",
+    "esno",
+    "esbuild-register",
+    "-y",
+    "--yes"
+  ];
+  const fileExtensions = [".js", ".ts", ".mjs", ".cjs", ".py", ".mts", ".cts"];
+  for (const arg of command) {
+    if (skipCommands.includes(arg) || arg.startsWith("-")) continue;
+    const looksLikeFile = fileExtensions.some((ext) => arg.endsWith(ext)) || arg.includes("/");
+    if (!looksLikeFile) continue;
+    return {
+      entryArg: arg,
+      entryPath: import_path59.default.join(stackPath, arg)
+    };
+  }
+  return { entryArg: null, entryPath: null };
+}
+function validateStackEntryPoint2(stackPath, manifest) {
+  const entryPoint = getStackEntryPoint2(stackPath, manifest);
+  if (entryPoint.error) return { valid: false, error: entryPoint.error };
+  if (!entryPoint.entryPath) return { valid: true };
+  if (!fsSync3.existsSync(entryPoint.entryPath)) {
+    return { valid: false, error: `Entry point not found: ${entryPoint.entryArg}` };
+  }
+  return { valid: true };
+}
+async function buildStackIfNeeded2(stackPath, manifest, onProgress) {
+  if (getStackRuntime2(manifest) !== "node") {
+    return { built: false, reason: "Non-node runtime" };
+  }
+  const entryPoint = getStackEntryPoint2(stackPath, manifest);
+  if (entryPoint.error) {
+    return { built: false, reason: entryPoint.error };
+  }
+  if (!entryPoint.entryPath || fsSync3.existsSync(entryPoint.entryPath)) {
+    return { built: false, reason: "Entry point already present" };
+  }
+  const project = getNodeProjectInfo2(stackPath);
+  if (!project) return { built: false, reason: "No package.json" };
+  if (project.error) throw new Error(`Failed to read package.json: ${project.error}`);
+  if (!project.packageJson?.scripts?.build) {
+    return { built: false, reason: "No build script" };
+  }
+  onProgress?.({ phase: "building" });
+  const npmCmd = getBundledBinary2("node", "npm");
+  try {
+    (0, import_child_process30.execSync)(`"${npmCmd}" run build`, {
+      cwd: project.root,
+      stdio: "pipe"
+    });
+  } catch (buildError) {
+    const stderr = buildError.stderr?.toString() || "";
+    const stdout = buildError.stdout?.toString() || "";
+    const output = stderr || stdout || buildError.message;
+    throw new Error(`Build failed:
+${output}`);
+  }
+  return { built: true };
+}
+async function checkSecrets3(manifest, deps) {
+  const found = [];
+  const missing = [];
+  for (const secret of getManifestSecrets2(manifest)) {
+    const name = getSecretName2(secret);
+    if (!name) continue;
+    const isRequired = typeof secret === "object" ? secret.required !== false : true;
+    const exists = await deps.hasSecret(name);
+    if (exists) {
+      found.push(name);
+    } else if (isRequired) {
+      missing.push(name);
+    }
+  }
+  return { found, missing };
+}
+async function parseEnvExample2(installPath) {
+  const examplePath = import_path59.default.join(installPath, ".env.example");
+  try {
+    const content = await fs57.readFile(examplePath, "utf-8");
+    const keys = [];
+    for (const line of content.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const match = trimmed.match(/^([A-Z][A-Z0-9_]*)=/);
+      if (match) keys.push(match[1]);
+    }
+    return keys;
+  } catch {
+    return [];
+  }
+}
+async function cleanupFailedStackInstall2(stackId, stackPath, removeConfig, deps) {
+  if (stackPath) {
+    try {
+      await fs57.rm(stackPath, { recursive: true, force: true });
+    } catch {
+    }
+  }
+  if (removeConfig && stackId) {
+    try {
+      deps.removeStack(stackId);
+    } catch {
+    }
+  }
+}
+async function defaultInstallAndRegisterPackage({ id, force, onProgress }, deps) {
+  const resolved = await deps.resolvePackage(id);
+  const installResult = await deps.installPackage(id, {
+    force,
+    onProgress
+  });
+  if (!installResult?.success) {
+    throw new Error(installResult?.error || `Installation failed for ${id}`);
+  }
+  if (resolved.kind !== "stack") {
+    return {
+      id: installResult.id,
+      kind: resolved.kind,
+      path: installResult.path,
+      version: resolved.version || null,
+      installed: installResult.installed || [],
+      alreadyInstalled: !!installResult.alreadyInstalled
+    };
+  }
+  let stackRegistered = false;
+  try {
+    onProgress?.({ phase: "loading_manifest" });
+    const manifest = await loadManifest3(installResult.path);
+    if (!manifest) {
+      throw new Error("Stack manifest not found after install");
+    }
+    const buildResult = await buildStackIfNeeded2(installResult.path, manifest, onProgress);
+    const validation = validateStackEntryPoint2(installResult.path, manifest);
+    if (!validation.valid) {
+      throw new Error(`Stack validation failed: ${validation.error}`);
+    }
+    onProgress?.({ phase: "registering" });
+    deps.addStack(installResult.id, {
+      path: installResult.path,
+      runtime: getStackRuntime2(manifest),
+      command: getStackCommand2(manifest),
+      secrets: getManifestSecrets2(manifest),
+      version: manifest.version
+    });
+    stackRegistered = true;
+    onProgress?.({ phase: "configuring_secrets" });
+    const { found, missing } = await checkSecrets3(manifest, deps);
+    const envExampleKeys = await parseEnvExample2(installResult.path);
+    for (const key of envExampleKeys) {
+      if (found.includes(key) || missing.includes(key)) continue;
+      const exists = await deps.hasSecret(key);
+      if (exists) found.push(key);
+      else missing.push(key);
+    }
+    for (const key of missing) {
+      const existing = await deps.getSecret(key);
+      if (existing === null) {
+        await deps.setSecret(key, "");
+      }
+      try {
+        deps.updateSecretStatus(key, false, "secrets.json");
+      } catch {
+      }
+    }
+    for (const key of found) {
+      try {
+        deps.updateSecretStatus(key, true, "secrets.json");
+      } catch {
+      }
+    }
+    return {
+      id: installResult.id,
+      kind: "stack",
+      path: installResult.path,
+      version: manifest.version || resolved.version || null,
+      installed: installResult.installed || [],
+      alreadyInstalled: !!installResult.alreadyInstalled,
+      built: !!buildResult.built,
+      secrets: { found, missing }
+    };
+  } catch (error) {
+    if (!installResult.alreadyInstalled) {
+      await cleanupFailedStackInstall2(installResult.id, installResult.path, stackRegistered, deps);
+    }
+    throw error;
+  }
+}
+function buildPackageRoutes(ctx, overrides = {}) {
+  const { json, error, readBody, log: log2, broadcast: broadcast2 } = ctx;
+  const deps = { ...defaultDeps, ...overrides };
+  if (!overrides.installAndRegisterPackage) {
+    deps.installAndRegisterPackage = (options) => defaultInstallAndRegisterPackage(options, deps);
+  }
+  const jobs = /* @__PURE__ */ new Map();
+  const expiryTimers = /* @__PURE__ */ new Map();
+  const activeInstallJobs = /* @__PURE__ */ new Map();
+  let activeInstallJobId = null;
+  function clearJobExpiry(jobId) {
+    const timer = expiryTimers.get(jobId);
+    if (timer) {
+      clearTimeout(timer);
+      expiryTimers.delete(jobId);
+    }
+  }
+  function expireJob(jobId) {
+    clearJobExpiry(jobId);
+    jobs.delete(jobId);
+  }
+  function scheduleJobExpiry(jobId) {
+    clearJobExpiry(jobId);
+    const timer = setTimeout(() => expireJob(jobId), JOB_TTL_MS);
+    timer.unref?.();
+    expiryTimers.set(jobId, timer);
+  }
+  function updateJobProgress(job, progress = {}) {
+    const next = {
+      phase: typeof progress.phase === "string" ? progress.phase : "working",
+      detail: progress.detail || progress.message || null
+    };
+    if (Number.isFinite(progress.current)) next.current = progress.current;
+    if (Number.isFinite(progress.total)) next.total = progress.total;
+    job.progress = next;
+    job.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    broadcast2("package:progress", {
+      jobId: job.jobId,
+      id: job.id,
+      ...next
+    });
+  }
+  async function handle(req, res, url) {
+    if (req.method === "GET" && url.pathname === "/packages/search") {
+      const query = (url.searchParams.get("q") || "").trim().slice(0, MAX_QUERY_LENGTH);
+      if (!query) return error(res, "q required", 400);
+      const rawKind = url.searchParams.get("kind");
+      const kind2 = rawKind == null ? null : normalizeKind(rawKind);
+      if (rawKind != null && !kind2) return error(res, "invalid kind", 400);
+      try {
+        const packages = await deps.searchPackages(query, kind2 ? { kind: kind2 } : {});
+        json(res, { packages: packages.map((pkg) => projectPackage(pkg)) });
+      } catch (err) {
+        log2("packages", "error", `package search failed: ${err.message}`);
+        error(res, `Package search failed: ${err.message}`, 500);
+      }
+      return true;
+    }
+    if (req.method === "GET" && url.pathname === "/packages/list") {
+      const kind2 = normalizeKind(url.searchParams.get("kind"));
+      if (!kind2) return error(res, "valid kind required", 400);
+      try {
+        const packages = await deps.listPackages(kind2);
+        json(res, { packages: packages.map((pkg) => projectPackage(pkg, kind2)) });
+      } catch (err) {
+        log2("packages", "error", `package list failed: ${err.message}`);
+        error(res, `Package list failed: ${err.message}`, 500);
+      }
+      return true;
+    }
+    if (req.method === "GET" && url.pathname === "/packages/installed") {
+      try {
+        const config = deps.readRudiConfig() || { stacks: {} };
+        json(res, { stacks: projectInstalledStacks(config) });
+      } catch (err) {
+        log2("packages", "error", `installed package read failed: ${err.message}`);
+        error(res, `Failed to read installed packages: ${err.message}`, 500);
+      }
+      return true;
+    }
+    const jobMatch = url.pathname.match(/^\/packages\/jobs\/([^/]+)$/);
+    if (req.method === "GET" && jobMatch) {
+      const jobId = decodeURIComponent(jobMatch[1]);
+      const job = jobs.get(jobId);
+      if (!job) return error(res, "job not found", 404);
+      json(res, {
+        jobId: job.jobId,
+        id: job.id,
+        status: job.status,
+        progress: job.progress,
+        result: job.result || null,
+        error: job.error || null,
+        createdAt: job.createdAt,
+        updatedAt: job.updatedAt,
+        completedAt: job.completedAt || null
+      });
+      return true;
+    }
+    if (req.method === "POST" && url.pathname === "/packages/install") {
+      const body = await readBody(req);
+      const id = typeof body.id === "string" ? body.id.trim() : "";
+      const force = body.force === true;
+      if (!id) return error(res, "id required", 400);
+      const existingJobId = activeInstallJobs.get(id);
+      if (existingJobId) {
+        const existingJob = jobs.get(existingJobId);
+        return json(res, {
+          jobId: existingJobId,
+          status: existingJob?.status || "running",
+          id,
+          reused: true
+        });
+      }
+      if (activeInstallJobId) {
+        const activeJob = jobs.get(activeInstallJobId);
+        return json(res, {
+          error: "another package install is already in progress",
+          activeJobId: activeInstallJobId,
+          activePackageId: activeJob?.id || null
+        }, 409);
+      }
+      const jobId = `job-${import_crypto13.default.randomUUID()}`;
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      const job = {
+        jobId,
+        id,
+        status: "running",
+        progress: { phase: "queued", detail: null },
+        createdAt: now,
+        updatedAt: now,
+        completedAt: null,
+        result: null,
+        error: null
+      };
+      jobs.set(jobId, job);
+      activeInstallJobs.set(id, jobId);
+      activeInstallJobId = jobId;
+      updateJobProgress(job, { phase: "starting" });
+      void (async () => {
+        try {
+          const result = await deps.installAndRegisterPackage({
+            id,
+            force,
+            onProgress: (progress) => updateJobProgress(job, progress)
+          });
+          job.status = "completed";
+          job.result = result;
+          job.completedAt = (/* @__PURE__ */ new Date()).toISOString();
+          job.updatedAt = job.completedAt;
+          broadcast2("package:complete", {
+            jobId,
+            id,
+            success: true,
+            result
+          });
+          log2("packages", "info", "package install completed", { jobId, id });
+        } catch (err) {
+          job.status = "failed";
+          job.error = err.message;
+          job.completedAt = (/* @__PURE__ */ new Date()).toISOString();
+          job.updatedAt = job.completedAt;
+          broadcast2("package:complete", {
+            jobId,
+            id,
+            success: false,
+            error: err.message
+          });
+          log2("packages", "warn", `package install failed: ${err.message}`, { jobId, id });
+        } finally {
+          activeInstallJobs.delete(id);
+          if (activeInstallJobId === jobId) activeInstallJobId = null;
+          scheduleJobExpiry(jobId);
+        }
+      })();
+      json(res, { jobId, status: "started", id });
+      return true;
+    }
+    if (req.method === "GET" && url.pathname === "/packages/secrets") {
+      try {
+        const secrets = await deps.getMaskedSecrets();
+        json(res, { secrets });
+      } catch (err) {
+        log2("packages", "error", `secret list failed: ${err.message}`);
+        error(res, `Failed to read secrets: ${err.message}`, 500);
+      }
+      return true;
+    }
+    if (req.method === "POST" && url.pathname === "/packages/secrets") {
+      const body = await readBody(req);
+      const name = typeof body.name === "string" ? body.name.trim() : "";
+      const value = typeof body.value === "string" ? body.value : null;
+      if (!SECRET_NAME_RE.test(name)) {
+        return error(res, "secret name must be UPPER_SNAKE_CASE", 400);
+      }
+      if (value === null) return error(res, "value required", 400);
+      try {
+        await deps.setSecret(name, value);
+        try {
+          deps.updateSecretStatus(name, value !== "", "secrets.json");
+        } catch {
+        }
+        json(res, { ok: true });
+      } catch (err) {
+        log2("packages", "error", `secret set failed: ${err.message}`);
+        error(res, `Failed to save secret: ${err.message}`, 500);
+      }
+      return true;
+    }
+    const secretDeleteMatch = url.pathname.match(/^\/packages\/secrets\/([^/]+)$/);
+    if (req.method === "DELETE" && secretDeleteMatch) {
+      const name = decodeURIComponent(secretDeleteMatch[1]).trim();
+      if (!SECRET_NAME_RE.test(name)) {
+        return error(res, "secret name must be UPPER_SNAKE_CASE", 400);
+      }
+      try {
+        await deps.removeSecret(name);
+        try {
+          deps.updateSecretStatus(name, false, "secrets.json");
+        } catch {
+        }
+        json(res, { ok: true });
+      } catch (err) {
+        log2("packages", "error", `secret delete failed: ${err.message}`);
+        error(res, `Failed to delete secret: ${err.message}`, 500);
+      }
+      return true;
+    }
+    return false;
+  }
+  function cleanup() {
+    for (const timer of expiryTimers.values()) {
+      clearTimeout(timer);
+    }
+    expiryTimers.clear();
+    jobs.clear();
+    activeInstallJobs.clear();
+    activeInstallJobId = null;
+  }
+  return { handle, cleanup };
+}
+
 // src/commands/serve.js
-var PORT_FILE = import_path53.default.join(PATHS.home, ".rudi-lite-port");
-var TOKEN_FILE = import_path53.default.join(PATHS.home, ".rudi-lite-token");
-var MAX_CONCURRENT = parseInt(process.env.RUDI_MAX_AGENT_PROCESSES || "10", 10) || 10;
-var IDLE_TIMEOUT_MS = parseInt(process.env.RUDI_IDLE_TIMEOUT_MS || String(10 * 60 * 1e3), 10) || 10 * 60 * 1e3;
+var PORT_FILE = import_path60.default.join(PATHS.home, ".rudi-lite-port");
+var TOKEN_FILE = import_path60.default.join(PATHS.home, ".rudi-lite-token");
 var WS_TOKEN_PROTOCOL_PREFIX = "rudi-token.";
+function clampedInt(value, { min = 0, max = Number.MAX_SAFE_INTEGER, fallback }) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(parsed, min), max);
+}
+var MAX_CONCURRENT = clampedInt(process.env.RUDI_MAX_AGENT_PROCESSES, {
+  min: 1,
+  max: 100,
+  fallback: 10
+});
+var IDLE_TIMEOUT_MS = clampedInt(process.env.RUDI_IDLE_TIMEOUT_MS, {
+  min: 6e4,
+  max: 36e5,
+  fallback: 10 * 60 * 1e3
+});
 function shouldRunInitialTurnBackfill(db3) {
   if (!db3 || typeof db3.prepare !== "function") return false;
   try {
@@ -55628,10 +62328,35 @@ function readWsTokenFromProtocolHeader(headerValue) {
   }
   return null;
 }
+var MIME_TYPES = {
+  ".html": "text/html",
+  ".js": "application/javascript",
+  ".mjs": "application/javascript",
+  ".css": "text/css",
+  ".json": "application/json",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".ico": "image/x-icon",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
+  ".wasm": "application/wasm"
+};
 async function cmdServe(args, flags) {
   const ctx = createInfrastructure();
-  const { log, broadcast, json, error, readBody, checkAuth: checkAuth4, generateToken, setWss, setToken } = ctx;
-  const agentProcesses = /* @__PURE__ */ new Map();
+  const { log: log2, broadcast: broadcast2, json, error, readBody, checkAuth: checkAuth4, generateToken, setWss, setToken } = ctx;
+  const webRoot = flags["web-root"] ? import_path60.default.resolve(flags["web-root"]) : null;
+  if (webRoot) {
+    if (!import_fs54.default.existsSync(import_path60.default.join(webRoot, "index.html"))) {
+      console.error(`[web-root] No index.html found in ${webRoot}`);
+      console.error("  Build the frontend first: cd lite && pnpm build");
+      process.exit(1);
+    }
+  }
+  const agentProcesses2 = /* @__PURE__ */ new Map();
   const resumeSessionIndex = /* @__PURE__ */ new Map();
   let _sessionsDb = null;
   let _sessionsDbChecked = false;
@@ -55647,8 +62372,8 @@ async function cmdServe(args, flags) {
     return _sessionsDb;
   }
   const sessionsModule = createSessionsModule({
-    log,
-    broadcast,
+    log: log2,
+    broadcast: broadcast2,
     json,
     error,
     readBody,
@@ -55670,9 +62395,13 @@ async function cmdServe(args, flags) {
     startTurnIngestReconcile,
     enableDbSpine,
     isDbSpineEnabled,
-    getTurnIngestStats
+    getTurnIngestStats,
+    backfillSessionTitles,
+    getTitleBackfillStats,
+    backfillSessionMetadata,
+    getMetadataBackfillStats
   } = sessionsModule;
-  runStartupTasks({ log });
+  runStartupTasks({ log: log2 });
   let sidecarPort = 0;
   let sidecarToken = "";
   const logsRoutes = buildLogsRoutes(ctx);
@@ -55684,15 +62413,18 @@ async function cmdServe(args, flags) {
   const terminalRoutes = buildTerminalRoutes(ctx);
   const suggestRoutes = buildSuggestRoutes(ctx);
   const providerRoutes = buildProviderRoutes(ctx);
+  const analyticsRoutes = buildAnalyticsRoutes(ctx);
+  const plansRoutes = buildPlansRoutes(ctx);
+  const packageRoutes = buildPackageRoutes(ctx);
   const handleGit = createGitHandler({ readBody, error, json });
   const handleAgent = createAgentHandler({
-    agentProcesses,
+    agentProcesses: agentProcesses2,
     resumeSessionIndex,
     readBody,
     error,
     json,
-    log,
-    broadcast,
+    log: log2,
+    broadcast: broadcast2,
     queueSessionsUpdated,
     maxConcurrent: MAX_CONCURRENT,
     getSidecarPort: () => sidecarPort,
@@ -55722,11 +62454,11 @@ async function cmdServe(args, flags) {
         error(res, "Unauthorized", 401);
         return;
       }
-      json(res, { home: import_os24.default.homedir(), platform: import_os24.default.platform() });
+      json(res, { home: import_os26.default.homedir(), platform: import_os26.default.platform() });
       return;
     }
     if (!checkAuth4(req)) {
-      log("http", "warn", `401 ${req.method} ${url.pathname}`);
+      log2("http", "warn", `401 ${req.method} ${url.pathname}`);
       error(res, "Unauthorized", 401);
       return;
     }
@@ -55749,6 +62481,9 @@ async function cmdServe(args, flags) {
       if (url.pathname.startsWith("/sessions")) {
         if (await handleSessions(req, res, url)) return;
       }
+      if (url.pathname.startsWith("/packages")) {
+        if (await packageRoutes.handle(req, res, url)) return;
+      }
       if (url.pathname.startsWith("/git/")) {
         if (await handleGit(req, res, url)) return;
       }
@@ -55763,6 +62498,12 @@ async function cmdServe(args, flags) {
       if (url.pathname.startsWith("/terminal/")) {
         if (await terminalRoutes.handle(req, res, url)) return;
       }
+      if (url.pathname.startsWith("/analytics/")) {
+        if (analyticsRoutes.handle(req, res, url)) return;
+      }
+      if (url.pathname.startsWith("/plans")) {
+        if (plansRoutes.handle(req, res, url)) return;
+      }
       if (url.pathname === "/admin/ingester" && req.method === "GET") {
         const stats = getTurnIngestStats();
         json(res, { status: stats.errors.length > 0 ? "degraded" : "healthy", ...stats });
@@ -55771,7 +62512,7 @@ async function cmdServe(args, flags) {
       if (url.pathname === "/admin/backfill" && req.method === "POST") {
         const stats = getTurnIngestStats();
         if (!stats.backfillRunning) {
-          backfillSessionTurnsToDb().then((result) => log("sessions", "info", "Manual backfill complete", result)).catch((err) => log("sessions", "warn", `Manual backfill failed: ${err.message}`));
+          backfillSessionTurnsToDb().then((result) => log2("sessions", "info", "Manual backfill complete", result)).catch((err) => log2("sessions", "warn", `Manual backfill failed: ${err.message}`));
           const next = getTurnIngestStats();
           json(res, {
             status: "started",
@@ -55798,7 +62539,7 @@ async function cmdServe(args, flags) {
         if (!stats.repairRunning) {
           const limitRaw = url.searchParams.get("limit");
           const limit2 = limitRaw ? Number.parseInt(limitRaw, 10) : 0;
-          repairNoTextSessionTurnsToDb({ limit: Number.isFinite(limit2) ? limit2 : 0 }).then((result) => log("sessions", "info", "Manual no-text repair complete", result)).catch((err) => log("sessions", "warn", `Manual no-text repair failed: ${err.message}`));
+          repairNoTextSessionTurnsToDb({ limit: Number.isFinite(limit2) ? limit2 : 0 }).then((result) => log2("sessions", "info", "Manual no-text repair complete", result)).catch((err) => log2("sessions", "warn", `Manual no-text repair failed: ${err.message}`));
           const next = getTurnIngestStats();
           json(res, {
             status: "started",
@@ -55820,15 +62561,77 @@ async function cmdServe(args, flags) {
         }
         return;
       }
-      log("http", "warn", `404 ${req.method} ${url.pathname}`);
+      if (url.pathname === "/admin/title-backfill" && req.method === "GET") {
+        json(res, getTitleBackfillStats());
+        return;
+      }
+      if (url.pathname === "/admin/title-backfill" && req.method === "POST") {
+        const stats = getTitleBackfillStats();
+        if (!stats.running) {
+          const useLlm = url.searchParams.get("llm") !== "false";
+          const minTurnsRaw = url.searchParams.get("minTurns");
+          const parsedMinTurns = minTurnsRaw == null ? 1 : Number.parseInt(minTurnsRaw, 10);
+          const minTurns = Number.isFinite(parsedMinTurns) && parsedMinTurns >= 0 ? parsedMinTurns : 1;
+          backfillSessionTitles({ llm: useLlm, minTurns }).then((result) => log2("sessions", "info", "Manual title backfill complete", result)).catch((err) => log2("sessions", "warn", `Manual title backfill failed: ${err.message}`));
+          json(res, { status: "started", ...getTitleBackfillStats() });
+        } else {
+          json(res, { status: "running", ...stats });
+        }
+        return;
+      }
+      if (url.pathname === "/admin/metadata-backfill" && req.method === "GET") {
+        json(res, getMetadataBackfillStats());
+        return;
+      }
+      if (url.pathname === "/admin/metadata-backfill" && req.method === "POST") {
+        const stats = getMetadataBackfillStats();
+        if (!stats.running) {
+          backfillSessionMetadata().then((result) => log2("sessions", "info", "Manual metadata backfill complete", result)).catch((err) => log2("sessions", "warn", `Manual metadata backfill failed: ${err.message}`));
+          json(res, { status: "started", ...getMetadataBackfillStats() });
+        } else {
+          json(res, { status: "running", ...stats });
+        }
+        return;
+      }
+      if (webRoot && req.method === "GET") {
+        const reqPath = decodeURIComponent(url.pathname);
+        const safePath = import_path60.default.normalize(reqPath).replace(/^(\.\.[/\\])+/, "");
+        let filePath = import_path60.default.join(webRoot, safePath);
+        let stat = null;
+        try {
+          stat = import_fs54.default.statSync(filePath);
+        } catch {
+        }
+        if (!stat || stat.isDirectory()) {
+          filePath = import_path60.default.join(webRoot, "index.html");
+          try {
+            stat = import_fs54.default.statSync(filePath);
+          } catch {
+            stat = null;
+          }
+        }
+        if (stat && stat.isFile()) {
+          const ext = import_path60.default.extname(filePath).toLowerCase();
+          const contentType = MIME_TYPES[ext] || "application/octet-stream";
+          res.writeHead(200, {
+            "Content-Type": contentType,
+            "Content-Length": stat.size,
+            "Cache-Control": ext === ".html" ? "no-cache" : "public, max-age=31536000, immutable"
+          });
+          import_fs54.default.createReadStream(filePath).pipe(res);
+          return;
+        }
+      }
+      log2("http", "warn", `404 ${req.method} ${url.pathname}`);
       error(res, "Not found", 404);
     } catch (err) {
-      log("http", "error", `500 ${req.method} ${url.pathname}: ${err.message}`, { stack: err.stack });
-      error(res, `Internal server error: ${err.message}`, 500);
+      const status = err.statusCode || 500;
+      log2("http", status >= 500 ? "error" : "warn", `${status} ${req.method} ${url.pathname}: ${err.message}`, { stack: status >= 500 ? err.stack : void 0 });
+      error(res, err.message, status);
     } finally {
       const ms = Date.now() - start;
       if (!url.pathname.startsWith("/logs") && url.pathname !== "/health") {
-        log("http", "info", `${req.method} ${url.pathname} ${ms}ms`);
+        log2("http", "info", `${req.method} ${url.pathname} ${ms}ms`);
       }
     }
   });
@@ -55852,8 +62655,9 @@ async function cmdServe(args, flags) {
     const protocolToken = readWsTokenFromProtocolHeader(req.headers["sec-websocket-protocol"]);
     const queryToken = url.searchParams.get("token");
     const presentedToken = protocolToken ?? queryToken;
-    if (presentedToken !== token) {
-      log("ws", "warn", "upgrade auth failed", {
+    const isSameOrigin = presentedToken === "same-origin" && (req.headers.host || "").match(/^(127\.0\.0\.1|localhost)(:|$)/);
+    if (presentedToken !== token && !isSameOrigin) {
+      log2("ws", "warn", "upgrade auth failed", {
         path: url.pathname,
         hasProtocolToken: !!protocolToken,
         hasQueryToken: !!queryToken
@@ -55866,7 +62670,7 @@ async function cmdServe(args, flags) {
     });
   });
   wss.on("connection", (ws) => {
-    log("ws", "info", `client connected (total: ${wss.clients.size})`, { protocol: ws.protocol || null });
+    log2("ws", "info", `client connected (total: ${wss.clients.size})`, { protocol: ws.protocol || null });
     ws.on("message", (raw) => {
       try {
         const msg = JSON.parse(typeof raw === "string" ? raw : raw.toString());
@@ -55875,15 +62679,15 @@ async function cmdServe(args, flags) {
       }
     });
     ws.on("close", () => {
-      log("ws", "info", `client disconnected (total: ${wss.clients.size})`);
+      log2("ws", "info", `client disconnected (total: ${wss.clients.size})`);
       handleSessionsWsDisconnect(ws);
     });
   });
   startSessionsWatcher();
   const stopIdleReaper = createIdleReaper({
-    agentProcesses,
-    broadcast,
-    log,
+    agentProcesses: agentProcesses2,
+    broadcast: broadcast2,
+    log: log2,
     idleTimeoutMs: IDLE_TIMEOUT_MS,
     maxConcurrent: MAX_CONCURRENT
   });
@@ -55891,16 +62695,22 @@ async function cmdServe(args, flags) {
     const actualPort = server.address().port;
     sidecarPort = actualPort;
     sidecarToken = token;
-    import_fs49.default.mkdirSync(PATHS.home, { recursive: true });
-    import_fs49.default.writeFileSync(PORT_FILE, String(actualPort), { mode: 384 });
-    import_fs49.default.writeFileSync(TOKEN_FILE, token, { mode: 384 });
+    import_fs54.default.mkdirSync(PATHS.home, { recursive: true });
+    import_fs54.default.writeFileSync(PORT_FILE, String(actualPort), { mode: 384 });
+    import_fs54.default.writeFileSync(TOKEN_FILE, token, { mode: 384 });
     console.log("");
     console.log("\u2550".repeat(50));
-    console.log("  RUDI Lite Server");
+    console.log(webRoot ? "  RUDI Dashboard" : "  RUDI Lite Server");
     console.log("\u2550".repeat(50));
+    if (webRoot) {
+      console.log(`  Open:  http://localhost:${actualPort}`);
+    }
     console.log(`  Port:  ${actualPort}`);
     console.log(`  Token: ${token.slice(0, 8)}...`);
     console.log(`  PID:   ${process.pid}`);
+    if (webRoot) {
+      console.log(`  Web:   ${webRoot}`);
+    }
     console.log("");
     console.log(`  Port file:  ${PORT_FILE}`);
     console.log(`  Token file: ${TOKEN_FILE}`);
@@ -55912,15 +62722,17 @@ async function cmdServe(args, flags) {
         const { c: c2 } = db3.prepare(`SELECT COUNT(*) as c FROM sessions WHERE status != 'deleted'`).get();
         if (c2 > 0) {
           enableDbSpine();
-          log("sessions", "info", `DB-as-spine enabled immediately (${c2} existing rows)`);
+          log2("sessions", "info", `DB-as-spine enabled immediately (${c2} existing rows)`);
         }
       } catch {
       }
     }
-    reconcileSessionsToDb().then(async () => {
+    reconcileSessionsToDb().catch((err) => {
+      log2("sessions", "warn", `Reconciliation failed (continuing): ${err.message}`);
+    }).then(async () => {
       if (!isDbSpineEnabled()) {
         enableDbSpine();
-        log("sessions", "info", "DB-as-spine enabled after reconciliation");
+        log2("sessions", "info", "DB-as-spine enabled after reconciliation");
       }
       try {
         const db4 = sessionsResolveDb();
@@ -55931,10 +62743,18 @@ async function cmdServe(args, flags) {
           await reconcileSessionTurnsToDb();
         }
       } catch (ingestErr) {
-        log("sessions", "warn", `Turn ingest reconcile failed: ${ingestErr.message}`);
+        log2("sessions", "warn", `Turn ingest reconcile failed: ${ingestErr.message}`);
       }
-    }).catch((err) => {
-      log("sessions", "warn", `Reconciliation failed: ${err.message}`);
+      try {
+        await backfillSessionTitles({ llm: true, minTurns: 1 });
+      } catch (titleErr) {
+        log2("sessions", "warn", `Title backfill failed: ${titleErr.message}`);
+      }
+      try {
+        await backfillSessionMetadata();
+      } catch (metaErr) {
+        log2("sessions", "warn", `Metadata backfill failed: ${metaErr.message}`);
+      }
     }).finally(() => {
       startPeriodicReconcile();
       startTurnIngestReconcile();
@@ -55945,14 +62765,14 @@ async function cmdServe(args, flags) {
     if (cleanupDone) return;
     cleanupDone = true;
     try {
-      import_fs49.default.unlinkSync(PORT_FILE);
+      import_fs54.default.unlinkSync(PORT_FILE);
     } catch {
     }
     try {
-      import_fs49.default.unlinkSync(TOKEN_FILE);
+      import_fs54.default.unlinkSync(TOKEN_FILE);
     } catch {
     }
-    for (const [, { proc }] of agentProcesses) {
+    for (const [, { proc }] of agentProcesses2) {
       try {
         proc.kill();
       } catch {
@@ -55961,6 +62781,7 @@ async function cmdServe(args, flags) {
     terminalRoutes.cleanup();
     fsRoutes.cleanup();
     suggestRoutes.cleanup();
+    packageRoutes.cleanup();
     resumeSessionIndex.clear();
     cleanupSessions();
     stopIdleReaper();
@@ -55969,13 +62790,192 @@ async function cmdServe(args, flags) {
   process.on("SIGINT", () => cleanup(0));
   process.on("SIGTERM", () => cleanup(0));
   process.on("uncaughtException", (err) => {
-    log("serve", "error", `Uncaught exception: ${err.message}`);
+    log2("serve", "error", `Uncaught exception: ${err.message}`);
     cleanup(1);
   });
   process.on("unhandledRejection", (err) => {
-    log("serve", "error", `Unhandled rejection: ${err}`);
+    log2("serve", "error", `Unhandled rejection: ${err}`);
     cleanup(1);
   });
+}
+
+// src/commands/parallel.js
+var import_fs56 = __toESM(require("fs"), 1);
+var import_path61 = __toESM(require("path"), 1);
+init_src();
+var PORT_FILE2 = import_path61.default.join(PATHS.home, ".rudi-lite-port");
+var TOKEN_FILE2 = import_path61.default.join(PATHS.home, ".rudi-lite-token");
+var TERMINAL_GROUP_STATES = /* @__PURE__ */ new Set(["completed", "partial", "failed", "stopped"]);
+var POLL_INTERVAL_MS = 2e3;
+function sleep2(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+function fmtUsd(value) {
+  const num = Number(value || 0);
+  return `$${num.toFixed(2)}`;
+}
+function pad(text, width) {
+  const str2 = String(text ?? "");
+  return str2.length >= width ? str2.slice(0, width) : str2 + " ".repeat(width - str2.length);
+}
+function readSidecarInfo() {
+  if (!import_fs56.default.existsSync(PORT_FILE2) || !import_fs56.default.existsSync(TOKEN_FILE2)) {
+    throw new Error("RUDI sidecar is not running. Start it with: rudi serve");
+  }
+  const portRaw = import_fs56.default.readFileSync(PORT_FILE2, "utf-8").trim();
+  const token = import_fs56.default.readFileSync(TOKEN_FILE2, "utf-8").trim();
+  const port = Number.parseInt(portRaw, 10);
+  if (!Number.isFinite(port) || port <= 0) {
+    throw new Error("Invalid sidecar port file. Restart sidecar with: rudi serve");
+  }
+  if (!token) {
+    throw new Error("Missing sidecar token. Restart sidecar with: rudi serve");
+  }
+  return { port, token };
+}
+async function sidecarRequest({ port, token, method, pathname, body }) {
+  const response = await fetch(`http://127.0.0.1:${port}${pathname}`, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      "X-Rudi-Token": token
+    },
+    body: body ? JSON.stringify(body) : void 0
+  });
+  const text = await response.text();
+  let parsed = null;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch {
+  }
+  if (!response.ok) {
+    const message = parsed?.message || parsed?.error || text || `HTTP ${response.status}`;
+    throw new Error(message);
+  }
+  return parsed || {};
+}
+function extractSessionStatus(session) {
+  return session.status || session.runtime_status || session.session_status || "unknown";
+}
+function extractSessionTurns(session) {
+  return Number(session.runtime_turn_count ?? session.turn_count ?? 0);
+}
+function extractSessionCost(session) {
+  return Number(session.runtime_cost_total ?? session.total_cost ?? 0);
+}
+function extractSessionName(session) {
+  return session.title_override || session.title || session.provider_session_id || session.id;
+}
+function clearTerminal() {
+  if (process.stdout.isTTY) {
+    process.stdout.write("\x1B[2J\x1B[H");
+  }
+}
+function renderProgress(group, sessions) {
+  const done = Number(group.completed_count || 0) + Number(group.failed_count || 0);
+  const total = Number(group.session_count || sessions.length || 0);
+  const title = group.name || group.id;
+  clearTerminal();
+  console.log(`RUDI Parallel: "${title}" (${total} tasks)
+`);
+  sessions.forEach((session, idx) => {
+    const status = extractSessionStatus(session);
+    const turns = extractSessionTurns(session);
+    const cost = extractSessionCost(session);
+    const name = extractSessionName(session);
+    const doneMark = status === "completed" ? " \u2713" : "";
+    console.log(
+      `  [${idx + 1}] ${pad(name, 12)} ${pad(status, 10)} ${pad(`${turns} turns`, 10)} ${fmtUsd(cost)}${doneMark}`
+    );
+  });
+  console.log(`
+Total: ${fmtUsd(group.total_cost || 0)} | ${done}/${total} completed`);
+}
+function printMergeHints(group, sessions) {
+  const baseBranch = group.base_branch || "main";
+  const lines = sessions.map((session) => ({
+    id: session.id,
+    branch: session.worktree_branch,
+    status: extractSessionStatus(session)
+  })).filter((row) => row.branch);
+  if (lines.length === 0) return;
+  console.log("\nBranches:");
+  for (const row of lines) {
+    const shortId = String(row.id).slice(0, 8);
+    console.log(`  - ${shortId} (${row.status}): ${row.branch}`);
+    console.log(`    git diff ${baseBranch}...${row.branch}`);
+  }
+}
+async function cmdParallel(args, flags) {
+  const tasks = args.map((value) => String(value || "").trim()).filter(Boolean);
+  if (tasks.length < 2) {
+    console.error('Usage: rudi parallel "task one" "task two" [more tasks] [--name "Batch"] [--provider claude] [--model sonnet]');
+    process.exit(1);
+  }
+  if (tasks.length > 10) {
+    console.error("rudi parallel supports at most 10 tasks per run-group");
+    process.exit(1);
+  }
+  let sidecar;
+  try {
+    sidecar = readSidecarInfo();
+  } catch (err) {
+    console.error(`Error: ${err.message}`);
+    process.exit(1);
+  }
+  const payload = {
+    name: typeof flags.name === "string" ? flags.name : null,
+    provider: typeof flags.provider === "string" ? flags.provider : "claude",
+    model: typeof flags.model === "string" ? flags.model : null,
+    baseBranch: typeof flags["base-branch"] === "string" ? flags["base-branch"] : null,
+    cwd: typeof flags.cwd === "string" ? flags.cwd : process.cwd(),
+    permissionMode: typeof flags["permission-mode"] === "string" ? flags["permission-mode"] : null,
+    systemPrompt: typeof flags["system-prompt"] === "string" ? flags["system-prompt"] : null,
+    executionMode: typeof flags["execution-mode"] === "string" ? flags["execution-mode"] : flags["no-worktree"] ? "shared_cwd" : "worktree",
+    useWorktree: flags["no-worktree"] ? false : true,
+    tasks: tasks.map((prompt) => ({ prompt }))
+  };
+  let created;
+  try {
+    created = await sidecarRequest({
+      ...sidecar,
+      method: "POST",
+      pathname: "/agent/run-group",
+      body: payload
+    });
+  } catch (err) {
+    console.error(`Error creating run-group: ${err.message}`);
+    process.exit(1);
+  }
+  const groupId = created.groupId;
+  if (!groupId) {
+    console.error("Error: sidecar did not return a run-group id");
+    process.exit(1);
+  }
+  let latest = null;
+  while (true) {
+    try {
+      latest = await sidecarRequest({
+        ...sidecar,
+        method: "GET",
+        pathname: `/agent/run-group/${encodeURIComponent(groupId)}`
+      });
+    } catch (err) {
+      console.error(`Error polling run-group: ${err.message}`);
+      process.exit(1);
+    }
+    const group2 = latest.group || {};
+    const sessions2 = Array.isArray(latest.sessions) ? latest.sessions : [];
+    renderProgress(group2, sessions2);
+    if (TERMINAL_GROUP_STATES.has(group2.status)) break;
+    await sleep2(POLL_INTERVAL_MS);
+  }
+  const group = latest.group || {};
+  const sessions = Array.isArray(latest.sessions) ? latest.sessions : [];
+  console.log(`
+Run group finished with status: ${group.status}`);
+  printMergeHints(group, sessions);
+  if (group.status === "failed") process.exit(1);
 }
 
 // src/index.js
@@ -56090,6 +63090,10 @@ async function main() {
         break;
       case "serve":
         await cmdServe(args, flags);
+        break;
+      case "parallel":
+      case "par":
+        await cmdParallel(args, flags);
         break;
       // Shortcuts for listing specific package types
       case "stacks":
