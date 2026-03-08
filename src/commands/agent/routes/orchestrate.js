@@ -43,7 +43,14 @@ const ORCHESTRATION_PLAN_SCHEMA = JSON.stringify({
           prompt: { type: 'string', description: 'Full task brief for the agent' },
           provider: { type: 'string', enum: ['claude', 'codex'], default: 'claude' },
           model: { type: 'string', description: 'Model alias (opus, sonnet, haiku)' },
+          role: { type: 'string', description: "Team role (e.g. 'reviewer', 'implementer', 'researcher')" },
+          goal: { type: 'string', description: 'What this task is trying to achieve' },
+          deliverable: { type: 'string', description: 'Expected output or artifact from this task' },
           files_touched: { type: 'array', items: { type: 'string' }, description: 'Files this task will modify' },
+          depends_on: { type: 'array', items: { type: 'integer' }, description: 'Indices of tasks that must complete first' },
+          requires_write: { type: 'boolean', description: 'Whether this task needs write access to the workspace' },
+          artifacts_in: { type: 'array', items: { type: 'string' }, description: 'Artifacts this task expects as inputs' },
+          artifacts_out: { type: 'array', items: { type: 'string' }, description: 'Artifacts this task should produce' },
           rationale: { type: 'string', description: 'Why this task exists and why this provider/model' },
         },
       },
@@ -140,8 +147,8 @@ export function buildOrchestrateRoutes(ctx) {
 
         db.prepare(`
           INSERT INTO session_runtime_state
-            (session_id, status, provider, cwd, started_at, updated_at)
-          VALUES (?, 'starting', ?, ?, ?, ?)
+            (session_id, status, provider, cwd, started_at, updated_at, use_worktree, execution_mode)
+          VALUES (?, 'starting', ?, ?, ?, ?, 0, 'read_only')
         `).run(sessionId, requestedProvider, workingDir, now, now);
 
         // Build args for explorer (use haiku for speed)
@@ -315,9 +322,14 @@ export function buildOrchestrateRoutes(ctx) {
       const args = buildArgs(providerConfig, argOptions);
 
       // If we have a codebase map from Phase 0, add it as context for the planner
-      if (codebaseMapPath && hasCapability(providerConfig, 'addDir')) {
-        const addDirArgs = expandConditional(providerConfig.headless.addDir, codebaseMapPath);
-        if (addDirArgs) args.push(...addDirArgs);
+      if (codebaseMapPath) {
+        const addDirsArgs = expandConditional(providerConfig, 'addDirs', [codebaseMapPath]);
+        if (addDirsArgs.length > 0) {
+          args.push(...addDirsArgs);
+        } else {
+          const addDirArgs = expandConditional(providerConfig, 'addDir', codebaseMapPath);
+          if (addDirArgs.length > 0) args.push(...addDirArgs);
+        }
       }
 
       // Use bypassPermissions for planner (read-only analysis)
@@ -365,8 +377,8 @@ export function buildOrchestrateRoutes(ctx) {
 
       db.prepare(`
         INSERT INTO session_runtime_state
-          (session_id, status, provider, cwd, started_at, updated_at)
-        VALUES (?, 'starting', ?, ?, ?, ?)
+          (session_id, status, provider, cwd, started_at, updated_at, use_worktree, execution_mode)
+        VALUES (?, 'starting', ?, ?, ?, ?, 0, 'read_only')
       `).run(plannerSessionId, requestedProvider, workingDir, now, now);
 
       // Track the last structured output from the planner
@@ -425,38 +437,58 @@ export function buildOrchestrateRoutes(ctx) {
                 orchestrationId: orchestrationId.slice(0, 8),
               });
             } else {
-              // Plan extraction failed
+              // Plan extraction failed — store a descriptive error message
+              let errorMessage;
+              if (finalStatus === 'completed') {
+                errorMessage = "Planner completed but didn't produce a valid plan structure";
+              } else if (finalStatus === 'error') {
+                errorMessage = 'Planner process crashed';
+              } else if (finalStatus === 'stopped') {
+                errorMessage = 'Planner process was stopped';
+              } else {
+                errorMessage = `Planning failed (${finalStatus})`;
+              }
+
+              // Ensure error_message column exists (idempotent ALTER)
+              try { db2.prepare('ALTER TABLE orchestration_plans ADD COLUMN error_message TEXT').run(); } catch { /* already exists */ }
+
               db2.prepare(`
                 UPDATE orchestration_plans
-                SET status = 'failed', updated_at = ?, completed_at = ?
+                SET status = 'failed', error_message = ?, updated_at = ?, completed_at = ?
                 WHERE id = ?
-              `).run(closeNow, closeNow, orchestrationId);
+              `).run(errorMessage, closeNow, closeNow, orchestrationId);
 
               broadcast('orchestration:plan-failed', {
                 orchestrationId,
                 plannerSessionId,
-                reason: finalStatus,
+                reason: errorMessage,
               });
 
               log('agent', 'warn', 'orchestration planning failed', {
                 orchestrationId: orchestrationId.slice(0, 8),
                 finalStatus,
+                errorMessage,
               });
             }
           },
           onProcessError: () => {
             const errNow = new Date().toISOString();
             const db2 = getDb();
+            const errorMessage = 'Failed to start planner process — check that CLI is installed';
+
+            // Ensure error_message column exists (idempotent ALTER)
+            try { db2.prepare('ALTER TABLE orchestration_plans ADD COLUMN error_message TEXT').run(); } catch { /* already exists */ }
+
             db2.prepare(`
               UPDATE orchestration_plans
-              SET status = 'failed', updated_at = ?, completed_at = ?
+              SET status = 'failed', error_message = ?, updated_at = ?, completed_at = ?
               WHERE id = ?
-            `).run(errNow, errNow, orchestrationId);
+            `).run(errorMessage, errNow, errNow, orchestrationId);
 
             broadcast('orchestration:plan-failed', {
               orchestrationId,
               plannerSessionId,
-              reason: 'process_error',
+              reason: errorMessage,
             });
           },
         });
@@ -520,13 +552,14 @@ export function buildOrchestrateRoutes(ctx) {
       }
 
       // Use tasks from body override, or from the stored plan
+      let parsedPlan = null;
       let tasks;
       if (Array.isArray(body.tasks) && body.tasks.length > 0) {
         tasks = body.tasks;
       } else if (row.plan_json) {
         try {
-          const plan = JSON.parse(row.plan_json);
-          tasks = plan.tasks;
+          parsedPlan = JSON.parse(row.plan_json);
+          tasks = parsedPlan.tasks;
         } catch {
           return error(res, 'Failed to parse stored plan', 500);
         }
@@ -555,12 +588,27 @@ export function buildOrchestrateRoutes(ctx) {
         provider: row.provider || 'claude',
         model: row.model,
         cwd: row.project_path || process.env.PWD || process.cwd(),
+        coordinationMode: Array.isArray(parsedPlan?.sequential_phases) && parsedPlan.sequential_phases.length > 0
+          ? 'phased'
+          : 'flat',
+        sequentialPhases: Array.isArray(parsedPlan?.sequential_phases)
+          ? parsedPlan.sequential_phases
+          : undefined,
         tasks: tasks.map((t) => ({
           prompt: t.prompt,
           name: t.name || null,
           provider: t.provider || row.provider || 'claude',
           model: t.model || row.model || null,
-          contextFiles: hasCodebaseMap ? [codebaseMapPath] : undefined,
+          role: t.role || null,
+          goal: t.goal || null,
+          deliverable: t.deliverable || null,
+          rationale: t.rationale || null,
+          files_touched: Array.isArray(t.files_touched) ? t.files_touched : undefined,
+          depends_on: Array.isArray(t.depends_on) ? t.depends_on : undefined,
+          requires_write: typeof t.requires_write === 'boolean' ? t.requires_write : undefined,
+          artifacts_in: Array.isArray(t.artifacts_in) ? t.artifacts_in : undefined,
+          artifacts_out: Array.isArray(t.artifacts_out) ? t.artifacts_out : undefined,
+          contextPaths: hasCodebaseMap ? [codebaseMapPath] : undefined,
         })),
       };
 
