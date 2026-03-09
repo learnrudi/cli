@@ -23,6 +23,15 @@ const WATCHER_DB_DEBOUNCE_MS = 10_000;
 const RECONCILE_INTERVAL_MS = 60_000;
 
 /**
+ * Normalize project paths to eliminate duplicates from trailing slashes.
+ */
+function normalizeProjectPath(p) {
+  if (!p || p === 'unknown') return p;
+  const normalized = path.normalize(p);
+  return normalized === path.sep ? path.sep : normalized.replace(/\/+$/, '');
+}
+
+/**
  * @param {{ log, resolveDb, caches: { diffStatsCache, gitStatusCache, sessionPathMap, GIT_STATUS_TTL_MS }, onProjectsReady }} deps
  */
 export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady }) {
@@ -33,6 +42,85 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
   let _lastReconcileIndexMtimes = new Map();
   /** @type {Map<string, number>} sessionId -> last DB upsert timestamp */
   const _watcherDbDebounce = new Map();
+
+  /**
+   * Backfill missing project_path values from cwd and origin_native_file.
+   * Runs after boot reconcile to fix sessions with null/empty project_path.
+   */
+  async function backfillProjectPaths(db) {
+    // Step A: Fix rows where cwd exists but project_path is missing
+    const cwdFixed = db.prepare(`
+      UPDATE sessions
+      SET project_path = cwd
+      WHERE (project_path IS NULL OR project_path = '')
+        AND cwd IS NOT NULL AND cwd != ''
+        AND deleted_at IS NULL
+    `).run().changes;
+
+    // Step B: Fix Claude sessions by decoding from origin_native_file
+    const claudeRows = db.prepare(`
+      SELECT id, origin_native_file
+      FROM sessions
+      WHERE (project_path IS NULL OR project_path = '')
+        AND provider = 'claude'
+        AND origin_native_file IS NOT NULL
+        AND deleted_at IS NULL
+    `).all();
+
+    let claudeFixed = 0;
+    for (const row of claudeRows) {
+      const match = row.origin_native_file.match(/\.claude\/projects\/([^/]+)\//);
+      if (match) {
+        const projDir = match[1];
+        // Try sessions-index.json first (has authoritative originalPath)
+        let projectPath = null;
+        try {
+          const indexPath = path.join(CLAUDE_PROJECTS_DIR, projDir, 'sessions-index.json');
+          const indexContent = await fsp.readFile(indexPath, 'utf-8');
+          const index = JSON.parse(indexContent);
+          if (index.originalPath) projectPath = index.originalPath;
+        } catch {}
+        // Fallback: use decodeProjectDirFromFilesystem
+        if (!projectPath) {
+          projectPath = await decodeProjectDirFromFilesystem(projDir);
+        }
+        if (projectPath) {
+          projectPath = normalizeProjectPath(projectPath);
+          db.prepare('UPDATE sessions SET project_path = ? WHERE id = ?').run(projectPath, row.id);
+          claudeFixed++;
+        }
+      }
+    }
+
+    // Step C: Normalize all existing project_path values to collapse duplicates
+    const allPaths = db.prepare(`
+      SELECT DISTINCT project_path FROM sessions
+      WHERE project_path IS NOT NULL AND project_path != '' AND deleted_at IS NULL
+    `).all();
+
+    let normalizedCount = 0;
+    for (const { project_path } of allPaths) {
+      const normalized = normalizeProjectPath(project_path);
+      if (normalized !== project_path) {
+        const r = db.prepare('UPDATE sessions SET project_path = ? WHERE project_path = ? AND deleted_at IS NULL')
+          .run(normalized, project_path);
+        normalizedCount += r.changes;
+      }
+    }
+    if (normalizedCount > 0) {
+      log('sessions', 'info', `[backfill] normalized ${normalizedCount} project_path values`);
+    }
+
+    // Step D: Log results
+    const remaining = db.prepare(`
+      SELECT COUNT(*) as cnt FROM sessions
+      WHERE (project_path IS NULL OR project_path = '')
+        AND deleted_at IS NULL
+    `).get().cnt;
+
+    log('sessions', 'info', `[backfill] project_path: ${cwdFixed} from cwd, ${claudeFixed} from origin_native_file, ${remaining} unresolved`);
+    return { cwdFixed, claudeFixed, remaining };
+  }
 
   /**
    * Full reconciliation: walk ~/.claude/projects/, collect all sessions,
@@ -152,29 +240,34 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
 
           const existed = db.prepare('SELECT 1 FROM sessions WHERE id = ?').get(sessionId);
 
-          db.prepare(`
-            INSERT INTO sessions
-              (id, provider, provider_session_id, origin, origin_native_file,
-               title, snippet, cwd, project_path, git_branch, model,
-               status, created_at, last_active_at, turn_count)
-            VALUES (?, 'claude', ?, 'provider-import', ?,
-                    ?, ?, ?, ?, ?, ?,
-                    'active', ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-              project_path = COALESCE(excluded.project_path, sessions.project_path),
-              title = COALESCE(sessions.title, excluded.title),
-              snippet = COALESCE(sessions.snippet, excluded.snippet),
-              git_branch = COALESCE(excluded.git_branch, sessions.git_branch),
-              model = COALESCE(excluded.model, sessions.model),
-              origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
-              last_active_at = MAX(sessions.last_active_at, excluded.last_active_at),
-              status = 'active',
-              deleted_at = NULL
-          `).run(
-            sessionId, sessionId, fullPath,
-            title, snippet, projectPath, projectPath, snippetBranch, snippetModel,
-            created, lastActive, messageCount,
-          );
+          try {
+            db.prepare(`
+              INSERT INTO sessions
+                (id, provider, provider_session_id, origin, origin_native_file,
+                 title, snippet, cwd, project_path, git_branch, model,
+                 status, created_at, last_active_at, turn_count)
+              VALUES (?, 'claude', ?, 'provider-import', ?,
+                      ?, ?, ?, ?, ?, ?,
+                      'active', ?, ?, ?)
+              ON CONFLICT(id) DO UPDATE SET
+                project_path = COALESCE(excluded.project_path, sessions.project_path),
+                title = COALESCE(sessions.title, excluded.title),
+                snippet = COALESCE(sessions.snippet, excluded.snippet),
+                git_branch = COALESCE(excluded.git_branch, sessions.git_branch),
+                model = COALESCE(excluded.model, sessions.model),
+                origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
+                last_active_at = MAX(sessions.last_active_at, excluded.last_active_at),
+                status = 'active',
+                deleted_at = NULL
+            `).run(
+              sessionId, sessionId, fullPath,
+              title, snippet, projectPath, projectPath, snippetBranch, snippetModel,
+              created, lastActive, messageCount,
+            );
+          } catch (dbErr) {
+            log?.('sessions', 'warn', `[reconcile.claude] INSERT failed: ${dbErr.message}`, { sessionId, filePath: fullPath });
+            continue;
+          }
 
           if (existed) updated++;
           else added++;
@@ -224,29 +317,34 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
 
           const existed = db.prepare('SELECT 1 FROM sessions WHERE id = ?').get(sessionId);
 
-          db.prepare(`
-            INSERT INTO sessions
-              (id, provider, provider_session_id, origin, origin_native_file,
-               title, snippet, cwd, project_path, git_branch, model,
-               status, created_at, last_active_at, turn_count)
-            VALUES (?, 'claude', ?, 'provider-import', ?,
-                    ?, ?, ?, ?, ?, ?,
-                    'active', ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-              project_path = COALESCE(excluded.project_path, sessions.project_path),
-              title = COALESCE(sessions.title, excluded.title),
-              snippet = COALESCE(sessions.snippet, excluded.snippet),
-              git_branch = COALESCE(excluded.git_branch, sessions.git_branch),
-              model = COALESCE(excluded.model, sessions.model),
-              origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
-              last_active_at = MAX(sessions.last_active_at, excluded.last_active_at),
-              status = 'active',
-              deleted_at = NULL
-          `).run(
-            sessionId, sessionId, extPath,
-            title, snippet, projectPath, projectPath, snippetBranch, snippetModel,
-            created, lastActive, messageCount,
-          );
+          try {
+            db.prepare(`
+              INSERT INTO sessions
+                (id, provider, provider_session_id, origin, origin_native_file,
+                 title, snippet, cwd, project_path, git_branch, model,
+                 status, created_at, last_active_at, turn_count)
+              VALUES (?, 'claude', ?, 'provider-import', ?,
+                      ?, ?, ?, ?, ?, ?,
+                      'active', ?, ?, ?)
+              ON CONFLICT(id) DO UPDATE SET
+                project_path = COALESCE(excluded.project_path, sessions.project_path),
+                title = COALESCE(sessions.title, excluded.title),
+                snippet = COALESCE(sessions.snippet, excluded.snippet),
+                git_branch = COALESCE(excluded.git_branch, sessions.git_branch),
+                model = COALESCE(excluded.model, sessions.model),
+                origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
+                last_active_at = MAX(sessions.last_active_at, excluded.last_active_at),
+                status = 'active',
+                deleted_at = NULL
+            `).run(
+              sessionId, sessionId, extPath,
+              title, snippet, projectPath, projectPath, snippetBranch, snippetModel,
+              created, lastActive, messageCount,
+            );
+          } catch (dbErr) {
+            log?.('sessions', 'warn', `[reconcile.crossdir] INSERT failed: ${dbErr.message}`, { sessionId, filePath: extPath });
+            continue;
+          }
 
           if (existed) updated++;
           else added++;
@@ -317,37 +415,42 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
             claudeFsIds.add(agentSessionId);
             fsCount++;
 
-            db.prepare(`
-              INSERT INTO sessions
-                (id, provider, provider_session_id, origin, origin_native_file,
-                 snippet, cwd, project_path, git_branch, model,
-                 parent_session_id, agent_id, is_sidechain, session_type,
-                 status, created_at, last_active_at)
-              VALUES (?, 'claude', ?, 'provider-import', ?,
-                      ?, ?, ?, ?, ?,
-                      ?, ?, 1, 'task',
-                      'active', ?, ?)
-              ON CONFLICT(id) DO UPDATE SET
-                cwd = COALESCE(excluded.cwd, sessions.cwd),
-                project_path = COALESCE(excluded.project_path, sessions.project_path),
-                git_branch = COALESCE(excluded.git_branch, sessions.git_branch),
-                model = COALESCE(excluded.model, sessions.model),
-                parent_session_id = COALESCE(excluded.parent_session_id, sessions.parent_session_id),
-                agent_id = COALESCE(excluded.agent_id, sessions.agent_id),
-                is_sidechain = COALESCE(excluded.is_sidechain, sessions.is_sidechain),
-                session_type = COALESCE(excluded.session_type, sessions.session_type),
-                snippet = COALESCE(sessions.snippet, excluded.snippet),
-                origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
-                last_active_at = MAX(sessions.last_active_at, excluded.last_active_at),
-                status = 'active',
-                deleted_at = NULL
-            `).run(
-              agentSessionId, agentSessionId, fullPath,
-              snippet, snippetCwd || null, projectPath, snippetBranch || null, snippetModel || null,
-              entry, // parent session UUID = the directory name
-              subFile.slice(6, -6), // agent ID = strip "agent-" prefix and ".jsonl" suffix
-              fstat.birthtime.toISOString(), fstat.mtime.toISOString(),
-            );
+            try {
+              db.prepare(`
+                INSERT INTO sessions
+                  (id, provider, provider_session_id, origin, origin_native_file,
+                   snippet, cwd, project_path, git_branch, model,
+                   parent_session_id, agent_id, is_sidechain, session_type,
+                   status, created_at, last_active_at)
+                VALUES (?, 'claude', ?, 'provider-import', ?,
+                        ?, ?, ?, ?, ?,
+                        ?, ?, 1, 'task',
+                        'active', ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                  cwd = COALESCE(excluded.cwd, sessions.cwd),
+                  project_path = COALESCE(excluded.project_path, sessions.project_path),
+                  git_branch = COALESCE(excluded.git_branch, sessions.git_branch),
+                  model = COALESCE(excluded.model, sessions.model),
+                  parent_session_id = COALESCE(excluded.parent_session_id, sessions.parent_session_id),
+                  agent_id = COALESCE(excluded.agent_id, sessions.agent_id),
+                  is_sidechain = COALESCE(excluded.is_sidechain, sessions.is_sidechain),
+                  session_type = COALESCE(excluded.session_type, sessions.session_type),
+                  snippet = COALESCE(sessions.snippet, excluded.snippet),
+                  origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
+                  last_active_at = MAX(sessions.last_active_at, excluded.last_active_at),
+                  status = 'active',
+                  deleted_at = NULL
+              `).run(
+                agentSessionId, agentSessionId, fullPath,
+                snippet, snippetCwd || null, projectPath, snippetBranch || null, snippetModel || null,
+                entry, // parent session UUID = the directory name
+                subFile.slice(6, -6), // agent ID = strip "agent-" prefix and ".jsonl" suffix
+                fstat.birthtime.toISOString(), fstat.mtime.toISOString(),
+              );
+            } catch (dbErr) {
+              log?.('sessions', 'warn', `[reconcile.subagent] INSERT failed: ${dbErr.message}`, { sessionId: agentSessionId, filePath: fullPath, parentSessionId: entry });
+              continue;
+            }
 
             if (existing) updated++;
             else { added++; }
@@ -387,7 +490,7 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
             // ignore
           }
         }
-        const projectPath = cwd || await inferProjectPathFromSessionFile(filePath) || os.homedir();
+        const projectPath = normalizeProjectPath(cwd || await inferProjectPathFromSessionFile(filePath) || os.homedir());
 
         cacheSessionFileHint(sessionId, 'codex', filePath);
 
@@ -395,26 +498,31 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
           'SELECT 1 FROM sessions WHERE provider = ? AND (id = ? OR provider_session_id = ?)'
         ).get('codex', sessionId, sessionId);
 
-        db.prepare(`
-          INSERT INTO sessions
-            (id, provider, provider_session_id, origin, origin_native_file,
-             snippet, cwd, project_path,
-             status, created_at, last_active_at)
-          VALUES (?, 'codex', ?, 'provider-import', ?,
-                  ?, ?, ?,
-                  'active', ?, ?)
-          ON CONFLICT(id) DO UPDATE SET
-            project_path = COALESCE(excluded.project_path, sessions.project_path),
-            snippet = COALESCE(sessions.snippet, excluded.snippet),
-            origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
-            last_active_at = MAX(sessions.last_active_at, excluded.last_active_at),
-            status = 'active',
-            deleted_at = NULL
-        `).run(
-          sessionId, sessionId, filePath,
-          snippet, cwd || projectPath, projectPath,
-          fstat.birthtime.toISOString(), fstat.mtime.toISOString(),
-        );
+        try {
+          db.prepare(`
+            INSERT INTO sessions
+              (id, provider, provider_session_id, origin, origin_native_file,
+               snippet, cwd, project_path,
+               status, created_at, last_active_at)
+            VALUES (?, 'codex', ?, 'provider-import', ?,
+                    ?, ?, ?,
+                    'active', ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              project_path = COALESCE(excluded.project_path, sessions.project_path),
+              snippet = COALESCE(sessions.snippet, excluded.snippet),
+              origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
+              last_active_at = MAX(sessions.last_active_at, excluded.last_active_at),
+              status = 'active',
+              deleted_at = NULL
+          `).run(
+            sessionId, sessionId, filePath,
+            snippet, normalizeProjectPath(cwd) || projectPath, projectPath,
+            fstat.birthtime.toISOString(), fstat.mtime.toISOString(),
+          );
+        } catch (dbErr) {
+          log?.('sessions', 'warn', `[reconcile.codex] INSERT failed: ${dbErr.message}`, { sessionId, filePath });
+          continue;
+        }
 
         if (existed) updated++;
         else added++;
@@ -481,6 +589,9 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
     ).get().c;
     log('sessions', 'info',
       `[reconcile] DB=${dbCount} fs=${fsCount} added=${added} pruned=${pruned} updated=${updated} duration=${duration}ms`);
+
+    // Backfill missing project_path values
+    await backfillProjectPaths(db);
   }
 
   /**
@@ -654,7 +765,7 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
         } catch {
           // ignore
         }
-        const projectPath = cwd || await inferProjectPathFromSessionFile(filePath) || os.homedir();
+        const projectPath = normalizeProjectPath(cwd || await inferProjectPathFromSessionFile(filePath) || os.homedir());
         cacheSessionFileHint(sessionId, 'codex', filePath);
 
         db.prepare(`
@@ -667,7 +778,7 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
                   'active', ?, ?)
         `).run(
           sessionId, sessionId, filePath,
-          snippet, cwd || projectPath, projectPath,
+          snippet, normalizeProjectPath(cwd) || projectPath, projectPath,
           fstat.birthtime.toISOString(), fstat.mtime.toISOString(),
         );
         codexDbIds.add(sessionId);
@@ -718,6 +829,7 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
         }
       }
       if (!pp) pp = 'unknown';
+      pp = normalizeProjectPath(pp);
       const sessionId = row.provider_session_id || row.id;
       if (!projectMap.has(pp)) {
         projectMap.set(pp, {
@@ -915,7 +1027,7 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
                   'active', ?, ?)
         `).run(
           resolvedSessionId, provider, resolvedSessionId, fullPath,
-          snippet, cwd || projectPath, projectPath, gitBranch,
+          snippet, normalizeProjectPath(cwd) || normalizeProjectPath(projectPath), normalizeProjectPath(projectPath), gitBranch,
           fstat.birthtime.toISOString(), fstat.mtime.toISOString(),
         );
 
