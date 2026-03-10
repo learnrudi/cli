@@ -7,7 +7,10 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import path from 'path';
 import os from 'os';
-import { shouldBroadcastSessionUpdate } from '../../commands/serve/sessions.js';
+import {
+  shouldBroadcastSessionUpdate,
+  shouldRefreshProjectsForSessionUpdate,
+} from '../../commands/serve/sessions.js';
 
 const CLAUDE_ROOT_DIR = path.join(os.homedir(), '.claude');
 const CLAUDE_PROJECTS_DIR = path.join(CLAUDE_ROOT_DIR, 'projects');
@@ -51,6 +54,31 @@ describe('shouldBroadcastSessionUpdate', () => {
 
   test('rejects non-sessions path from parent .codex dir', () => {
     assert.ok(!shouldBroadcastSessionUpdate(CODEX_ROOT_DIR, 'config.json'));
+  });
+});
+
+describe('shouldRefreshProjectsForSessionUpdate', () => {
+  test('does not refresh projects for live JSONL append activity', () => {
+    assert.strictEqual(
+      shouldRefreshProjectsForSessionUpdate(CLAUDE_PROJECTS_DIR, 'my-project/abc123.jsonl'),
+      false,
+    );
+    assert.strictEqual(
+      shouldRefreshProjectsForSessionUpdate(CODEX_SESSIONS_DIR, '2026/02/14/rollout-abc.jsonl'),
+      false,
+    );
+  });
+
+  test('does refresh projects for sessions index changes', () => {
+    assert.strictEqual(
+      shouldRefreshProjectsForSessionUpdate(CLAUDE_PROJECTS_DIR, 'my-project/sessions-index.json'),
+      true,
+    );
+  });
+
+  test('fails safe for empty or directory-level watcher events', () => {
+    assert.strictEqual(shouldRefreshProjectsForSessionUpdate(CLAUDE_PROJECTS_DIR, ''), true);
+    assert.strictEqual(shouldRefreshProjectsForSessionUpdate(CLAUDE_ROOT_DIR, 'projects'), true);
   });
 });
 

@@ -102,34 +102,76 @@ const CANONICAL_TOOL_NAMES = {
 
 // Keys in tool input that hold a file path, per provider
 const FILE_PATH_KEYS = {
-  claude: { Read: 'file_path', Edit: 'file_path', Write: 'file_path', NotebookEdit: 'notebook_path', Grep: 'path', LSP: 'filePath' },
+  claude: { Read: 'file_path', Edit: 'file_path', Write: 'file_path', NotebookEdit: 'notebook_path', Grep: 'path', LSP: 'filePath', Glob: 'path' },
   codex: { file_read: 'path', file_edit: 'path', file_write: 'path' },
   gemini: { read_file: 'target_file', edit_file: 'target_file', create_file: 'target_file' },
+};
+
+const INPUT_PREVIEW_KEYS = {
+  claude: {
+    Read: 'file_path',
+    Edit: 'file_path',
+    Write: 'file_path',
+    NotebookEdit: 'notebook_path',
+    Bash: 'command',
+    Grep: 'pattern',
+    Glob: 'pattern',
+    WebFetch: 'url',
+    WebSearch: 'query',
+    Task: 'description',
+  },
+  codex: {
+    file_read: 'path',
+    file_edit: 'path',
+    file_write: 'path',
+    apply_patch: 'apply_patch',
+    shell: ['command', 'cmd'],
+    shell_command: ['command', 'cmd'],
+    exec_command: ['cmd', 'command'],
+    write_stdin: 'chars',
+    grep: 'pattern',
+    glob: 'pattern',
+  },
+  gemini: { run_terminal_command: 'command', search_files: 'pattern' },
 };
 
 function _resolveCanonical(provider, toolName) {
   return CANONICAL_TOOL_NAMES[provider]?.[toolName] || 'mcp';
 }
 
+function _extractPreview(input, keys) {
+  if (!input || !keys) return null;
+  const candidates = Array.isArray(keys) ? keys : [keys];
+  for (const key of candidates) {
+    if (typeof input[key] === 'string') {
+      return input[key].slice(0, 300);
+    }
+  }
+  return null;
+}
+
+function _extractPatchFilePath(patchText) {
+  if (typeof patchText !== 'string' || patchText.length === 0) return null;
+  const moved = patchText.match(/^\*\*\* Move to: (.+)$/m);
+  if (moved?.[1]) return moved[1].trim();
+  const fileMatch = patchText.match(/^\*\*\* (?:Update|Add|Delete) File: (.+)$/m);
+  return fileMatch?.[1]?.trim() || null;
+}
+
 function _extractFilePath(provider, toolName, input) {
   const key = FILE_PATH_KEYS[provider]?.[toolName];
   let filePath = null;
-  let inputPreview = null;
 
   if (key && input) {
     const v = input[key];
     if (typeof v === 'string') filePath = v;
   }
 
-  if (input) {
-    if (toolName === 'Bash' && typeof input.command === 'string') {
-      inputPreview = input.command.slice(0, 300);
-    } else if (toolName === 'Grep' && typeof input.pattern === 'string') {
-      inputPreview = input.pattern.slice(0, 300);
-    } else if (toolName === 'Glob' && typeof input.pattern === 'string') {
-      inputPreview = input.pattern.slice(0, 300);
-    }
+  if (!filePath && provider === 'codex' && toolName === 'apply_patch' && input) {
+    filePath = _extractPatchFilePath(input.apply_patch);
   }
+
+  const inputPreview = _extractPreview(input, INPUT_PREVIEW_KEYS[provider]?.[toolName]);
 
   return { filePath, inputPreview };
 }
@@ -561,6 +603,15 @@ async function _extractAgentMeta(text, filePath, provider) {
 
 function _ensureSessionRow(db, { sessionId, provider, filePath, agentMeta }) {
   const now = new Date().toISOString();
+
+  // Idempotent upsert: if a row already exists for this (provider, provider_session_id)
+  // with a different id (e.g. from a prior ingestion scheme), reuse its id to avoid
+  // UNIQUE constraint violation on the partial index.
+  const existing = db.prepare(
+    `SELECT id FROM sessions WHERE provider = ? AND provider_session_id = ? AND status != 'deleted' LIMIT 1`
+  ).get(provider, sessionId);
+  const rowId = existing ? existing.id : sessionId;
+
   if (agentMeta) {
     db.prepare(`
       INSERT INTO sessions
@@ -582,7 +633,7 @@ function _ensureSessionRow(db, { sessionId, provider, filePath, agentMeta }) {
         origin_native_file = COALESCE(excluded.origin_native_file, sessions.origin_native_file),
         status = 'active'
     `).run(
-      sessionId, provider, sessionId, filePath,
+      rowId, provider, sessionId, filePath,
       agentMeta.cwd || null, agentMeta.projectPath || null, agentMeta.gitBranch || null,
       agentMeta.parentSessionId || null, agentMeta.agentId || null,
       agentMeta.isSidechain ?? null, agentMeta.sessionType || null, agentMeta.model || null,
@@ -593,7 +644,7 @@ function _ensureSessionRow(db, { sessionId, provider, filePath, agentMeta }) {
       INSERT OR IGNORE INTO sessions
         (id, provider, provider_session_id, origin, origin_native_file, status, created_at, last_active_at)
       VALUES (?, ?, ?, 'provider-import', ?, 'active', ?, ?)
-    `).run(sessionId, provider, sessionId, filePath, now, now);
+    `).run(rowId, provider, sessionId, filePath, now, now);
   }
 }
 

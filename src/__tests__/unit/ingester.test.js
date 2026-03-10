@@ -225,6 +225,133 @@ test('model and token usage extracted from raw JSONL entries', async () => {
   });
 });
 
+test('codex shell tool previews store the extracted command instead of raw JSON', async () => {
+  await withHarness(async ({ db, ingester, codexRoot }) => {
+    const sessionId = 'codex-shell-preview';
+    const filePath = path.join(codexRoot, `${sessionId}.jsonl`);
+    const entries = [
+      {
+        type: 'event_msg',
+        timestamp: isoFor(2),
+        payload: { type: 'user_message', message: 'Find the cleanup handler' },
+      },
+      {
+        type: 'response_item',
+        timestamp: isoFor(3),
+        payload: {
+          type: 'function_call',
+          id: 'call-1',
+          call_id: 'call-1',
+          name: 'exec_command',
+          arguments: JSON.stringify({
+            cmd: 'rg -n "cleanup" src/commands/serve.js',
+            yield_time_ms: 1000,
+          }),
+        },
+      },
+      {
+        type: 'response_item',
+        timestamp: isoFor(4),
+        payload: {
+          type: 'function_call_output',
+          call_id: 'call-1',
+          output: 'Chunk ID: test\nWall time: 0.1s\nProcess exited with code 0\nOriginal token count: 1\nOutput:\n42:const cleanup = () => {}',
+        },
+      },
+      {
+        type: 'response_item',
+        timestamp: isoFor(5),
+        payload: {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'Found it.' }],
+        },
+      },
+    ];
+
+    await writeJsonl(filePath, entries);
+    const result = await ingester.ingestFile(filePath, { provider: 'codex', sessionId });
+    assert.strictEqual(result.turnsAdded, 1);
+
+    const row = db.prepare(`
+      SELECT canonical_name, input_preview
+      FROM tool_calls
+      WHERE session_id = ?
+      LIMIT 1
+    `).get(sessionId);
+
+    assert.strictEqual(row.canonical_name, 'shell');
+    assert.strictEqual(row.input_preview, 'rg -n "cleanup" src/commands/serve.js');
+  });
+});
+
+test('codex apply_patch tool calls capture the edited file path', async () => {
+  await withHarness(async ({ db, ingester, codexRoot }) => {
+    const sessionId = 'codex-apply-patch';
+    const filePath = path.join(codexRoot, `${sessionId}.jsonl`);
+    const entries = [
+      {
+        type: 'event_msg',
+        timestamp: isoFor(6),
+        payload: { type: 'user_message', message: 'Patch the worker to log retries.' },
+      },
+      {
+        type: 'response_item',
+        timestamp: isoFor(7),
+        payload: {
+          type: 'function_call',
+          id: 'patch-1',
+          call_id: 'patch-1',
+          name: 'apply_patch',
+          arguments: JSON.stringify({
+            apply_patch: [
+              '*** Begin Patch',
+              '*** Update File: /tmp/example.ts',
+              '@@',
+              '-const retries = 0;',
+              '+const retries = 1;',
+              '*** End Patch',
+            ].join('\n'),
+          }),
+        },
+      },
+      {
+        type: 'response_item',
+        timestamp: isoFor(8),
+        payload: {
+          type: 'function_call_output',
+          call_id: 'patch-1',
+          output: 'Success. Updated the following files:\nM /tmp/example.ts',
+        },
+      },
+      {
+        type: 'response_item',
+        timestamp: isoFor(9),
+        payload: {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'Patched.' }],
+        },
+      },
+    ];
+
+    await writeJsonl(filePath, entries);
+    const result = await ingester.ingestFile(filePath, { provider: 'codex', sessionId });
+    assert.strictEqual(result.turnsAdded, 1);
+
+    const row = db.prepare(`
+      SELECT canonical_name, file_path, input_preview
+      FROM tool_calls
+      WHERE session_id = ?
+      LIMIT 1
+    `).get(sessionId);
+
+    assert.strictEqual(row.canonical_name, 'file_edit');
+    assert.strictEqual(row.file_path, '/tmp/example.ts');
+    assert.ok(row.input_preview.startsWith('*** Begin Patch'));
+  });
+});
+
 test('compaction metadata is persisted from Claude system events', async () => {
   await withHarness(async ({ db, ingester, claudeRoot }) => {
     const sessionId = 'session-compaction-meta';

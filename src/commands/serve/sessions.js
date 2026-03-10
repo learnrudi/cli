@@ -855,6 +855,14 @@ export function shouldBroadcastSessionUpdate(watchRoot, relPath) {
   );
 }
 
+export function shouldRefreshProjectsForSessionUpdate(watchRoot, relPath) {
+  const normalized = String(relPath || '').replace(/\\/g, '/');
+  if (!normalized) return true;
+  if (normalized.endsWith('sessions-index.json')) return true;
+  if (normalized.endsWith('.jsonl')) return false;
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Factory — stateful session module with caching and watcher
 // ---------------------------------------------------------------------------
@@ -1048,6 +1056,7 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
 
   const {
     reconcileSessionsToDb,
+    backfillProjectPaths,
     watcherDbUpsert,
     startPeriodicReconcile,
     enableDbSpine,
@@ -1118,7 +1127,10 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
   }
 
   function queueSessionsUpdated(data = {}) {
-    invalidateSessionsProjectsCache();
+    const wantsRefresh = data.refreshProjects !== false;
+    if (wantsRefresh) {
+      invalidateSessionsProjectsCache();
+    }
 
     // Accumulate sessionIds across multiple watcher events within the debounce window
     if (data.sessionId) {
@@ -1129,6 +1141,7 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
     pendingSessionsUpdate = {
       ...pendingSessionsUpdate,
       ...data,
+      refreshProjects: (pendingSessionsUpdate?.refreshProjects === true) || wantsRefresh,
       ts: new Date().toISOString(),
     };
 
@@ -1190,6 +1203,7 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
               provider,
               event: eventType,
               path: rootPath,
+              refreshProjects: true,
               missingFilename: true,
             });
             return;
@@ -1202,6 +1216,7 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
             provider,
             event: eventType,
             path: fullPath,
+            refreshProjects: shouldRefreshProjectsForSessionUpdate(rootPath, relPath),
           };
           const normalized = relPath.replace(/\\/g, '/');
           if (normalized.endsWith('.jsonl')) {
@@ -1237,6 +1252,7 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
                   queueSessionsUpdated({
                     source: 'watcher-new',
                     sessionId: result.sessionId,
+                    refreshProjects: true,
                     newSession: {
                       sessionId: result.sessionId,
                       provider: result.provider,
@@ -1279,6 +1295,12 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
    * Hot path: no sync file reads, no sync git subprocesses. Diff stats and git status
    * come from caches (populated by background enrichment on previous calls).
    */
+  // Resolve symlinks / case differences (macOS is case-insensitive)
+  function normalizePath(p) {
+    if (!p) return p;
+    try { return fs.realpathSync(p); } catch { return p; }
+  }
+
   async function enumerateProjectsWithSessions() {
     const claudeDir = path.join(os.homedir(), '.claude', 'projects');
     const projects = [];
@@ -1298,7 +1320,7 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
         originalPath = index.originalPath || null;
 
         if (Array.isArray(index.entries)) {
-          const STALE_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes
+          const STALE_THRESHOLD_MS = 30 * 1000; // 30 seconds
           const now = Date.now();
           const ENTRY_BATCH = 50;
           for (let ei = 0; ei < index.entries.length; ei += ENTRY_BATCH) {
@@ -1400,18 +1422,20 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
 
       sessions.sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime());
 
-      // Try to infer a better path from session JSONL files
-      let inferredOriginalPath = null;
-      for (const session of sessions) {
-        if (!session.fullPath) continue;
-        const inferredPath = await inferProjectPathFromSessionFile(session.fullPath);
-        if (inferredPath) {
-          inferredOriginalPath = inferredPath;
-          break;
+      // Only infer path from session JSONL files if we don't have originalPath from index
+      if (!originalPath) {
+        let inferredOriginalPath = null;
+        for (const session of sessions) {
+          if (!session.fullPath) continue;
+          const inferredPath = await inferProjectPathFromSessionFile(session.fullPath);
+          if (inferredPath) {
+            inferredOriginalPath = inferredPath;
+            break;
+          }
         }
-      }
-      if (inferredOriginalPath) {
-        originalPath = inferredOriginalPath;
+        if (inferredOriginalPath) {
+          originalPath = inferredOriginalPath;
+        }
       }
 
       // Keep originalPath from index even if directory no longer exists —
@@ -1421,11 +1445,13 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
       if (!originalPath) {
         decodedPath = await decodeProjectDirFromFilesystem(projDir);
       }
+      // If no originalPath and filesystem decode failed, use the raw directory name
+      // as an opaque identifier — never mangle hyphens into slashes.
       if (!decodedPath) {
-        decodedPath = '/' + projDir.replace(/-/g, '/').replace(/^\//, '');
+        decodedPath = projDir;
       }
 
-      const displayPath = originalPath || decodedPath;
+      const displayPath = normalizePath(originalPath || decodedPath);
       const name = path.basename(displayPath);
 
       // Diff stats: read from cache only (background enrichment fills it)
@@ -1489,7 +1515,8 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
           const sessionId = meta.sessionId || deriveCodexSessionIdFromFilename(filePath);
           if (!sessionId) return null;
           const snippet = await readSessionSnippet(filePath, 'codex');
-          const projectPath = meta.cwd || snippet.cwd || await inferProjectPathFromSessionFile(filePath) || os.homedir();
+          const projectPath = meta.cwd || snippet.cwd || await inferProjectPathFromSessionFile(filePath);
+          if (!projectPath) return null; // Skip sessions with no identifiable project
           cacheSessionFileHint(sessionId, 'codex', filePath);
           _sessionPathMap.set(sessionId, filePath);
           return {
@@ -1517,7 +1544,7 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
           codexProjectMap.set(projectPath, {
             path: encoded,
             name: path.basename(projectPath) || projectPath,
-            originalPath: projectPath,
+            originalPath: normalizePath(projectPath),
             sessions: [],
             gitStatus: null,
           });
@@ -1556,7 +1583,7 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
             const chunk = allSessionIds.slice(i, i + 400);
             const placeholders = chunk.map(() => '?').join(',');
             const rows = db.prepare(`
-              SELECT id, provider, provider_session_id, title, title_override, total_cost, total_input_tokens, total_output_tokens, turn_count,
+              SELECT id, provider, provider_session_id, title, title_override, description, total_cost, total_input_tokens, total_output_tokens, turn_count,
                      parent_session_id, is_sidechain, session_type, origin_native_file
               FROM sessions
               WHERE status != 'deleted'
@@ -1576,6 +1603,7 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
               if (!row) continue;
               const display = row.title_override || row.title;
               if (display) s.dbTitle = display;
+              if (row.description) s.description = row.description;
               if (row.total_cost > 0) s.totalCost = row.total_cost;
               if (row.total_input_tokens > 0) s.totalInputTokens = row.total_input_tokens;
               if (row.total_output_tokens > 0) s.totalOutputTokens = row.total_output_tokens;
@@ -1586,52 +1614,77 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
               if (!s.originNativeFile && row.origin_native_file) s.originNativeFile = row.origin_native_file;
             }
           }
+
+          // Batch-fetch tags for all sessions
+          const tagMap = new Map();
+          for (let i = 0; i < allSessionIds.length; i += 400) {
+            const chunk = allSessionIds.slice(i, i + 400);
+            const placeholders = chunk.map(() => '?').join(',');
+            try {
+              const tagRows = db.prepare(`
+                SELECT st.session_id, t.name
+                FROM session_tags st JOIN tags t ON st.tag_id = t.id
+                WHERE st.session_id IN (${placeholders})
+              `).all(...chunk);
+              for (const tr of tagRows) {
+                if (!tagMap.has(tr.session_id)) tagMap.set(tr.session_id, []);
+                tagMap.get(tr.session_id).push(tr.name);
+              }
+            } catch { /* tags tables may not exist yet */ }
+          }
+          for (const proj of projects) {
+            for (const s of proj.sessions) {
+              const tags = tagMap.get(s.sessionId);
+              if (tags && tags.length > 0) s.tags = tags;
+            }
+          }
         }
       } catch (err) {
         log('sessions', 'warn', `DB title merge failed: ${err.message}`);
       }
     }
 
-    // Merge worktree projects into their parent project.
+    // Merge worktree projects into their parent project (two-pass, order-independent).
     // Claude CLI records the worktree cwd as the project path, creating separate
     // entries like /repo/.rudi/worktrees/main. Fold those sessions back into /repo.
     const worktreeMarker = '/.rudi/worktrees/';
-    const mergedProjects = [];
-    const parentMap = new Map(); // realRoot -> index in mergedProjects
 
+    // Pass 1: Separate worktree entries from regular entries
+    const regularProjects = [];
+    const worktreeEntries = []; // { realRoot, proj }
     for (const proj of projects) {
       const op = proj.originalPath || '';
       const wtIdx = op.indexOf(worktreeMarker);
       if (wtIdx !== -1) {
-        // This is a worktree project — merge into parent
-        const realRoot = op.slice(0, wtIdx);
-        if (parentMap.has(realRoot)) {
-          // Parent already exists — merge sessions
-          const parent = mergedProjects[parentMap.get(realRoot)];
-          parent.sessions.push(...proj.sessions);
-        } else {
-          // Parent not seen yet — rewrite this entry as the parent
-          const realName = path.basename(realRoot);
-          parentMap.set(realRoot, mergedProjects.length);
-          mergedProjects.push({
-            ...proj,
-            name: realName,
-            originalPath: realRoot,
-          });
-        }
+        worktreeEntries.push({ realRoot: op.slice(0, wtIdx), proj });
       } else {
-        // Regular project
-        if (parentMap.has(op)) {
-          // Already have an entry from a worktree — merge into it
-          const existing = mergedProjects[parentMap.get(op)];
-          existing.sessions.push(...proj.sessions);
-          // Keep the first stable path key; fill missing metadata only.
-          if (!existing.path) existing.path = proj.path;
-          if (!existing.gitStatus && proj.gitStatus) existing.gitStatus = proj.gitStatus;
-        } else {
-          parentMap.set(op, mergedProjects.length);
-          mergedProjects.push(proj);
-        }
+        regularProjects.push(proj);
+      }
+    }
+
+    // Pass 2: Build merged list — regular projects first, then fold in worktrees
+    const mergedProjects = [];
+    const parentMap = new Map(); // realRoot -> index in mergedProjects
+
+    for (const proj of regularProjects) {
+      const op = proj.originalPath || '';
+      parentMap.set(op, mergedProjects.length);
+      mergedProjects.push(proj);
+    }
+
+    for (const { realRoot, proj } of worktreeEntries) {
+      if (parentMap.has(realRoot)) {
+        // Parent exists — merge sessions into it
+        const parent = mergedProjects[parentMap.get(realRoot)];
+        parent.sessions.push(...proj.sessions);
+      } else {
+        // No parent project found — promote worktree entry as the parent
+        parentMap.set(realRoot, mergedProjects.length);
+        mergedProjects.push({
+          ...proj,
+          name: path.basename(realRoot),
+          originalPath: realRoot,
+        });
       }
     }
 
@@ -1642,19 +1695,11 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
       );
     }
 
-    // Disambiguate duplicate project names by prepending parent directory
-    const nameCount = new Map();
-    for (const proj of mergedProjects) {
-      nameCount.set(proj.name, (nameCount.get(proj.name) || 0) + 1);
-    }
-    for (const proj of mergedProjects) {
-      if (nameCount.get(proj.name) > 1 && proj.originalPath) {
-        const parent = path.basename(path.dirname(proj.originalPath));
-        if (parent && parent !== '.' && parent !== '/') {
-          proj.name = `${parent}/${proj.name}`;
-        }
-      }
-    }
+    // Display-name deduplication is handled by the Lite frontend
+    // (computeProjectDisplayName). The API returns raw names only.
+
+    const totalSessions = mergedProjects.reduce((s, p) => s + p.sessions.length, 0);
+    log('sessions', 'debug', `built ${mergedProjects.length} projects from ${totalSessions} sessions`);
 
     mergedProjects.sort((a, b) => {
       const aTime = a.sessions[0]?.modified || '';
@@ -2040,6 +2085,7 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
     cleanup,
     // DB-as-spine
     reconcileSessionsToDb,
+    backfillProjectPaths,
     reconcileSessionTurnsToDb,
     backfillSessionTurnsToDb,
     repairNoTextSessionTurnsToDb,

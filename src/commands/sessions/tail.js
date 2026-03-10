@@ -27,6 +27,8 @@ export function createSessionsTailModule({ log, broadcast, findSessionFile }) {
   const followedSessions = new Map();
   // ws → Set<sessionId>
   const clientFollows = new WeakMap();
+  // sessionIds currently being set up (prevents duplicate watchers)
+  const pendingFollows = new Set();
   let tailFallbackTimer = null;
 
   function createParserState() {
@@ -465,43 +467,78 @@ export function createSessionsTailModule({ log, broadcast, findSessionFile }) {
       return;
     }
 
-    const found = await findSessionFile(sessionId);
-    if (!found?.filePath) {
-      log('sessions', 'warn', `follow: session file not found for ${sessionId}`);
-      try {
-        ws.send(JSON.stringify({
-          type: 'session:follow-error',
-          data: { sessionId, error: 'not_found' },
-        }));
-      } catch {}
-      return;
+    // Another client is setting up this session — wait for it to complete
+    if (pendingFollows.has(sessionId)) {
+      log('sessions', 'debug', `follow: waiting for pending setup of ${sessionId}`);
+      const waitForSetup = () => new Promise(resolve => {
+        const check = () => {
+          if (!pendingFollows.has(sessionId)) {
+            resolve();
+          } else {
+            setTimeout(check, 50);
+          }
+        };
+        setTimeout(check, 50);
+      });
+      await waitForSetup();
+      // Now it should be in followedSessions — increment ref count
+      if (followedSessions.has(sessionId)) {
+        const entry = followedSessions.get(sessionId);
+        if (!clientSet.has(sessionId)) {
+          entry.subscriberCount++;
+          clientSet.add(sessionId);
+        }
+        log('sessions', 'debug', `follow: joined after setup ${sessionId} (subscribers: ${entry.subscriberCount})`);
+        return;
+      }
+      // If setup failed, fall through to try again
+      log('sessions', 'warn', `follow: setup failed for ${sessionId}, retrying`);
     }
 
-    const entry = {
-      sessionId,
-      provider: found.provider || 'claude',
-      filePath: found.filePath,
-      byteOffset: typeof fromOffset === 'number' && fromOffset > 0 ? fromOffset : 0,
-      partialLine: '',
-      parserState: createParserState(),
-      subscriberCount: 1,
-      watcher: null,
-      lastGrowth: Date.now(),
-      tailQueued: false,
-    };
+    pendingFollows.add(sessionId);
 
-    followedSessions.set(sessionId, entry);
-    clientSet.add(sessionId);
+    let found;
+    try {
+      found = await findSessionFile(sessionId);
+      if (!found?.filePath) {
+        log('sessions', 'warn', `follow: session file not found for ${sessionId}`);
+        try {
+          ws.send(JSON.stringify({
+            type: 'session:follow-error',
+            data: { sessionId, error: 'not_found' },
+          }));
+        } catch {}
+        return;
+      }
 
-    startFileWatcher(entry);
+      const entry = {
+        sessionId,
+        provider: found.provider || 'claude',
+        filePath: found.filePath,
+        byteOffset: typeof fromOffset === 'number' && fromOffset > 0 ? fromOffset : 0,
+        partialLine: '',
+        parserState: createParserState(),
+        subscriberCount: 1,
+        watcher: null,
+        lastGrowth: Date.now(),
+        tailQueued: false,
+      };
 
-    if (!tailFallbackTimer) {
-      tailFallbackTimer = setInterval(tailFallbackTick, TAIL_FALLBACK_INTERVAL_MS);
+      followedSessions.set(sessionId, entry);
+      clientSet.add(sessionId);
+
+      startFileWatcher(entry);
+
+      if (!tailFallbackTimer) {
+        tailFallbackTimer = setInterval(tailFallbackTick, TAIL_FALLBACK_INTERVAL_MS);
+      }
+
+      setImmediate(() => tailSession(entry));
+
+      log('sessions', 'info', `follow: started ${sessionId} from offset ${entry.byteOffset}`);
+    } finally {
+      pendingFollows.delete(sessionId);
     }
-
-    setImmediate(() => tailSession(entry));
-
-    log('sessions', 'info', `follow: started ${sessionId} from offset ${entry.byteOffset}`);
   }
 
   function handleSessionUnfollow(ws, data) {
