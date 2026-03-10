@@ -591,7 +591,11 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
       `[reconcile] DB=${dbCount} fs=${fsCount} added=${added} pruned=${pruned} updated=${updated} duration=${duration}ms`);
 
     // Backfill missing project_path values
-    await backfillProjectPaths(db);
+    try {
+      await backfillProjectPaths(db);
+    } catch (err) {
+      log('sessions', 'warn', `[backfill] failed: ${err.message}`);
+    }
   }
 
   /**
@@ -1079,6 +1083,7 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
 
   return {
     reconcileSessionsToDb,
+    backfillProjectPaths,
     getProjectsFromDb,
     watcherDbUpsert,
     startPeriodicReconcile,

@@ -94,6 +94,7 @@ function normalizeAssistantEvent(event) {
   };
   if (usage) normalized.usage = usage;
   if (model) normalized.model = model;
+  if (event.error) normalized.error = event.error;
   return normalized;
 }
 
@@ -125,6 +126,7 @@ function normalizeResultEvent(event) {
 
   if (usage) normalized.usage = usage;
   if (model) normalized.model = model;
+  if (event.is_error === true) normalized.isError = true;
 
   return normalized;
 }
