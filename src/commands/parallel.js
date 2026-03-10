@@ -162,6 +162,9 @@ export async function cmdParallel(args, flags) {
     cwd: typeof flags.cwd === 'string' ? flags.cwd : process.cwd(),
     permissionMode: typeof flags['permission-mode'] === 'string' ? flags['permission-mode'] : null,
     systemPrompt: typeof flags['system-prompt'] === 'string' ? flags['system-prompt'] : null,
+    executionMode: typeof flags['execution-mode'] === 'string'
+      ? flags['execution-mode']
+      : (flags['no-worktree'] ? 'shared_cwd' : 'worktree'),
     useWorktree: flags['no-worktree'] ? false : true,
     tasks: tasks.map((prompt) => ({ prompt })),
   };

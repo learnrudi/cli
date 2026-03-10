@@ -6,7 +6,12 @@
 
 import { v4 as uuidv4 } from 'uuid'
 import type BetterSqlite3 from 'better-sqlite3'
-import type { DbRunGroup, RunGroupStatus } from './types'
+import type {
+  DbRunGroup,
+  RunGroupCoordinationMode,
+  RunGroupExecutionMode,
+  RunGroupStatus,
+} from './types'
 
 export interface RunGroupCreateOptions {
   id?: string
@@ -14,6 +19,10 @@ export interface RunGroupCreateOptions {
   status?: RunGroupStatus
   projectPath?: string | null
   baseBranch?: string | null
+  executionMode?: RunGroupExecutionMode
+  coordinationMode?: RunGroupCoordinationMode
+  requiresGit?: boolean
+  workspaceRoot?: string | null
   provider?: string | null
   model?: string | null
   permissionMode?: string | null
@@ -40,6 +49,7 @@ function mapDbRunGroup(row: DbRunGroup): DbRunGroup {
     session_count: Number(row.session_count || 0),
     completed_count: Number(row.completed_count || 0),
     failed_count: Number(row.failed_count || 0),
+    requires_git: Number(row.requires_git || 0),
     total_cost: Number(row.total_cost || 0),
     total_tokens: Number(row.total_tokens || 0),
   }
@@ -54,16 +64,21 @@ export function createRunGroup(
   const status = options.status || 'pending'
   db.prepare(`
     INSERT INTO run_groups (
-      id, name, status, project_path, base_branch, provider, model, permission_mode,
+      id, name, status, project_path, base_branch, execution_mode, coordination_mode, requires_git, workspace_root,
+      provider, model, permission_mode,
       session_count, completed_count, failed_count, total_cost, total_tokens, config_json,
       created_at, started_at, completed_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     options.name ?? null,
     status,
     options.projectPath ?? null,
     options.baseBranch ?? null,
+    options.executionMode ?? 'worktree',
+    options.coordinationMode ?? 'flat',
+    options.requiresGit === false ? 0 : 1,
+    options.workspaceRoot ?? null,
     options.provider ?? null,
     options.model ?? null,
     options.permissionMode ?? null,

@@ -69,6 +69,8 @@ export interface DbSession {
 // ============================================================================
 
 export type RunGroupStatus = 'pending' | 'running' | 'completed' | 'partial' | 'failed' | 'stopped'
+export type RunGroupExecutionMode = 'worktree' | 'shared_cwd' | 'read_only' | 'detached'
+export type RunGroupCoordinationMode = 'flat' | 'phased' | 'supervisor'
 
 export interface DbRunGroup {
   id: string
@@ -76,6 +78,10 @@ export interface DbRunGroup {
   status: RunGroupStatus
   project_path: string | null
   base_branch: string | null
+  execution_mode: RunGroupExecutionMode
+  coordination_mode: RunGroupCoordinationMode
+  requires_git: number
+  workspace_root: string | null
   provider: string | null
   model: string | null
   permission_mode: string | null
