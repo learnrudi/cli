@@ -75,8 +75,8 @@ export function checkAllDependencies(resolved) {
   const results = [];
   let satisfied = true;
 
-  // Check runtime
-  if (resolved.runtime) {
+  // Check runtime (binary stacks are self-contained — no runtime dependency)
+  if (resolved.runtime && resolved.runtime !== 'binary') {
     const runtime = resolved.runtime.replace(/^runtime:/, '');
     const check = checkRuntime(runtime);
     results.push({

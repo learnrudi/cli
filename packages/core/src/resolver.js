@@ -58,6 +58,7 @@ export async function resolvePackage(id) {
     npmPackage: mergedPkg.npmPackage,
     pipPackage: mergedPkg.pipPackage,
     postInstall: mergedPkg.postInstall,
+    command: mergedPkg.command,
     binary: mergedPkg.binary,
     bins: mergedPkg.bins,
     binaries: mergedPkg.binaries, // backward compat
@@ -140,8 +141,9 @@ async function resolveDynamicNpm(id) {
 async function resolveDependencies(pkg) {
   const dependencies = [];
 
-  // Resolve runtime dependencies
-  const runtimes = pkg.requires?.runtimes || (pkg.runtime ? [pkg.runtime] : []);
+  // Resolve runtime dependencies (binary stacks have no runtime dependency)
+  const runtimeVal = pkg.runtime === 'binary' ? null : pkg.runtime;
+  const runtimes = pkg.requires?.runtimes || (runtimeVal ? [runtimeVal] : []);
 
   for (const runtime of runtimes) {
     const runtimeId = runtime.startsWith('runtime:') ? runtime : `runtime:${runtime}`;

@@ -332,11 +332,15 @@ export async function getManifest(pkg) {
 
     for (const localPath of localPaths) {
       if (fs.existsSync(localPath)) {
+        // If path is a directory, look for manifest.json inside it
+        const filePath = fs.statSync(localPath).isDirectory()
+          ? path.join(localPath, 'manifest.json')
+          : localPath;
         try {
-          const content = fs.readFileSync(localPath, 'utf-8');
+          const content = fs.readFileSync(filePath, 'utf-8');
           return JSON.parse(content);
         } catch (err) {
-          // Skip invalid JSON
+          // Skip invalid JSON or missing manifest.json
         }
       }
     }
@@ -344,7 +348,8 @@ export async function getManifest(pkg) {
 
   // Fetch from remote (GitHub raw)
   try {
-    const url = `${GITHUB_RAW_BASE}/${manifestPath}`;
+    const remotePath = manifestPath.endsWith('.json') ? manifestPath : `${manifestPath}/manifest.json`;
+    const url = `${GITHUB_RAW_BASE}/${remotePath}`;
     const response = await fetch(url, {
       headers: {
         'Accept': 'application/json',
