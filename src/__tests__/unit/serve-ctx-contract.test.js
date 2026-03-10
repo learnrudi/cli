@@ -77,26 +77,61 @@ describe('createInfrastructure', () => {
   // --- readBody ---
 
   describe('readBody', () => {
-    test('parses JSON from async iterable', async () => {
+    test('parses JSON from event-based request', async () => {
       const ctx = createInfrastructure();
       const payload = { foo: 'bar', n: 42 };
+      const listeners = {};
       const req = {
-        [Symbol.asyncIterator]: async function* () {
-          yield Buffer.from(JSON.stringify(payload));
+        on(event, handler) {
+          listeners[event] = handler;
         },
+        destroy() {},
       };
-      const result = await ctx.readBody(req);
+      const resultPromise = ctx.readBody(req);
+      // Simulate data and end events
+      setImmediate(() => {
+        listeners.data(Buffer.from(JSON.stringify(payload)));
+        listeners.end();
+      });
+      const result = await resultPromise;
       assert.deepStrictEqual(result, payload);
     });
 
     test('throws on invalid JSON', async () => {
       const ctx = createInfrastructure();
+      const listeners = {};
       const req = {
-        [Symbol.asyncIterator]: async function* () {
-          yield Buffer.from('not json');
+        on(event, handler) {
+          listeners[event] = handler;
+        },
+        destroy() {},
+      };
+      const resultPromise = ctx.readBody(req);
+      setImmediate(() => {
+        listeners.data(Buffer.from('not json'));
+        listeners.end();
+      });
+      await assert.rejects(() => resultPromise, { message: 'Invalid JSON in request body' });
+    });
+
+    test('supports a per-request body size override', async () => {
+      const ctx = createInfrastructure();
+      const listeners = {};
+      let destroyed = false;
+      const req = {
+        on(event, handler) {
+          listeners[event] = handler;
+        },
+        destroy() {
+          destroyed = true;
         },
       };
-      await assert.rejects(() => ctx.readBody(req), { name: 'SyntaxError' });
+      const resultPromise = ctx.readBody(req, { maxBodySize: 4 });
+      setImmediate(() => {
+        listeners.data(Buffer.from('{"abc":1}'));
+      });
+      await assert.rejects(() => resultPromise, { message: 'Request body too large' });
+      assert.strictEqual(destroyed, true);
     });
   });
 
