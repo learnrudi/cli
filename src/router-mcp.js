@@ -287,6 +287,13 @@ function spawnStackServer(stackId, stackConfig) {
     throw new Error(`Stack ${stackId} has no launch configuration`);
   }
 
+  // Validate binary exists before attempting spawn
+  if (stackConfig.runtime === 'binary') {
+    if (!fs.existsSync(launch.bin)) {
+      throw new Error(`Binary not found for stack ${stackId}: ${launch.bin}`);
+    }
+  }
+
   const secrets = getStackSecrets(stackId);
   const env = { ...process.env, ...secrets };
 

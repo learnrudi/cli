@@ -16,9 +16,10 @@ import {
   parsePackageId,
   getNodeRuntimeRoot,
   getNodeRuntimeBinDir,
-  resolveNodeRuntimeBin
+  resolveNodeRuntimeBin,
+  getPlatformArch
 } from '@learnrudi/env';
-import { downloadRuntime, downloadPackage, downloadTool } from '@learnrudi/registry-client';
+import { downloadRuntime, downloadPackage, downloadTool, verifyHash } from '@learnrudi/registry-client';
 import { resolvePackage, getInstallOrder } from './resolver.js';
 import { writeLockfile } from './lockfile.js';
 import { createShimsForTool, removeShims } from './shims.js';
@@ -169,6 +170,101 @@ export async function installPackage(id, options = {}) {
     path: getPackagePath(resolved.id),
     installed: results.map(r => r.id)
   };
+}
+
+/**
+ * Install a binary stack — download platform binary, verify, extract, chmod
+ * @param {Object} pkg - Resolved package with binary.platforms
+ * @param {string} installPath - Destination directory
+ * @param {Object} options
+ * @returns {Promise<void>}
+ */
+async function installBinaryStack(pkg, installPath, options = {}) {
+  const { onProgress } = options;
+  const platformArch = getPlatformArch();
+  const platforms = pkg.binary?.platforms;
+
+  if (!platforms || !platforms[platformArch]) {
+    const supported = platforms ? Object.keys(platforms).join(', ') : 'none';
+    throw new Error(`No binary for ${platformArch}. Supported: ${supported}`);
+  }
+
+  const platform = platforms[platformArch];
+  const { url, sha256, extractType = 'tar.gz' } = platform;
+  const binaryName = platform.binary || pkg.command?.[0]?.replace(/^\.\//, '') || pkg.id;
+
+  // Download to temp file
+  const cacheDir = path.join(PATHS.cache, 'downloads');
+  fs.mkdirSync(cacheDir, { recursive: true });
+  const tempFile = path.join(cacheDir, `${pkg.id}-${platformArch}.download`);
+
+  try {
+    onProgress?.({ phase: 'downloading', package: pkg.id, detail: `Downloading binary for ${platformArch}` });
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Download failed: HTTP ${response.status} from ${url}`);
+    }
+    await pipeline(response.body, createWriteStream(tempFile));
+
+    // Verify checksum if provided
+    if (sha256) {
+      onProgress?.({ phase: 'verifying', package: pkg.id });
+      const valid = await verifyHash(tempFile, sha256);
+      if (!valid) {
+        throw new Error(`Checksum verification failed for ${pkg.id}`);
+      }
+    }
+
+    // Extract
+    onProgress?.({ phase: 'extracting', package: pkg.id });
+    const { execSync } = await import('child_process');
+
+    if (extractType === 'none') {
+      // Raw binary — move directly
+      const destPath = path.join(installPath, binaryName);
+      fs.copyFileSync(tempFile, destPath);
+    } else if (extractType === 'tar.gz' || extractType === 'tgz') {
+      execSync(`tar -xzf "${tempFile}" -C "${installPath}"`, { stdio: 'pipe' });
+    } else if (extractType === 'tar.xz') {
+      execSync(`tar -xJf "${tempFile}" -C "${installPath}"`, { stdio: 'pipe' });
+    } else if (extractType === 'zip') {
+      execSync(`unzip -o "${tempFile}" -d "${installPath}"`, { stdio: 'pipe' });
+    } else {
+      throw new Error(`Unsupported extract type: ${extractType}`);
+    }
+
+    // Make binary executable
+    const binaryPath = path.join(installPath, binaryName);
+    if (!fs.existsSync(binaryPath)) {
+      // Binary might be in a subdirectory — look one level deep
+      const entries = fs.readdirSync(installPath, { withFileTypes: true });
+      let found = false;
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const nested = path.join(installPath, entry.name, binaryName);
+          if (fs.existsSync(nested)) {
+            // Move binary up to install root
+            fs.renameSync(nested, binaryPath);
+            found = true;
+            break;
+          }
+        }
+      }
+      if (!found) {
+        throw new Error(`Binary '${binaryName}' not found after extraction`);
+      }
+    }
+
+    if (process.platform !== 'win32') {
+      fs.chmodSync(binaryPath, 0o755);
+    }
+
+    onProgress?.({ phase: 'installed', package: pkg.id });
+  } finally {
+    // Always clean up temp file
+    try { fs.unlinkSync(tempFile); } catch { /* ignore */ }
+  }
 }
 
 /**
@@ -526,6 +622,27 @@ async function installSinglePackage(pkg, options = {}) {
         }, null, 2)
       );
       return { success: true, id: pkg.id, path: installPath, placeholder: true };
+    }
+  }
+
+  // Handle binary runtime stacks — download platform binary directly
+  if (pkg.runtime === 'binary' && pkg.binary?.platforms) {
+    onProgress?.({ phase: 'downloading', package: pkg.id });
+    try {
+      fs.mkdirSync(installPath, { recursive: true });
+      await installBinaryStack(pkg, installPath, { onProgress });
+
+      // Write manifest for reference
+      fs.writeFileSync(
+        path.join(installPath, 'manifest.json'),
+        JSON.stringify(pkg, null, 2)
+      );
+
+      return { success: true, id: pkg.id, path: installPath };
+    } catch (error) {
+      // Clean up install dir on failure
+      try { fs.rmSync(installPath, { recursive: true, force: true }); } catch { /* ignore */ }
+      throw new Error(`Failed to install binary stack ${pkg.id}: ${error.message}`);
     }
   }
 

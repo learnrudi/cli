@@ -106,6 +106,11 @@ async function installDependencies(stackPath, manifest, options = {}) {
   const { includeDevDeps = false, nodeProject } = options;
   const runtime = getStackRuntime(manifest);
 
+  // Binary stacks have no dependencies to install
+  if (runtime === 'binary') {
+    return { installed: false, reason: 'Binary runtime — no dependencies' };
+  }
+
   try {
     if (runtime === 'node') {
       const project = nodeProject || getNodeProjectInfo(stackPath);
@@ -243,6 +248,28 @@ function getStackEntryPoint(stackPath, manifest) {
  * @returns {{ valid: boolean, error?: string }}
  */
 function validateStackEntryPoint(stackPath, manifest) {
+  const runtime = getStackRuntime(manifest);
+
+  // Binary stacks: validate binary exists and is executable
+  if (runtime === 'binary') {
+    const command = getStackCommand(manifest);
+    if (!command || command.length === 0) {
+      return { valid: false, error: 'Binary stack has no command' };
+    }
+    const binName = command[0].replace(/^\.\//, '');
+    const binaryPath = path.join(stackPath, binName);
+    if (!fsSync.existsSync(binaryPath)) {
+      return { valid: false, error: `Binary not found: ${command[0]}` };
+    }
+    if (process.platform !== 'win32') {
+      const stats = fsSync.statSync(binaryPath);
+      if ((stats.mode & 0o111) === 0) {
+        return { valid: false, error: `Binary not executable: ${command[0]}` };
+      }
+    }
+    return { valid: true };
+  }
+
   const entryPoint = getStackEntryPoint(stackPath, manifest);
 
   if (entryPoint.error) {

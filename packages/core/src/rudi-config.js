@@ -129,11 +129,21 @@ export function createRudiConfig() {
 /**
  * Create a LaunchConfig from manifest command array
  * @param {string[]} command - Command array from manifest (e.g., ["npx", "tsx", "src/index.ts"])
- * @param {string} runtime - Runtime type ('node' or 'python')
+ * @param {string} runtime - Runtime type ('node', 'python', or 'binary')
  * @param {string} stackPath - Absolute path to stack directory
  * @returns {LaunchConfig}
  */
 export function createLaunchConfig(command, runtime, stackPath) {
+  // Binary runtime: command[0] is relative path within stack directory
+  if (runtime === 'binary') {
+    if (!command || command.length === 0) {
+      throw new Error('Binary runtime requires a command');
+    }
+    const bin = command[0].replace(/^\.\//, '');
+    const binaryPath = path.isAbsolute(command[0]) ? command[0] : path.join(stackPath, bin);
+    return { bin: binaryPath, args: command.slice(1), cwd: stackPath };
+  }
+
   if (!command || command.length === 0) {
     // Default based on runtime
     if (runtime === 'python') {
