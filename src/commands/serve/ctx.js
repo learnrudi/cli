@@ -85,10 +85,69 @@ export function createInfrastructure() {
     return true;
   }
 
-  async function readBody(req) {
-    const chunks = [];
-    for await (const chunk of req) chunks.push(chunk);
-    return JSON.parse(Buffer.concat(chunks).toString());
+  const DEFAULT_MAX_BODY_SIZE = 10 * 1024 * 1024; // 10MB
+  const BODY_READ_TIMEOUT = 30_000; // 30s
+
+  async function readBody(req, options = {}) {
+    const maxBodySize = Number.isFinite(options.maxBodySize) && options.maxBodySize > 0
+      ? options.maxBodySize
+      : DEFAULT_MAX_BODY_SIZE;
+    const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs > 0
+      ? options.timeoutMs
+      : BODY_READ_TIMEOUT;
+    return new Promise((resolve, reject) => {
+      const chunks = [];
+      let size = 0;
+      let settled = false;
+
+      function resolveOnce(value) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      }
+
+      function rejectOnce(err) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        reject(err);
+      }
+
+      const timer = setTimeout(() => {
+        try { req.destroy(); } catch {}
+        const err = new Error('Request body read timed out');
+        err.statusCode = 408;
+        rejectOnce(err);
+      }, timeoutMs);
+
+      req.on('data', (chunk) => {
+        size += chunk.length;
+        if (size > maxBodySize) {
+          try { req.destroy(); } catch {}
+          const err = new Error('Request body too large');
+          err.statusCode = 413;
+          rejectOnce(err);
+          return;
+        }
+        chunks.push(chunk);
+      });
+
+      req.on('end', () => {
+        if (settled) return;
+        try {
+          resolveOnce(JSON.parse(Buffer.concat(chunks).toString()));
+        } catch {
+          const parseErr = new Error('Invalid JSON in request body');
+          parseErr.statusCode = 400;
+          rejectOnce(parseErr);
+        }
+      });
+
+      req.on('error', (err) => {
+        rejectOnce(err);
+      });
+    });
   }
 
   // --- Auth ---

@@ -9,6 +9,7 @@ import fsp from 'fs/promises';
 import path from 'path';
 
 const FS_READDIR_CACHE_TTL_MS = 1200;
+const MAX_FS_WRITE_BODY_SIZE = 50 * 1024 * 1024;
 
 export function buildFsRoutes(ctx) {
   const { json, error, readBody, log, broadcast } = ctx;
@@ -96,7 +97,7 @@ export function buildFsRoutes(ctx) {
 
     // POST /fs/write {path, content}
     if (req.method === 'POST' && pathname === '/fs/write') {
-      const body = await readBody(req);
+      const body = await readBody(req, { maxBodySize: MAX_FS_WRITE_BODY_SIZE });
       if (!body.path || body.content === undefined) return error(res, 'path and content required');
       try {
         await fsp.mkdir(path.dirname(body.path), { recursive: true });
@@ -111,7 +112,7 @@ export function buildFsRoutes(ctx) {
 
     // POST /fs/write-binary {path, base64}
     if (req.method === 'POST' && pathname === '/fs/write-binary') {
-      const body = await readBody(req);
+      const body = await readBody(req, { maxBodySize: MAX_FS_WRITE_BODY_SIZE });
       if (!body.path || body.base64 === undefined) return error(res, 'path and base64 required');
       try {
         await fsp.mkdir(path.dirname(body.path), { recursive: true });

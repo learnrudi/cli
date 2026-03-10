@@ -157,7 +157,7 @@ export async function cmdServe(args, flags) {
     handleWsMessage: handleSessionsWsMessage,
     handleWsDisconnect: handleSessionsWsDisconnect,
     cleanup: cleanupSessions,
-    reconcileSessionsToDb, reconcileSessionTurnsToDb, backfillSessionTurnsToDb,
+    reconcileSessionsToDb, backfillProjectPaths, reconcileSessionTurnsToDb, backfillSessionTurnsToDb,
     repairNoTextSessionTurnsToDb,
     startPeriodicReconcile, startTurnIngestReconcile,
     enableDbSpine, isDbSpineEnabled, getTurnIngestStats,
@@ -537,6 +537,13 @@ export async function cmdServe(args, flags) {
       if (!isDbSpineEnabled()) {
         enableDbSpine();
         log('sessions', 'info', 'DB-as-spine enabled after reconciliation');
+      }
+      // Backfill missing/corrupted project_path values (runs even if reconcile failed)
+      try {
+        const db = sessionsResolveDb();
+        await backfillProjectPaths(db);
+      } catch (bfErr) {
+        log('sessions', 'warn', `[backfill] project paths failed: ${bfErr.message}`);
       }
       try {
         const db = sessionsResolveDb();
