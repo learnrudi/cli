@@ -8,6 +8,7 @@ import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
 import { getDb, initSchema } from '@learnrudi/db';
+import { transitionSessionStatus } from '../agent/db.js';
 
 /**
  * Run synchronous startup tasks. Call before server.listen().
@@ -34,17 +35,23 @@ export function runStartupTasks({ log }) {
       SELECT DISTINCT s.run_group_id
       FROM session_runtime_state srs
       JOIN sessions s ON s.id = srs.session_id
-      WHERE srs.status IN ('starting', 'running')
+      WHERE srs.status IN ('starting', 'running', 'retrying')
         AND s.run_group_id IS NOT NULL
     `).all().map(r => r.run_group_id);
 
-    const stale = db.prepare(`
-      UPDATE session_runtime_state
-      SET status = 'crashed', updated_at = ?
-      WHERE status IN ('starting', 'running')
-    `).run(now);
-    if (stale.changes > 0) {
-      log('serve', 'info', `Marked ${stale.changes} stale session(s) as crashed`);
+    const staleRows = db.prepare(`
+      SELECT session_id
+      FROM session_runtime_state
+      WHERE status IN ('starting', 'running', 'retrying')
+    `).all();
+    let staleCount = 0;
+    for (const row of staleRows) {
+      if (transitionSessionStatus(db, row.session_id, 'crashed')) {
+        staleCount += 1;
+      }
+    }
+    if (staleCount > 0) {
+      log('serve', 'info', `Marked ${staleCount} stale session(s) as crashed`);
     }
 
     // Refresh aggregates for any run_groups whose sessions were just marked crashed
@@ -103,9 +110,9 @@ export function runStartupTasks({ log }) {
         AND rg.session_count > 0
         AND NOT EXISTS (
           SELECT 1 FROM sessions s
-          JOIN session_runtime_state srs ON srs.session_id = s.id
+          LEFT JOIN session_runtime_state srs ON srs.session_id = s.id
           WHERE s.run_group_id = rg.id
-            AND srs.status NOT IN ('completed', 'error', 'stopped', 'crashed')
+            AND COALESCE(srs.status, 'pending') NOT IN ('completed', 'error', 'stopped', 'crashed')
         )
     `).all();
     for (const { id: groupId } of stuckGroups) {

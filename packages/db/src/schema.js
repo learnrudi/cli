@@ -4,7 +4,7 @@
 
 import { getDb } from './index.js';
 
-export const SCHEMA_VERSION = 17;
+export const SCHEMA_VERSION = 22;
 
 export const SCHEMA_SQL = `
 -- Schema version tracking
@@ -42,6 +42,12 @@ CREATE TABLE IF NOT EXISTS run_groups (
     CHECK (status IN ('pending','running','completed','partial','failed','stopped')),
   project_path TEXT,
   base_branch TEXT,
+  execution_mode TEXT NOT NULL DEFAULT 'worktree'
+    CHECK (execution_mode IN ('worktree','shared_cwd','read_only','detached')),
+  coordination_mode TEXT NOT NULL DEFAULT 'flat'
+    CHECK (coordination_mode IN ('flat','phased','supervisor')),
+  requires_git INTEGER NOT NULL DEFAULT 1,
+  workspace_root TEXT,
   provider TEXT DEFAULT 'claude',
   model TEXT,
   permission_mode TEXT,
@@ -426,7 +432,7 @@ CREATE INDEX IF NOT EXISTS idx_system_events_type ON system_events(event_type);
 
 CREATE TABLE IF NOT EXISTS session_runtime_state (
   session_id TEXT PRIMARY KEY,
-  status TEXT NOT NULL CHECK(status IN ('starting','running','completed','error','stopped','crashed')),
+  status TEXT NOT NULL CHECK(status IN ('starting','running','retrying','completed','error','stopped','crashed')),
   provider TEXT,
   provider_session_id TEXT,
   resume_session_id TEXT,
@@ -447,7 +453,9 @@ CREATE TABLE IF NOT EXISTS session_runtime_state (
   worktree_path TEXT,
   worktree_branch TEXT,
   project_root TEXT,
-  base_branch TEXT
+  base_branch TEXT,
+  use_worktree INTEGER NOT NULL DEFAULT 1,
+  execution_mode TEXT DEFAULT 'shared_cwd'
 );
 
 CREATE TABLE IF NOT EXISTS session_runtime_events (
@@ -664,6 +672,12 @@ export function applySchemaUpdates(db) {
         CHECK (status IN ('pending','running','completed','partial','failed','stopped')),
       project_path TEXT,
       base_branch TEXT,
+      execution_mode TEXT NOT NULL DEFAULT 'worktree'
+        CHECK (execution_mode IN ('worktree','shared_cwd','read_only','detached')),
+      coordination_mode TEXT NOT NULL DEFAULT 'flat'
+        CHECK (coordination_mode IN ('flat','phased','supervisor')),
+      requires_git INTEGER NOT NULL DEFAULT 1,
+      workspace_root TEXT,
       provider TEXT DEFAULT 'claude',
       model TEXT,
       permission_mode TEXT,
@@ -679,6 +693,30 @@ export function applySchemaUpdates(db) {
       updated_at TEXT NOT NULL
     );
   `);
+  ensureColumn(
+    db,
+    'run_groups',
+    'execution_mode',
+    "ALTER TABLE run_groups ADD COLUMN execution_mode TEXT NOT NULL DEFAULT 'worktree'"
+  );
+  ensureColumn(
+    db,
+    'run_groups',
+    'coordination_mode',
+    "ALTER TABLE run_groups ADD COLUMN coordination_mode TEXT NOT NULL DEFAULT 'flat'"
+  );
+  ensureColumn(
+    db,
+    'run_groups',
+    'requires_git',
+    'ALTER TABLE run_groups ADD COLUMN requires_git INTEGER NOT NULL DEFAULT 1'
+  );
+  ensureColumn(
+    db,
+    'run_groups',
+    'workspace_root',
+    'ALTER TABLE run_groups ADD COLUMN workspace_root TEXT'
+  );
   ensureIndex(
     db,
     'idx_run_groups_status',
@@ -1008,7 +1046,7 @@ export function applySchemaUpdates(db) {
   ensureTable(db, 'session_runtime_state', `
     CREATE TABLE IF NOT EXISTS session_runtime_state (
       session_id TEXT PRIMARY KEY,
-      status TEXT NOT NULL CHECK(status IN ('starting','running','completed','error','stopped','crashed')),
+      status TEXT NOT NULL CHECK(status IN ('starting','running','retrying','completed','error','stopped','crashed')),
       provider TEXT,
       provider_session_id TEXT,
       resume_session_id TEXT,
@@ -1044,6 +1082,7 @@ export function applySchemaUpdates(db) {
     ensureColumn(db, 'session_runtime_state', 'project_root', 'ALTER TABLE session_runtime_state ADD COLUMN project_root TEXT');
     ensureColumn(db, 'session_runtime_state', 'base_branch', 'ALTER TABLE session_runtime_state ADD COLUMN base_branch TEXT');
     ensureColumn(db, 'session_runtime_state', 'use_worktree', 'ALTER TABLE session_runtime_state ADD COLUMN use_worktree INTEGER NOT NULL DEFAULT 1');
+    ensureColumn(db, 'session_runtime_state', 'execution_mode', "ALTER TABLE session_runtime_state ADD COLUMN execution_mode TEXT DEFAULT 'shared_cwd'");
   }
 
   ensureTable(db, 'session_runtime_events', `
@@ -1158,6 +1197,84 @@ export function applySchemaUpdates(db) {
       `).run('claude', 'claude-opus-4-6%', 'Claude Opus 4.6', 5.0, 25.0, 0.50, 6.25, '2025-01-01', 'Most capable');
     }
   }
+}
+
+function extractToolPreview(input, keys) {
+  if (!input || typeof input !== 'object' || !keys) return null;
+  const candidates = Array.isArray(keys) ? keys : [keys];
+  for (const key of candidates) {
+    if (typeof input[key] === 'string') {
+      return input[key].slice(0, 300);
+    }
+  }
+  return null;
+}
+
+function extractPatchFilePath(patchText) {
+  if (typeof patchText !== 'string' || patchText.length === 0) return null;
+  const moved = patchText.match(/^\*\*\* Move to: (.+)$/m);
+  if (moved?.[1]) return moved[1].trim();
+  const fileMatch = patchText.match(/^\*\*\* (?:Update|Add|Delete) File: (.+)$/m);
+  return fileMatch?.[1]?.trim() || null;
+}
+
+function extractToolBackfillData(provider, toolName, input, filePathKeys, inputPreviewKeys) {
+  if (!input || typeof input !== 'object') {
+    return { filePath: null, inputPreview: null };
+  }
+
+  const filePathKey = filePathKeys[provider]?.[toolName];
+  let filePath = filePathKey && typeof input[filePathKey] === 'string'
+    ? input[filePathKey]
+    : null;
+
+  if (!filePath && provider === 'codex' && toolName === 'apply_patch') {
+    filePath = extractPatchFilePath(input.apply_patch);
+  }
+
+  const inputPreview = extractToolPreview(input, inputPreviewKeys[provider]?.[toolName]);
+  return { filePath, inputPreview };
+}
+
+function escapeRegex(text) {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function decodeJsonStringFragment(fragment) {
+  if (typeof fragment !== 'string') return null;
+  return fragment
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(Number.parseInt(hex, 16)))
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\t/g, '\t')
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, '\\');
+}
+
+function extractToolPreviewFromBlob(blob, keys) {
+  if (typeof blob !== 'string' || !keys) return null;
+  const candidates = Array.isArray(keys) ? keys : [keys];
+  for (const key of candidates) {
+    const pattern = new RegExp(`"${escapeRegex(key)}"\\s*:\\s*"((?:\\\\.|[^"])*)`);
+    const match = blob.match(pattern);
+    if (!match?.[1]) continue;
+    const decoded = decodeJsonStringFragment(match[1]);
+    if (decoded) return decoded.slice(0, 300);
+  }
+  return null;
+}
+
+function extractToolBackfillDataFromBlob(provider, toolName, blob, filePathKeys, inputPreviewKeys) {
+  const filePathKey = filePathKeys[provider]?.[toolName];
+  let filePath = extractToolPreviewFromBlob(blob, filePathKey);
+
+  if (!filePath && provider === 'codex' && toolName === 'apply_patch') {
+    const patchText = extractToolPreviewFromBlob(blob, 'apply_patch');
+    filePath = extractPatchFilePath(patchText);
+  }
+
+  const inputPreview = extractToolPreviewFromBlob(blob, inputPreviewKeys[provider]?.[toolName]);
+  return { filePath, inputPreview };
 }
 
 /**
@@ -1402,7 +1519,7 @@ function runMigrations(db, from, to) {
           ALTER TABLE session_runtime_state RENAME TO _srs_old;
           CREATE TABLE session_runtime_state (
             session_id TEXT PRIMARY KEY,
-            status TEXT NOT NULL CHECK(status IN ('starting','running','completed','error','stopped','crashed')),
+            status TEXT NOT NULL CHECK(status IN ('starting','running','retrying','completed','error','stopped','crashed')),
             provider TEXT,
             provider_session_id TEXT,
             resume_session_id TEXT,
@@ -1663,14 +1780,35 @@ function runMigrations(db, from, to) {
       };
       const INPUT_PREVIEW_KEYS = {
         claude: {
-          Bash: 'command', Grep: 'pattern', Glob: 'pattern',
+          Read: 'file_path',
+          Edit: 'file_path',
+          Write: 'file_path',
+          NotebookEdit: 'notebook_path',
+          Bash: 'command',
+          Grep: 'pattern',
+          Glob: 'pattern',
+          WebFetch: 'url',
+          WebSearch: 'query',
+          Task: 'description',
         },
         codex: {
-          shell: 'command', shell_command: 'command', exec_command: 'cmd',
-          write_stdin: 'chars', grep: 'pattern', glob: 'pattern',
+          file_read: 'path',
+          file_edit: 'path',
+          file_write: 'path',
+          apply_patch: 'apply_patch',
+          shell: 'command',
+          shell_command: 'command',
+          exec_command: 'cmd',
+          write_stdin: 'chars',
+          grep: 'pattern',
+          glob: 'pattern',
         },
         gemini: {
-          run_terminal_command: 'command', search_files: 'pattern',
+          read_file: 'target_file',
+          edit_file: 'target_file',
+          create_file: 'target_file',
+          run_terminal_command: 'command',
+          search_files: 'pattern',
         },
       };
 
@@ -1685,24 +1823,6 @@ function runMigrations(db, from, to) {
           AND (file_path IS NULL OR input_preview IS NULL)
       `);
 
-      function extractBackfillData(provider, toolName, input) {
-        if (!input || typeof input !== 'object') {
-          return { filePath: null, inputPreview: null };
-        }
-
-        const filePathKey = FILE_PATH_KEYS[provider]?.[toolName];
-        const previewKey = INPUT_PREVIEW_KEYS[provider]?.[toolName];
-
-        const filePath = filePathKey && typeof input[filePathKey] === 'string'
-          ? input[filePathKey]
-          : null;
-        const previewValue = previewKey && typeof input[previewKey] === 'string'
-          ? input[previewKey].slice(0, 300)
-          : null;
-
-        return { filePath, inputPreview: previewValue };
-      }
-
       let updated = 0;
       let total = 0;
       const txn = db.transaction(() => {
@@ -1715,7 +1835,13 @@ function runMigrations(db, from, to) {
             if (!tc.id || !tc.name) continue;
             total++;
 
-            const { filePath, inputPreview } = extractBackfillData(row.provider, tc.name, tc.input);
+            const { filePath, inputPreview } = extractToolBackfillData(
+              row.provider,
+              tc.name,
+              tc.input,
+              FILE_PATH_KEYS,
+              INPUT_PREVIEW_KEYS,
+            );
 
             if (filePath || inputPreview) {
               const result = update.run(filePath, inputPreview, tc.id);
@@ -1731,6 +1857,307 @@ function runMigrations(db, from, to) {
 
       txn();
       console.log(`    Backfilled ${updated}/${total} tool_calls with file_path/input_preview`);
+    },
+
+    // Version 18: Normalize JSON blob input_preview values into extracted command/pattern strings
+    18: (db) => {
+      const INPUT_PREVIEW_KEYS = {
+        claude: {
+          Read: 'file_path',
+          Edit: 'file_path',
+          Write: 'file_path',
+          NotebookEdit: 'notebook_path',
+          Bash: 'command',
+          Grep: 'pattern',
+          Glob: 'pattern',
+          WebFetch: 'url',
+          WebSearch: 'query',
+          Task: 'description',
+        },
+        codex: {
+          file_read: 'path',
+          file_edit: 'path',
+          file_write: 'path',
+          apply_patch: 'apply_patch',
+          shell: ['command', 'cmd'],
+          shell_command: ['command', 'cmd'],
+          exec_command: ['cmd', 'command'],
+          write_stdin: 'chars',
+          grep: 'pattern',
+          glob: 'pattern',
+        },
+        gemini: {
+          read_file: 'target_file',
+          edit_file: 'target_file',
+          create_file: 'target_file',
+          run_terminal_command: 'command',
+          search_files: 'pattern',
+        },
+      };
+
+      const rows = db.prepare(`
+        SELECT provider, tool_results
+        FROM turns
+        WHERE tool_results IS NOT NULL
+      `).all();
+
+      const update = db.prepare(`
+        UPDATE tool_calls
+        SET input_preview = ?
+        WHERE id = ?
+          AND (? IS NOT NULL)
+          AND (input_preview IS NULL OR input_preview LIKE '{%')
+      `);
+
+      let normalized = 0;
+      let total = 0;
+
+      const txn = db.transaction(() => {
+        for (const row of rows) {
+          let calls;
+          try { calls = JSON.parse(row.tool_results); } catch { continue; }
+          if (!Array.isArray(calls)) continue;
+
+          for (const tc of calls) {
+            if (!tc?.id || !tc?.name) continue;
+            total++;
+            const preview = extractToolPreview(tc.input, INPUT_PREVIEW_KEYS[row.provider]?.[tc.name]);
+            if (!preview) continue;
+            const result = update.run(preview, tc.id, preview);
+            if (result.changes > 0) normalized++;
+          }
+        }
+      });
+
+      txn();
+      console.log(`    Normalized ${normalized}/${total} tool_call input_preview values`);
+    },
+
+    // Version 19: Parse existing JSON blob input_preview values into normalized previews/file paths
+    19: (db) => {
+      const FILE_PATH_KEYS = {
+        claude: {
+          Read: 'file_path', Edit: 'file_path', Write: 'file_path',
+          NotebookEdit: 'notebook_path', Grep: 'path', LSP: 'filePath',
+          Glob: 'path',
+        },
+        codex: {
+          file_read: 'path', file_edit: 'path', file_write: 'path',
+        },
+        gemini: {
+          read_file: 'target_file', edit_file: 'target_file', create_file: 'target_file',
+        },
+      };
+      const INPUT_PREVIEW_KEYS = {
+        claude: {
+          Read: 'file_path',
+          Edit: 'file_path',
+          Write: 'file_path',
+          NotebookEdit: 'notebook_path',
+          Bash: 'command',
+          Grep: 'pattern',
+          Glob: 'pattern',
+          WebFetch: 'url',
+          WebSearch: 'query',
+          Task: 'description',
+        },
+        codex: {
+          file_read: 'path',
+          file_edit: 'path',
+          file_write: 'path',
+          apply_patch: 'apply_patch',
+          shell: ['command', 'cmd'],
+          shell_command: ['command', 'cmd'],
+          exec_command: ['cmd', 'command'],
+          write_stdin: 'chars',
+          grep: 'pattern',
+          glob: 'pattern',
+        },
+        gemini: {
+          read_file: 'target_file',
+          edit_file: 'target_file',
+          create_file: 'target_file',
+          run_terminal_command: 'command',
+          search_files: 'pattern',
+        },
+      };
+
+      const rows = db.prepare(`
+        SELECT id, provider, tool_name, file_path, input_preview
+        FROM tool_calls
+        WHERE input_preview LIKE '{%' OR input_preview LIKE '[%'
+      `).all();
+
+      const update = db.prepare(`
+        UPDATE tool_calls
+        SET
+          file_path = COALESCE(file_path, ?),
+          input_preview = CASE
+            WHEN (input_preview LIKE '{%' OR input_preview LIKE '[%') AND ? IS NOT NULL THEN ?
+            ELSE input_preview
+          END
+        WHERE id = ?
+          AND (
+            (file_path IS NULL AND ? IS NOT NULL)
+            OR ((input_preview LIKE '{%' OR input_preview LIKE '[%') AND ? IS NOT NULL AND input_preview != ?)
+          )
+      `);
+
+      let normalized = 0;
+      let total = 0;
+
+      const txn = db.transaction(() => {
+        for (const row of rows) {
+          total++;
+
+          let parsed;
+          try {
+            parsed = JSON.parse(row.input_preview);
+          } catch {
+            continue;
+          }
+
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
+
+          const { filePath, inputPreview } = extractToolBackfillData(
+            row.provider,
+            row.tool_name,
+            parsed,
+            FILE_PATH_KEYS,
+            INPUT_PREVIEW_KEYS,
+          );
+
+          if (!filePath && !inputPreview) continue;
+
+          const result = update.run(
+            filePath,
+            inputPreview,
+            inputPreview,
+            row.id,
+            filePath,
+            inputPreview,
+            inputPreview,
+          );
+          if (result.changes > 0) normalized++;
+        }
+      });
+
+      txn();
+      console.log(`    Normalized ${normalized}/${total} raw JSON tool_call previews`);
+    },
+
+    // Version 20: Recover normalized previews/file paths from truncated JSON preview blobs
+    20: (db) => {
+      const FILE_PATH_KEYS = {
+        claude: {
+          Read: 'file_path', Edit: 'file_path', Write: 'file_path',
+          NotebookEdit: 'notebook_path', Grep: 'path', LSP: 'filePath',
+          Glob: 'path',
+        },
+        codex: {
+          file_read: 'path', file_edit: 'path', file_write: 'path',
+        },
+        gemini: {
+          read_file: 'target_file', edit_file: 'target_file', create_file: 'target_file',
+        },
+      };
+      const INPUT_PREVIEW_KEYS = {
+        claude: {
+          Read: 'file_path',
+          Edit: 'file_path',
+          Write: 'file_path',
+          NotebookEdit: 'notebook_path',
+          Bash: 'command',
+          Grep: 'pattern',
+          Glob: 'pattern',
+          WebFetch: 'url',
+          WebSearch: 'query',
+          Task: 'description',
+        },
+        codex: {
+          file_read: 'path',
+          file_edit: 'path',
+          file_write: 'path',
+          apply_patch: 'apply_patch',
+          shell: ['command', 'cmd'],
+          shell_command: ['command', 'cmd'],
+          exec_command: ['cmd', 'command'],
+          write_stdin: 'chars',
+          grep: 'pattern',
+          glob: 'pattern',
+        },
+        gemini: {
+          read_file: 'target_file',
+          edit_file: 'target_file',
+          create_file: 'target_file',
+          run_terminal_command: 'command',
+          search_files: 'pattern',
+        },
+      };
+
+      const rows = db.prepare(`
+        SELECT id, provider, tool_name, input_preview
+        FROM tool_calls
+        WHERE input_preview LIKE '{%' OR input_preview LIKE '[%'
+      `).all();
+
+      const update = db.prepare(`
+        UPDATE tool_calls
+        SET
+          file_path = COALESCE(file_path, ?),
+          input_preview = CASE
+            WHEN (input_preview LIKE '{%' OR input_preview LIKE '[%') AND ? IS NOT NULL THEN ?
+            ELSE input_preview
+          END
+        WHERE id = ?
+          AND (
+            (file_path IS NULL AND ? IS NOT NULL)
+            OR ((input_preview LIKE '{%' OR input_preview LIKE '[%') AND ? IS NOT NULL AND input_preview != ?)
+          )
+      `);
+
+      let normalized = 0;
+      let total = 0;
+
+      const txn = db.transaction(() => {
+        for (const row of rows) {
+          total++;
+          const { filePath, inputPreview } = extractToolBackfillDataFromBlob(
+            row.provider,
+            row.tool_name,
+            row.input_preview,
+            FILE_PATH_KEYS,
+            INPUT_PREVIEW_KEYS,
+          );
+
+          if (!filePath && !inputPreview) continue;
+
+          const result = update.run(
+            filePath,
+            inputPreview,
+            inputPreview,
+            row.id,
+            filePath,
+            inputPreview,
+            inputPreview,
+          );
+          if (result.changes > 0) normalized++;
+        }
+      });
+
+      txn();
+      console.log(`    Recovered ${normalized}/${total} truncated raw JSON tool_call previews`);
+    },
+
+    21: (db) => {
+      if (tableExists(db, 'sessions')) {
+        ensureColumn(db, 'sessions', 'description', 'ALTER TABLE sessions ADD COLUMN description TEXT');
+        ensureColumn(db, 'sessions', 'enriched_at', 'ALTER TABLE sessions ADD COLUMN enriched_at TEXT');
+      }
+    },
+
+    22: (db) => {
+      applySchemaUpdates(db);
     },
   };
 
@@ -1766,6 +2193,7 @@ function _createSessionsFtsTable(db) {
     CREATE VIRTUAL TABLE IF NOT EXISTS sessions_fts USING fts5(
       session_id UNINDEXED,
       title,
+      description,
       snippet
     );
   `);
@@ -1774,10 +2202,11 @@ function _createSessionsFtsTable(db) {
 function _refreshSessionsFts(db) {
   db.exec('DELETE FROM sessions_fts');
   db.exec(`
-    INSERT INTO sessions_fts(session_id, title, snippet)
+    INSERT INTO sessions_fts(session_id, title, description, snippet)
     SELECT
       id,
       COALESCE(title, ''),
+      COALESCE(description, ''),
       COALESCE(snippet, '')
     FROM sessions
     WHERE status != 'deleted'
@@ -1794,7 +2223,8 @@ function ensureSessionsFtsHealthy(db) {
     if (!recreate) {
       const cols = db.pragma('table_info(sessions_fts)');
       const hasSessionId = cols.some((col) => col.name === 'session_id');
-      if (!hasSessionId) recreate = true;
+      const hasDescription = cols.some((col) => col.name === 'description');
+      if (!hasSessionId || !hasDescription) recreate = true;
     }
     if (recreate) {
       try { db.exec('DROP TABLE IF EXISTS sessions_fts'); } catch {}
