@@ -1,0 +1,195 @@
+{
+  "version": "1.0.0",
+  "generated": "2026-03-10T14:23:19.633Z",
+  "packages": {
+    "runtimes": [
+      {
+        "id": "bun",
+        "name": "Bun",
+        "kind": "runtime",
+        "installDir": "bun",
+        "basePath": "runtimes",
+        "installType": "binary",
+        "commands": [
+          {
+            "name": "bun",
+            "bin": "bun",
+            "args": null
+          },
+          {
+            "name": "bunx",
+            "bin": "bun",
+            "args": [
+              "x"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "deno",
+        "name": "Deno",
+        "kind": "runtime",
+        "installDir": "deno",
+        "basePath": "runtimes",
+        "installType": "binary",
+        "commands": [
+          {
+            "name": "deno",
+            "bin": "deno",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "node",
+        "name": "Node.js",
+        "kind": "runtime",
+        "installDir": "node",
+        "basePath": "runtimes",
+        "installType": "binary",
+        "commands": [
+          {
+            "name": "node",
+            "bin": "bin/node",
+            "args": null
+          },
+          {
+            "name": "npm",
+            "bin": "bin/npm",
+            "args": null
+          },
+          {
+            "name": "npx",
+            "bin": "bin/npx",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "ollama",
+        "name": "Ollama",
+        "kind": "runtime",
+        "installDir": "ollama",
+        "basePath": "runtimes",
+        "installType": "binary",
+        "commands": [
+          {
+            "name": "ollama",
+            "bin": "ollama",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "python",
+        "name": "Python",
+        "kind": "runtime",
+        "installDir": "python",
+        "basePath": "runtimes",
+        "installType": "binary",
+        "commands": [
+          {
+            "name": "python",
+            "bin": "bin/python3",
+            "args": null
+          },
+          {
+            "name": "python3",
+            "bin": "bin/python3",
+            "args": null
+          },
+          {
+            "name": "pip",
+            "bin": "bin/python3",
+            "args": [
+              "-m",
+              "pip"
+            ]
+          },
+          {
+            "name": "pip3",
+            "bin": "bin/python3",
+            "args": [
+              "-m",
+              "pip"
+            ]
+          }
+        ]
+      }
+    ],
+    "agents": [
+      {
+        "id": "claude",
+        "name": "Claude Code",
+        "kind": "agent",
+        "installDir": "claude",
+        "basePath": "agents",
+        "installType": "native-installer",
+        "commands": [
+          {
+            "name": "claude",
+            "bin": "claude",
+            "args": null
+          }
+        ],
+        "nativeInstaller": {
+          "darwin": "curl -fsSL https://claude.ai/install.sh | sh",
+          "linux": "curl -fsSL https://claude.ai/install.sh | sh",
+          "win32": "irm https://claude.ai/install.ps1 | iex"
+        },
+        "nativeBinPath": ".local/bin/claude"
+      },
+      {
+        "id": "codex",
+        "name": "OpenAI Codex",
+        "kind": "agent",
+        "installDir": "node",
+        "basePath": "runtimes",
+        "installType": "npm-global",
+        "commands": [
+          {
+            "name": "codex",
+            "bin": "bin/codex",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "copilot",
+        "name": "GitHub Copilot",
+        "kind": "agent",
+        "installDir": "node",
+        "basePath": "runtimes",
+        "installType": "npm-global",
+        "commands": [
+          {
+            "name": "copilot",
+            "bin": "bin/github-copilot-cli",
+            "args": null
+          },
+          {
+            "name": "github-copilot-cli",
+            "bin": "bin/github-copilot-cli",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "gemini",
+        "name": "Gemini CLI",
+        "kind": "agent",
+        "installDir": "node",
+        "basePath": "runtimes",
+        "installType": "npm-global",
+        "commands": [
+          {
+            "name": "gemini",
+            "bin": "bin/gemini",
+            "args": null
+          }
+        ]
+      }
+    ],
+    "binaries": []
+  }
+}
