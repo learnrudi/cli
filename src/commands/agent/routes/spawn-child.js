@@ -13,10 +13,18 @@ import { PATHS } from '@learnrudi/env';
 import { getDb } from '@learnrudi/db';
 import { loadProviderConfig, resolveProviderBinary, buildArgs, getPermissionArgs, buildEnv, hasCapability, expandConditional } from '../providers/index.js';
 import { buildSystemPrompt } from '../prompts.js';
-import { dbWrite } from '../db.js';
+import { dbWrite, transitionSessionStatus } from '../db.js';
+import { classifyError, isRetryable } from '../error-classifier.js';
+import { createRetryState, canRetry, getNextDelay, incrementRetry } from '../retry-logic.js';
 import { countAlive, broadcastProcessCount, normalizeHeader } from '../helpers.js';
 import { getRepoRoot, createChildWorktree } from '../worktree.js';
 import { attachStdoutHandler, attachStderrHandler } from '../process-io.js';
+
+function reserveRetryDelay(entry) {
+  const delay = getNextDelay(entry._retryState);
+  incrementRetry(entry._retryState);
+  return delay;
+}
 
 export function buildSpawnChildRoutes(ctx) {
   const {
@@ -227,10 +235,10 @@ export function buildSpawnChildRoutes(ctx) {
         db.prepare(`
           INSERT INTO session_runtime_state
             (session_id, status, provider, cwd, started_at, updated_at,
-             worktree_path, worktree_branch, project_root, base_branch, use_worktree)
-          VALUES (?, 'starting', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             worktree_path, worktree_branch, project_root, base_branch, use_worktree, execution_mode)
+          VALUES (?, 'starting', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(childSessionId, provider, worktreePath, nowIso, nowIso,
-               worktreePath, worktreeBranch, parentRepoRoot, parentBaseBranch, 1);
+               worktreePath, worktreeBranch, parentRepoRoot, parentBaseBranch, 1, 'worktree');
       });
 
       // --- Build args from provider config ---
@@ -274,7 +282,76 @@ export function buildSpawnChildRoutes(ctx) {
       }
 
       // --- Spawn ---
-      try {
+      const killWithFallback = (p) => {
+        try { p.kill('SIGTERM'); } catch {}
+        setTimeout(() => { try { if (!p.killed) p.kill('SIGKILL'); } catch {} }, 5000);
+      };
+
+      let entry = null;
+
+      const scheduleChildRetry = (errorText, classification) => {
+        if (!entry || !isRetryable(classification) || !canRetry(entry._retryState)) {
+          return false;
+        }
+
+        const delay = reserveRetryDelay(entry);
+        log('agent', 'info', 'retry scheduled', {
+          sessionId: shortId,
+          retryCount: entry._retryState.count,
+          maxRetries: entry._retryState.maxRetries,
+          nextDelayMs: delay,
+          scope: 'child',
+        });
+
+        dbWrite((db) => {
+          transitionSessionStatus(db, childSessionId, 'retrying', {
+            lastError: `${classification.code}: ${(errorText || 'Transient child process failure').slice(0, 200)}`,
+          });
+        });
+
+        broadcast('agent:error', {
+          sessionId: childSessionId,
+          error: (errorText || 'Transient child process failure').slice(0, 500),
+          code: classification.code,
+          category: classification.category,
+          retryable: true,
+          retryCount: entry._retryState.count,
+          maxRetries: entry._retryState.maxRetries,
+          nextRetryMs: delay,
+        });
+
+        entry._retryTimer = setTimeout(() => {
+          entry._retryTimer = null;
+          if (!agentProcesses.has(childSessionId) || entry._terminationReason === 'stopped') return;
+          try {
+            spawnChildAttempt({ isRetry: true });
+          } catch (retryErr) {
+            log('agent', 'error', `child retry respawn failed: ${retryErr.message}`, { sessionId: shortId });
+            dbWrite((db) => {
+              const now = new Date().toISOString();
+              transitionSessionStatus(db, childSessionId, 'error', {
+                lastError: `Retry respawn failed: ${retryErr.message}`,
+                completedAt: now,
+              });
+              db.prepare(`
+                UPDATE sessions SET error_code = 'SPAWN_ERROR', error_message = ?, ended_at = ? WHERE id = ?
+              `).run(retryErr.message, now, childSessionId);
+            });
+            broadcast('agent:error', { sessionId: childSessionId, error: `Retry respawn failed: ${retryErr.message}` });
+            agentProcesses.delete(childSessionId);
+            broadcastProcessCount(ctx);
+          }
+        }, delay);
+
+        return true;
+      };
+
+      function spawnChildAttempt({ isRetry = false } = {}) {
+        if (entry?._retryTimer) {
+          clearTimeout(entry._retryTimer);
+          entry._retryTimer = null;
+        }
+
         const proc = spawn(binaryPath, childArgs, {
           cwd: worktreePath,
           env: childEnv,
@@ -287,44 +364,54 @@ export function buildSpawnChildRoutes(ctx) {
           proc.stdin.end();
         }
 
-        const entry = {
-          proc,
-          provider,
-          providerConfig,
-          providerSessionId: null,
-          resumeSessionId: null,
-          parentSessionId,
-          stdoutBuffer: '',
-          turnActive: true,
-          startedAt: Date.now(),
-          lastActivityAt: Date.now(),
-          cwd: worktreePath,
-          repoRoot: parentRepoRoot,
-          worktreePath,
-          worktreeBranch,
-          baseBranch: parentBaseBranch,
-          _terminationReason: null,
-          _turnPrompt: childPrompt,
-          _turnNumber: 1,
-          _turnInputTokens: 0,
-          _turnOutputTokens: 0,
-          _turnCacheReadTokens: 0,
-          _turnCacheCreationTokens: 0,
-          _turnModel: childModel || parentModel || null,
-          _turnToolsUsed: [],
-          _isChild: true,
-          _description: sanitizedDesc,
-        };
-        agentProcesses.set(childSessionId, entry);
+        if (!entry) {
+          entry = {
+            proc,
+            provider,
+            providerConfig,
+            providerSessionId: null,
+            resumeSessionId: null,
+            parentSessionId,
+            stdoutBuffer: '',
+            turnActive: true,
+            startedAt: Date.now(),
+            lastActivityAt: Date.now(),
+            cwd: worktreePath,
+            repoRoot: parentRepoRoot,
+            worktreePath,
+            worktreeBranch,
+            baseBranch: parentBaseBranch,
+            _terminationReason: null,
+            _turnPrompt: childPrompt,
+            _turnNumber: 1,
+            _turnInputTokens: 0,
+            _turnOutputTokens: 0,
+            _turnCacheReadTokens: 0,
+            _turnCacheCreationTokens: 0,
+            _turnModel: childModel || parentModel || null,
+            _turnToolsUsed: [],
+            _retryState: createRetryState(),
+            _isChild: true,
+            _description: sanitizedDesc,
+          };
+          agentProcesses.set(childSessionId, entry);
+        } else {
+          entry.proc = proc;
+          entry.stdoutBuffer = '';
+          entry.turnActive = true;
+          entry.lastActivityAt = Date.now();
+          entry._terminationReason = null;
+          entry._stderrText = '';
+          entry._lastErrorContext = null;
+        }
 
-        // Mark running
         dbWrite((db) => {
-          db.prepare(`
-            UPDATE session_runtime_state SET status = 'running', updated_at = ? WHERE session_id = ?
-          `).run(new Date().toISOString(), childSessionId);
-          db.prepare(`
-            UPDATE sessions SET started_at = ? WHERE id = ?
-          `).run(new Date().toISOString(), childSessionId);
+          transitionSessionStatus(db, childSessionId, 'running');
+          if (!isRetry) {
+            db.prepare(`
+              UPDATE sessions SET started_at = ? WHERE id = ?
+            `).run(new Date().toISOString(), childSessionId);
+          }
         });
 
         log('agent', 'info', `child process spawned pid=${proc.pid}`, {
@@ -337,14 +424,9 @@ export function buildSpawnChildRoutes(ctx) {
           provider,
           argsCount: childArgs.length,
           promptLen: childPrompt.length,
+          retryCount: entry._retryState.count,
           args: childArgs.filter(a => a !== childPrompt && (a.length < 60 || a.startsWith('--'))).join(' '),
         });
-
-        // --- Timers ---
-        const killWithFallback = (p) => {
-          try { p.kill('SIGTERM'); } catch {}
-          setTimeout(() => { try { if (!p.killed) p.kill('SIGKILL'); } catch {} }, 5000);
-        };
 
         const STARTUP_TIMEOUT_MS = 120_000;
         let startupTimer = setTimeout(() => {
@@ -364,13 +446,20 @@ export function buildSpawnChildRoutes(ctx) {
           }
         }, RUNTIME_TIMEOUT_MS);
 
-        // --- stdout handler (uses shared process-io) ---
         const clearStartupTimer = () => {
-          if (startupTimer) { clearTimeout(startupTimer); startupTimer = null; }
+          if (startupTimer) {
+            clearTimeout(startupTimer);
+            startupTimer = null;
+          }
+        };
+
+        const clearTimers = () => {
+          clearStartupTimer();
+          clearTimeout(runtimeTimer);
         };
 
         attachStdoutHandler(ctx, childSessionId, entry, {
-          setRunningOnCapture: false, // already set to 'running' above
+          setRunningOnCapture: false,
           onFirstData: (chunk, totalBytes) => {
             clearStartupTimer();
             if (totalBytes <= 2000) {
@@ -413,41 +502,87 @@ export function buildSpawnChildRoutes(ctx) {
               }
             });
             broadcast('agent:done', { sessionId: childSessionId, exitCode: 0, providerSessionId: entry.providerSessionId });
-            queueSessionsUpdated({ source: 'agent', event: 'child-result', sessionId: entry.providerSessionId || null });
+            queueSessionsUpdated({
+              source: 'agent',
+              event: 'child-result',
+              sessionId: entry.providerSessionId || null,
+              refreshProjects: false,
+            });
           },
         });
 
-        // --- stderr handler ---
         attachStderrHandler(ctx, childSessionId, entry, {
           logSlice: 500,
-          onFirstData: (chunk, totalBytes) => {
+          onFirstData: () => {
             clearStartupTimer();
           },
         });
 
-        // --- Shared cleanup ---
-        let _childCleanedUp = false;
+        let finalized = false;
         const cleanupChild = (exitCode, source) => {
-          if (_childCleanedUp) return;
-          _childCleanedUp = true;
-          clearStartupTimer();
-          clearTimeout(runtimeTimer);
+          if (finalized) return;
+          clearTimers();
+
+          if (exitCode !== 0) {
+            const errorText = [
+              entry._lastErrorContext?.error,
+              entry._lastErrorContext?.message,
+              entry._stderrText,
+            ].filter(Boolean).join(' ') || `Process exited with code ${exitCode}`;
+
+            const classification = classifyError(errorText, exitCode);
+            log('agent', 'info', 'error classified', {
+              sessionId: shortId,
+              code: classification.code,
+              category: classification.category,
+              retryable: classification.retryable,
+              source: `child-${source}`,
+            });
+
+            if (scheduleChildRetry(errorText, classification)) {
+              finalized = true;
+              return;
+            }
+          }
+
+          finalized = true;
           try {
             log('agent', 'info', `child process exited code=${exitCode} (${source})`, { sessionId: shortId });
-            const finalStatus = entry._terminationReason || (exitCode === 0 ? 'completed' : 'error');
+            const finalStatus = entry._terminationReason === 'stopped'
+              ? 'stopped'
+              : (exitCode === 0 ? 'completed' : 'error');
+            const finalError = exitCode === 0
+              ? undefined
+              : (
+                  entry._terminationReason && entry._terminationReason !== 'stopped'
+                    ? entry._terminationReason
+                    : `Process exited with code ${exitCode}`
+                );
             dbWrite((db) => {
               const now = new Date().toISOString();
+              transitionSessionStatus(db, childSessionId, finalStatus, {
+                completedAt: now,
+                lastError: finalError,
+              });
               db.prepare(`
-                UPDATE session_runtime_state SET status = ?, completed_at = ?, updated_at = ? WHERE session_id = ?
-              `).run(finalStatus, now, now, childSessionId);
-              db.prepare(`
-                UPDATE sessions SET ended_at = ?, exit_code = ? WHERE id = ?
-              `).run(now, exitCode, childSessionId);
+                UPDATE sessions SET ended_at = ?, exit_code = ?, error_code = ?, error_message = ? WHERE id = ?
+              `).run(
+                now,
+                exitCode,
+                exitCode === 0 ? null : (entry._terminationReason === 'stopped' ? 'STOPPED' : 'PROCESS_EXIT'),
+                exitCode === 0 ? null : (finalError || `Process exited with code ${exitCode}`),
+                childSessionId,
+              );
             });
             if (entry.turnActive) {
               broadcast('agent:done', { sessionId: childSessionId, exitCode, providerSessionId: entry.providerSessionId });
             }
-            broadcast('sessions:updated', { source: 'agent', event: 'child-completed', sessionId: childSessionId });
+            broadcast('sessions:updated', {
+              source: 'agent',
+              event: 'child-completed',
+              sessionId: childSessionId,
+              refreshProjects: true,
+            });
           } catch (cleanupErr) {
             log('agent', 'error', `child cleanup error: ${cleanupErr.message}`, { sessionId: shortId });
           }
@@ -456,18 +591,36 @@ export function buildSpawnChildRoutes(ctx) {
         };
 
         proc.on('close', (exitCode) => cleanupChild(exitCode, 'close'));
-        proc.on('exit', (exitCode) => cleanupChild(exitCode, 'exit'));
+        proc.on('exit', (exitCode) => cleanupChild(exitCode ?? 0, 'exit'));
 
         proc.on('error', (err) => {
+          if (finalized) return;
+          clearTimers();
+
+          const errorText = [err.message, entry._stderrText || ''].filter(Boolean).join(' ');
+          const classification = classifyError(errorText, null);
+          log('agent', 'info', 'error classified', {
+            sessionId: shortId,
+            code: classification.code,
+            category: classification.category,
+            retryable: classification.retryable,
+            source: 'child-spawn-error',
+          });
+
+          if (scheduleChildRetry(err.message, classification)) {
+            finalized = true;
+            return;
+          }
+
+          finalized = true;
           log('agent', 'error', `child spawn error: ${err.message}`, { sessionId: shortId });
-          clearStartupTimer();
-          clearTimeout(runtimeTimer);
           try {
             dbWrite((db) => {
               const now = new Date().toISOString();
-              db.prepare(`
-                UPDATE session_runtime_state SET status = 'error', last_error = ?, updated_at = ? WHERE session_id = ?
-              `).run(err.message, now, childSessionId);
+              transitionSessionStatus(db, childSessionId, 'error', {
+                lastError: err.message,
+                completedAt: now,
+              });
               db.prepare(`
                 UPDATE sessions SET error_code = 'SPAWN_ERROR', error_message = ?, ended_at = ? WHERE id = ?
               `).run(err.message, now, childSessionId);
@@ -477,14 +630,24 @@ export function buildSpawnChildRoutes(ctx) {
           }
           broadcast('agent:error', { sessionId: childSessionId, error: err.message });
           agentProcesses.delete(childSessionId);
+          broadcastProcessCount(ctx);
         });
+      }
+
+      try {
+        spawnChildAttempt();
 
         // Track rate limit
         recentTimestamps.push(now);
         spawnRateMap.set(parentSessionId, recentTimestamps);
 
         broadcastProcessCount(ctx);
-        broadcast('sessions:updated', { source: 'agent', event: 'child-spawned', sessionId: childSessionId });
+        broadcast('sessions:updated', {
+          source: 'agent',
+          event: 'child-spawned',
+          sessionId: childSessionId,
+          refreshProjects: true,
+        });
 
         json(res, {
           sessionId: childSessionId,
@@ -501,9 +664,10 @@ export function buildSpawnChildRoutes(ctx) {
         } catch {}
         dbWrite((db) => {
           const now = new Date().toISOString();
-          db.prepare(`
-            UPDATE session_runtime_state SET status = 'error', last_error = ?, updated_at = ? WHERE session_id = ?
-          `).run(spawnErr.message, now, childSessionId);
+          transitionSessionStatus(db, childSessionId, 'error', {
+            lastError: spawnErr.message,
+            completedAt: now,
+          });
           db.prepare(`
             UPDATE sessions SET error_code = 'SPAWN_FAILED', error_message = ?, ended_at = ? WHERE id = ?
           `).run(spawnErr.message, now, childSessionId);

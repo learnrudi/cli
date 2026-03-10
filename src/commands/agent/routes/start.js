@@ -11,10 +11,12 @@ import { execSync } from 'child_process';
 import { PATHS } from '@learnrudi/env';
 import { loadProviderConfig, resolveProviderBinary, buildArgs, getPermissionArgs, buildEnv, hasCapability, expandConditional } from '../providers/index.js';
 import { buildSystemPrompt } from '../prompts.js';
-import { dbWrite, resolveDb } from '../db.js';
+import { dbWrite, resolveDb, transitionSessionStatus } from '../db.js';
 import { resolveReusableEntry, countAlive, buildUserContent, dropResumeMappingsForSession } from '../helpers.js';
 import { getRepoRoot, createSessionWorktree, restoreSessionWorktree } from '../worktree.js';
 import { spawnAgentProcess } from '../spawn-process.js';
+
+const MAX_AGENT_BODY_SIZE = 50 * 1024 * 1024; // allow image attachments
 
 export function buildStartRoute(ctx) {
   const {
@@ -24,10 +26,13 @@ export function buildStartRoute(ctx) {
     pendingPermissions, sessionAlwaysAllowed,
   } = ctx;
 
+  // Track in-flight start operations per resumeSessionId to prevent duplicate spawns
+  const pendingStarts = new Map(); // resumeSessionId → Promise<response>
+
   return async (req, res, url) => {
     if (req.method !== 'POST' || url.pathname !== '/agent/start') return false;
 
-    const body = await readBody(req);
+    const body = await readBody(req, { maxBodySize: MAX_AGENT_BODY_SIZE });
     log('agent', 'info', 'received /agent/start request', { bodyKeys: Object.keys(body), resumeSessionId: body.resumeSessionId || null });
     const {
       prompt,
@@ -83,18 +88,35 @@ export function buildStartRoute(ctx) {
           `).run(new Date().toISOString(), existingId);
         });
         const inputMsg = JSON.stringify({ type: 'user', message: { role: 'user', content: buildUserContent(prompt, images, entry.cwd, log) } }) + '\n';
-        entry.proc.stdin.write(inputMsg);
-        broadcast('agent:event', {
-          sessionId: existingId,
-          event: { type: 'system', message: 'Resumed existing process' },
-        });
-        return json(res, {
-          sessionId: existingId,
-          provider: entry.provider,
-          reused: true,
-          cwd: entry.cwd,
-          useWorktree: Boolean(entry.worktreePath),
-        });
+        if (!entry.proc.stdin.writable) {
+          log('agent', 'warn', 'reused process stdin not writable, cannot resume', { sessionId: existingId.slice(0, 8) });
+          // Fall through to spawn a new process instead of returning early
+        } else {
+          entry.proc.stdin.write(inputMsg);
+          broadcast('agent:event', {
+            sessionId: existingId,
+            event: { type: 'system', message: 'Resumed existing process' },
+          });
+          return json(res, {
+            sessionId: existingId,
+            provider: entry.provider,
+            reused: true,
+            cwd: entry.cwd,
+            useWorktree: Boolean(entry.worktreePath),
+          });
+        }
+      }
+    }
+
+    // If another request is already starting this resumeSessionId, wait for it
+    if (resumeSessionId && pendingStarts.has(resumeSessionId)) {
+      log('agent', 'info', 'concurrent start for same session, waiting for in-flight request', { resumeSessionId: resumeSessionId.slice(0, 8) });
+      try {
+        const result = await pendingStarts.get(resumeSessionId);
+        return json(res, { ...result, reused: true });
+      } catch (err) {
+        // In-flight request failed, fall through to start a new one
+        log('agent', 'warn', 'in-flight start failed, proceeding with new start', { resumeSessionId: resumeSessionId.slice(0, 8), error: err.message });
       }
     }
 
@@ -118,6 +140,13 @@ export function buildStartRoute(ctx) {
     const shortId = sessionId.slice(0, 8);
     if (resumeSessionId) {
       resumeSessionIndex.set(resumeSessionId, sessionId);
+    }
+
+    // Register this start operation to prevent duplicate concurrent spawns
+    let resolvePending, rejectPending;
+    if (resumeSessionId) {
+      const p = new Promise((resolve, reject) => { resolvePending = resolve; rejectPending = reject; });
+      pendingStarts.set(resumeSessionId, p);
     }
 
     // --- Build args from provider config ---
@@ -221,6 +250,7 @@ export function buildStartRoute(ctx) {
     let mcpConfigPath = null;
     if (canSpawnChildren && hasCapability(providerConfig, 'mcpConfig')) {
       const spawnShimPath = path.join(PATHS.home, 'bins', 'rudi-spawn');
+      const routerShimPath = path.join(PATHS.home, 'bins', 'rudi-router');
       if (fs.existsSync(spawnShimPath)) {
         try {
           let existingMcpServers = {};
@@ -236,6 +266,7 @@ export function buildStartRoute(ctx) {
             mcpServers: {
               ...existingMcpServers,
               'rudi-spawn': { command: spawnShimPath, args: [] },
+              ...(fs.existsSync(routerShimPath) ? { 'rudi': { command: routerShimPath, args: [] } } : {}),
             },
           };
 
@@ -359,10 +390,11 @@ export function buildStartRoute(ctx) {
       db.prepare(`
         INSERT INTO session_runtime_state
           (session_id, status, provider, resume_session_id, cwd, started_at, updated_at,
-           worktree_path, worktree_branch, project_root, base_branch, use_worktree)
-        VALUES (?, 'starting', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           worktree_path, worktree_branch, project_root, base_branch, use_worktree, execution_mode)
+        VALUES (?, 'starting', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(sessionId, provider, resumeSessionId || null, effectiveCwd, now, now,
-             worktreePath, worktreeBranch, repoRoot, baseBranch, resolvedUseWorktree ? 1 : 0);
+             worktreePath, worktreeBranch, repoRoot, baseBranch, resolvedUseWorktree ? 1 : 0,
+             resolvedUseWorktree ? 'worktree' : 'shared_cwd');
     });
 
     try {
@@ -394,7 +426,7 @@ export function buildStartRoute(ctx) {
         queueCloseEvent: 'process-close',
       });
 
-      json(res, {
+      const responsePayload = {
         sessionId,
         provider,
         cwd: effectiveCwd,
@@ -405,19 +437,24 @@ export function buildStartRoute(ctx) {
         baseBranch: baseBranch || undefined,
         gitignoreWarning: gitignoreWarning || undefined,
         useWorktree: resolvedUseWorktree,
-      });
+      };
+
+      if (resolvePending) resolvePending(responsePayload);
+      json(res, responsePayload);
     } catch (err) {
+      if (rejectPending) rejectPending(err);
       dropResumeMappingsForSession(sessionId, resumeSessionIndex);
       // 4f. Spawn catch
       dbWrite((db) => {
-        db.prepare(`
-          UPDATE session_runtime_state
-          SET status = 'error', last_error = ?, updated_at = ?
-          WHERE session_id = ?
-        `).run(err.message, new Date().toISOString(), sessionId);
+        transitionSessionStatus(db, sessionId, 'error', {
+          lastError: err.message,
+          completedAt: new Date().toISOString(),
+        });
       });
       log('agent', 'error', `Failed to spawn: ${err.message}`);
       error(res, `Failed to spawn agent: ${err.message}`, 500);
+    } finally {
+      if (resumeSessionId) pendingStarts.delete(resumeSessionId);
     }
     return true;
   };

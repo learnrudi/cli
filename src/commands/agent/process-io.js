@@ -3,7 +3,7 @@
  * Provider-agnostic: uses normalizers to map events to canonical format.
  */
 
-import { dbWrite } from './db.js';
+import { dbWrite, transitionSessionStatus } from './db.js';
 import { normalizeEvent, createNormalizer } from './normalizers/index.js';
 
 function _safeStringify(value) {
@@ -137,18 +137,13 @@ export function attachStdoutHandler(ctx, sessionId, entry, options = {}) {
           dbWrite((db) => {
             const now = new Date().toISOString();
             if (setRunningOnCapture) {
-              db.prepare(`
-                UPDATE session_runtime_state
-                SET status = 'running', provider_session_id = ?, updated_at = ?
-                WHERE session_id = ?
-              `).run(rawSid, now, sessionId);
-            } else {
-              db.prepare(`
-                UPDATE session_runtime_state
-                SET provider_session_id = ?, updated_at = ?
-                WHERE session_id = ?
-              `).run(rawSid, now, sessionId);
+              transitionSessionStatus(db, sessionId, 'running');
             }
+            db.prepare(`
+              UPDATE session_runtime_state
+              SET provider_session_id = ?, updated_at = ?
+              WHERE session_id = ?
+            `).run(rawSid, now, sessionId);
           });
         }
 
@@ -186,6 +181,23 @@ export function attachStdoutHandler(ctx, sessionId, entry, options = {}) {
                 entry._turnToolsUsed.push(block.name);
               }
             }
+          }
+
+          // Capture error context for retry classification
+          if (event.type === 'assistant' && event.error) {
+            entry._lastErrorContext = {
+              error: event.error,
+              message: Array.isArray(event.content)
+                ? event.content.filter(b => b.type === 'text').map(b => b.text).join(' ')
+                : '',
+              isError: false,
+            };
+          }
+          if (event.type === 'result' && event.isError) {
+            entry._lastErrorContext = {
+              ...(entry._lastErrorContext || {}),
+              isError: true,
+            };
           }
 
           ctx.log('agent', 'debug', `stdout event: ${event.type}`, { sessionId: sessionId.slice(0, 8), provider });
@@ -230,6 +242,9 @@ export function attachStderrHandler(ctx, sessionId, entry, options = {}) {
   const { onFirstData, logSlice = 200 } = options;
   let totalBytes = 0;
 
+  // Initialize stderr accumulator
+  entry._stderrText = '';
+
   entry.proc.stderr.on('data', (chunk) => {
     totalBytes += chunk.length;
     entry.lastActivityAt = Date.now();
@@ -237,6 +252,14 @@ export function attachStderrHandler(ctx, sessionId, entry, options = {}) {
 
     const text = chunk.toString().trim();
     if (text) {
+      // Accumulate stderr text for error classification
+      entry._stderrText = (entry._stderrText || '') + text + '\n';
+
+      // Keep stderr bounded (last 4096 chars)
+      if (entry._stderrText.length > 4096) {
+        entry._stderrText = entry._stderrText.slice(-4096);
+      }
+
       // Log stderr server-side for debugging but don't broadcast to frontend.
       // Most CLI stderr is informational noise (e.g. Codex "state db missing
       // rollout path"). Real failures are signaled by process exit code — the

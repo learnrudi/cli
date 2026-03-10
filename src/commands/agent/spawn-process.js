@@ -8,9 +8,11 @@
 import fs from 'fs';
 import { spawn } from 'child_process';
 import { hasCapability } from './providers/index.js';
-import { dbWrite, flushDbWrites, autoNameSession } from './db.js';
+import { dbWrite, flushDbWrites, autoNameSession, transitionSessionStatus } from './db.js';
 import { buildUserContent, broadcastProcessCount, dropResumeMappingsForSession } from './helpers.js';
 import { attachStdoutHandler, attachStderrHandler, flushStdoutBuffer } from './process-io.js';
+import { classifyError, isRetryable } from './error-classifier.js';
+import { createRetryState, canRetry, getNextDelay, incrementRetry } from './retry-logic.js';
 
 function unlinkQuiet(filePath) {
   if (!filePath) return;
@@ -41,6 +43,299 @@ function resetTurnAccumulators(entry) {
   entry._turnCacheCreationTokens = 0;
   entry._turnToolsUsed = [];
   if (entry._normalizer) entry._normalizer.reset();
+}
+
+function clearRetryTimer(entry) {
+  if (!entry?._retryTimer) return;
+  clearTimeout(entry._retryTimer);
+  entry._retryTimer = null;
+}
+
+function reserveRetryDelay(entry) {
+  const delay = getNextDelay(entry._retryState);
+  incrementRetry(entry._retryState);
+  return delay;
+}
+
+function respawnFromRetryContext(ctx, sessionId, entry) {
+  const { log, broadcast, agentProcesses } = ctx;
+  const rc = entry._retryContext;
+  const shortId = sessionId.slice(0, 8);
+
+  clearRetryTimer(entry);
+  if (entry._terminationReason === 'stopped' || !agentProcesses.has(sessionId)) {
+    return;
+  }
+
+  log('agent', 'info', 'retry respawn started', {
+    sessionId: shortId,
+    attempt: entry._retryState.count + 1,
+  });
+
+  try {
+    // Clear accumulated error context from previous attempt
+    entry._stderrText = '';
+    entry._lastErrorContext = null;
+    entry.stdoutBuffer = '';
+
+    const proc = spawn(rc.binaryPath, rc.spawnArgs, {
+      cwd: rc.spawnCwd,
+      env: rc.spawnEnv,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    // Replace the process reference on the entry
+    entry.proc = proc;
+    entry.lastActivityAt = Date.now();
+    entry.turnActive = true;
+    entry._terminationReason = null;
+
+    dbWrite((db) => {
+      transitionSessionStatus(db, sessionId, 'running');
+    });
+
+    // Re-attach stdout/stderr handlers
+    attachStdoutHandler(ctx, sessionId, entry, {
+      onResult: rc.onTurnResult,
+      setRunningOnCapture: false,
+    });
+    attachStderrHandler(ctx, sessionId, entry, {
+      logSlice: rc.stderrLogSlice || 200,
+    });
+
+    // Re-attach close/error handlers with a new finalized flag for this process instance
+    let retryFinalized = false;
+
+    proc.on('close', (exitCode) => {
+      if (retryFinalized) return;
+
+      // Check for transient retry again
+      if (exitCode !== 0) {
+        const errorText = [
+          entry._lastErrorContext?.error,
+          entry._lastErrorContext?.message,
+          entry._stderrText,
+        ].filter(Boolean).join(' ');
+
+        const classification = classifyError(errorText, exitCode);
+        log('agent', 'info', 'error classified', {
+          sessionId: shortId,
+          code: classification.code,
+          category: classification.category,
+          retryable: classification.retryable,
+          source: 'retry-close',
+        });
+
+        if (isRetryable(classification) && canRetry(entry._retryState)) {
+          const delay = reserveRetryDelay(entry);
+
+          log('agent', 'info', 'retry scheduled', {
+            sessionId: shortId,
+            retryCount: entry._retryState.count,
+            maxRetries: entry._retryState.maxRetries,
+            nextDelayMs: delay,
+          });
+
+          dbWrite((db) => {
+            transitionSessionStatus(db, sessionId, 'retrying', {
+              lastError: `${classification.code}: ${errorText.slice(0, 200)}`,
+            });
+          });
+
+          broadcast('agent:error', {
+            sessionId,
+            error: errorText.slice(0, 500),
+            code: classification.code,
+            category: classification.category,
+            retryable: true,
+            retryCount: entry._retryState.count,
+            maxRetries: entry._retryState.maxRetries,
+            nextRetryMs: delay,
+          });
+
+          entry._retryTimer = setTimeout(() => {
+            entry._retryTimer = null;
+            if (!agentProcesses.has(sessionId) || entry._terminationReason === 'stopped') return;
+            respawnFromRetryContext(ctx, sessionId, entry);
+          }, delay);
+          return;
+        }
+      }
+
+      retryFinalized = true;
+
+      // Terminal: flush and clean up
+      log('agent', 'info', `retry process exited code=${exitCode}`, { sessionId: shortId });
+      flushStdoutBuffer(ctx, sessionId, entry);
+
+      const finalStatus = entry._terminationReason || (exitCode === 0 ? 'completed' : 'error');
+      dbWrite((db) => {
+        const now = new Date().toISOString();
+        transitionSessionStatus(db, sessionId, finalStatus, {
+          completedAt: now,
+          lastError: finalStatus === 'error'
+            ? `Process exited with code ${exitCode} after ${entry._retryState.count} retries`
+            : undefined,
+        });
+
+        if (rc.sessionRowMode === 'existingSession') {
+          const sessionRowId = rc.existingSessionId || sessionId;
+          db.prepare(`
+            UPDATE sessions
+            SET ended_at = ?, exit_code = ?, error_code = ?, error_message = ?
+            WHERE id = ?
+          `).run(
+            now,
+            exitCode,
+            exitCode === 0 ? null : (entry._terminationReason || 'PROCESS_EXIT'),
+            exitCode === 0 ? null : `Process exited with code ${exitCode} after ${entry._retryState.count} retries`,
+            sessionRowId,
+          );
+        }
+      });
+
+      if (finalStatus === 'error') {
+        log('agent', 'warn', 'retry exhausted', {
+          sessionId: shortId,
+          finalErrorCode: 'PROCESS_EXIT',
+          totalAttempts: entry._retryState.count + 1,
+        });
+      }
+
+      if (entry.turnActive) {
+        broadcast('agent:done', { sessionId, exitCode, providerSessionId: entry.providerSessionId });
+        if (rc.queueSessionsUpdated) {
+          const queuedSessionId = entry.providerSessionId
+            || (rc.sessionRowMode === 'existingSession' ? (rc.existingSessionId || sessionId) : null);
+          rc.queueSessionsUpdated({
+            source: 'agent',
+            event: rc.queueCloseEvent,
+            sessionId: queuedSessionId,
+          });
+        }
+      }
+
+      // Full cleanup
+      clearRetryTimer(entry);
+      dropResumeMappingsForSession(sessionId, ctx.resumeSessionIndex);
+      if (ctx.sessionAlwaysAllowed) ctx.sessionAlwaysAllowed.delete(sessionId);
+      agentProcesses.delete(sessionId);
+      broadcastProcessCount(ctx);
+
+      if (typeof rc.onProcessClose === 'function') {
+        flushDbWrites();
+        rc.onProcessClose({
+          sessionId,
+          entry,
+          exitCode,
+          finalStatus,
+          providerSessionId: entry.providerSessionId || null,
+          runGroupId: rc.runGroupId,
+        });
+      }
+    });
+
+    proc.on('error', (err) => {
+      if (retryFinalized) return;
+      log('agent', 'error', `retry spawn error: ${err.message}`, { sessionId: shortId });
+
+      // Same retry classification
+      const errorText = err.message + ' ' + (entry._stderrText || '');
+      const classification = classifyError(errorText, null);
+
+      if (isRetryable(classification) && canRetry(entry._retryState)) {
+        const delay = reserveRetryDelay(entry);
+
+        dbWrite((db) => {
+          transitionSessionStatus(db, sessionId, 'retrying', {
+            lastError: `${classification.code}: ${err.message.slice(0, 200)}`,
+          });
+        });
+
+        broadcast('agent:error', {
+          sessionId,
+          error: err.message,
+          code: classification.code,
+          category: classification.category,
+          retryable: true,
+          retryCount: entry._retryState.count,
+          maxRetries: entry._retryState.maxRetries,
+          nextRetryMs: delay,
+        });
+
+        entry._retryTimer = setTimeout(() => {
+          entry._retryTimer = null;
+          if (!agentProcesses.has(sessionId) || entry._terminationReason === 'stopped') return;
+          respawnFromRetryContext(ctx, sessionId, entry);
+        }, delay);
+        return;
+      }
+
+      retryFinalized = true;
+
+      // Terminal error
+      broadcast('agent:error', { sessionId, error: err.message });
+      dbWrite((db) => {
+        const now = new Date().toISOString();
+        transitionSessionStatus(db, sessionId, 'error', {
+          lastError: err.message,
+          completedAt: now,
+        });
+        if (rc.sessionRowMode === 'existingSession') {
+          const sessionRowId = rc.existingSessionId || sessionId;
+          db.prepare(`
+            UPDATE sessions
+            SET error_code = 'SPAWN_ERROR', error_message = ?, ended_at = ?
+            WHERE id = ?
+          `).run(err.message, now, sessionRowId);
+        }
+      });
+
+      agentProcesses.delete(sessionId);
+      broadcastProcessCount(ctx);
+
+      if (typeof rc.onProcessError === 'function') {
+        rc.onProcessError({ sessionId, entry, error: err, runGroupId: rc.runGroupId });
+      }
+    });
+
+    // Handle stdin: write the prompt
+    if (rc.prompt) {
+      const inputMsg = JSON.stringify({
+        type: 'user',
+        message: {
+          role: 'user',
+          content: buildUserContent(rc.prompt, rc.images, entry.cwd, log),
+        },
+      }) + '\n';
+      proc.stdin.write(inputMsg);
+    }
+
+    // Handle stdinMode
+    if (rc.stdinModeOverride === 'close') {
+      proc.stdin.end();
+    }
+
+    proc.stdin.on('error', (err) => {
+      log('agent', 'warn', `retry stdin error (EPIPE/destroyed): ${err.message}`, { sessionId: shortId });
+    });
+
+  } catch (err) {
+    log('agent', 'error', `retry respawn failed: ${err.message}`, { sessionId: shortId });
+
+    // Terminal cleanup on respawn failure
+    dbWrite((db) => {
+      const now = new Date().toISOString();
+      transitionSessionStatus(db, sessionId, 'error', {
+        lastError: `Retry respawn failed: ${err.message}`,
+        completedAt: now,
+      });
+    });
+    broadcast('agent:error', { sessionId, error: `Retry respawn failed: ${err.message}` });
+    clearRetryTimer(entry);
+    agentProcesses.delete(sessionId);
+    broadcastProcessCount(ctx);
+  }
 }
 
 export function spawnAgentProcess(ctx, options) {
@@ -133,9 +428,48 @@ export function spawnAgentProcess(ctx, options) {
     _turnCacheCreationTokens: 0,
     _turnModel: model || null,
     _turnToolsUsed: [],
+    _retryState: createRetryState(),
+    _retryContext: null, // populated below
   };
 
   agentProcesses.set(sessionId, entry);
+
+  // Populate retry context with everything needed to respawn this process
+  entry._retryContext = {
+    binaryPath,
+    spawnArgs: args,
+    spawnEnv: env,
+    spawnCwd,
+    prompt,
+    images,
+    model,
+    sessionId,
+    provider,
+    providerConfig,
+    permissionMode,
+    systemPrompt,
+    sessionRowMode,
+    existingSessionId,
+    parentSessionId,
+    runGroupId,
+    worktreePath,
+    worktreeBranch,
+    baseBranch,
+    repoRoot,
+    mcpConfigPath,
+    onProcessClose,
+    onProcessError,
+    onTurnResult,
+    queueSessionsUpdated,
+    queueCloseEvent,
+    stdinModeOverride,
+    stderrLogSlice,
+    setRunningOnCapture,
+    autoNameOnFirstTurn,
+    workingDir,
+    effectiveCwd,
+  };
+
   log('agent', 'info', `process spawned pid=${proc.pid}`, { sessionId: shortId, provider });
 
   const stdinMode = stdinModeOverride || providerConfig?.headless?.stdin;
@@ -144,8 +478,12 @@ export function spawnAgentProcess(ctx, options) {
       type: 'user',
       message: { role: 'user', content: buildUserContent(prompt, images, effectiveCwd, log) },
     }) + '\n';
-    proc.stdin.write(inputMsg);
-    log('agent', 'debug', 'wrote first prompt to stdin (stream-json)', { sessionId: shortId });
+    if (proc.stdin.writable) {
+      proc.stdin.write(inputMsg);
+      log('agent', 'debug', 'wrote first prompt to stdin (stream-json)', { sessionId: shortId });
+    } else {
+      log('agent', 'warn', 'stdin not writable, skipping initial prompt write', { sessionId: shortId });
+    }
   } else if (stdinMode === 'close') {
     proc.stdin.end();
     log('agent', 'debug', 'closed stdin (prompt delivered via args)', { sessionId: shortId });
@@ -277,6 +615,7 @@ export function spawnAgentProcess(ctx, options) {
           source: 'agent',
           event: queueEvent,
           sessionId: queuedSessionId,
+          refreshProjects: false,
         });
       }
     },
@@ -290,6 +629,65 @@ export function spawnAgentProcess(ctx, options) {
   let finalized = false;
   const finalizeClose = (exitCode, source = 'close') => {
     if (finalized) return;
+
+    // --- Transient retry check (BEFORE setting finalized=true) ---
+    if (exitCode !== 0) {
+      const errorText = [
+        entry._lastErrorContext?.error,
+        entry._lastErrorContext?.message,
+        entry._stderrText,
+      ].filter(Boolean).join(' ');
+
+      const classification = classifyError(errorText, exitCode);
+      log('agent', 'info', 'error classified', {
+        sessionId: shortId,
+        code: classification.code,
+        category: classification.category,
+        retryable: classification.retryable,
+        source,
+      });
+
+      if (isRetryable(classification) && canRetry(entry._retryState)) {
+        const delay = reserveRetryDelay(entry);
+
+        log('agent', 'info', 'retry scheduled', {
+          sessionId: shortId,
+          retryCount: entry._retryState.count,
+          maxRetries: entry._retryState.maxRetries,
+          nextDelayMs: delay,
+        });
+
+        // Transition to retrying (NOT terminal)
+        dbWrite((db) => {
+          transitionSessionStatus(db, sessionId, 'retrying', {
+            lastError: `${classification.code}: ${errorText.slice(0, 200)}`,
+          });
+        });
+
+        // Broadcast enriched error event
+        broadcast('agent:error', {
+          sessionId,
+          error: errorText.slice(0, 500),
+          code: classification.code,
+          category: classification.category,
+          retryable: true,
+          retryCount: entry._retryState.count,
+          maxRetries: entry._retryState.maxRetries,
+          nextRetryMs: delay,
+        });
+
+        // Schedule respawn
+        entry._retryTimer = setTimeout(() => {
+          entry._retryTimer = null;
+          if (!agentProcesses.has(sessionId) || entry._terminationReason === 'stopped') return;
+          respawnFromRetryContext(ctx, sessionId, entry);
+        }, delay);
+
+        // DO NOT set finalized=true, DO NOT delete agentProcesses entry
+        return; // short-circuit, no terminal cleanup
+      }
+    }
+
     finalized = true;
     log('agent', 'info', `process exited code=${exitCode}`, { sessionId: shortId, provider, source });
     flushStdoutBuffer(ctx, sessionId, entry);
@@ -297,11 +695,10 @@ export function spawnAgentProcess(ctx, options) {
     const finalStatus = entry._terminationReason || (exitCode === 0 ? 'completed' : 'error');
     dbWrite((db) => {
       const now = new Date().toISOString();
-      db.prepare(`
-        UPDATE session_runtime_state
-        SET status = ?, completed_at = ?, updated_at = ?
-        WHERE session_id = ?
-      `).run(finalStatus, now, now, sessionId);
+      transitionSessionStatus(db, sessionId, finalStatus, {
+        completedAt: now,
+        lastError: finalStatus === 'error' ? `Process exited with code ${exitCode}` : undefined,
+      });
 
       if (sessionRowMode === 'existingSession') {
         const sessionRowId = existingSessionId || sessionId;
@@ -342,6 +739,7 @@ export function spawnAgentProcess(ctx, options) {
       pendingPermissions.delete(reqId);
     }
     if (sessionAlwaysAllowed) sessionAlwaysAllowed.delete(sessionId);
+    clearRetryTimer(entry);
     agentProcesses.delete(sessionId);
     broadcastProcessCount(ctx);
     maybeCleanupMcpConfig();
@@ -364,18 +762,69 @@ export function spawnAgentProcess(ctx, options) {
   proc.on('close', (exitCode) => finalizeClose(exitCode, 'close'));
   proc.on('exit', () => maybeCleanupMcpConfig());
 
+  proc.stdin.on('error', (err) => {
+    log('agent', 'warn', `stdin error (EPIPE/destroyed): ${err.message}`, { sessionId: shortId });
+  });
+
   proc.on('error', (err) => {
     if (finalized) return;
+
+    // --- Transient retry check ---
+    const errorText = err.message + ' ' + (entry._stderrText || '');
+    const classification = classifyError(errorText, null);
+    log('agent', 'info', 'error classified', {
+      sessionId: shortId,
+      code: classification.code,
+      category: classification.category,
+      retryable: classification.retryable,
+      source: 'spawn-error',
+    });
+
+    if (isRetryable(classification) && canRetry(entry._retryState)) {
+      const delay = reserveRetryDelay(entry);
+
+      log('agent', 'info', 'retry scheduled', {
+        sessionId: shortId,
+        retryCount: entry._retryState.count,
+        maxRetries: entry._retryState.maxRetries,
+        nextDelayMs: delay,
+      });
+
+      dbWrite((db) => {
+        transitionSessionStatus(db, sessionId, 'retrying', {
+          lastError: `${classification.code}: ${err.message.slice(0, 200)}`,
+        });
+      });
+
+      broadcast('agent:error', {
+        sessionId,
+        error: err.message,
+        code: classification.code,
+        category: classification.category,
+        retryable: true,
+        retryCount: entry._retryState.count,
+        maxRetries: entry._retryState.maxRetries,
+        nextRetryMs: delay,
+      });
+
+      entry._retryTimer = setTimeout(() => {
+        entry._retryTimer = null;
+        if (!agentProcesses.has(sessionId) || entry._terminationReason === 'stopped') return;
+        respawnFromRetryContext(ctx, sessionId, entry);
+      }, delay);
+
+      return; // short-circuit
+    }
+
     finalized = true;
     log('agent', 'error', `spawn error: ${err.message}`, { sessionId: shortId, provider });
     broadcast('agent:error', { sessionId, error: err.message });
     dbWrite((db) => {
       const now = new Date().toISOString();
-      db.prepare(`
-        UPDATE session_runtime_state
-        SET status = 'error', last_error = ?, updated_at = ?
-        WHERE session_id = ?
-      `).run(err.message, now, sessionId);
+      transitionSessionStatus(db, sessionId, 'error', {
+        lastError: err.message,
+        completedAt: now,
+      });
 
       if (sessionRowMode === 'existingSession') {
         const sessionRowId = existingSessionId || sessionId;
@@ -391,6 +840,7 @@ export function spawnAgentProcess(ctx, options) {
 
     dropResumeMappingsForSession(sessionId, resumeSessionIndex);
     if (sessionAlwaysAllowed) sessionAlwaysAllowed.delete(sessionId);
+    clearRetryTimer(entry);
     agentProcesses.delete(sessionId);
     broadcastProcessCount(ctx);
     maybeCleanupMcpConfig();

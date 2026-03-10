@@ -2,23 +2,74 @@
  * Simple agent lifecycle endpoints: stop, send, tool-result, status, sessions, kill-all.
  */
 
-import { buildUserContent } from '../helpers.js';
+import { dbWrite, transitionSessionStatus } from '../db.js';
+import { broadcastProcessCount, buildUserContent, dropResumeMappingsForSession } from '../helpers.js';
+
+const MAX_AGENT_BODY_SIZE = 50 * 1024 * 1024; // allow image attachments
 
 export function buildLifecycleRoutes(ctx) {
-  const { json, error, readBody, log, broadcast, agentProcesses, maxConcurrent } = ctx;
+  const {
+    json,
+    error,
+    readBody,
+    log,
+    broadcast,
+    agentProcesses,
+    maxConcurrent,
+    pendingPermissions,
+    resumeSessionIndex,
+    sessionAlwaysAllowed,
+  } = ctx;
+
+  function cleanupPendingRetrySession(sessionId, entry) {
+    if (!entry?._retryTimer) return false;
+
+    clearTimeout(entry._retryTimer);
+    entry._retryTimer = null;
+    entry._terminationReason = 'stopped';
+
+    dbWrite((db) => {
+      const now = new Date().toISOString();
+      transitionSessionStatus(db, sessionId, 'stopped', {
+        completedAt: now,
+      });
+      db.prepare(`
+        UPDATE sessions
+        SET ended_at = ?, exit_code = NULL, error_code = NULL, error_message = NULL
+        WHERE id = ?
+      `).run(now, sessionId);
+    });
+
+    dropResumeMappingsForSession(sessionId, resumeSessionIndex);
+    for (const [reqId, pending] of pendingPermissions || []) {
+      if (pending.rudiSessionId !== sessionId) continue;
+      const denyDecision = { permissionDecision: 'deny', reason: 'Session ended' };
+      if (pending.resolve) pending.resolve(denyDecision);
+      else pending.decision = denyDecision;
+      if (pending.timer) clearTimeout(pending.timer);
+      pendingPermissions.delete(reqId);
+    }
+    if (sessionAlwaysAllowed) sessionAlwaysAllowed.delete(sessionId);
+    agentProcesses.delete(sessionId);
+    broadcastProcessCount(ctx);
+    return true;
+  }
 
   return async (req, res, url) => {
     // POST /agent/stop
     if (req.method === 'POST' && url.pathname === '/agent/stop') {
-      const body = await readBody(req);
+      const body = await readBody(req, { maxBodySize: MAX_AGENT_BODY_SIZE });
       const entry = agentProcesses.get(body.sessionId);
       if (entry) {
+        const canceledRetry = cleanupPendingRetrySession(body.sessionId, entry);
         entry._terminationReason = 'stopped';
-        entry.proc.kill('SIGTERM');
-        const killTimer = setTimeout(() => {
-          try { entry.proc.kill('SIGKILL'); } catch {}
-        }, 3000);
-        entry.proc.on('close', () => clearTimeout(killTimer));
+        if (!canceledRetry && entry.proc && !entry.proc.killed) {
+          entry.proc.kill('SIGTERM');
+          const killTimer = setTimeout(() => {
+            try { entry.proc.kill('SIGKILL'); } catch {}
+          }, 3000);
+          entry.proc.on('close', () => clearTimeout(killTimer));
+        }
         broadcast('agent:stopped', { sessionId: body.sessionId });
       }
       json(res, { ok: true });
@@ -27,7 +78,7 @@ export function buildLifecycleRoutes(ctx) {
 
     // POST /agent/send
     if (req.method === 'POST' && url.pathname === '/agent/send') {
-      const body = await readBody(req);
+      const body = await readBody(req, { maxBodySize: MAX_AGENT_BODY_SIZE });
       if (!body.sessionId || (!body.message && (!body.images || body.images.length === 0))) return error(res, 'sessionId and message required');
 
       const entry = agentProcesses.get(body.sessionId);
@@ -45,12 +96,20 @@ export function buildLifecycleRoutes(ctx) {
         entry.lastActivityAt = Date.now();
         // Reset per-turn accumulators for the new turn
         entry._turnPrompt = body.message;
+        // Update retry context with latest turn data
+        if (entry._retryContext) {
+          entry._retryContext.prompt = body.message;
+          entry._retryContext.images = body.images || null;
+        }
         entry._turnInputTokens = 0;
         entry._turnOutputTokens = 0;
         entry._turnCacheReadTokens = 0;
         entry._turnCacheCreationTokens = 0;
         entry._turnToolsUsed = [];
         const inputMsg = JSON.stringify({ type: 'user', message: { role: 'user', content: buildUserContent(body.message, body.images, entry.cwd, log) } }) + '\n';
+        if (!entry.proc.stdin.writable) {
+          return error(res, 'Process stdin is no longer writable — the agent may have exited', 410);
+        }
         entry.proc.stdin.write(inputMsg);
         json(res, { ok: true });
       } catch (err) {
@@ -93,6 +152,9 @@ export function buildLifecycleRoutes(ctx) {
           },
           toolUseResult: { questions: body.questions, answers: body.answers }
         });
+        if (!entry.proc.stdin.writable) {
+          return error(res, 'Process stdin is no longer writable — the agent may have exited', 410);
+        }
         entry.proc.stdin.write(payload + '\n');
         json(res, { ok: true });
       } catch (err) {
@@ -141,6 +203,11 @@ export function buildLifecycleRoutes(ctx) {
     if (req.method === 'POST' && url.pathname === '/agent/kill-all') {
       const killed = [];
       for (const [sessionId, entry] of agentProcesses) {
+        if (cleanupPendingRetrySession(sessionId, entry)) {
+          killed.push(sessionId);
+          broadcast('agent:stopped', { sessionId });
+          continue;
+        }
         if (entry.proc && !entry.proc.killed) {
           killed.push(sessionId);
           entry._terminationReason = 'stopped';
