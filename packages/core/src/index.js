@@ -38,3 +38,4 @@ export * from './rudi-config.js';
 export * from './tool-index.js';
 export * from './shims.js';
 export * from './system-registry.js';
+export * from './stack-lifecycle.js';

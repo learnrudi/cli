@@ -13,7 +13,7 @@
  *   2 = installed but not authenticated (agents only)
  */
 
-import { PATHS, isPackageInstalled, getPackagePath, resolveNodeRuntimeBin } from '@learnrudi/core';
+import { PATHS, isPackageInstalled, getPackagePath, resolveNodeRuntimeBin, checkStackLifecycle, readRudiConfig } from '@learnrudi/core';
 import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
@@ -253,8 +253,30 @@ export async function cmdCheck(args, flags) {
       result.installed = isPackageInstalled(`stack:${name}`);
       if (result.installed) {
         result.path = getPackagePath(`stack:${name}`);
+
+        // Run full lifecycle certification
+        const rudiConfig = readRudiConfig();
+        const stackConfig = rudiConfig.stacks?.[`stack:${name}`];
+        if (stackConfig) {
+          const lifecycle = await checkStackLifecycle(name, stackConfig, { log: () => {} });
+          result.lifecycle = {
+            finalState: lifecycle.finalState,
+            healthy: lifecycle.healthy,
+            failedAt: lifecycle.failedAt,
+            fixCommand: lifecycle.fixCommand,
+            checks: lifecycle.checks.map(c => ({
+              state: c.state,
+              passed: c.passed,
+              error: c.error,
+            })),
+          };
+          result.ready = lifecycle.healthy;
+        } else {
+          result.ready = false;
+        }
+      } else {
+        result.ready = false;
       }
-      result.ready = result.installed;
       break;
     }
 
@@ -278,6 +300,22 @@ export async function cmdCheck(args, flags) {
       console.log(`  Authenticated: ${result.authenticated}`);
     }
     console.log(`  Ready: ${result.ready}`);
+    if (result.lifecycle) {
+      const states = ['installed', 'launchable', 'secrets_ready', 'mcp_ready', 'indexed'];
+      for (const state of states) {
+        const check = result.lifecycle.checks.find(c => c.state === state);
+        if (check) {
+          const icon = check.passed ? '✓' : '✗';
+          const detail = check.error ? `  ${check.error}` : '';
+          console.log(`  ${icon} ${state}${detail}`);
+        } else {
+          console.log(`  - ${state} (skipped)`);
+        }
+      }
+      if (result.lifecycle.fixCommand) {
+        console.log(`\nFix: ${result.lifecycle.fixCommand}`);
+      }
+    }
   }
 
   // Exit code
