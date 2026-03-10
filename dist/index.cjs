@@ -1314,17 +1314,17 @@ var require_visit = __commonJS({
     visit.BREAK = BREAK;
     visit.SKIP = SKIP;
     visit.REMOVE = REMOVE;
-    function visit_(key, node, visitor, path68) {
-      const ctrl = callVisitor(key, node, visitor, path68);
+    function visit_(key, node, visitor, path69) {
+      const ctrl = callVisitor(key, node, visitor, path69);
       if (identity.isNode(ctrl) || identity.isPair(ctrl)) {
-        replaceNode(key, path68, ctrl);
-        return visit_(key, ctrl, visitor, path68);
+        replaceNode(key, path69, ctrl);
+        return visit_(key, ctrl, visitor, path69);
       }
       if (typeof ctrl !== "symbol") {
         if (identity.isCollection(node)) {
-          path68 = Object.freeze(path68.concat(node));
+          path69 = Object.freeze(path69.concat(node));
           for (let i2 = 0; i2 < node.items.length; ++i2) {
-            const ci = visit_(i2, node.items[i2], visitor, path68);
+            const ci = visit_(i2, node.items[i2], visitor, path69);
             if (typeof ci === "number")
               i2 = ci - 1;
             else if (ci === BREAK)
@@ -1335,13 +1335,13 @@ var require_visit = __commonJS({
             }
           }
         } else if (identity.isPair(node)) {
-          path68 = Object.freeze(path68.concat(node));
-          const ck = visit_("key", node.key, visitor, path68);
+          path69 = Object.freeze(path69.concat(node));
+          const ck = visit_("key", node.key, visitor, path69);
           if (ck === BREAK)
             return BREAK;
           else if (ck === REMOVE)
             node.key = null;
-          const cv = visit_("value", node.value, visitor, path68);
+          const cv = visit_("value", node.value, visitor, path69);
           if (cv === BREAK)
             return BREAK;
           else if (cv === REMOVE)
@@ -1362,17 +1362,17 @@ var require_visit = __commonJS({
     visitAsync.BREAK = BREAK;
     visitAsync.SKIP = SKIP;
     visitAsync.REMOVE = REMOVE;
-    async function visitAsync_(key, node, visitor, path68) {
-      const ctrl = await callVisitor(key, node, visitor, path68);
+    async function visitAsync_(key, node, visitor, path69) {
+      const ctrl = await callVisitor(key, node, visitor, path69);
       if (identity.isNode(ctrl) || identity.isPair(ctrl)) {
-        replaceNode(key, path68, ctrl);
-        return visitAsync_(key, ctrl, visitor, path68);
+        replaceNode(key, path69, ctrl);
+        return visitAsync_(key, ctrl, visitor, path69);
       }
       if (typeof ctrl !== "symbol") {
         if (identity.isCollection(node)) {
-          path68 = Object.freeze(path68.concat(node));
+          path69 = Object.freeze(path69.concat(node));
           for (let i2 = 0; i2 < node.items.length; ++i2) {
-            const ci = await visitAsync_(i2, node.items[i2], visitor, path68);
+            const ci = await visitAsync_(i2, node.items[i2], visitor, path69);
             if (typeof ci === "number")
               i2 = ci - 1;
             else if (ci === BREAK)
@@ -1383,13 +1383,13 @@ var require_visit = __commonJS({
             }
           }
         } else if (identity.isPair(node)) {
-          path68 = Object.freeze(path68.concat(node));
-          const ck = await visitAsync_("key", node.key, visitor, path68);
+          path69 = Object.freeze(path69.concat(node));
+          const ck = await visitAsync_("key", node.key, visitor, path69);
           if (ck === BREAK)
             return BREAK;
           else if (ck === REMOVE)
             node.key = null;
-          const cv = await visitAsync_("value", node.value, visitor, path68);
+          const cv = await visitAsync_("value", node.value, visitor, path69);
           if (cv === BREAK)
             return BREAK;
           else if (cv === REMOVE)
@@ -1416,23 +1416,23 @@ var require_visit = __commonJS({
       }
       return visitor;
     }
-    function callVisitor(key, node, visitor, path68) {
+    function callVisitor(key, node, visitor, path69) {
       if (typeof visitor === "function")
-        return visitor(key, node, path68);
+        return visitor(key, node, path69);
       if (identity.isMap(node))
-        return visitor.Map?.(key, node, path68);
+        return visitor.Map?.(key, node, path69);
       if (identity.isSeq(node))
-        return visitor.Seq?.(key, node, path68);
+        return visitor.Seq?.(key, node, path69);
       if (identity.isPair(node))
-        return visitor.Pair?.(key, node, path68);
+        return visitor.Pair?.(key, node, path69);
       if (identity.isScalar(node))
-        return visitor.Scalar?.(key, node, path68);
+        return visitor.Scalar?.(key, node, path69);
       if (identity.isAlias(node))
-        return visitor.Alias?.(key, node, path68);
+        return visitor.Alias?.(key, node, path69);
       return void 0;
     }
-    function replaceNode(key, path68, node) {
-      const parent = path68[path68.length - 1];
+    function replaceNode(key, path69, node) {
+      const parent = path69[path69.length - 1];
       if (identity.isCollection(parent)) {
         parent.items[key] = node;
       } else if (identity.isPair(parent)) {
@@ -2040,10 +2040,10 @@ var require_Collection = __commonJS({
     var createNode = require_createNode();
     var identity = require_identity();
     var Node = require_Node();
-    function collectionFromPath(schema, path68, value) {
+    function collectionFromPath(schema, path69, value) {
       let v2 = value;
-      for (let i2 = path68.length - 1; i2 >= 0; --i2) {
-        const k2 = path68[i2];
+      for (let i2 = path69.length - 1; i2 >= 0; --i2) {
+        const k2 = path69[i2];
         if (typeof k2 === "number" && Number.isInteger(k2) && k2 >= 0) {
           const a2 = [];
           a2[k2] = v2;
@@ -2062,7 +2062,7 @@ var require_Collection = __commonJS({
         sourceObjects: /* @__PURE__ */ new Map()
       });
     }
-    var isEmptyPath = (path68) => path68 == null || typeof path68 === "object" && !!path68[Symbol.iterator]().next().done;
+    var isEmptyPath = (path69) => path69 == null || typeof path69 === "object" && !!path69[Symbol.iterator]().next().done;
     var Collection = class extends Node.NodeBase {
       constructor(type, schema) {
         super(type);
@@ -2092,11 +2092,11 @@ var require_Collection = __commonJS({
        * be a Pair instance or a `{ key, value }` object, which may not have a key
        * that already exists in the map.
        */
-      addIn(path68, value) {
-        if (isEmptyPath(path68))
+      addIn(path69, value) {
+        if (isEmptyPath(path69))
           this.add(value);
         else {
-          const [key, ...rest] = path68;
+          const [key, ...rest] = path69;
           const node = this.get(key, true);
           if (identity.isCollection(node))
             node.addIn(rest, value);
@@ -2110,8 +2110,8 @@ var require_Collection = __commonJS({
        * Removes a value from the collection.
        * @returns `true` if the item was found and removed.
        */
-      deleteIn(path68) {
-        const [key, ...rest] = path68;
+      deleteIn(path69) {
+        const [key, ...rest] = path69;
         if (rest.length === 0)
           return this.delete(key);
         const node = this.get(key, true);
@@ -2125,8 +2125,8 @@ var require_Collection = __commonJS({
        * scalar values from their surrounding node; to disable set `keepScalar` to
        * `true` (collections are always returned intact).
        */
-      getIn(path68, keepScalar) {
-        const [key, ...rest] = path68;
+      getIn(path69, keepScalar) {
+        const [key, ...rest] = path69;
         const node = this.get(key, true);
         if (rest.length === 0)
           return !keepScalar && identity.isScalar(node) ? node.value : node;
@@ -2144,8 +2144,8 @@ var require_Collection = __commonJS({
       /**
        * Checks if the collection includes a value with the key `key`.
        */
-      hasIn(path68) {
-        const [key, ...rest] = path68;
+      hasIn(path69) {
+        const [key, ...rest] = path69;
         if (rest.length === 0)
           return this.has(key);
         const node = this.get(key, true);
@@ -2155,8 +2155,8 @@ var require_Collection = __commonJS({
        * Sets a value in this collection. For `!!set`, `value` needs to be a
        * boolean to add/remove the item from the set.
        */
-      setIn(path68, value) {
-        const [key, ...rest] = path68;
+      setIn(path69, value) {
+        const [key, ...rest] = path69;
         if (rest.length === 0) {
           this.set(key, value);
         } else {
@@ -4660,9 +4660,9 @@ var require_Document = __commonJS({
           this.contents.add(value);
       }
       /** Adds a value to the document. */
-      addIn(path68, value) {
+      addIn(path69, value) {
         if (assertCollection(this.contents))
-          this.contents.addIn(path68, value);
+          this.contents.addIn(path69, value);
       }
       /**
        * Create a new `Alias` node, ensuring that the target `node` has the required anchor.
@@ -4737,14 +4737,14 @@ var require_Document = __commonJS({
        * Removes a value from the document.
        * @returns `true` if the item was found and removed.
        */
-      deleteIn(path68) {
-        if (Collection.isEmptyPath(path68)) {
+      deleteIn(path69) {
+        if (Collection.isEmptyPath(path69)) {
           if (this.contents == null)
             return false;
           this.contents = null;
           return true;
         }
-        return assertCollection(this.contents) ? this.contents.deleteIn(path68) : false;
+        return assertCollection(this.contents) ? this.contents.deleteIn(path69) : false;
       }
       /**
        * Returns item at `key`, or `undefined` if not found. By default unwraps
@@ -4759,10 +4759,10 @@ var require_Document = __commonJS({
        * scalar values from their surrounding node; to disable set `keepScalar` to
        * `true` (collections are always returned intact).
        */
-      getIn(path68, keepScalar) {
-        if (Collection.isEmptyPath(path68))
+      getIn(path69, keepScalar) {
+        if (Collection.isEmptyPath(path69))
           return !keepScalar && identity.isScalar(this.contents) ? this.contents.value : this.contents;
-        return identity.isCollection(this.contents) ? this.contents.getIn(path68, keepScalar) : void 0;
+        return identity.isCollection(this.contents) ? this.contents.getIn(path69, keepScalar) : void 0;
       }
       /**
        * Checks if the document includes a value with the key `key`.
@@ -4773,10 +4773,10 @@ var require_Document = __commonJS({
       /**
        * Checks if the document includes a value at `path`.
        */
-      hasIn(path68) {
-        if (Collection.isEmptyPath(path68))
+      hasIn(path69) {
+        if (Collection.isEmptyPath(path69))
           return this.contents !== void 0;
-        return identity.isCollection(this.contents) ? this.contents.hasIn(path68) : false;
+        return identity.isCollection(this.contents) ? this.contents.hasIn(path69) : false;
       }
       /**
        * Sets a value in this document. For `!!set`, `value` needs to be a
@@ -4793,13 +4793,13 @@ var require_Document = __commonJS({
        * Sets a value in this document. For `!!set`, `value` needs to be a
        * boolean to add/remove the item from the set.
        */
-      setIn(path68, value) {
-        if (Collection.isEmptyPath(path68)) {
+      setIn(path69, value) {
+        if (Collection.isEmptyPath(path69)) {
           this.contents = value;
         } else if (this.contents == null) {
-          this.contents = Collection.collectionFromPath(this.schema, Array.from(path68), value);
+          this.contents = Collection.collectionFromPath(this.schema, Array.from(path69), value);
         } else if (assertCollection(this.contents)) {
-          this.contents.setIn(path68, value);
+          this.contents.setIn(path69, value);
         }
       }
       /**
@@ -6751,9 +6751,9 @@ var require_cst_visit = __commonJS({
     visit.BREAK = BREAK;
     visit.SKIP = SKIP;
     visit.REMOVE = REMOVE;
-    visit.itemAtPath = (cst, path68) => {
+    visit.itemAtPath = (cst, path69) => {
       let item = cst;
-      for (const [field, index] of path68) {
+      for (const [field, index] of path69) {
         const tok = item?.[field];
         if (tok && "items" in tok) {
           item = tok.items[index];
@@ -6762,23 +6762,23 @@ var require_cst_visit = __commonJS({
       }
       return item;
     };
-    visit.parentCollection = (cst, path68) => {
-      const parent = visit.itemAtPath(cst, path68.slice(0, -1));
-      const field = path68[path68.length - 1][0];
+    visit.parentCollection = (cst, path69) => {
+      const parent = visit.itemAtPath(cst, path69.slice(0, -1));
+      const field = path69[path69.length - 1][0];
       const coll = parent?.[field];
       if (coll && "items" in coll)
         return coll;
       throw new Error("Parent collection not found");
     };
-    function _visit(path68, item, visitor) {
-      let ctrl = visitor(item, path68);
+    function _visit(path69, item, visitor) {
+      let ctrl = visitor(item, path69);
       if (typeof ctrl === "symbol")
         return ctrl;
       for (const field of ["key", "value"]) {
         const token = item[field];
         if (token && "items" in token) {
           for (let i2 = 0; i2 < token.items.length; ++i2) {
-            const ci = _visit(Object.freeze(path68.concat([[field, i2]])), token.items[i2], visitor);
+            const ci = _visit(Object.freeze(path69.concat([[field, i2]])), token.items[i2], visitor);
             if (typeof ci === "number")
               i2 = ci - 1;
             else if (ci === BREAK)
@@ -6789,10 +6789,10 @@ var require_cst_visit = __commonJS({
             }
           }
           if (typeof ctrl === "function" && field === "key")
-            ctrl = ctrl(item, path68);
+            ctrl = ctrl(item, path69);
         }
       }
-      return typeof ctrl === "function" ? ctrl(item, path68) : ctrl;
+      return typeof ctrl === "function" ? ctrl(item, path69) : ctrl;
     }
     exports2.visit = visit;
   }
@@ -8077,14 +8077,14 @@ var require_parser = __commonJS({
             case "scalar":
             case "single-quoted-scalar":
             case "double-quoted-scalar": {
-              const fs60 = this.flowScalar(this.type);
+              const fs61 = this.flowScalar(this.type);
               if (atNextItem || it2.value) {
-                map.items.push({ start, key: fs60, sep: [] });
+                map.items.push({ start, key: fs61, sep: [] });
                 this.onKeyLine = true;
               } else if (it2.sep) {
-                this.stack.push(fs60);
+                this.stack.push(fs61);
               } else {
-                Object.assign(it2, { key: fs60, sep: [] });
+                Object.assign(it2, { key: fs61, sep: [] });
                 this.onKeyLine = true;
               }
               return;
@@ -8212,13 +8212,13 @@ var require_parser = __commonJS({
             case "scalar":
             case "single-quoted-scalar":
             case "double-quoted-scalar": {
-              const fs60 = this.flowScalar(this.type);
+              const fs61 = this.flowScalar(this.type);
               if (!it2 || it2.value)
-                fc.items.push({ start: [], key: fs60, sep: [] });
+                fc.items.push({ start: [], key: fs61, sep: [] });
               else if (it2.sep)
-                this.stack.push(fs60);
+                this.stack.push(fs61);
               else
-                Object.assign(it2, { key: fs60, sep: [] });
+                Object.assign(it2, { key: fs61, sep: [] });
               return;
             }
             case "flow-map-end":
@@ -10540,6 +10540,399 @@ var init_system_registry = __esm({
   }
 });
 
+// packages/secrets/src/index.js
+function ensureSecretsFile() {
+  const dir = path11.dirname(SECRETS_FILE);
+  if (!fs10.existsSync(dir)) {
+    fs10.mkdirSync(dir, { recursive: true });
+  }
+  if (!fs10.existsSync(SECRETS_FILE)) {
+    fs10.writeFileSync(SECRETS_FILE, "{}", { mode: 384 });
+  } else {
+    try {
+      fs10.chmodSync(SECRETS_FILE, 384);
+    } catch {
+    }
+  }
+}
+function loadSecrets2() {
+  ensureSecretsFile();
+  try {
+    const content = fs10.readFileSync(SECRETS_FILE, "utf-8");
+    return JSON.parse(content);
+  } catch {
+    return {};
+  }
+}
+function saveSecrets(secrets) {
+  ensureSecretsFile();
+  fs10.writeFileSync(SECRETS_FILE, JSON.stringify(secrets, null, 2), {
+    encoding: "utf-8",
+    mode: 384
+  });
+}
+async function getSecret(name) {
+  const secrets = loadSecrets2();
+  return secrets[name] || null;
+}
+async function setSecret(name, value) {
+  const secrets = loadSecrets2();
+  secrets[name] = value;
+  saveSecrets(secrets);
+  return true;
+}
+async function removeSecret(name) {
+  const secrets = loadSecrets2();
+  delete secrets[name];
+  saveSecrets(secrets);
+  return true;
+}
+async function listSecrets() {
+  const secrets = loadSecrets2();
+  return Object.keys(secrets).sort();
+}
+async function hasSecret(name) {
+  const secrets = loadSecrets2();
+  return secrets[name] !== void 0 && secrets[name] !== null && secrets[name] !== "";
+}
+async function getMaskedSecrets() {
+  const secrets = loadSecrets2();
+  const masked = {};
+  for (const [name, value] of Object.entries(secrets)) {
+    if (value && typeof value === "string" && value.length > 8) {
+      masked[name] = value.slice(0, 4) + "..." + value.slice(-4);
+    } else if (value && typeof value === "string" && value.length > 0) {
+      masked[name] = "****";
+    } else {
+      masked[name] = "(pending)";
+    }
+  }
+  return masked;
+}
+function getStorageInfo() {
+  return {
+    backend: "file",
+    file: SECRETS_FILE,
+    permissions: "0600 (owner read/write only)"
+  };
+}
+var fs10, path11, SECRETS_FILE;
+var init_src4 = __esm({
+  "packages/secrets/src/index.js"() {
+    fs10 = __toESM(require("fs"), 1);
+    path11 = __toESM(require("path"), 1);
+    init_src2();
+    SECRETS_FILE = path11.join(PATHS2.home, "secrets.json");
+  }
+});
+
+// packages/core/src/stack-lifecycle.js
+function checkInstalled(stackId, stackConfig) {
+  try {
+    if (stackConfig.installed !== true) {
+      return {
+        passed: false,
+        state: "installed",
+        error: "Stack not marked as installed in config",
+        details: { path: stackConfig.path }
+      };
+    }
+    if (!import_node_fs.default.existsSync(stackConfig.path)) {
+      return {
+        passed: false,
+        state: "installed",
+        error: `Stack directory not found: ${stackConfig.path}`,
+        details: { path: stackConfig.path }
+      };
+    }
+    const manifestPath = import_node_path.default.join(stackConfig.path, "manifest.json");
+    if (!import_node_fs.default.existsSync(manifestPath)) {
+      return {
+        passed: false,
+        state: "installed",
+        error: "manifest.json not found in stack directory",
+        details: { path: stackConfig.path }
+      };
+    }
+    return {
+      passed: true,
+      state: "installed",
+      error: null,
+      details: { path: stackConfig.path }
+    };
+  } catch (err) {
+    return {
+      passed: false,
+      state: "installed",
+      error: err.message,
+      details: { path: stackConfig.path }
+    };
+  }
+}
+function checkLaunchable(stackId, stackConfig) {
+  try {
+    const launch = stackConfig.launch;
+    if (!launch) {
+      return {
+        passed: false,
+        state: "launchable",
+        error: "No launch configuration found",
+        details: { bin: null, cwd: null }
+      };
+    }
+    if (!launch.bin) {
+      return {
+        passed: false,
+        state: "launchable",
+        error: "No launch bin specified",
+        details: { bin: null, cwd: launch.cwd || stackConfig.path }
+      };
+    }
+    if (!import_node_fs.default.existsSync(launch.bin)) {
+      return {
+        passed: false,
+        state: "launchable",
+        error: `Launch bin not found: ${launch.bin}`,
+        details: { bin: launch.bin, cwd: launch.cwd || stackConfig.path }
+      };
+    }
+    try {
+      import_node_fs.default.accessSync(launch.bin, import_node_fs.default.constants.X_OK);
+    } catch (err) {
+      return {
+        passed: false,
+        state: "launchable",
+        error: `Launch bin is not executable: ${launch.bin}`,
+        details: { bin: launch.bin, cwd: launch.cwd || stackConfig.path }
+      };
+    }
+    const cwd = launch.cwd || stackConfig.path;
+    if (!import_node_fs.default.existsSync(cwd)) {
+      return {
+        passed: false,
+        state: "launchable",
+        error: `Launch cwd directory not found: ${cwd}`,
+        details: { bin: launch.bin, cwd }
+      };
+    }
+    return {
+      passed: true,
+      state: "launchable",
+      error: null,
+      details: { bin: launch.bin, cwd }
+    };
+  } catch (err) {
+    return {
+      passed: false,
+      state: "launchable",
+      error: err.message,
+      details: { bin: stackConfig.launch?.bin || null, cwd: stackConfig.launch?.cwd || stackConfig.path }
+    };
+  }
+}
+async function checkSecretsReady(stackId, stackConfig) {
+  try {
+    const secrets = stackConfig.secrets;
+    if (!secrets || secrets.length === 0) {
+      return {
+        passed: true,
+        state: "secrets_ready",
+        error: null,
+        details: { missing: [], checked: 0 }
+      };
+    }
+    const missing = [];
+    let checked = 0;
+    for (const entry of secrets) {
+      const secretName = typeof entry === "string" ? entry : entry.name;
+      const required = typeof entry === "string" ? true : entry.required !== false;
+      if (!required) {
+        continue;
+      }
+      checked++;
+      const value = await getSecret(secretName);
+      if (!value || value.trim() === "") {
+        missing.push(secretName);
+      }
+    }
+    if (missing.length > 0) {
+      return {
+        passed: false,
+        state: "secrets_ready",
+        error: `Missing required secrets: ${missing.join(", ")}`,
+        details: { missing, checked }
+      };
+    }
+    return {
+      passed: true,
+      state: "secrets_ready",
+      error: null,
+      details: { missing: [], checked }
+    };
+  } catch (err) {
+    return {
+      passed: false,
+      state: "secrets_ready",
+      error: err.message,
+      details: { missing: [], checked: 0 }
+    };
+  }
+}
+async function checkMcpReady(stackId, stackConfig, opts = {}) {
+  try {
+    const result = await discoverStackTools(stackId, stackConfig, {
+      timeout: opts.timeout || 15e3,
+      log: opts.log
+    });
+    if (result.error) {
+      return {
+        passed: false,
+        state: "mcp_ready",
+        error: result.error,
+        details: { toolCount: 0, tools: [] }
+      };
+    }
+    if (!result.tools || result.tools.length === 0) {
+      return {
+        passed: false,
+        state: "mcp_ready",
+        error: "MCP handshake succeeded but no tools returned",
+        details: { toolCount: 0, tools: [] }
+      };
+    }
+    return {
+      passed: true,
+      state: "mcp_ready",
+      error: null,
+      details: {
+        toolCount: result.tools.length,
+        tools: result.tools.map((t2) => t2.name || t2.qualifiedName)
+      }
+    };
+  } catch (err) {
+    return {
+      passed: false,
+      state: "mcp_ready",
+      error: err.message,
+      details: { toolCount: 0, tools: [] }
+    };
+  }
+}
+function checkIndexed(stackId, stackConfig) {
+  try {
+    if (!import_node_fs.default.existsSync(TOOL_INDEX_PATH)) {
+      return {
+        passed: false,
+        state: "indexed",
+        error: "Tool index file not found",
+        details: { toolCount: 0, indexPath: TOOL_INDEX_PATH }
+      };
+    }
+    const indexContent = import_node_fs.default.readFileSync(TOOL_INDEX_PATH, "utf8");
+    const index = JSON.parse(indexContent);
+    const byStack = index.byStack || index;
+    const entry = byStack[stackId] || byStack[`stack:${stackId}`];
+    if (!entry) {
+      return {
+        passed: false,
+        state: "indexed",
+        error: `Stack not found in tool index`,
+        details: { toolCount: 0, indexPath: TOOL_INDEX_PATH }
+      };
+    }
+    if (entry.error) {
+      return {
+        passed: false,
+        state: "indexed",
+        error: `Stack indexed with error: ${entry.error}`,
+        details: { toolCount: entry.tools?.length || 0, indexPath: TOOL_INDEX_PATH }
+      };
+    }
+    if (!entry.tools || entry.tools.length === 0) {
+      return {
+        passed: false,
+        state: "indexed",
+        error: "Stack indexed but has no tools",
+        details: { toolCount: 0, indexPath: TOOL_INDEX_PATH }
+      };
+    }
+    return {
+      passed: true,
+      state: "indexed",
+      error: null,
+      details: { toolCount: entry.tools.length, indexPath: TOOL_INDEX_PATH }
+    };
+  } catch (err) {
+    return {
+      passed: false,
+      state: "indexed",
+      error: err.message,
+      details: { toolCount: 0, indexPath: TOOL_INDEX_PATH }
+    };
+  }
+}
+function determineFix(failedState, stackId, checkDetails) {
+  if (!failedState) return null;
+  switch (failedState) {
+    case "installed":
+      return `rudi install stack:${stackId}`;
+    case "launchable":
+      return "Check stack runtime and launch configuration";
+    case "secrets_ready":
+      const missing = checkDetails?.missing?.[0];
+      return missing ? `rudi secrets set ${missing}` : "rudi secrets set <SECRET_NAME>";
+    case "mcp_ready":
+      return "Check stack logs \u2014 launch may be failing";
+    case "indexed":
+      return "rudi index";
+    default:
+      return null;
+  }
+}
+async function checkStackLifecycle(stackId, stackConfig, opts = {}) {
+  const checks = [];
+  let finalState = null;
+  let failedAt = null;
+  let failedCheckDetails = null;
+  const checkSequence = [
+    { name: "installed", fn: () => checkInstalled(stackId, stackConfig) },
+    { name: "launchable", fn: () => checkLaunchable(stackId, stackConfig) },
+    { name: "secrets_ready", fn: () => checkSecretsReady(stackId, stackConfig) },
+    { name: "mcp_ready", fn: () => checkMcpReady(stackId, stackConfig, opts) },
+    { name: "indexed", fn: () => checkIndexed(stackId, stackConfig) }
+  ];
+  for (const check of checkSequence) {
+    const result = await check.fn();
+    checks.push(result);
+    if (result.passed) {
+      finalState = result.state;
+    } else {
+      failedAt = result.state;
+      failedCheckDetails = result.details;
+      break;
+    }
+  }
+  const healthy = checks.every((c2) => c2.passed);
+  const fixCommand = determineFix(failedAt, stackId, failedCheckDetails);
+  return {
+    stackId,
+    finalState,
+    healthy,
+    checks,
+    failedAt,
+    fixCommand
+  };
+}
+var import_node_fs, import_node_path;
+var init_stack_lifecycle = __esm({
+  "packages/core/src/stack-lifecycle.js"() {
+    import_node_fs = __toESM(require("node:fs"), 1);
+    import_node_path = __toESM(require("node:path"), 1);
+    init_src4();
+    init_tool_index();
+  }
+});
+
 // packages/core/src/index.js
 var src_exports2 = {};
 __export(src_exports2, {
@@ -10552,7 +10945,13 @@ __export(src_exports2, {
   checkAllDependencies: () => checkAllDependencies,
   checkBinary: () => checkBinary,
   checkDependencies: () => checkDependencies,
+  checkIndexed: () => checkIndexed,
+  checkInstalled: () => checkInstalled,
+  checkLaunchable: () => checkLaunchable,
+  checkMcpReady: () => checkMcpReady,
   checkRuntime: () => checkRuntime,
+  checkSecretsReady: () => checkSecretsReady,
+  checkStackLifecycle: () => checkStackLifecycle,
   cleanOrphanedLockfiles: () => cleanOrphanedLockfiles,
   clearCache: () => clearCache,
   createLaunchConfig: () => createLaunchConfig,
@@ -10619,7 +11018,7 @@ __export(src_exports2, {
   writeRudiConfig: () => writeRudiConfig,
   writeToolIndex: () => writeToolIndex
 });
-var init_src4 = __esm({
+var init_src5 = __esm({
   "packages/core/src/index.js"() {
     init_src();
     init_src3();
@@ -10631,6 +11030,7 @@ var init_src4 = __esm({
     init_tool_index();
     init_shims();
     init_system_registry();
+    init_stack_lifecycle();
   }
 });
 
@@ -10663,7 +11063,7 @@ function getPackagePath2(id) {
   }
 }
 var import_path10, import_os5, RUDI_HOME3, PATHS3, PACKAGE_KINDS3;
-var init_src5 = __esm({
+var init_src6 = __esm({
   "node_modules/.pnpm/@learnrudi+env@1.0.1/node_modules/@learnrudi/env/src/index.js"() {
     import_path10 = __toESM(require("path"), 1);
     import_os5 = __toESM(require("os"), 1);
@@ -13899,8 +14299,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path68) {
-      let input = path68;
+    function removeDotSegments(path69) {
+      let input = path69;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -14099,8 +14499,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path68, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path68 && path68 !== "/" ? path68 : void 0;
+        const [path69, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path69 && path69 !== "/" ? path69 : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -17453,12 +17853,12 @@ var require_dist2 = __commonJS({
         throw new Error(`Unknown format "${name}"`);
       return f2;
     };
-    function addFormats2(ajv2, list, fs60, exportName) {
+    function addFormats2(ajv2, list, fs61, exportName) {
       var _a2;
       var _b;
       (_a2 = (_b = ajv2.opts.code).formats) !== null && _a2 !== void 0 ? _a2 : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
       for (const f2 of list)
-        ajv2.addFormat(f2, fs60[f2]);
+        ajv2.addFormat(f2, fs61[f2]);
     }
     module2.exports = exports2 = formatsPlugin;
     Object.defineProperty(exports2, "__esModule", { value: true });
@@ -17520,28 +17920,28 @@ var init_vector = __esm({
 // node_modules/.pnpm/@learnrudi+db@1.0.2/node_modules/@learnrudi/db/src/schema.js
 var init_schema = __esm({
   "node_modules/.pnpm/@learnrudi+db@1.0.2/node_modules/@learnrudi/db/src/schema.js"() {
-    init_src6();
+    init_src7();
   }
 });
 
 // node_modules/.pnpm/@learnrudi+db@1.0.2/node_modules/@learnrudi/db/src/search.js
 var init_search = __esm({
   "node_modules/.pnpm/@learnrudi+db@1.0.2/node_modules/@learnrudi/db/src/search.js"() {
-    init_src6();
+    init_src7();
   }
 });
 
 // node_modules/.pnpm/@learnrudi+db@1.0.2/node_modules/@learnrudi/db/src/stats.js
 var init_stats = __esm({
   "node_modules/.pnpm/@learnrudi+db@1.0.2/node_modules/@learnrudi/db/src/stats.js"() {
-    init_src6();
+    init_src7();
   }
 });
 
 // node_modules/.pnpm/@learnrudi+db@1.0.2/node_modules/@learnrudi/db/src/logs.js
 var init_logs = __esm({
   "node_modules/.pnpm/@learnrudi+db@1.0.2/node_modules/@learnrudi/db/src/logs.js"() {
-    init_src6();
+    init_src7();
   }
 });
 
@@ -17549,8 +17949,8 @@ var init_logs = __esm({
 var RUDI_HOME5;
 var init_import = __esm({
   "node_modules/.pnpm/@learnrudi+db@1.0.2/node_modules/@learnrudi/db/src/import.js"() {
-    init_src5();
     init_src6();
+    init_src7();
     init_schema();
     RUDI_HOME5 = PATHS3.home;
   }
@@ -17574,12 +17974,12 @@ function getDb2(options = {}) {
   return db2;
 }
 var import_better_sqlite32, import_path17, import_fs15, DB_PATH2, db2;
-var init_src6 = __esm({
+var init_src7 = __esm({
   "node_modules/.pnpm/@learnrudi+db@1.0.2/node_modules/@learnrudi/db/src/index.js"() {
     import_better_sqlite32 = __toESM(require("better-sqlite3"), 1);
     import_path17 = __toESM(require("path"), 1);
     import_fs15 = __toESM(require("fs"), 1);
-    init_src5();
+    init_src6();
     init_schema();
     init_search();
     init_stats();
@@ -17808,7 +18208,7 @@ function clearEmbeddings(model) {
 }
 var init_sqlite = __esm({
   "packages/embeddings/src/stores/sqlite.js"() {
-    init_src6();
+    init_src7();
   }
 });
 
@@ -19158,14 +19558,14 @@ var require_url_state_machine = __commonJS({
       return url.replace(/\u0009|\u000A|\u000D/g, "");
     }
     function shortenPath(url) {
-      const path68 = url.path;
-      if (path68.length === 0) {
+      const path69 = url.path;
+      if (path69.length === 0) {
         return;
       }
-      if (url.scheme === "file" && path68.length === 1 && isNormalizedWindowsDriveLetter(path68[0])) {
+      if (url.scheme === "file" && path69.length === 1 && isNormalizedWindowsDriveLetter(path69[0])) {
         return;
       }
-      path68.pop();
+      path69.pop();
     }
     function includesCredentials(url) {
       return url.username !== "" || url.password !== "";
@@ -25149,14 +25549,14 @@ __export(fileFromPath_exports, {
   fileFromPathSync: () => fileFromPathSync,
   isFile: () => isFile
 });
-function createFileFromPath(path68, { mtimeMs, size }, filenameOrOptions, options = {}) {
+function createFileFromPath(path69, { mtimeMs, size }, filenameOrOptions, options = {}) {
   let filename;
   if (isPlainObject_default2(filenameOrOptions)) {
     [options, filename] = [filenameOrOptions, void 0];
   } else {
     filename = filenameOrOptions;
   }
-  const file = new FileFromPath({ path: path68, size, lastModified: mtimeMs });
+  const file = new FileFromPath({ path: path69, size, lastModified: mtimeMs });
   if (!filename) {
     filename = file.name;
   }
@@ -25165,13 +25565,13 @@ function createFileFromPath(path68, { mtimeMs, size }, filenameOrOptions, option
     lastModified: file.lastModified
   });
 }
-function fileFromPathSync(path68, filenameOrOptions, options = {}) {
-  const stats = (0, import_fs16.statSync)(path68);
-  return createFileFromPath(path68, stats, filenameOrOptions, options);
+function fileFromPathSync(path69, filenameOrOptions, options = {}) {
+  const stats = (0, import_fs16.statSync)(path69);
+  return createFileFromPath(path69, stats, filenameOrOptions, options);
 }
-async function fileFromPath2(path68, filenameOrOptions, options) {
-  const stats = await import_fs16.promises.stat(path68);
-  return createFileFromPath(path68, stats, filenameOrOptions, options);
+async function fileFromPath2(path69, filenameOrOptions, options) {
+  const stats = await import_fs16.promises.stat(path69);
+  return createFileFromPath(path69, stats, filenameOrOptions, options);
 }
 var import_fs16, import_path18, import_node_domexception, __classPrivateFieldSet4, __classPrivateFieldGet5, _FileFromPath_path, _FileFromPath_start, MESSAGE, FileFromPath;
 var init_fileFromPath = __esm({
@@ -25232,13 +25632,13 @@ var init_fileFromPath = __esm({
 });
 
 // node_modules/.pnpm/openai@4.104.0_ws@8.19.0/node_modules/openai/_shims/node-runtime.mjs
-async function fileFromPath3(path68, ...args) {
+async function fileFromPath3(path69, ...args) {
   const { fileFromPath: _fileFromPath } = await Promise.resolve().then(() => (init_fileFromPath(), fileFromPath_exports));
   if (!fileFromPathWarned) {
-    console.warn(`fileFromPath is deprecated; use fs.createReadStream(${JSON.stringify(path68)}) instead`);
+    console.warn(`fileFromPath is deprecated; use fs.createReadStream(${JSON.stringify(path69)}) instead`);
     fileFromPathWarned = true;
   }
-  return await _fileFromPath(path68, ...args);
+  return await _fileFromPath(path69, ...args);
 }
 async function getMultipartRequestOptions2(form, opts) {
   const encoder = new FormDataEncoder(form);
@@ -25268,17 +25668,17 @@ function getRuntime() {
     getMultipartRequestOptions: getMultipartRequestOptions2,
     getDefaultAgent: (url) => url.startsWith("https") ? defaultHttpsAgent : defaultHttpAgent,
     fileFromPath: fileFromPath3,
-    isFsReadStream: (value) => value instanceof import_node_fs.ReadStream
+    isFsReadStream: (value) => value instanceof import_node_fs2.ReadStream
   };
 }
-var nf, import_agentkeepalive, import_abort_controller, import_node_fs, import_node_stream, import_web, fileFromPathWarned, defaultHttpAgent, defaultHttpsAgent;
+var nf, import_agentkeepalive, import_abort_controller, import_node_fs2, import_node_stream, import_web, fileFromPathWarned, defaultHttpAgent, defaultHttpsAgent;
 var init_node_runtime = __esm({
   "node_modules/.pnpm/openai@4.104.0_ws@8.19.0/node_modules/openai/_shims/node-runtime.mjs"() {
     nf = __toESM(require_lib2(), 1);
     init_esm();
     import_agentkeepalive = __toESM(require_agentkeepalive(), 1);
     import_abort_controller = __toESM(require_abort_controller(), 1);
-    import_node_fs = require("node:fs");
+    import_node_fs2 = require("node:fs");
     init_esm2();
     import_node_stream = require("node:stream");
     init_MultipartBody();
@@ -26171,29 +26571,29 @@ var init_core = __esm({
       defaultIdempotencyKey() {
         return `stainless-node-retry-${uuid4()}`;
       }
-      get(path68, opts) {
-        return this.methodRequest("get", path68, opts);
+      get(path69, opts) {
+        return this.methodRequest("get", path69, opts);
       }
-      post(path68, opts) {
-        return this.methodRequest("post", path68, opts);
+      post(path69, opts) {
+        return this.methodRequest("post", path69, opts);
       }
-      patch(path68, opts) {
-        return this.methodRequest("patch", path68, opts);
+      patch(path69, opts) {
+        return this.methodRequest("patch", path69, opts);
       }
-      put(path68, opts) {
-        return this.methodRequest("put", path68, opts);
+      put(path69, opts) {
+        return this.methodRequest("put", path69, opts);
       }
-      delete(path68, opts) {
-        return this.methodRequest("delete", path68, opts);
+      delete(path69, opts) {
+        return this.methodRequest("delete", path69, opts);
       }
-      methodRequest(method, path68, opts) {
+      methodRequest(method, path69, opts) {
         return this.request(Promise.resolve(opts).then(async (opts2) => {
           const body = opts2 && isBlobLike(opts2?.body) ? new DataView(await opts2.body.arrayBuffer()) : opts2?.body instanceof DataView ? opts2.body : opts2?.body instanceof ArrayBuffer ? new DataView(opts2.body) : opts2 && ArrayBuffer.isView(opts2?.body) ? new DataView(opts2.body.buffer) : opts2?.body;
-          return { method, path: path68, ...opts2, body };
+          return { method, path: path69, ...opts2, body };
         }));
       }
-      getAPIList(path68, Page2, opts) {
-        return this.requestAPIList(Page2, { method: "get", path: path68, ...opts });
+      getAPIList(path69, Page2, opts) {
+        return this.requestAPIList(Page2, { method: "get", path: path69, ...opts });
       }
       calculateContentLength(body) {
         if (typeof body === "string") {
@@ -26212,10 +26612,10 @@ var init_core = __esm({
       }
       buildRequest(inputOptions, { retryCount = 0 } = {}) {
         const options = { ...inputOptions };
-        const { method, path: path68, query, headers = {} } = options;
+        const { method, path: path69, query, headers = {} } = options;
         const body = ArrayBuffer.isView(options.body) || options.__binaryRequest && typeof options.body === "string" ? options.body : isMultipartBody(options.body) ? options.body.body : options.body ? JSON.stringify(options.body, null, 2) : null;
         const contentLength = this.calculateContentLength(body);
-        const url = this.buildURL(path68, query);
+        const url = this.buildURL(path69, query);
         if ("timeout" in options)
           validatePositiveInteger("timeout", options.timeout);
         options.timeout = options.timeout ?? this.timeout;
@@ -26331,8 +26731,8 @@ var init_core = __esm({
         const request = this.makeRequest(options, null);
         return new PagePromise(this, request, Page2);
       }
-      buildURL(path68, query) {
-        const url = isAbsoluteURL(path68) ? new URL(path68) : new URL(this.baseURL + (this.baseURL.endsWith("/") && path68.startsWith("/") ? path68.slice(1) : path68));
+      buildURL(path69, query) {
+        const url = isAbsoluteURL(path69) ? new URL(path69) : new URL(this.baseURL + (this.baseURL.endsWith("/") && path69.startsWith("/") ? path69.slice(1) : path69));
         const defaultQuery = this.defaultQuery();
         if (!isEmptyObj(defaultQuery)) {
           query = { ...defaultQuery, ...query };
@@ -32059,7 +32459,7 @@ __export(src_exports3, {
   sha256: () => sha256,
   store: () => sqlite_exports
 });
-var init_src7 = __esm({
+var init_src8 = __esm({
   "packages/embeddings/src/index.js"() {
     init_client();
     init_providers();
@@ -36147,7 +36547,7 @@ EXAMPLES
 }
 
 // src/commands/search.js
-init_src4();
+init_src5();
 function pluralizeKind(kind2) {
   if (!kind2) return "packages";
   return kind2 === "binary" ? "binaries" : `${kind2}s`;
@@ -36256,92 +36656,12 @@ Total: ${totalCount} package(s) available`);
 }
 
 // src/commands/install.js
-var fs13 = __toESM(require("fs/promises"), 1);
+var fs14 = __toESM(require("fs/promises"), 1);
 var fsSync = __toESM(require("fs"), 1);
-var path14 = __toESM(require("path"), 1);
+var path15 = __toESM(require("path"), 1);
 var import_child_process4 = require("child_process");
+init_src5();
 init_src4();
-
-// packages/secrets/src/index.js
-var fs10 = __toESM(require("fs"), 1);
-var path11 = __toESM(require("path"), 1);
-init_src2();
-var SECRETS_FILE = path11.join(PATHS2.home, "secrets.json");
-function ensureSecretsFile() {
-  const dir = path11.dirname(SECRETS_FILE);
-  if (!fs10.existsSync(dir)) {
-    fs10.mkdirSync(dir, { recursive: true });
-  }
-  if (!fs10.existsSync(SECRETS_FILE)) {
-    fs10.writeFileSync(SECRETS_FILE, "{}", { mode: 384 });
-  } else {
-    try {
-      fs10.chmodSync(SECRETS_FILE, 384);
-    } catch {
-    }
-  }
-}
-function loadSecrets2() {
-  ensureSecretsFile();
-  try {
-    const content = fs10.readFileSync(SECRETS_FILE, "utf-8");
-    return JSON.parse(content);
-  } catch {
-    return {};
-  }
-}
-function saveSecrets(secrets) {
-  ensureSecretsFile();
-  fs10.writeFileSync(SECRETS_FILE, JSON.stringify(secrets, null, 2), {
-    encoding: "utf-8",
-    mode: 384
-  });
-}
-async function getSecret(name) {
-  const secrets = loadSecrets2();
-  return secrets[name] || null;
-}
-async function setSecret(name, value) {
-  const secrets = loadSecrets2();
-  secrets[name] = value;
-  saveSecrets(secrets);
-  return true;
-}
-async function removeSecret(name) {
-  const secrets = loadSecrets2();
-  delete secrets[name];
-  saveSecrets(secrets);
-  return true;
-}
-async function listSecrets() {
-  const secrets = loadSecrets2();
-  return Object.keys(secrets).sort();
-}
-async function hasSecret(name) {
-  const secrets = loadSecrets2();
-  return secrets[name] !== void 0 && secrets[name] !== null && secrets[name] !== "";
-}
-async function getMaskedSecrets() {
-  const secrets = loadSecrets2();
-  const masked = {};
-  for (const [name, value] of Object.entries(secrets)) {
-    if (value && typeof value === "string" && value.length > 8) {
-      masked[name] = value.slice(0, 4) + "..." + value.slice(-4);
-    } else if (value && typeof value === "string" && value.length > 0) {
-      masked[name] = "****";
-    } else {
-      masked[name] = "(pending)";
-    }
-  }
-  return masked;
-}
-function getStorageInfo() {
-  return {
-    backend: "file",
-    file: SECRETS_FILE,
-    permissions: "0600 (owner read/write only)"
-  };
-}
 
 // packages/mcp/src/agents.js
 var import_fs8 = __toESM(require("fs"), 1);
@@ -36519,28 +36839,28 @@ function getMcpServerSummary() {
 }
 
 // packages/mcp/src/registry.js
-var fs12 = __toESM(require("fs/promises"), 1);
-var path13 = __toESM(require("path"), 1);
+var fs13 = __toESM(require("fs/promises"), 1);
+var path14 = __toESM(require("path"), 1);
 var os5 = __toESM(require("os"), 1);
 var HOME = os5.homedir();
 var AGENT_CONFIGS2 = {
-  claude: path13.join(HOME, ".claude", "settings.json"),
-  codex: path13.join(HOME, ".codex", "config.toml"),
-  gemini: path13.join(HOME, ".gemini", "settings.json")
+  claude: path14.join(HOME, ".claude", "settings.json"),
+  codex: path14.join(HOME, ".codex", "config.toml"),
+  gemini: path14.join(HOME, ".gemini", "settings.json")
 };
-var RUDI_ROUTER_SHIM = path13.join(HOME, ".rudi", "bins", "rudi-router");
+var RUDI_ROUTER_SHIM = path14.join(HOME, ".rudi", "bins", "rudi-router");
 async function readJson(filePath) {
   try {
-    const content = await fs12.readFile(filePath, "utf-8");
+    const content = await fs13.readFile(filePath, "utf-8");
     return JSON.parse(content);
   } catch {
     return {};
   }
 }
 async function writeJson(filePath, data) {
-  const dir = path13.dirname(filePath);
-  await fs12.mkdir(dir, { recursive: true });
-  await fs12.writeFile(filePath, JSON.stringify(data, null, 2), "utf-8");
+  const dir = path14.dirname(filePath);
+  await fs13.mkdir(dir, { recursive: true });
+  await fs13.writeFile(filePath, JSON.stringify(data, null, 2), "utf-8");
 }
 function parseTomlValue(value) {
   if (value.startsWith('"') && value.endsWith('"') || value.startsWith("'") && value.endsWith("'")) {
@@ -36648,16 +36968,16 @@ function stringifyToml(config, prefix = "") {
 }
 async function readToml(filePath) {
   try {
-    const content = await fs12.readFile(filePath, "utf-8");
+    const content = await fs13.readFile(filePath, "utf-8");
     return parseToml(content);
   } catch {
     return {};
   }
 }
 async function writeToml(filePath, data) {
-  const dir = path13.dirname(filePath);
-  await fs12.mkdir(dir, { recursive: true });
-  await fs12.writeFile(filePath, stringifyToml(data), "utf-8");
+  const dir = path14.dirname(filePath);
+  await fs13.mkdir(dir, { recursive: true });
+  await fs13.writeFile(filePath, stringifyToml(data), "utf-8");
 }
 async function unregisterMcpCodex(stackId) {
   const configPath = AGENT_CONFIGS2.codex;
@@ -36725,9 +37045,9 @@ async function unregisterMcpAll(stackId, targetAgents = null) {
 
 // src/commands/install.js
 async function loadManifest(installPath) {
-  const manifestPath = path14.join(installPath, "manifest.json");
+  const manifestPath = path15.join(installPath, "manifest.json");
   try {
-    const content = await fs13.readFile(manifestPath, "utf-8");
+    const content = await fs14.readFile(manifestPath, "utf-8");
     return JSON.parse(content);
   } catch {
     return null;
@@ -36735,15 +37055,15 @@ async function loadManifest(installPath) {
 }
 function getBundledBinary(runtime, binary) {
   const platform = process.platform;
-  const rudiHome = process.env.RUDI_HOME || path14.join(process.env.HOME || process.env.USERPROFILE, ".rudi");
+  const rudiHome = process.env.RUDI_HOME || path15.join(process.env.HOME || process.env.USERPROFILE, ".rudi");
   if (runtime === "node") {
-    const npmPath = platform === "win32" ? path14.join(rudiHome, "runtimes", "node", "npm.cmd") : path14.join(rudiHome, "runtimes", "node", "bin", "npm");
+    const npmPath = platform === "win32" ? path15.join(rudiHome, "runtimes", "node", "npm.cmd") : path15.join(rudiHome, "runtimes", "node", "bin", "npm");
     if (fsSync.existsSync(npmPath)) {
       return npmPath;
     }
   }
   if (runtime === "python") {
-    const pipPath = platform === "win32" ? path14.join(rudiHome, "runtimes", "python", "Scripts", "pip.exe") : path14.join(rudiHome, "runtimes", "python", "bin", "pip3");
+    const pipPath = platform === "win32" ? path15.join(rudiHome, "runtimes", "python", "Scripts", "pip.exe") : path15.join(rudiHome, "runtimes", "python", "bin", "pip3");
     if (fsSync.existsSync(pipPath)) {
       return pipPath;
     }
@@ -36765,9 +37085,9 @@ function getStackCommand(manifest) {
   return command;
 }
 function getNodeProjectInfo(stackPath) {
-  const candidates = [stackPath, path14.join(stackPath, "node")];
+  const candidates = [stackPath, path15.join(stackPath, "node")];
   for (const root of candidates) {
-    const packageJsonPath = path14.join(root, "package.json");
+    const packageJsonPath = path15.join(root, "package.json");
     if (!fsSync.existsSync(packageJsonPath)) continue;
     try {
       const content = fsSync.readFileSync(packageJsonPath, "utf-8");
@@ -36791,9 +37111,9 @@ async function installDependencies(stackPath, manifest, options = {}) {
       if (project.error) {
         return { installed: false, error: `Failed to read package.json: ${project.error}` };
       }
-      const nodeModulesPath = path14.join(project.root, "node_modules");
+      const nodeModulesPath = path15.join(project.root, "node_modules");
       try {
-        await fs13.access(nodeModulesPath);
+        await fs14.access(nodeModulesPath);
         return { installed: false, reason: "Dependencies already installed" };
       } catch {
       }
@@ -36806,15 +37126,15 @@ async function installDependencies(stackPath, manifest, options = {}) {
       });
       return { installed: true };
     } else if (runtime === "python") {
-      let requirementsPath = path14.join(stackPath, "python", "requirements.txt");
-      let reqCwd = path14.join(stackPath, "python");
+      let requirementsPath = path15.join(stackPath, "python", "requirements.txt");
+      let reqCwd = path15.join(stackPath, "python");
       try {
-        await fs13.access(requirementsPath);
+        await fs14.access(requirementsPath);
       } catch {
-        requirementsPath = path14.join(stackPath, "requirements.txt");
+        requirementsPath = path15.join(stackPath, "requirements.txt");
         reqCwd = stackPath;
         try {
-          await fs13.access(requirementsPath);
+          await fs14.access(requirementsPath);
         } catch {
           return { installed: false, reason: "No requirements.txt" };
         }
@@ -36879,7 +37199,7 @@ function getStackEntryPoint(stackPath, manifest) {
     if (arg.startsWith("-")) continue;
     const looksLikeFile = fileExtensions.some((ext) => arg.endsWith(ext)) || arg.includes("/");
     if (!looksLikeFile) continue;
-    const entryPath = path14.join(stackPath, arg);
+    const entryPath = path15.join(stackPath, arg);
     return { entryArg: arg, entryPath };
   }
   return { entryArg: null, entryPath: null };
@@ -36953,9 +37273,9 @@ async function checkSecrets(manifest) {
   return { found, missing };
 }
 async function parseEnvExample(installPath) {
-  const examplePath = path14.join(installPath, ".env.example");
+  const examplePath = path15.join(installPath, ".env.example");
   try {
-    const content = await fs13.readFile(examplePath, "utf-8");
+    const content = await fs14.readFile(examplePath, "utf-8");
     const keys = [];
     for (const line of content.split("\n")) {
       const trimmed = line.trim();
@@ -36973,7 +37293,7 @@ async function parseEnvExample(installPath) {
 async function cleanupFailedStackInstall(stackId, stackPath, removeConfig) {
   if (stackPath) {
     try {
-      await fs13.rm(stackPath, { recursive: true, force: true });
+      await fs14.rm(stackPath, { recursive: true, force: true });
     } catch {
     }
   }
@@ -37217,7 +37537,7 @@ Next steps:`);
 }
 
 // src/commands/run.js
-init_src4();
+init_src5();
 
 // packages/runner/src/spawn.js
 var import_child_process5 = require("child_process");
@@ -37225,38 +37545,38 @@ var import_path12 = __toESM(require("path"), 1);
 var import_fs10 = __toESM(require("fs"), 1);
 
 // node_modules/.pnpm/@learnrudi+core@1.0.2/node_modules/@learnrudi/core/src/index.js
-init_src5();
+init_src6();
 
 // node_modules/.pnpm/@learnrudi+registry-client@1.0.5/node_modules/@learnrudi/registry-client/src/index.js
-init_src5();
+init_src6();
 var CACHE_TTL2 = 24 * 60 * 60 * 1e3;
 
 // node_modules/.pnpm/@learnrudi+core@1.0.2/node_modules/@learnrudi/core/src/resolver.js
-init_src5();
+init_src6();
 
 // node_modules/.pnpm/@learnrudi+core@1.0.2/node_modules/@learnrudi/core/src/installer.js
-init_src5();
+init_src6();
 
 // node_modules/.pnpm/@learnrudi+core@1.0.2/node_modules/@learnrudi/core/src/lockfile.js
 var import_yaml2 = __toESM(require_dist(), 1);
-init_src5();
+init_src6();
 
 // node_modules/.pnpm/@learnrudi+core@1.0.2/node_modules/@learnrudi/core/src/deps.js
-init_src5();
+init_src6();
 
 // node_modules/.pnpm/@learnrudi+core@1.0.2/node_modules/@learnrudi/core/src/rudi-config.js
-var path16 = __toESM(require("path"), 1);
-init_src5();
-var RUDI_JSON_PATH2 = path16.join(RUDI_HOME3, "rudi.json");
-var RUDI_JSON_TMP2 = path16.join(RUDI_HOME3, "rudi.json.tmp");
-var RUDI_JSON_LOCK2 = path16.join(RUDI_HOME3, "rudi.json.lock");
+var path17 = __toESM(require("path"), 1);
+init_src6();
+var RUDI_JSON_PATH2 = path17.join(RUDI_HOME3, "rudi.json");
+var RUDI_JSON_TMP2 = path17.join(RUDI_HOME3, "rudi.json.tmp");
+var RUDI_JSON_LOCK2 = path17.join(RUDI_HOME3, "rudi.json.lock");
 
 // node_modules/.pnpm/@learnrudi+core@1.0.2/node_modules/@learnrudi/core/src/tool-index.js
-var path17 = __toESM(require("path"), 1);
-init_src5();
-var TOOL_INDEX_PATH2 = path17.join(RUDI_HOME3, "cache", "tool-index.json");
-var TOOL_INDEX_TMP2 = path17.join(RUDI_HOME3, "cache", "tool-index.json.tmp");
-var SECRETS_PATH2 = path17.join(RUDI_HOME3, "secrets.json");
+var path18 = __toESM(require("path"), 1);
+init_src6();
+var TOOL_INDEX_PATH2 = path18.join(RUDI_HOME3, "cache", "tool-index.json");
+var TOOL_INDEX_TMP2 = path18.join(RUDI_HOME3, "cache", "tool-index.json.tmp");
+var SECRETS_PATH2 = path18.join(RUDI_HOME3, "secrets.json");
 
 // packages/runner/src/secrets.js
 var import_fs9 = __toESM(require("fs"), 1);
@@ -37325,11 +37645,11 @@ async function runStack(id, options = {}) {
   const startTime = Date.now();
   const packagePath = getPackagePath2(id);
   const manifestPath = import_path12.default.join(packagePath, "manifest.json");
-  const { default: fs60 } = await import("fs");
-  if (!fs60.existsSync(manifestPath)) {
+  const { default: fs61 } = await import("fs");
+  if (!fs61.existsSync(manifestPath)) {
     throw new Error(`Stack manifest not found: ${id}`);
   }
-  const manifest = JSON.parse(fs60.readFileSync(manifestPath, "utf-8"));
+  const manifest = JSON.parse(fs61.readFileSync(manifestPath, "utf-8"));
   const { command, args } = resolveCommandFromManifest(manifest, packagePath);
   const secrets = await getSecrets(manifest.requires?.secrets || []);
   const runEnv = {
@@ -37807,7 +38127,7 @@ function formatDuration2(ms) {
 }
 
 // src/commands/list.js
-init_src4();
+init_src5();
 function pluralizeKind2(kind2) {
   if (!kind2) return "packages";
   return kind2 === "binary" ? "binaries" : `${kind2}s`;
@@ -37984,7 +38304,7 @@ Total: ${total} package(s)`);
 }
 
 // src/commands/remove.js
-init_src4();
+init_src5();
 function pluralizeKind3(kind2) {
   if (!kind2) return "packages";
   return kind2 === "binary" ? "binaries" : `${kind2}s`;
@@ -38114,6 +38434,7 @@ Removal complete: ${succeeded} succeeded, ${failed} failed`);
 
 // src/commands/secrets.js
 var import_readline = __toESM(require("readline"), 1);
+init_src4();
 async function cmdSecrets(args, flags) {
   const subcommand = args[0];
   switch (subcommand) {
@@ -38742,7 +39063,7 @@ CREATE INDEX IF NOT EXISTS idx_system_events_type ON system_events(event_type);
 
 CREATE TABLE IF NOT EXISTS session_runtime_state (
   session_id TEXT PRIMARY KEY,
-  status TEXT NOT NULL CHECK(status IN ('starting','running','completed','error','stopped','crashed')),
+  status TEXT NOT NULL CHECK(status IN ('starting','running','retrying','completed','error','stopped','crashed')),
   provider TEXT,
   provider_session_id TEXT,
   resume_session_id TEXT,
@@ -39305,7 +39626,7 @@ function applySchemaUpdates(db3) {
   ensureTable(db3, "session_runtime_state", `
     CREATE TABLE IF NOT EXISTS session_runtime_state (
       session_id TEXT PRIMARY KEY,
-      status TEXT NOT NULL CHECK(status IN ('starting','running','completed','error','stopped','crashed')),
+      status TEXT NOT NULL CHECK(status IN ('starting','running','retrying','completed','error','stopped','crashed')),
       provider TEXT,
       provider_session_id TEXT,
       resume_session_id TEXT,
@@ -39734,7 +40055,7 @@ function runMigrations(db3, from, to) {
           ALTER TABLE session_runtime_state RENAME TO _srs_old;
           CREATE TABLE session_runtime_state (
             session_id TEXT PRIMARY KEY,
-            status TEXT NOT NULL CHECK(status IN ('starting','running','completed','error','stopped','crashed')),
+            status TEXT NOT NULL CHECK(status IN ('starting','running','retrying','completed','error','stopped','crashed')),
             provider TEXT,
             provider_session_id TEXT,
             resume_session_id TEXT,
@@ -41299,7 +41620,7 @@ var import_readline2 = require("readline");
 var embeddingsModule = null;
 async function getEmbeddings() {
   if (!embeddingsModule) {
-    embeddingsModule = await Promise.resolve().then(() => (init_src7(), src_exports3));
+    embeddingsModule = await Promise.resolve().then(() => (init_src8(), src_exports3));
   }
   return embeddingsModule;
 }
@@ -41358,7 +41679,7 @@ async function ensureEmbeddingProvider(preferredProvider = "auto", options = {})
   }
   console.log("\nInstalling Ollama...");
   try {
-    const { installPackage: installPackage2 } = await Promise.resolve().then(() => (init_src4(), src_exports2));
+    const { installPackage: installPackage2 } = await Promise.resolve().then(() => (init_src5(), src_exports2));
     await installPackage2("runtime:ollama", {
       onProgress: (p2) => {
         if (p2.phase === "downloading") process.stdout.write("\r  Downloading...");
@@ -41821,9 +42142,9 @@ async function sessionExport(args, flags) {
   };
   const json = JSON.stringify(exportData, null, 2);
   if (flags.output || flags.o) {
-    const fs60 = await import("fs");
+    const fs61 = await import("fs");
     const outputFile = flags.output || flags.o;
-    fs60.writeFileSync(outputFile, json);
+    fs61.writeFileSync(outputFile, json);
     console.log(`\u2713 Exported session to: ${outputFile}`);
   } else {
     console.log(json);
@@ -43318,7 +43639,7 @@ function calculateCost(pricingRows, provider, model, tokens) {
 }
 
 // src/commands/doctor.js
-init_src4();
+init_src5();
 var import_fs18 = __toESM(require("fs"), 1);
 async function cmdDoctor(args, flags) {
   console.log("RUDI Health Check");
@@ -43444,7 +43765,7 @@ async function cmdDoctor(args, flags) {
 // src/commands/home.js
 var import_fs19 = __toESM(require("fs"), 1);
 var import_path20 = __toESM(require("path"), 1);
-init_src4();
+init_src5();
 function formatBytes2(bytes) {
   if (bytes === 0) return "0 B";
   const k2 = 1024;
@@ -44190,10 +44511,10 @@ async function handleLogsCommand(args, flags) {
 }
 
 // src/commands/which.js
-var fs26 = __toESM(require("fs/promises"), 1);
-var path27 = __toESM(require("path"), 1);
+var fs27 = __toESM(require("fs/promises"), 1);
+var path28 = __toESM(require("path"), 1);
 var import_child_process8 = require("child_process");
-init_src4();
+init_src5();
 init_src();
 async function cmdWhich(args, flags) {
   const stackId = args[0];
@@ -44261,7 +44582,7 @@ Installed stacks:`);
     if (runtimeInfo.entry) {
       console.log("");
       console.log("Run MCP server directly:");
-      const entryPath = path27.join(stackPath, runtimeInfo.entry);
+      const entryPath = path28.join(stackPath, runtimeInfo.entry);
       if (runtimeInfo.runtime === "node") {
         console.log(`  echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | node ${entryPath}`);
       } else if (runtimeInfo.runtime === "python") {
@@ -44280,27 +44601,27 @@ Installed stacks:`);
 async function detectRuntime(stackPath) {
   const runtimes = ["node", "python"];
   for (const runtime of runtimes) {
-    const runtimePath = path27.join(stackPath, runtime);
+    const runtimePath = path28.join(stackPath, runtime);
     try {
-      await fs26.access(runtimePath);
+      await fs27.access(runtimePath);
       if (runtime === "node") {
-        const distEntry = path27.join(runtimePath, "dist", "index.js");
-        const srcEntry = path27.join(runtimePath, "src", "index.ts");
+        const distEntry = path28.join(runtimePath, "dist", "index.js");
+        const srcEntry = path28.join(runtimePath, "src", "index.ts");
         try {
-          await fs26.access(distEntry);
+          await fs27.access(distEntry);
           return { runtime: "node", entry: `${runtime}/dist/index.js` };
         } catch {
           try {
-            await fs26.access(srcEntry);
+            await fs27.access(srcEntry);
             return { runtime: "node", entry: `${runtime}/src/index.ts` };
           } catch {
             return { runtime: "node", entry: null };
           }
         }
       } else if (runtime === "python") {
-        const entry = path27.join(runtimePath, "src", "index.py");
+        const entry = path28.join(runtimePath, "src", "index.py");
         try {
-          await fs26.access(entry);
+          await fs27.access(entry);
           return { runtime: "python", entry: `${runtime}/src/index.py` };
         } catch {
           return { runtime: "python", entry: null };
@@ -44316,21 +44637,21 @@ async function checkAuth(stackPath, runtime) {
   const authFiles = [];
   let configured = false;
   if (runtime === "node" || runtime === "python") {
-    const runtimePath = path27.join(stackPath, runtime);
-    const tokenPath = path27.join(runtimePath, "token.json");
+    const runtimePath = path28.join(stackPath, runtime);
+    const tokenPath = path28.join(runtimePath, "token.json");
     try {
-      await fs26.access(tokenPath);
+      await fs27.access(tokenPath);
       authFiles.push(`${runtime}/token.json`);
       configured = true;
     } catch {
-      const accountsPath = path27.join(runtimePath, "accounts");
+      const accountsPath = path28.join(runtimePath, "accounts");
       try {
-        const accounts = await fs26.readdir(accountsPath);
+        const accounts = await fs27.readdir(accountsPath);
         for (const account of accounts) {
           if (account.startsWith(".")) continue;
-          const accountTokenPath = path27.join(accountsPath, account, "token.json");
+          const accountTokenPath = path28.join(accountsPath, account, "token.json");
           try {
-            await fs26.access(accountTokenPath);
+            await fs27.access(accountTokenPath);
             authFiles.push(`${runtime}/accounts/${account}/token.json`);
             configured = true;
           } catch {
@@ -44340,9 +44661,9 @@ async function checkAuth(stackPath, runtime) {
       }
     }
   }
-  const envPath = path27.join(stackPath, ".env");
+  const envPath = path28.join(stackPath, ".env");
   try {
-    const envContent = await fs26.readFile(envPath, "utf-8");
+    const envContent = await fs27.readFile(envPath, "utf-8");
     const hasValues = envContent.split("\n").some((line) => {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith("#")) return false;
@@ -44386,10 +44707,10 @@ function checkIfRunning(stackName) {
 }
 
 // src/commands/auth.js
-var fs27 = __toESM(require("fs/promises"), 1);
-var path28 = __toESM(require("path"), 1);
+var fs28 = __toESM(require("fs/promises"), 1);
+var path29 = __toESM(require("path"), 1);
 var import_child_process9 = require("child_process");
-init_src4();
+init_src5();
 init_src();
 var net = __toESM(require("net"), 1);
 async function findAvailablePort(basePort = 3456) {
@@ -44420,26 +44741,26 @@ function isPortAvailable(port) {
 async function detectRuntime2(stackPath) {
   const runtimes = ["node", "python"];
   for (const runtime of runtimes) {
-    const runtimePath = path28.join(stackPath, runtime);
+    const runtimePath = path29.join(stackPath, runtime);
     try {
-      await fs27.access(runtimePath);
+      await fs28.access(runtimePath);
       if (runtime === "node") {
-        const authTs = path28.join(runtimePath, "src", "auth.ts");
-        const authJs = path28.join(runtimePath, "dist", "auth.js");
+        const authTs = path29.join(runtimePath, "src", "auth.ts");
+        const authJs = path29.join(runtimePath, "dist", "auth.js");
         try {
-          await fs27.access(authTs);
+          await fs28.access(authTs);
           return { runtime: "node", authScript: authTs, useTsx: true };
         } catch {
           try {
-            await fs27.access(authJs);
+            await fs28.access(authJs);
             return { runtime: "node", authScript: authJs, useTsx: false };
           } catch {
           }
         }
       } else if (runtime === "python") {
-        const authPy = path28.join(runtimePath, "src", "auth.py");
+        const authPy = path29.join(runtimePath, "src", "auth.py");
         try {
-          await fs27.access(authPy);
+          await fs28.access(authPy);
           return { runtime: "python", authScript: authPy, useTsx: false };
         } catch {
         }
@@ -44489,14 +44810,14 @@ Installed stacks:`);
     console.log(`Using port: ${port}`);
     console.log("");
     let cmd;
-    const cwd = path28.dirname(authInfo.authScript);
+    const cwd = path29.dirname(authInfo.authScript);
     if (authInfo.runtime === "node") {
-      const distAuth = path28.join(cwd, "..", "dist", "auth.js");
+      const distAuth = path29.join(cwd, "..", "dist", "auth.js");
       let useBuiltInPort = false;
       let tempAuthScript = null;
       try {
-        await fs27.access(distAuth);
-        const distContent = await fs27.readFile(distAuth, "utf-8");
+        await fs28.access(distAuth);
+        const distContent = await fs28.readFile(distAuth, "utf-8");
         if (distContent.includes("findAvailablePort")) {
           console.log("Using compiled authentication script...");
           cmd = `node ${distAuth}${accountEmail ? ` ${accountEmail}` : ""}`;
@@ -44505,11 +44826,11 @@ Installed stacks:`);
       } catch {
       }
       if (!useBuiltInPort) {
-        const authContent = await fs27.readFile(authInfo.authScript, "utf-8");
+        const authContent = await fs28.readFile(authInfo.authScript, "utf-8");
         const tempExt = authInfo.useTsx ? ".ts" : ".mjs";
-        tempAuthScript = path28.join(cwd, "..", `auth-temp${tempExt}`);
+        tempAuthScript = path29.join(cwd, "..", `auth-temp${tempExt}`);
         const modifiedContent = authContent.replace(/localhost:3456/g, `localhost:${port}`).replace(/server\.listen\(3456/g, `server.listen(${port}`);
-        await fs27.writeFile(tempAuthScript, modifiedContent);
+        await fs28.writeFile(tempAuthScript, modifiedContent);
         if (authInfo.useTsx) {
           cmd = `npx tsx ${tempAuthScript}${accountEmail ? ` ${accountEmail}` : ""}`;
         } else {
@@ -44524,12 +44845,12 @@ Installed stacks:`);
           stdio: "inherit"
         });
         if (tempAuthScript) {
-          await fs27.unlink(tempAuthScript);
+          await fs28.unlink(tempAuthScript);
         }
       } catch (error) {
         if (tempAuthScript) {
           try {
-            await fs27.unlink(tempAuthScript);
+            await fs28.unlink(tempAuthScript);
           } catch {
           }
         }
@@ -44561,21 +44882,22 @@ Installed stacks:`);
 }
 
 // src/commands/mcp.js
-var fs28 = __toESM(require("fs"), 1);
-var path29 = __toESM(require("path"), 1);
+var fs29 = __toESM(require("fs"), 1);
+var path30 = __toESM(require("path"), 1);
 var import_child_process10 = require("child_process");
 init_src();
+init_src4();
 function getBundledRuntime(runtime) {
   const platform = process.platform;
   if (runtime === "node") {
-    const nodePath = platform === "win32" ? path29.join(PATHS.runtimes, "node", "node.exe") : path29.join(PATHS.runtimes, "node", "bin", "node");
-    if (fs28.existsSync(nodePath)) {
+    const nodePath = platform === "win32" ? path30.join(PATHS.runtimes, "node", "node.exe") : path30.join(PATHS.runtimes, "node", "bin", "node");
+    if (fs29.existsSync(nodePath)) {
       return nodePath;
     }
   }
   if (runtime === "python") {
-    const pythonPath = platform === "win32" ? path29.join(PATHS.runtimes, "python", "python.exe") : path29.join(PATHS.runtimes, "python", "bin", "python3");
-    if (fs28.existsSync(pythonPath)) {
+    const pythonPath = platform === "win32" ? path30.join(PATHS.runtimes, "python", "python.exe") : path30.join(PATHS.runtimes, "python", "bin", "python3");
+    if (fs29.existsSync(pythonPath)) {
       return pythonPath;
     }
   }
@@ -44583,18 +44905,18 @@ function getBundledRuntime(runtime) {
 }
 function getBundledNpx() {
   const platform = process.platform;
-  const npxPath = platform === "win32" ? path29.join(PATHS.runtimes, "node", "npx.cmd") : path29.join(PATHS.runtimes, "node", "bin", "npx");
-  if (fs28.existsSync(npxPath)) {
+  const npxPath = platform === "win32" ? path30.join(PATHS.runtimes, "node", "npx.cmd") : path30.join(PATHS.runtimes, "node", "bin", "npx");
+  if (fs29.existsSync(npxPath)) {
     return npxPath;
   }
   return null;
 }
 function loadManifest2(stackPath) {
-  const manifestPath = path29.join(stackPath, "manifest.json");
-  if (!fs28.existsSync(manifestPath)) {
+  const manifestPath = path30.join(stackPath, "manifest.json");
+  if (!fs29.existsSync(manifestPath)) {
     return null;
   }
-  return JSON.parse(fs28.readFileSync(manifestPath, "utf-8"));
+  return JSON.parse(fs29.readFileSync(manifestPath, "utf-8"));
 }
 function getRequiredSecrets(manifest) {
   const secrets = manifest?.requires?.secrets || manifest?.secrets || [];
@@ -44627,8 +44949,8 @@ async function cmdMcp(args, flags) {
     console.error("Example: rudi mcp slack");
     process.exit(1);
   }
-  const stackPath = path29.join(PATHS.stacks, stackName);
-  if (!fs28.existsSync(stackPath)) {
+  const stackPath = path30.join(PATHS.stacks, stackName);
+  if (!fs29.existsSync(stackPath)) {
     console.error(`Stack not found: ${stackName}`);
     console.error(`Expected at: ${stackPath}`);
     console.error("");
@@ -44677,22 +44999,22 @@ async function cmdMcp(args, flags) {
       }
       return part;
     }
-    if (part.startsWith("./") || part.startsWith("../") || !path29.isAbsolute(part)) {
-      const resolved = path29.join(stackPath, part);
-      if (fs28.existsSync(resolved)) {
+    if (part.startsWith("./") || part.startsWith("../") || !path30.isAbsolute(part)) {
+      const resolved = path30.join(stackPath, part);
+      if (fs29.existsSync(resolved)) {
         return resolved;
       }
     }
     return part;
   });
   const [cmd, ...cmdArgs] = resolvedCommand;
-  const bundledNodeBin = path29.join(PATHS.runtimes, "node", "bin");
-  const bundledPythonBin = path29.join(PATHS.runtimes, "python", "bin");
-  if (fs28.existsSync(bundledNodeBin) || fs28.existsSync(bundledPythonBin)) {
+  const bundledNodeBin = path30.join(PATHS.runtimes, "node", "bin");
+  const bundledPythonBin = path30.join(PATHS.runtimes, "python", "bin");
+  if (fs29.existsSync(bundledNodeBin) || fs29.existsSync(bundledPythonBin)) {
     const runtimePaths = [];
-    if (fs28.existsSync(bundledNodeBin)) runtimePaths.push(bundledNodeBin);
-    if (fs28.existsSync(bundledPythonBin)) runtimePaths.push(bundledPythonBin);
-    env.PATH = runtimePaths.join(path29.delimiter) + path29.delimiter + (env.PATH || "");
+    if (fs29.existsSync(bundledNodeBin)) runtimePaths.push(bundledNodeBin);
+    if (fs29.existsSync(bundledPythonBin)) runtimePaths.push(bundledPythonBin);
+    env.PATH = runtimePaths.join(path30.delimiter) + path30.delimiter + (env.PATH || "");
   }
   if (flags.debug) {
     console.error(`[rudi mcp] Stack: ${stackName}`);
@@ -44722,43 +45044,43 @@ async function cmdMcp(args, flags) {
 }
 
 // src/commands/integrate.js
-var fs29 = __toESM(require("fs"), 1);
-var path30 = __toESM(require("path"), 1);
+var fs30 = __toESM(require("fs"), 1);
+var path31 = __toESM(require("path"), 1);
 var import_os8 = __toESM(require("os"), 1);
 init_src();
 var HOME2 = import_os8.default.homedir();
-var ROUTER_SHIM_PATH = path30.join(PATHS.bins, "rudi-router");
-var LEGACY_ROUTER_SHIM_PATH = path30.join(PATHS.home, "shims", "rudi-router");
+var ROUTER_SHIM_PATH = path31.join(PATHS.bins, "rudi-router");
+var LEGACY_ROUTER_SHIM_PATH = path31.join(PATHS.home, "shims", "rudi-router");
 function checkRouterShim() {
-  if (fs29.existsSync(ROUTER_SHIM_PATH)) return ROUTER_SHIM_PATH;
-  if (fs29.existsSync(LEGACY_ROUTER_SHIM_PATH)) return LEGACY_ROUTER_SHIM_PATH;
+  if (fs30.existsSync(ROUTER_SHIM_PATH)) return ROUTER_SHIM_PATH;
+  if (fs30.existsSync(LEGACY_ROUTER_SHIM_PATH)) return LEGACY_ROUTER_SHIM_PATH;
   throw new Error(
     `Router shim not found at ${ROUTER_SHIM_PATH}
 Run: rudi shims rebuild`
   );
 }
 function backupConfig(configPath) {
-  if (!fs29.existsSync(configPath)) return null;
+  if (!fs30.existsSync(configPath)) return null;
   const backupPath = configPath + ".backup." + Date.now();
-  fs29.copyFileSync(configPath, backupPath);
+  fs30.copyFileSync(configPath, backupPath);
   return backupPath;
 }
 function readJsonConfig(configPath) {
-  if (!fs29.existsSync(configPath)) {
+  if (!fs30.existsSync(configPath)) {
     return {};
   }
   try {
-    return JSON.parse(fs29.readFileSync(configPath, "utf-8"));
+    return JSON.parse(fs30.readFileSync(configPath, "utf-8"));
   } catch {
     return {};
   }
 }
 function writeJsonConfig(configPath, config) {
-  const dir = path30.dirname(configPath);
-  if (!fs29.existsSync(dir)) {
-    fs29.mkdirSync(dir, { recursive: true });
+  const dir = path31.dirname(configPath);
+  if (!fs30.existsSync(dir)) {
+    fs30.mkdirSync(dir, { recursive: true });
   }
-  fs29.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  fs30.writeFileSync(configPath, JSON.stringify(config, null, 2));
 }
 function buildRouterEntry(agentId, routerPath) {
   const base = {
@@ -44777,11 +45099,11 @@ async function integrateAgent(agentId, flags) {
     return { success: false, error: "Unknown agent" };
   }
   const configPath = findAgentConfig(agentConfig);
-  const targetPath = configPath || path30.join(HOME2, agentConfig.paths[process.platform]?.[0] || agentConfig.paths.darwin[0]);
+  const targetPath = configPath || path31.join(HOME2, agentConfig.paths[process.platform]?.[0] || agentConfig.paths.darwin[0]);
   console.log(`
 ${agentConfig.name}:`);
   console.log(`  Config: ${targetPath}`);
-  if (fs29.existsSync(targetPath)) {
+  if (fs30.existsSync(targetPath)) {
     const backup = backupConfig(targetPath);
     if (backup && flags.verbose) {
       console.log(`  Backup: ${backup}`);
@@ -44792,9 +45114,9 @@ ${agentConfig.name}:`);
   if (!config[key]) {
     config[key] = {};
   }
-  const rudiMcpShimPath = path30.join(PATHS.bins, "rudi-mcp");
-  const legacyMcpShimPath = path30.join(PATHS.home, "shims", "rudi-mcp");
-  const rudiStacksPath = path30.join(PATHS.home, "stacks");
+  const rudiMcpShimPath = path31.join(PATHS.bins, "rudi-mcp");
+  const legacyMcpShimPath = path31.join(PATHS.home, "shims", "rudi-mcp");
+  const rudiStacksPath = path31.join(PATHS.home, "stacks");
   const removedEntries = [];
   for (const [serverName, serverConfig] of Object.entries(config[key])) {
     if (serverName === "rudi") continue;
@@ -44945,8 +45267,8 @@ Wiring up RUDI router...`);
 // src/commands/index-tools.js
 var import_fs24 = __toESM(require("fs"), 1);
 var import_path23 = __toESM(require("path"), 1);
-init_src4();
-init_src4();
+init_src5();
+init_src5();
 async function cmdIndex(args, flags) {
   const stackFilter = args.length > 0 ? args : null;
   const forceReindex = flags.force || false;
@@ -45131,7 +45453,7 @@ After configuring secrets, run: rudi index`);
 }
 
 // src/commands/status.js
-init_src4();
+init_src5();
 var import_child_process11 = require("child_process");
 var import_fs25 = __toESM(require("fs"), 1);
 var import_path24 = __toESM(require("path"), 1);
@@ -45448,7 +45770,7 @@ async function cmdStatus(args, flags) {
 }
 
 // src/commands/check.js
-init_src4();
+init_src5();
 var import_child_process12 = require("child_process");
 var import_fs26 = __toESM(require("fs"), 1);
 var import_path25 = __toESM(require("path"), 1);
@@ -45635,8 +45957,29 @@ async function cmdCheck(args, flags) {
       result.installed = isPackageInstalled(`stack:${name}`);
       if (result.installed) {
         result.path = getPackagePath(`stack:${name}`);
+        const rudiConfig = readRudiConfig();
+        const stackConfig = rudiConfig.stacks?.[`stack:${name}`];
+        if (stackConfig) {
+          const lifecycle = await checkStackLifecycle(name, stackConfig, { log: () => {
+          } });
+          result.lifecycle = {
+            finalState: lifecycle.finalState,
+            healthy: lifecycle.healthy,
+            failedAt: lifecycle.failedAt,
+            fixCommand: lifecycle.fixCommand,
+            checks: lifecycle.checks.map((c2) => ({
+              state: c2.state,
+              passed: c2.passed,
+              error: c2.error
+            }))
+          };
+          result.ready = lifecycle.healthy;
+        } else {
+          result.ready = false;
+        }
+      } else {
+        result.ready = false;
       }
-      result.ready = result.installed;
       break;
     }
     default:
@@ -45657,6 +46000,23 @@ async function cmdCheck(args, flags) {
       console.log(`  Authenticated: ${result.authenticated}`);
     }
     console.log(`  Ready: ${result.ready}`);
+    if (result.lifecycle) {
+      const states = ["installed", "launchable", "secrets_ready", "mcp_ready", "indexed"];
+      for (const state of states) {
+        const check = result.lifecycle.checks.find((c2) => c2.state === state);
+        if (check) {
+          const icon = check.passed ? "\u2713" : "\u2717";
+          const detail = check.error ? `  ${check.error}` : "";
+          console.log(`  ${icon} ${state}${detail}`);
+        } else {
+          console.log(`  - ${state} (skipped)`);
+        }
+      }
+      if (result.lifecycle.fixCommand) {
+        console.log(`
+Fix: ${result.lifecycle.fixCommand}`);
+      }
+    }
   }
   if (!result.installed) {
     process.exit(1);
@@ -45668,7 +46028,7 @@ async function cmdCheck(args, flags) {
 }
 
 // src/commands/shims.js
-init_src4();
+init_src5();
 var import_fs27 = __toESM(require("fs"), 1);
 var import_path26 = __toESM(require("path"), 1);
 function listShims2() {
@@ -46065,7 +46425,7 @@ ${valid} valid, ${broken} broken`);
       process.exit(0);
     }
     if (brokenPackages.size > 0) {
-      const { installPackage: installPackage2 } = await Promise.resolve().then(() => (init_src4(), src_exports2));
+      const { installPackage: installPackage2 } = await Promise.resolve().then(() => (init_src5(), src_exports2));
       for (const pkg of brokenPackages) {
         console.log(`Reinstalling ${pkg}...`);
         try {
@@ -46085,7 +46445,7 @@ ${valid} valid, ${broken} broken`);
 var import_fs28 = __toESM(require("fs"), 1);
 var import_path27 = __toESM(require("path"), 1);
 init_src();
-init_src4();
+init_src5();
 async function cmdInfo(args, flags) {
   const pkgId = args[0];
   if (!pkgId) {
@@ -47593,7 +47953,7 @@ var import_child_process20 = require("child_process");
 init_src();
 
 // src/commands/agent/providers/index.js
-var import_node_fs2 = require("node:fs");
+var import_node_fs3 = require("node:fs");
 var import_node_os = require("node:os");
 var import_node_child_process = require("node:child_process");
 
@@ -48327,7 +48687,7 @@ function resolveProviderBinary(config) {
   const arch = process.arch;
   for (const rawPath of config.binary.resolvePaths) {
     const resolved = rawPath.replace(/^~/, home).replace(/\{arch\}/g, arch);
-    if ((0, import_node_fs2.existsSync)(resolved)) {
+    if ((0, import_node_fs3.existsSync)(resolved)) {
       return resolved;
     }
   }
@@ -48933,8 +49293,9 @@ var DB_WRITE_QUEUE_MAX = 1e4;
 var DB_WRITE_QUEUE_DROP_COUNT = Math.ceil(DB_WRITE_QUEUE_MAX * 0.1);
 var TERMINAL_RUNTIME_STATES = /* @__PURE__ */ new Set(["completed", "error", "stopped", "crashed"]);
 var RUNTIME_STATE_TRANSITIONS = Object.freeze({
-  starting: /* @__PURE__ */ new Set(["running", "error", "stopped", "crashed"]),
-  running: /* @__PURE__ */ new Set(["completed", "error", "stopped", "crashed"]),
+  starting: /* @__PURE__ */ new Set(["running", "retrying", "error", "stopped", "crashed"]),
+  running: /* @__PURE__ */ new Set(["retrying", "completed", "error", "stopped", "crashed"]),
+  retrying: /* @__PURE__ */ new Set(["running", "error", "stopped", "crashed"]),
   completed: /* @__PURE__ */ new Set(),
   error: /* @__PURE__ */ new Set(),
   stopped: /* @__PURE__ */ new Set(),
@@ -49380,6 +49741,7 @@ function normalizeAssistantEvent(event) {
   };
   if (usage) normalized.usage = usage;
   if (model) normalized.model = model;
+  if (event.error) normalized.error = event.error;
   return normalized;
 }
 function normalizeResultEvent(event) {
@@ -49403,6 +49765,7 @@ function normalizeResultEvent(event) {
   if (typeof result === "string") normalized.result = result;
   if (usage) normalized.usage = usage;
   if (model) normalized.model = model;
+  if (event.is_error === true) normalized.isError = true;
   return normalized;
 }
 function normalizeSystemEvent(event) {
@@ -49912,6 +50275,19 @@ function attachStdoutHandler(ctx, sessionId, entry, options = {}) {
               }
             }
           }
+          if (event.type === "assistant" && event.error) {
+            entry._lastErrorContext = {
+              error: event.error,
+              message: Array.isArray(event.content) ? event.content.filter((b2) => b2.type === "text").map((b2) => b2.text).join(" ") : "",
+              isError: false
+            };
+          }
+          if (event.type === "result" && event.isError) {
+            entry._lastErrorContext = {
+              ...entry._lastErrorContext || {},
+              isError: true
+            };
+          }
           ctx.log("agent", "debug", `stdout event: ${event.type}`, { sessionId: sessionId.slice(0, 8), provider });
           ctx.broadcast("agent:event", {
             sessionId,
@@ -49940,12 +50316,17 @@ function attachStdoutHandler(ctx, sessionId, entry, options = {}) {
 function attachStderrHandler(ctx, sessionId, entry, options = {}) {
   const { onFirstData, logSlice = 200 } = options;
   let totalBytes = 0;
+  entry._stderrText = "";
   entry.proc.stderr.on("data", (chunk) => {
     totalBytes += chunk.length;
     entry.lastActivityAt = Date.now();
     if (onFirstData) onFirstData(chunk, totalBytes);
     const text = chunk.toString().trim();
     if (text) {
+      entry._stderrText = (entry._stderrText || "") + text + "\n";
+      if (entry._stderrText.length > 4096) {
+        entry._stderrText = entry._stderrText.slice(-4096);
+      }
       ctx.log("agent", "warn", `stderr: ${text.slice(0, logSlice)}`, { sessionId: sessionId.slice(0, 8) });
     }
   });
@@ -49985,6 +50366,98 @@ function flushStdoutBuffer(ctx, sessionId, entry) {
   }
 }
 
+// src/commands/agent/error-classifier.js
+var ERROR_CATEGORIES = {
+  TRANSIENT: "transient",
+  PERMANENT: "permanent"
+};
+var ERROR_CODES = {
+  API_RATE_LIMIT: "API_RATE_LIMIT",
+  API_CONCURRENCY: "API_CONCURRENCY",
+  API_OVERLOADED: "API_OVERLOADED",
+  NETWORK_TIMEOUT: "NETWORK_TIMEOUT",
+  NETWORK_RESET: "NETWORK_RESET",
+  AUTH_FAILURE: "AUTH_FAILURE",
+  INVALID_MODEL: "INVALID_MODEL",
+  SPAWN_FAILURE: "SPAWN_FAILURE",
+  SIGKILL: "SIGKILL",
+  SIGNAL_N: "SIGNAL_N",
+  UNKNOWN: "UNKNOWN"
+};
+var TRANSIENT_PATTERNS = [
+  { pattern: /429|rate\.?limit/i, code: ERROR_CODES.API_RATE_LIMIT },
+  { pattern: /tool\.use\.concurrency|concurrent tool/i, code: ERROR_CODES.API_CONCURRENCY },
+  { pattern: /529|overloaded/i, code: ERROR_CODES.API_OVERLOADED },
+  { pattern: /ETIMEDOUT|ESOCKETTIMEDOUT/i, code: ERROR_CODES.NETWORK_TIMEOUT },
+  { pattern: /ECONNRESET|ECONNREFUSED/i, code: ERROR_CODES.NETWORK_RESET }
+];
+var PERMANENT_PATTERNS = [
+  { pattern: /401|unauthorized|403|forbidden|authentication_failed/i, code: ERROR_CODES.AUTH_FAILURE },
+  { pattern: /invalid.*model|model.*not found/i, code: ERROR_CODES.INVALID_MODEL },
+  { pattern: /ENOENT.*spawn/i, code: ERROR_CODES.SPAWN_FAILURE }
+];
+function classifyError(text, exitCode) {
+  if (exitCode === 137) {
+    return {
+      category: ERROR_CATEGORIES.PERMANENT,
+      code: ERROR_CODES.SIGKILL,
+      retryable: false
+    };
+  }
+  if (exitCode > 128) {
+    return {
+      category: ERROR_CATEGORIES.PERMANENT,
+      code: ERROR_CODES.SIGNAL_N,
+      retryable: false
+    };
+  }
+  const errorText = text || "";
+  for (const { pattern, code } of TRANSIENT_PATTERNS) {
+    if (pattern.test(errorText)) {
+      return {
+        category: ERROR_CATEGORIES.TRANSIENT,
+        code,
+        retryable: true
+      };
+    }
+  }
+  for (const { pattern, code } of PERMANENT_PATTERNS) {
+    if (pattern.test(errorText)) {
+      return {
+        category: ERROR_CATEGORIES.PERMANENT,
+        code,
+        retryable: false
+      };
+    }
+  }
+  return {
+    category: ERROR_CATEGORIES.PERMANENT,
+    code: ERROR_CODES.UNKNOWN,
+    retryable: false
+  };
+}
+function isRetryable(classification) {
+  return classification.retryable === true;
+}
+
+// src/commands/agent/retry-logic.js
+function createRetryState() {
+  return {
+    count: 0,
+    maxRetries: 3,
+    delays: [1e3, 2e3, 4e3]
+  };
+}
+function canRetry(state) {
+  return state.count < state.maxRetries;
+}
+function getNextDelay(state) {
+  return state.delays[state.count] || state.delays[state.delays.length - 1];
+}
+function incrementRetry(state) {
+  state.count++;
+}
+
 // src/commands/agent/spawn-process.js
 function unlinkQuiet(filePath) {
   if (!filePath) return;
@@ -50012,6 +50485,242 @@ function resetTurnAccumulators(entry) {
   entry._turnCacheCreationTokens = 0;
   entry._turnToolsUsed = [];
   if (entry._normalizer) entry._normalizer.reset();
+}
+function clearRetryTimer(entry) {
+  if (!entry?._retryTimer) return;
+  clearTimeout(entry._retryTimer);
+  entry._retryTimer = null;
+}
+function reserveRetryDelay(entry) {
+  const delay = getNextDelay(entry._retryState);
+  incrementRetry(entry._retryState);
+  return delay;
+}
+function respawnFromRetryContext(ctx, sessionId, entry) {
+  const { log: log2, broadcast: broadcast2, agentProcesses: agentProcesses2 } = ctx;
+  const rc = entry._retryContext;
+  const shortId = sessionId.slice(0, 8);
+  clearRetryTimer(entry);
+  if (entry._terminationReason === "stopped" || !agentProcesses2.has(sessionId)) {
+    return;
+  }
+  log2("agent", "info", "retry respawn started", {
+    sessionId: shortId,
+    attempt: entry._retryState.count + 1
+  });
+  try {
+    entry._stderrText = "";
+    entry._lastErrorContext = null;
+    entry.stdoutBuffer = "";
+    const proc = (0, import_child_process19.spawn)(rc.binaryPath, rc.spawnArgs, {
+      cwd: rc.spawnCwd,
+      env: rc.spawnEnv,
+      stdio: ["pipe", "pipe", "pipe"]
+    });
+    entry.proc = proc;
+    entry.lastActivityAt = Date.now();
+    entry.turnActive = true;
+    entry._terminationReason = null;
+    dbWrite((db3) => {
+      transitionSessionStatus(db3, sessionId, "running");
+    });
+    attachStdoutHandler(ctx, sessionId, entry, {
+      onResult: rc.onTurnResult,
+      setRunningOnCapture: false
+    });
+    attachStderrHandler(ctx, sessionId, entry, {
+      logSlice: rc.stderrLogSlice || 200
+    });
+    let retryFinalized = false;
+    proc.on("close", (exitCode) => {
+      if (retryFinalized) return;
+      if (exitCode !== 0) {
+        const errorText = [
+          entry._lastErrorContext?.error,
+          entry._lastErrorContext?.message,
+          entry._stderrText
+        ].filter(Boolean).join(" ");
+        const classification = classifyError(errorText, exitCode);
+        log2("agent", "info", "error classified", {
+          sessionId: shortId,
+          code: classification.code,
+          category: classification.category,
+          retryable: classification.retryable,
+          source: "retry-close"
+        });
+        if (isRetryable(classification) && canRetry(entry._retryState)) {
+          const delay = reserveRetryDelay(entry);
+          log2("agent", "info", "retry scheduled", {
+            sessionId: shortId,
+            retryCount: entry._retryState.count,
+            maxRetries: entry._retryState.maxRetries,
+            nextDelayMs: delay
+          });
+          dbWrite((db3) => {
+            transitionSessionStatus(db3, sessionId, "retrying", {
+              lastError: `${classification.code}: ${errorText.slice(0, 200)}`
+            });
+          });
+          broadcast2("agent:error", {
+            sessionId,
+            error: errorText.slice(0, 500),
+            code: classification.code,
+            category: classification.category,
+            retryable: true,
+            retryCount: entry._retryState.count,
+            maxRetries: entry._retryState.maxRetries,
+            nextRetryMs: delay
+          });
+          entry._retryTimer = setTimeout(() => {
+            entry._retryTimer = null;
+            if (!agentProcesses2.has(sessionId) || entry._terminationReason === "stopped") return;
+            respawnFromRetryContext(ctx, sessionId, entry);
+          }, delay);
+          return;
+        }
+      }
+      retryFinalized = true;
+      log2("agent", "info", `retry process exited code=${exitCode}`, { sessionId: shortId });
+      flushStdoutBuffer(ctx, sessionId, entry);
+      const finalStatus = entry._terminationReason || (exitCode === 0 ? "completed" : "error");
+      dbWrite((db3) => {
+        const now = (/* @__PURE__ */ new Date()).toISOString();
+        transitionSessionStatus(db3, sessionId, finalStatus, {
+          completedAt: now,
+          lastError: finalStatus === "error" ? `Process exited with code ${exitCode} after ${entry._retryState.count} retries` : void 0
+        });
+        if (rc.sessionRowMode === "existingSession") {
+          const sessionRowId = rc.existingSessionId || sessionId;
+          db3.prepare(`
+            UPDATE sessions
+            SET ended_at = ?, exit_code = ?, error_code = ?, error_message = ?
+            WHERE id = ?
+          `).run(
+            now,
+            exitCode,
+            exitCode === 0 ? null : entry._terminationReason || "PROCESS_EXIT",
+            exitCode === 0 ? null : `Process exited with code ${exitCode} after ${entry._retryState.count} retries`,
+            sessionRowId
+          );
+        }
+      });
+      if (finalStatus === "error") {
+        log2("agent", "warn", "retry exhausted", {
+          sessionId: shortId,
+          finalErrorCode: "PROCESS_EXIT",
+          totalAttempts: entry._retryState.count + 1
+        });
+      }
+      if (entry.turnActive) {
+        broadcast2("agent:done", { sessionId, exitCode, providerSessionId: entry.providerSessionId });
+        if (rc.queueSessionsUpdated) {
+          const queuedSessionId = entry.providerSessionId || (rc.sessionRowMode === "existingSession" ? rc.existingSessionId || sessionId : null);
+          rc.queueSessionsUpdated({
+            source: "agent",
+            event: rc.queueCloseEvent,
+            sessionId: queuedSessionId
+          });
+        }
+      }
+      clearRetryTimer(entry);
+      dropResumeMappingsForSession(sessionId, ctx.resumeSessionIndex);
+      if (ctx.sessionAlwaysAllowed) ctx.sessionAlwaysAllowed.delete(sessionId);
+      agentProcesses2.delete(sessionId);
+      broadcastProcessCount(ctx);
+      if (typeof rc.onProcessClose === "function") {
+        flushDbWrites();
+        rc.onProcessClose({
+          sessionId,
+          entry,
+          exitCode,
+          finalStatus,
+          providerSessionId: entry.providerSessionId || null,
+          runGroupId: rc.runGroupId
+        });
+      }
+    });
+    proc.on("error", (err) => {
+      if (retryFinalized) return;
+      log2("agent", "error", `retry spawn error: ${err.message}`, { sessionId: shortId });
+      const errorText = err.message + " " + (entry._stderrText || "");
+      const classification = classifyError(errorText, null);
+      if (isRetryable(classification) && canRetry(entry._retryState)) {
+        const delay = reserveRetryDelay(entry);
+        dbWrite((db3) => {
+          transitionSessionStatus(db3, sessionId, "retrying", {
+            lastError: `${classification.code}: ${err.message.slice(0, 200)}`
+          });
+        });
+        broadcast2("agent:error", {
+          sessionId,
+          error: err.message,
+          code: classification.code,
+          category: classification.category,
+          retryable: true,
+          retryCount: entry._retryState.count,
+          maxRetries: entry._retryState.maxRetries,
+          nextRetryMs: delay
+        });
+        entry._retryTimer = setTimeout(() => {
+          entry._retryTimer = null;
+          if (!agentProcesses2.has(sessionId) || entry._terminationReason === "stopped") return;
+          respawnFromRetryContext(ctx, sessionId, entry);
+        }, delay);
+        return;
+      }
+      retryFinalized = true;
+      broadcast2("agent:error", { sessionId, error: err.message });
+      dbWrite((db3) => {
+        const now = (/* @__PURE__ */ new Date()).toISOString();
+        transitionSessionStatus(db3, sessionId, "error", {
+          lastError: err.message,
+          completedAt: now
+        });
+        if (rc.sessionRowMode === "existingSession") {
+          const sessionRowId = rc.existingSessionId || sessionId;
+          db3.prepare(`
+            UPDATE sessions
+            SET error_code = 'SPAWN_ERROR', error_message = ?, ended_at = ?
+            WHERE id = ?
+          `).run(err.message, now, sessionRowId);
+        }
+      });
+      agentProcesses2.delete(sessionId);
+      broadcastProcessCount(ctx);
+      if (typeof rc.onProcessError === "function") {
+        rc.onProcessError({ sessionId, entry, error: err, runGroupId: rc.runGroupId });
+      }
+    });
+    if (rc.prompt) {
+      const inputMsg = JSON.stringify({
+        type: "user",
+        message: {
+          role: "user",
+          content: buildUserContent(rc.prompt, rc.images, entry.cwd, log2)
+        }
+      }) + "\n";
+      proc.stdin.write(inputMsg);
+    }
+    if (rc.stdinModeOverride === "close") {
+      proc.stdin.end();
+    }
+    proc.stdin.on("error", (err) => {
+      log2("agent", "warn", `retry stdin error (EPIPE/destroyed): ${err.message}`, { sessionId: shortId });
+    });
+  } catch (err) {
+    log2("agent", "error", `retry respawn failed: ${err.message}`, { sessionId: shortId });
+    dbWrite((db3) => {
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      transitionSessionStatus(db3, sessionId, "error", {
+        lastError: `Retry respawn failed: ${err.message}`,
+        completedAt: now
+      });
+    });
+    broadcast2("agent:error", { sessionId, error: `Retry respawn failed: ${err.message}` });
+    clearRetryTimer(entry);
+    agentProcesses2.delete(sessionId);
+    broadcastProcessCount(ctx);
+  }
 }
 function spawnAgentProcess(ctx, options) {
   const {
@@ -50101,9 +50810,46 @@ function spawnAgentProcess(ctx, options) {
     _turnCacheReadTokens: 0,
     _turnCacheCreationTokens: 0,
     _turnModel: model || null,
-    _turnToolsUsed: []
+    _turnToolsUsed: [],
+    _retryState: createRetryState(),
+    _retryContext: null
+    // populated below
   };
   agentProcesses2.set(sessionId, entry);
+  entry._retryContext = {
+    binaryPath,
+    spawnArgs: args,
+    spawnEnv: env,
+    spawnCwd,
+    prompt,
+    images,
+    model,
+    sessionId,
+    provider,
+    providerConfig,
+    permissionMode,
+    systemPrompt,
+    sessionRowMode,
+    existingSessionId,
+    parentSessionId,
+    runGroupId,
+    worktreePath,
+    worktreeBranch,
+    baseBranch,
+    repoRoot,
+    mcpConfigPath,
+    onProcessClose,
+    onProcessError,
+    onTurnResult,
+    queueSessionsUpdated,
+    queueCloseEvent,
+    stdinModeOverride,
+    stderrLogSlice,
+    setRunningOnCapture,
+    autoNameOnFirstTurn,
+    workingDir,
+    effectiveCwd
+  };
   log2("agent", "info", `process spawned pid=${proc.pid}`, { sessionId: shortId, provider });
   const stdinMode = stdinModeOverride || providerConfig?.headless?.stdin;
   if (stdinMode === "pipe" && !stdinModeOverride && hasCapability(providerConfig, "inputStreaming")) {
@@ -50248,6 +50994,51 @@ function spawnAgentProcess(ctx, options) {
   let finalized = false;
   const finalizeClose = (exitCode, source = "close") => {
     if (finalized) return;
+    if (exitCode !== 0) {
+      const errorText = [
+        entry._lastErrorContext?.error,
+        entry._lastErrorContext?.message,
+        entry._stderrText
+      ].filter(Boolean).join(" ");
+      const classification = classifyError(errorText, exitCode);
+      log2("agent", "info", "error classified", {
+        sessionId: shortId,
+        code: classification.code,
+        category: classification.category,
+        retryable: classification.retryable,
+        source
+      });
+      if (isRetryable(classification) && canRetry(entry._retryState)) {
+        const delay = reserveRetryDelay(entry);
+        log2("agent", "info", "retry scheduled", {
+          sessionId: shortId,
+          retryCount: entry._retryState.count,
+          maxRetries: entry._retryState.maxRetries,
+          nextDelayMs: delay
+        });
+        dbWrite((db3) => {
+          transitionSessionStatus(db3, sessionId, "retrying", {
+            lastError: `${classification.code}: ${errorText.slice(0, 200)}`
+          });
+        });
+        broadcast2("agent:error", {
+          sessionId,
+          error: errorText.slice(0, 500),
+          code: classification.code,
+          category: classification.category,
+          retryable: true,
+          retryCount: entry._retryState.count,
+          maxRetries: entry._retryState.maxRetries,
+          nextRetryMs: delay
+        });
+        entry._retryTimer = setTimeout(() => {
+          entry._retryTimer = null;
+          if (!agentProcesses2.has(sessionId) || entry._terminationReason === "stopped") return;
+          respawnFromRetryContext(ctx, sessionId, entry);
+        }, delay);
+        return;
+      }
+    }
     finalized = true;
     log2("agent", "info", `process exited code=${exitCode}`, { sessionId: shortId, provider, source });
     flushStdoutBuffer(ctx, sessionId, entry);
@@ -50294,6 +51085,7 @@ function spawnAgentProcess(ctx, options) {
       pendingPermissions.delete(reqId);
     }
     if (sessionAlwaysAllowed) sessionAlwaysAllowed.delete(sessionId);
+    clearRetryTimer(entry);
     agentProcesses2.delete(sessionId);
     broadcastProcessCount(ctx);
     maybeCleanupMcpConfig();
@@ -50316,6 +51108,45 @@ function spawnAgentProcess(ctx, options) {
   });
   proc.on("error", (err) => {
     if (finalized) return;
+    const errorText = err.message + " " + (entry._stderrText || "");
+    const classification = classifyError(errorText, null);
+    log2("agent", "info", "error classified", {
+      sessionId: shortId,
+      code: classification.code,
+      category: classification.category,
+      retryable: classification.retryable,
+      source: "spawn-error"
+    });
+    if (isRetryable(classification) && canRetry(entry._retryState)) {
+      const delay = reserveRetryDelay(entry);
+      log2("agent", "info", "retry scheduled", {
+        sessionId: shortId,
+        retryCount: entry._retryState.count,
+        maxRetries: entry._retryState.maxRetries,
+        nextDelayMs: delay
+      });
+      dbWrite((db3) => {
+        transitionSessionStatus(db3, sessionId, "retrying", {
+          lastError: `${classification.code}: ${err.message.slice(0, 200)}`
+        });
+      });
+      broadcast2("agent:error", {
+        sessionId,
+        error: err.message,
+        code: classification.code,
+        category: classification.category,
+        retryable: true,
+        retryCount: entry._retryState.count,
+        maxRetries: entry._retryState.maxRetries,
+        nextRetryMs: delay
+      });
+      entry._retryTimer = setTimeout(() => {
+        entry._retryTimer = null;
+        if (!agentProcesses2.has(sessionId) || entry._terminationReason === "stopped") return;
+        respawnFromRetryContext(ctx, sessionId, entry);
+      }, delay);
+      return;
+    }
     finalized = true;
     log2("agent", "error", `spawn error: ${err.message}`, { sessionId: shortId, provider });
     broadcast2("agent:error", { sessionId, error: err.message });
@@ -50338,6 +51169,7 @@ function spawnAgentProcess(ctx, options) {
     });
     dropResumeMappingsForSession(sessionId, resumeSessionIndex);
     if (sessionAlwaysAllowed) sessionAlwaysAllowed.delete(sessionId);
+    clearRetryTimer(entry);
     agentProcesses2.delete(sessionId);
     broadcastProcessCount(ctx);
     maybeCleanupMcpConfig();
@@ -50558,6 +51390,7 @@ function buildStartRoute(ctx) {
     let mcpConfigPath = null;
     if (canSpawnChildren && hasCapability(providerConfig, "mcpConfig")) {
       const spawnShimPath = import_path39.default.join(PATHS.home, "bins", "rudi-spawn");
+      const routerShimPath = import_path39.default.join(PATHS.home, "bins", "rudi-router");
       if (import_fs40.default.existsSync(spawnShimPath)) {
         try {
           let existingMcpServers = {};
@@ -50570,7 +51403,8 @@ function buildStartRoute(ctx) {
           const mergedConfig = {
             mcpServers: {
               ...existingMcpServers,
-              "rudi-spawn": { command: spawnShimPath, args: [] }
+              "rudi-spawn": { command: spawnShimPath, args: [] },
+              ...import_fs40.default.existsSync(routerShimPath) ? { "rudi": { command: routerShimPath, args: [] } } : {}
             }
           };
           const tmpDir = import_path39.default.join(PATHS.home, "tmp");
@@ -50756,21 +51590,65 @@ function buildStartRoute(ctx) {
 // src/commands/agent/routes/lifecycle.js
 var MAX_AGENT_BODY_SIZE2 = 50 * 1024 * 1024;
 function buildLifecycleRoutes(ctx) {
-  const { json, error, readBody, log: log2, broadcast: broadcast2, agentProcesses: agentProcesses2, maxConcurrent } = ctx;
+  const {
+    json,
+    error,
+    readBody,
+    log: log2,
+    broadcast: broadcast2,
+    agentProcesses: agentProcesses2,
+    maxConcurrent,
+    pendingPermissions,
+    resumeSessionIndex,
+    sessionAlwaysAllowed
+  } = ctx;
+  function cleanupPendingRetrySession(sessionId, entry) {
+    if (!entry?._retryTimer) return false;
+    clearTimeout(entry._retryTimer);
+    entry._retryTimer = null;
+    entry._terminationReason = "stopped";
+    dbWrite((db3) => {
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      transitionSessionStatus(db3, sessionId, "stopped", {
+        completedAt: now
+      });
+      db3.prepare(`
+        UPDATE sessions
+        SET ended_at = ?, exit_code = NULL, error_code = NULL, error_message = NULL
+        WHERE id = ?
+      `).run(now, sessionId);
+    });
+    dropResumeMappingsForSession(sessionId, resumeSessionIndex);
+    for (const [reqId, pending] of pendingPermissions || []) {
+      if (pending.rudiSessionId !== sessionId) continue;
+      const denyDecision = { permissionDecision: "deny", reason: "Session ended" };
+      if (pending.resolve) pending.resolve(denyDecision);
+      else pending.decision = denyDecision;
+      if (pending.timer) clearTimeout(pending.timer);
+      pendingPermissions.delete(reqId);
+    }
+    if (sessionAlwaysAllowed) sessionAlwaysAllowed.delete(sessionId);
+    agentProcesses2.delete(sessionId);
+    broadcastProcessCount(ctx);
+    return true;
+  }
   return async (req, res, url) => {
     if (req.method === "POST" && url.pathname === "/agent/stop") {
       const body = await readBody(req, { maxBodySize: MAX_AGENT_BODY_SIZE2 });
       const entry = agentProcesses2.get(body.sessionId);
       if (entry) {
+        const canceledRetry = cleanupPendingRetrySession(body.sessionId, entry);
         entry._terminationReason = "stopped";
-        entry.proc.kill("SIGTERM");
-        const killTimer = setTimeout(() => {
-          try {
-            entry.proc.kill("SIGKILL");
-          } catch {
-          }
-        }, 3e3);
-        entry.proc.on("close", () => clearTimeout(killTimer));
+        if (!canceledRetry && entry.proc && !entry.proc.killed) {
+          entry.proc.kill("SIGTERM");
+          const killTimer = setTimeout(() => {
+            try {
+              entry.proc.kill("SIGKILL");
+            } catch {
+            }
+          }, 3e3);
+          entry.proc.on("close", () => clearTimeout(killTimer));
+        }
         broadcast2("agent:stopped", { sessionId: body.sessionId });
       }
       json(res, { ok: true });
@@ -50791,6 +51669,10 @@ function buildLifecycleRoutes(ctx) {
         entry.turnActive = true;
         entry.lastActivityAt = Date.now();
         entry._turnPrompt = body.message;
+        if (entry._retryContext) {
+          entry._retryContext.prompt = body.message;
+          entry._retryContext.images = body.images || null;
+        }
         entry._turnInputTokens = 0;
         entry._turnOutputTokens = 0;
         entry._turnCacheReadTokens = 0;
@@ -50878,6 +51760,11 @@ function buildLifecycleRoutes(ctx) {
     if (req.method === "POST" && url.pathname === "/agent/kill-all") {
       const killed = [];
       for (const [sessionId, entry] of agentProcesses2) {
+        if (cleanupPendingRetrySession(sessionId, entry)) {
+          killed.push(sessionId);
+          broadcast2("agent:stopped", { sessionId });
+          continue;
+        }
         if (entry.proc && !entry.proc.killed) {
           killed.push(sessionId);
           entry._terminationReason = "stopped";
@@ -50907,6 +51794,11 @@ var import_path40 = __toESM(require("path"), 1);
 var import_crypto7 = __toESM(require("crypto"), 1);
 var import_child_process21 = require("child_process");
 init_src();
+function reserveRetryDelay2(entry) {
+  const delay = getNextDelay(entry._retryState);
+  incrementRetry(entry._retryState);
+  return delay;
+}
 function buildSpawnChildRoutes(ctx) {
   const {
     json,
@@ -50927,6 +51819,257 @@ function buildSpawnChildRoutes(ctx) {
   } = ctx;
   return async (req, res, url) => {
     if (req.method === "POST" && url.pathname === "/agent/spawn-child") {
+      let spawnChildAttempt = function({ isRetry = false } = {}) {
+        if (entry?._retryTimer) {
+          clearTimeout(entry._retryTimer);
+          entry._retryTimer = null;
+        }
+        const proc = (0, import_child_process21.spawn)(binaryPath, childArgs, {
+          cwd: worktreePath,
+          env: childEnv,
+          stdio: ["pipe", "pipe", "pipe"]
+        });
+        const stdinMode = providerConfig.headless.stdin;
+        if (stdinMode === "close" || !hasCapability(providerConfig, "inputStreaming")) {
+          proc.stdin.end();
+        }
+        if (!entry) {
+          entry = {
+            proc,
+            provider,
+            providerConfig,
+            providerSessionId: null,
+            resumeSessionId: null,
+            parentSessionId,
+            stdoutBuffer: "",
+            turnActive: true,
+            startedAt: Date.now(),
+            lastActivityAt: Date.now(),
+            cwd: worktreePath,
+            repoRoot: parentRepoRoot,
+            worktreePath,
+            worktreeBranch,
+            baseBranch: parentBaseBranch,
+            _terminationReason: null,
+            _turnPrompt: childPrompt,
+            _turnNumber: 1,
+            _turnInputTokens: 0,
+            _turnOutputTokens: 0,
+            _turnCacheReadTokens: 0,
+            _turnCacheCreationTokens: 0,
+            _turnModel: childModel || parentModel || null,
+            _turnToolsUsed: [],
+            _retryState: createRetryState(),
+            _isChild: true,
+            _description: sanitizedDesc
+          };
+          agentProcesses2.set(childSessionId, entry);
+        } else {
+          entry.proc = proc;
+          entry.stdoutBuffer = "";
+          entry.turnActive = true;
+          entry.lastActivityAt = Date.now();
+          entry._terminationReason = null;
+          entry._stderrText = "";
+          entry._lastErrorContext = null;
+        }
+        dbWrite((db3) => {
+          transitionSessionStatus(db3, childSessionId, "running");
+          if (!isRetry) {
+            db3.prepare(`
+              UPDATE sessions SET started_at = ? WHERE id = ?
+            `).run((/* @__PURE__ */ new Date()).toISOString(), childSessionId);
+          }
+        });
+        log2("agent", "info", `child process spawned pid=${proc.pid}`, {
+          sessionId: shortId,
+          parentSessionId: parentSessionId.slice(0, 8),
+          worktreeBranch,
+          cwd: worktreePath,
+          binary: binaryPath,
+          origin,
+          provider,
+          argsCount: childArgs.length,
+          promptLen: childPrompt.length,
+          retryCount: entry._retryState.count,
+          args: childArgs.filter((a2) => a2 !== childPrompt && (a2.length < 60 || a2.startsWith("--"))).join(" ")
+        });
+        const STARTUP_TIMEOUT_MS = 12e4;
+        let startupTimer = setTimeout(() => {
+          if (entry.turnActive && entry.lastActivityAt === entry.startedAt) {
+            log2("agent", "error", `child startup stall \u2014 no output in ${STARTUP_TIMEOUT_MS / 1e3}s`, { sessionId: shortId });
+            entry._terminationReason = "startup_stall";
+            killWithFallback(proc);
+          }
+        }, STARTUP_TIMEOUT_MS);
+        const RUNTIME_TIMEOUT_MS = 15 * 60 * 1e3;
+        const runtimeTimer = setTimeout(() => {
+          if (entry.proc && !entry.proc.killed) {
+            log2("agent", "warn", `child runtime timeout (${RUNTIME_TIMEOUT_MS / 1e3}s)`, { sessionId: shortId });
+            entry._terminationReason = "timeout";
+            killWithFallback(proc);
+          }
+        }, RUNTIME_TIMEOUT_MS);
+        const clearStartupTimer = () => {
+          if (startupTimer) {
+            clearTimeout(startupTimer);
+            startupTimer = null;
+          }
+        };
+        const clearTimers = () => {
+          clearStartupTimer();
+          clearTimeout(runtimeTimer);
+        };
+        attachStdoutHandler(ctx, childSessionId, entry, {
+          setRunningOnCapture: false,
+          onFirstData: (chunk, totalBytes) => {
+            clearStartupTimer();
+            if (totalBytes <= 2e3) {
+              log2("agent", "debug", `child stdout (${chunk.length}b, total=${totalBytes}): ${chunk.toString().slice(0, 200)}`, { sessionId: shortId });
+            }
+          },
+          onResult: (event) => {
+            entry.turnActive = false;
+            const costUsd = typeof event.costUsd === "number" ? event.costUsd : typeof event.total_cost_usd === "number" ? event.total_cost_usd : null;
+            const turnTokens = Math.max(
+              0,
+              Number(entry._turnInputTokens || 0) + Number(entry._turnOutputTokens || 0) + Number(entry._turnCacheReadTokens || 0) + Number(entry._turnCacheCreationTokens || 0)
+            );
+            const providerSid = entry.providerSessionId;
+            dbWrite((db3) => {
+              const now2 = (/* @__PURE__ */ new Date()).toISOString();
+              if (costUsd !== null) {
+                db3.prepare(`
+                  UPDATE session_runtime_state
+                  SET turn_count = turn_count + 1, cost_total = ?, tokens_total = tokens_total + ?, updated_at = ?
+                  WHERE session_id = ?
+                `).run(costUsd, turnTokens, now2, childSessionId);
+              } else {
+                db3.prepare(`
+                  UPDATE session_runtime_state
+                  SET turn_count = turn_count + 1, tokens_total = tokens_total + ?, updated_at = ?
+                  WHERE session_id = ?
+                `).run(turnTokens, now2, childSessionId);
+              }
+              if (providerSid) {
+                db3.prepare(`
+                  UPDATE sessions SET provider_session_id = ?, last_active_at = ?, total_cost = ? WHERE id = ?
+                `).run(providerSid, now2, costUsd || 0, childSessionId);
+              }
+            });
+            broadcast2("agent:done", { sessionId: childSessionId, exitCode: 0, providerSessionId: entry.providerSessionId });
+            queueSessionsUpdated({
+              source: "agent",
+              event: "child-result",
+              sessionId: entry.providerSessionId || null,
+              refreshProjects: false
+            });
+          }
+        });
+        attachStderrHandler(ctx, childSessionId, entry, {
+          logSlice: 500,
+          onFirstData: () => {
+            clearStartupTimer();
+          }
+        });
+        let finalized = false;
+        const cleanupChild = (exitCode, source) => {
+          if (finalized) return;
+          clearTimers();
+          if (exitCode !== 0) {
+            const errorText = [
+              entry._lastErrorContext?.error,
+              entry._lastErrorContext?.message,
+              entry._stderrText
+            ].filter(Boolean).join(" ") || `Process exited with code ${exitCode}`;
+            const classification = classifyError(errorText, exitCode);
+            log2("agent", "info", "error classified", {
+              sessionId: shortId,
+              code: classification.code,
+              category: classification.category,
+              retryable: classification.retryable,
+              source: `child-${source}`
+            });
+            if (scheduleChildRetry(errorText, classification)) {
+              finalized = true;
+              return;
+            }
+          }
+          finalized = true;
+          try {
+            log2("agent", "info", `child process exited code=${exitCode} (${source})`, { sessionId: shortId });
+            const finalStatus = entry._terminationReason === "stopped" ? "stopped" : exitCode === 0 ? "completed" : "error";
+            const finalError = exitCode === 0 ? void 0 : entry._terminationReason && entry._terminationReason !== "stopped" ? entry._terminationReason : `Process exited with code ${exitCode}`;
+            dbWrite((db3) => {
+              const now2 = (/* @__PURE__ */ new Date()).toISOString();
+              transitionSessionStatus(db3, childSessionId, finalStatus, {
+                completedAt: now2,
+                lastError: finalError
+              });
+              db3.prepare(`
+                UPDATE sessions SET ended_at = ?, exit_code = ?, error_code = ?, error_message = ? WHERE id = ?
+              `).run(
+                now2,
+                exitCode,
+                exitCode === 0 ? null : entry._terminationReason === "stopped" ? "STOPPED" : "PROCESS_EXIT",
+                exitCode === 0 ? null : finalError || `Process exited with code ${exitCode}`,
+                childSessionId
+              );
+            });
+            if (entry.turnActive) {
+              broadcast2("agent:done", { sessionId: childSessionId, exitCode, providerSessionId: entry.providerSessionId });
+            }
+            broadcast2("sessions:updated", {
+              source: "agent",
+              event: "child-completed",
+              sessionId: childSessionId,
+              refreshProjects: true
+            });
+          } catch (cleanupErr) {
+            log2("agent", "error", `child cleanup error: ${cleanupErr.message}`, { sessionId: shortId });
+          }
+          agentProcesses2.delete(childSessionId);
+          broadcastProcessCount(ctx);
+        };
+        proc.on("close", (exitCode) => cleanupChild(exitCode, "close"));
+        proc.on("exit", (exitCode) => cleanupChild(exitCode ?? 0, "exit"));
+        proc.on("error", (err) => {
+          if (finalized) return;
+          clearTimers();
+          const errorText = [err.message, entry._stderrText || ""].filter(Boolean).join(" ");
+          const classification = classifyError(errorText, null);
+          log2("agent", "info", "error classified", {
+            sessionId: shortId,
+            code: classification.code,
+            category: classification.category,
+            retryable: classification.retryable,
+            source: "child-spawn-error"
+          });
+          if (scheduleChildRetry(err.message, classification)) {
+            finalized = true;
+            return;
+          }
+          finalized = true;
+          log2("agent", "error", `child spawn error: ${err.message}`, { sessionId: shortId });
+          try {
+            dbWrite((db3) => {
+              const now2 = (/* @__PURE__ */ new Date()).toISOString();
+              transitionSessionStatus(db3, childSessionId, "error", {
+                lastError: err.message,
+                completedAt: now2
+              });
+              db3.prepare(`
+                UPDATE sessions SET error_code = 'SPAWN_ERROR', error_message = ?, ended_at = ? WHERE id = ?
+              `).run(err.message, now2, childSessionId);
+            });
+          } catch (dbErr) {
+            log2("agent", "error", `child error handler DB write failed: ${dbErr.message}`, { sessionId: shortId });
+          }
+          broadcast2("agent:error", { sessionId: childSessionId, error: err.message });
+          agentProcesses2.delete(childSessionId);
+          broadcastProcessCount(ctx);
+        });
+      };
       if (getSidecarPort() === 0) {
         return json(res, { error: "SIDECAR_NOT_READY", message: "Sidecar server is still initializing" }, 503);
       }
@@ -50984,8 +52127,8 @@ function buildSpawnChildRoutes(ctx) {
       } catch {
       }
       let childCount = 0;
-      for (const [, entry] of agentProcesses2) {
-        if (entry.parentSessionId === parentSessionId && entry.proc && !entry.proc.killed) {
+      for (const [, entry2] of agentProcesses2) {
+        if (entry2.parentSessionId === parentSessionId && entry2.proc && !entry2.proc.killed) {
           childCount++;
         }
       }
@@ -51130,207 +52273,72 @@ function buildSpawnChildRoutes(ctx) {
         childEnv.RUDI_SESSION_ID = childSessionId;
         childEnv.RUDI_CAN_SPAWN_CHILDREN = "0";
       }
-      try {
-        const proc = (0, import_child_process21.spawn)(binaryPath, childArgs, {
-          cwd: worktreePath,
-          env: childEnv,
-          stdio: ["pipe", "pipe", "pipe"]
-        });
-        const stdinMode = providerConfig.headless.stdin;
-        if (stdinMode === "close" || !hasCapability(providerConfig, "inputStreaming")) {
-          proc.stdin.end();
+      const killWithFallback = (p2) => {
+        try {
+          p2.kill("SIGTERM");
+        } catch {
         }
-        const entry = {
-          proc,
-          provider,
-          providerConfig,
-          providerSessionId: null,
-          resumeSessionId: null,
-          parentSessionId,
-          stdoutBuffer: "",
-          turnActive: true,
-          startedAt: Date.now(),
-          lastActivityAt: Date.now(),
-          cwd: worktreePath,
-          repoRoot: parentRepoRoot,
-          worktreePath,
-          worktreeBranch,
-          baseBranch: parentBaseBranch,
-          _terminationReason: null,
-          _turnPrompt: childPrompt,
-          _turnNumber: 1,
-          _turnInputTokens: 0,
-          _turnOutputTokens: 0,
-          _turnCacheReadTokens: 0,
-          _turnCacheCreationTokens: 0,
-          _turnModel: childModel || parentModel || null,
-          _turnToolsUsed: [],
-          _isChild: true,
-          _description: sanitizedDesc
-        };
-        agentProcesses2.set(childSessionId, entry);
-        dbWrite((db3) => {
-          db3.prepare(`
-            UPDATE session_runtime_state SET status = 'running', updated_at = ? WHERE session_id = ?
-          `).run((/* @__PURE__ */ new Date()).toISOString(), childSessionId);
-          db3.prepare(`
-            UPDATE sessions SET started_at = ? WHERE id = ?
-          `).run((/* @__PURE__ */ new Date()).toISOString(), childSessionId);
-        });
-        log2("agent", "info", `child process spawned pid=${proc.pid}`, {
-          sessionId: shortId,
-          parentSessionId: parentSessionId.slice(0, 8),
-          worktreeBranch,
-          cwd: worktreePath,
-          binary: binaryPath,
-          origin,
-          provider,
-          argsCount: childArgs.length,
-          promptLen: childPrompt.length,
-          args: childArgs.filter((a2) => a2 !== childPrompt && (a2.length < 60 || a2.startsWith("--"))).join(" ")
-        });
-        const killWithFallback = (p2) => {
+        setTimeout(() => {
           try {
-            p2.kill("SIGTERM");
+            if (!p2.killed) p2.kill("SIGKILL");
           } catch {
           }
-          setTimeout(() => {
-            try {
-              if (!p2.killed) p2.kill("SIGKILL");
-            } catch {
-            }
-          }, 5e3);
-        };
-        const STARTUP_TIMEOUT_MS = 12e4;
-        let startupTimer = setTimeout(() => {
-          if (entry.turnActive && entry.lastActivityAt === entry.startedAt) {
-            log2("agent", "error", `child startup stall \u2014 no output in ${STARTUP_TIMEOUT_MS / 1e3}s`, { sessionId: shortId });
-            entry._terminationReason = "startup_stall";
-            killWithFallback(proc);
-          }
-        }, STARTUP_TIMEOUT_MS);
-        const RUNTIME_TIMEOUT_MS = 15 * 60 * 1e3;
-        const runtimeTimer = setTimeout(() => {
-          if (entry.proc && !entry.proc.killed) {
-            log2("agent", "warn", `child runtime timeout (${RUNTIME_TIMEOUT_MS / 1e3}s)`, { sessionId: shortId });
-            entry._terminationReason = "timeout";
-            killWithFallback(proc);
-          }
-        }, RUNTIME_TIMEOUT_MS);
-        const clearStartupTimer = () => {
-          if (startupTimer) {
-            clearTimeout(startupTimer);
-            startupTimer = null;
-          }
-        };
-        attachStdoutHandler(ctx, childSessionId, entry, {
-          setRunningOnCapture: false,
-          // already set to 'running' above
-          onFirstData: (chunk, totalBytes) => {
-            clearStartupTimer();
-            if (totalBytes <= 2e3) {
-              log2("agent", "debug", `child stdout (${chunk.length}b, total=${totalBytes}): ${chunk.toString().slice(0, 200)}`, { sessionId: shortId });
-            }
-          },
-          onResult: (event) => {
-            entry.turnActive = false;
-            const costUsd = typeof event.costUsd === "number" ? event.costUsd : typeof event.total_cost_usd === "number" ? event.total_cost_usd : null;
-            const turnTokens = Math.max(
-              0,
-              Number(entry._turnInputTokens || 0) + Number(entry._turnOutputTokens || 0) + Number(entry._turnCacheReadTokens || 0) + Number(entry._turnCacheCreationTokens || 0)
-            );
-            const providerSid = entry.providerSessionId;
-            dbWrite((db3) => {
-              const now2 = (/* @__PURE__ */ new Date()).toISOString();
-              if (costUsd !== null) {
-                db3.prepare(`
-                  UPDATE session_runtime_state
-                  SET turn_count = turn_count + 1, cost_total = ?, tokens_total = tokens_total + ?, updated_at = ?
-                  WHERE session_id = ?
-                `).run(costUsd, turnTokens, now2, childSessionId);
-              } else {
-                db3.prepare(`
-                  UPDATE session_runtime_state
-                  SET turn_count = turn_count + 1, tokens_total = tokens_total + ?, updated_at = ?
-                  WHERE session_id = ?
-                `).run(turnTokens, now2, childSessionId);
-              }
-              if (providerSid) {
-                db3.prepare(`
-                  UPDATE sessions SET provider_session_id = ?, last_active_at = ?, total_cost = ? WHERE id = ?
-                `).run(providerSid, now2, costUsd || 0, childSessionId);
-              }
-            });
-            broadcast2("agent:done", { sessionId: childSessionId, exitCode: 0, providerSessionId: entry.providerSessionId });
-            queueSessionsUpdated({
-              source: "agent",
-              event: "child-result",
-              sessionId: entry.providerSessionId || null,
-              refreshProjects: false
-            });
-          }
+        }, 5e3);
+      };
+      let entry = null;
+      const scheduleChildRetry = (errorText, classification) => {
+        if (!entry || !isRetryable(classification) || !canRetry(entry._retryState)) {
+          return false;
+        }
+        const delay = reserveRetryDelay2(entry);
+        log2("agent", "info", "retry scheduled", {
+          sessionId: shortId,
+          retryCount: entry._retryState.count,
+          maxRetries: entry._retryState.maxRetries,
+          nextDelayMs: delay,
+          scope: "child"
         });
-        attachStderrHandler(ctx, childSessionId, entry, {
-          logSlice: 500,
-          onFirstData: (chunk, totalBytes) => {
-            clearStartupTimer();
-          }
+        dbWrite((db3) => {
+          transitionSessionStatus(db3, childSessionId, "retrying", {
+            lastError: `${classification.code}: ${(errorText || "Transient child process failure").slice(0, 200)}`
+          });
         });
-        let _childCleanedUp = false;
-        const cleanupChild = (exitCode, source) => {
-          if (_childCleanedUp) return;
-          _childCleanedUp = true;
-          clearStartupTimer();
-          clearTimeout(runtimeTimer);
+        broadcast2("agent:error", {
+          sessionId: childSessionId,
+          error: (errorText || "Transient child process failure").slice(0, 500),
+          code: classification.code,
+          category: classification.category,
+          retryable: true,
+          retryCount: entry._retryState.count,
+          maxRetries: entry._retryState.maxRetries,
+          nextRetryMs: delay
+        });
+        entry._retryTimer = setTimeout(() => {
+          entry._retryTimer = null;
+          if (!agentProcesses2.has(childSessionId) || entry._terminationReason === "stopped") return;
           try {
-            log2("agent", "info", `child process exited code=${exitCode} (${source})`, { sessionId: shortId });
-            const finalStatus = entry._terminationReason || (exitCode === 0 ? "completed" : "error");
+            spawnChildAttempt({ isRetry: true });
+          } catch (retryErr) {
+            log2("agent", "error", `child retry respawn failed: ${retryErr.message}`, { sessionId: shortId });
             dbWrite((db3) => {
               const now2 = (/* @__PURE__ */ new Date()).toISOString();
-              db3.prepare(`
-                UPDATE session_runtime_state SET status = ?, completed_at = ?, updated_at = ? WHERE session_id = ?
-              `).run(finalStatus, now2, now2, childSessionId);
-              db3.prepare(`
-                UPDATE sessions SET ended_at = ?, exit_code = ? WHERE id = ?
-              `).run(now2, exitCode, childSessionId);
-            });
-            if (entry.turnActive) {
-              broadcast2("agent:done", { sessionId: childSessionId, exitCode, providerSessionId: entry.providerSessionId });
-            }
-            broadcast2("sessions:updated", {
-              source: "agent",
-              event: "child-completed",
-              sessionId: childSessionId,
-              refreshProjects: true
-            });
-          } catch (cleanupErr) {
-            log2("agent", "error", `child cleanup error: ${cleanupErr.message}`, { sessionId: shortId });
-          }
-          agentProcesses2.delete(childSessionId);
-          broadcastProcessCount(ctx);
-        };
-        proc.on("close", (exitCode) => cleanupChild(exitCode, "close"));
-        proc.on("exit", (exitCode) => cleanupChild(exitCode, "exit"));
-        proc.on("error", (err) => {
-          log2("agent", "error", `child spawn error: ${err.message}`, { sessionId: shortId });
-          clearStartupTimer();
-          clearTimeout(runtimeTimer);
-          try {
-            dbWrite((db3) => {
-              const now2 = (/* @__PURE__ */ new Date()).toISOString();
-              db3.prepare(`
-                UPDATE session_runtime_state SET status = 'error', last_error = ?, updated_at = ? WHERE session_id = ?
-              `).run(err.message, now2, childSessionId);
+              transitionSessionStatus(db3, childSessionId, "error", {
+                lastError: `Retry respawn failed: ${retryErr.message}`,
+                completedAt: now2
+              });
               db3.prepare(`
                 UPDATE sessions SET error_code = 'SPAWN_ERROR', error_message = ?, ended_at = ? WHERE id = ?
-              `).run(err.message, now2, childSessionId);
+              `).run(retryErr.message, now2, childSessionId);
             });
-          } catch (dbErr) {
-            log2("agent", "error", `child error handler DB write failed: ${dbErr.message}`, { sessionId: shortId });
+            broadcast2("agent:error", { sessionId: childSessionId, error: `Retry respawn failed: ${retryErr.message}` });
+            agentProcesses2.delete(childSessionId);
+            broadcastProcessCount(ctx);
           }
-          broadcast2("agent:error", { sessionId: childSessionId, error: err.message });
-          agentProcesses2.delete(childSessionId);
-        });
+        }, delay);
+        return true;
+      };
+      try {
+        spawnChildAttempt();
         recentTimestamps.push(now);
         spawnRateMap.set(parentSessionId, recentTimestamps);
         broadcastProcessCount(ctx);
@@ -51358,9 +52366,10 @@ function buildSpawnChildRoutes(ctx) {
         }
         dbWrite((db3) => {
           const now2 = (/* @__PURE__ */ new Date()).toISOString();
-          db3.prepare(`
-            UPDATE session_runtime_state SET status = 'error', last_error = ?, updated_at = ? WHERE session_id = ?
-          `).run(spawnErr.message, now2, childSessionId);
+          transitionSessionStatus(db3, childSessionId, "error", {
+            lastError: spawnErr.message,
+            completedAt: now2
+          });
           db3.prepare(`
             UPDATE sessions SET error_code = 'SPAWN_FAILED', error_message = ?, ended_at = ? WHERE id = ?
           `).run(spawnErr.message, now2, childSessionId);
@@ -51874,7 +52883,7 @@ function evaluatePhaseExecution({ coordinationMode, tasks, phasePlan, runtimeSta
         pendingTasks.push(task);
         continue;
       }
-      if (status === "starting" || status === "running") {
+      if (status === "starting" || status === "running" || status === "retrying") {
         hasActive = true;
         continue;
       }
@@ -52276,6 +53285,7 @@ function launchRunGroupTask(ctx, group, task, settledFn) {
     }
     if (canSpawnChildren && hasCapability(providerConfig, "mcpConfig")) {
       const spawnShimPath = import_path42.default.join(PATHS.home, "bins", "rudi-spawn");
+      const routerShimPath = import_path42.default.join(PATHS.home, "bins", "rudi-router");
       if (import_fs43.default.existsSync(spawnShimPath)) {
         let existingMcpServers = {};
         const claudeJsonPath = import_path42.default.join(import_os19.default.homedir(), ".claude.json");
@@ -52287,7 +53297,8 @@ function launchRunGroupTask(ctx, group, task, settledFn) {
         const mergedConfig = {
           mcpServers: {
             ...existingMcpServers,
-            "rudi-spawn": { command: spawnShimPath, args: [] }
+            "rudi-spawn": { command: spawnShimPath, args: [] },
+            ...import_fs43.default.existsSync(routerShimPath) ? { "rudi": { command: routerShimPath, args: [] } } : {}
           }
         };
         const tmpDir = import_path42.default.join(PATHS.home, "tmp");
@@ -54646,12 +55657,79 @@ var import_path49 = __toESM(require("path"), 1);
 var import_os21 = __toESM(require("os"), 1);
 var WATCHER_DB_DEBOUNCE_MS = 1e4;
 var RECONCILE_INTERVAL_MS = 6e4;
+function normalizeProjectPath(p2) {
+  if (!p2 || p2 === "unknown") return p2;
+  const normalized = import_path49.default.normalize(p2);
+  return normalized === import_path49.default.sep ? import_path49.default.sep : normalized.replace(/\/+$/, "");
+}
 function createSessionsDbModule({ log: log2, resolveDb: resolveDb2, caches, onProjectsReady }) {
   const { diffStatsCache, gitStatusCache, sessionPathMap, GIT_STATUS_TTL_MS } = caches;
   let useDbSpine = false;
   let _reconcileInterval = null;
   let _lastReconcileIndexMtimes = /* @__PURE__ */ new Map();
   const _watcherDbDebounce = /* @__PURE__ */ new Map();
+  async function backfillProjectPaths(db3) {
+    const cwdFixed = db3.prepare(`
+      UPDATE sessions
+      SET project_path = cwd
+      WHERE (project_path IS NULL OR project_path = '')
+        AND cwd IS NOT NULL AND cwd != ''
+        AND deleted_at IS NULL
+    `).run().changes;
+    const claudeRows = db3.prepare(`
+      SELECT id, origin_native_file
+      FROM sessions
+      WHERE (project_path IS NULL OR project_path = '')
+        AND provider = 'claude'
+        AND origin_native_file IS NOT NULL
+        AND deleted_at IS NULL
+    `).all();
+    let claudeFixed = 0;
+    for (const row of claudeRows) {
+      const match = row.origin_native_file.match(/\.claude\/projects\/([^/]+)\//);
+      if (match) {
+        const projDir = match[1];
+        let projectPath = null;
+        try {
+          const indexPath = import_path49.default.join(CLAUDE_PROJECTS_DIR, projDir, "sessions-index.json");
+          const indexContent = await import_promises5.default.readFile(indexPath, "utf-8");
+          const index = JSON.parse(indexContent);
+          if (index.originalPath) projectPath = index.originalPath;
+        } catch {
+        }
+        if (!projectPath) {
+          projectPath = await decodeProjectDirFromFilesystem(projDir);
+        }
+        if (projectPath) {
+          projectPath = normalizeProjectPath(projectPath);
+          db3.prepare("UPDATE sessions SET project_path = ? WHERE id = ?").run(projectPath, row.id);
+          claudeFixed++;
+        }
+      }
+    }
+    const allPaths = db3.prepare(`
+      SELECT DISTINCT project_path FROM sessions
+      WHERE project_path IS NOT NULL AND project_path != '' AND deleted_at IS NULL
+    `).all();
+    let normalizedCount = 0;
+    for (const { project_path } of allPaths) {
+      const normalized = normalizeProjectPath(project_path);
+      if (normalized !== project_path) {
+        const r2 = db3.prepare("UPDATE sessions SET project_path = ? WHERE project_path = ? AND deleted_at IS NULL").run(normalized, project_path);
+        normalizedCount += r2.changes;
+      }
+    }
+    if (normalizedCount > 0) {
+      log2("sessions", "info", `[backfill] normalized ${normalizedCount} project_path values`);
+    }
+    const remaining = db3.prepare(`
+      SELECT COUNT(*) as cnt FROM sessions
+      WHERE (project_path IS NULL OR project_path = '')
+        AND deleted_at IS NULL
+    `).get().cnt;
+    log2("sessions", "info", `[backfill] project_path: ${cwdFixed} from cwd, ${claudeFixed} from origin_native_file, ${remaining} unresolved`);
+    return { cwdFixed, claudeFixed, remaining };
+  }
   async function reconcileSessionsToDb() {
     const db3 = resolveDb2 ? resolveDb2() : null;
     if (!db3) return;
@@ -55019,7 +56097,7 @@ function createSessionsDbModule({ log: log2, resolveDb: resolveDb2, caches, onPr
           } catch {
           }
         }
-        const projectPath = cwd || await inferProjectPathFromSessionFile(filePath) || import_os21.default.homedir();
+        const projectPath = normalizeProjectPath(cwd || await inferProjectPathFromSessionFile(filePath) || import_os21.default.homedir());
         cacheSessionFileHint(sessionId, "codex", filePath);
         const existed = db3.prepare(
           "SELECT 1 FROM sessions WHERE provider = ? AND (id = ? OR provider_session_id = ?)"
@@ -55045,7 +56123,7 @@ function createSessionsDbModule({ log: log2, resolveDb: resolveDb2, caches, onPr
             sessionId,
             filePath,
             snippet,
-            cwd || projectPath,
+            normalizeProjectPath(cwd) || projectPath,
             projectPath,
             fstat.birthtime.toISOString(),
             fstat.mtime.toISOString()
@@ -55110,6 +56188,11 @@ function createSessionsDbModule({ log: log2, resolveDb: resolveDb2, caches, onPr
       "info",
       `[reconcile] DB=${dbCount} fs=${fsCount} added=${added} pruned=${pruned} updated=${updated} duration=${duration}ms`
     );
+    try {
+      await backfillProjectPaths(db3);
+    } catch (err) {
+      log2("sessions", "warn", `[backfill] failed: ${err.message}`);
+    }
   }
   async function periodicReconcile() {
     const db3 = resolveDb2 ? resolveDb2() : null;
@@ -55289,7 +56372,7 @@ function createSessionsDbModule({ log: log2, resolveDb: resolveDb2, caches, onPr
           if (!cwd) cwd = s2.cwd || null;
         } catch {
         }
-        const projectPath = cwd || await inferProjectPathFromSessionFile(filePath) || import_os21.default.homedir();
+        const projectPath = normalizeProjectPath(cwd || await inferProjectPathFromSessionFile(filePath) || import_os21.default.homedir());
         cacheSessionFileHint(sessionId, "codex", filePath);
         db3.prepare(`
           INSERT OR IGNORE INTO sessions
@@ -55304,7 +56387,7 @@ function createSessionsDbModule({ log: log2, resolveDb: resolveDb2, caches, onPr
           sessionId,
           filePath,
           snippet,
-          cwd || projectPath,
+          normalizeProjectPath(cwd) || projectPath,
           projectPath,
           fstat.birthtime.toISOString(),
           fstat.mtime.toISOString()
@@ -55347,6 +56430,7 @@ function createSessionsDbModule({ log: log2, resolveDb: resolveDb2, caches, onPr
         }
       }
       if (!pp) pp = "unknown";
+      pp = normalizeProjectPath(pp);
       const sessionId = row.provider_session_id || row.id;
       if (!projectMap.has(pp)) {
         projectMap.set(pp, {
@@ -55525,8 +56609,8 @@ function createSessionsDbModule({ log: log2, resolveDb: resolveDb2, caches, onPr
           resolvedSessionId,
           fullPath,
           snippet,
-          cwd || projectPath,
-          projectPath,
+          normalizeProjectPath(cwd) || normalizeProjectPath(projectPath),
+          normalizeProjectPath(projectPath),
           gitBranch,
           fstat.birthtime.toISOString(),
           fstat.mtime.toISOString()
@@ -55574,6 +56658,7 @@ function createSessionsDbModule({ log: log2, resolveDb: resolveDb2, caches, onPr
   }
   return {
     reconcileSessionsToDb,
+    backfillProjectPaths,
     getProjectsFromDb,
     watcherDbUpsert,
     startPeriodicReconcile,
@@ -58966,6 +60051,7 @@ function createSessionsModule({ log: log2, broadcast: broadcast2, json, error, r
   });
   const {
     reconcileSessionsToDb,
+    backfillProjectPaths,
     watcherDbUpsert,
     startPeriodicReconcile,
     enableDbSpine,
@@ -59163,6 +60249,14 @@ function createSessionsModule({ log: log2, broadcast: broadcast2, json, error, r
     }
     sessionsWatcher = { watchers };
   }
+  function normalizePath(p2) {
+    if (!p2) return p2;
+    try {
+      return import_fs49.default.realpathSync(p2);
+    } catch {
+      return p2;
+    }
+  }
   async function enumerateProjectsWithSessions() {
     const claudeDir = import_path53.default.join(import_os22.default.homedir(), ".claude", "projects");
     const projects = [];
@@ -59178,7 +60272,7 @@ function createSessionsModule({ log: log2, broadcast: broadcast2, json, error, r
         const index = JSON.parse(indexContent);
         originalPath = index.originalPath || null;
         if (Array.isArray(index.entries)) {
-          const STALE_THRESHOLD_MS = 2 * 60 * 1e3;
+          const STALE_THRESHOLD_MS = 30 * 1e3;
           const now = Date.now();
           const ENTRY_BATCH = 50;
           for (let ei = 0; ei < index.entries.length; ei += ENTRY_BATCH) {
@@ -59290,9 +60384,9 @@ function createSessionsModule({ log: log2, broadcast: broadcast2, json, error, r
         decodedPath = await decodeProjectDirFromFilesystem(projDir);
       }
       if (!decodedPath) {
-        decodedPath = "/" + projDir.replace(/-/g, "/").replace(/^\//, "");
+        decodedPath = projDir;
       }
-      const displayPath = originalPath || decodedPath;
+      const displayPath = normalizePath(originalPath || decodedPath);
       const name = import_path53.default.basename(displayPath);
       for (const session of sessions) {
         if (session.fullPath) {
@@ -59342,7 +60436,8 @@ function createSessionsModule({ log: log2, broadcast: broadcast2, json, error, r
           const sessionId = meta.sessionId || deriveCodexSessionIdFromFilename(filePath);
           if (!sessionId) return null;
           const snippet = await readSessionSnippet(filePath, "codex");
-          const projectPath = meta.cwd || snippet.cwd || await inferProjectPathFromSessionFile(filePath) || import_os22.default.homedir();
+          const projectPath = meta.cwd || snippet.cwd || await inferProjectPathFromSessionFile(filePath);
+          if (!projectPath) return null;
           cacheSessionFileHint(sessionId, "codex", filePath);
           _sessionPathMap.set(sessionId, filePath);
           return {
@@ -59369,7 +60464,7 @@ function createSessionsModule({ log: log2, broadcast: broadcast2, json, error, r
           codexProjectMap.set(projectPath, {
             path: encoded,
             name: import_path53.default.basename(projectPath) || projectPath,
-            originalPath: projectPath,
+            originalPath: normalizePath(projectPath),
             sessions: [],
             gitStatus: null
           });
@@ -59461,35 +60556,35 @@ function createSessionsModule({ log: log2, broadcast: broadcast2, json, error, r
       }
     }
     const worktreeMarker = "/.rudi/worktrees/";
-    const mergedProjects = [];
-    const parentMap = /* @__PURE__ */ new Map();
+    const regularProjects = [];
+    const worktreeEntries = [];
     for (const proj of projects) {
       const op = proj.originalPath || "";
       const wtIdx = op.indexOf(worktreeMarker);
       if (wtIdx !== -1) {
-        const realRoot = op.slice(0, wtIdx);
-        if (parentMap.has(realRoot)) {
-          const parent = mergedProjects[parentMap.get(realRoot)];
-          parent.sessions.push(...proj.sessions);
-        } else {
-          const realName = import_path53.default.basename(realRoot);
-          parentMap.set(realRoot, mergedProjects.length);
-          mergedProjects.push({
-            ...proj,
-            name: realName,
-            originalPath: realRoot
-          });
-        }
+        worktreeEntries.push({ realRoot: op.slice(0, wtIdx), proj });
       } else {
-        if (parentMap.has(op)) {
-          const existing = mergedProjects[parentMap.get(op)];
-          existing.sessions.push(...proj.sessions);
-          if (!existing.path) existing.path = proj.path;
-          if (!existing.gitStatus && proj.gitStatus) existing.gitStatus = proj.gitStatus;
-        } else {
-          parentMap.set(op, mergedProjects.length);
-          mergedProjects.push(proj);
-        }
+        regularProjects.push(proj);
+      }
+    }
+    const mergedProjects = [];
+    const parentMap = /* @__PURE__ */ new Map();
+    for (const proj of regularProjects) {
+      const op = proj.originalPath || "";
+      parentMap.set(op, mergedProjects.length);
+      mergedProjects.push(proj);
+    }
+    for (const { realRoot, proj } of worktreeEntries) {
+      if (parentMap.has(realRoot)) {
+        const parent = mergedProjects[parentMap.get(realRoot)];
+        parent.sessions.push(...proj.sessions);
+      } else {
+        parentMap.set(realRoot, mergedProjects.length);
+        mergedProjects.push({
+          ...proj,
+          name: import_path53.default.basename(realRoot),
+          originalPath: realRoot
+        });
       }
     }
     for (const proj of mergedProjects) {
@@ -59497,18 +60592,8 @@ function createSessionsModule({ log: log2, broadcast: broadcast2, json, error, r
         (a2, b2) => new Date(b2.modified).getTime() - new Date(a2.modified).getTime()
       );
     }
-    const nameCount = /* @__PURE__ */ new Map();
-    for (const proj of mergedProjects) {
-      nameCount.set(proj.name, (nameCount.get(proj.name) || 0) + 1);
-    }
-    for (const proj of mergedProjects) {
-      if (nameCount.get(proj.name) > 1 && proj.originalPath) {
-        const parent = import_path53.default.basename(import_path53.default.dirname(proj.originalPath));
-        if (parent && parent !== "." && parent !== "/") {
-          proj.name = `${parent}/${proj.name}`;
-        }
-      }
-    }
+    const totalSessions = mergedProjects.reduce((s2, p2) => s2 + p2.sessions.length, 0);
+    log2("sessions", "debug", `built ${mergedProjects.length} projects from ${totalSessions} sessions`);
     mergedProjects.sort((a2, b2) => {
       const aTime = a2.sessions[0]?.modified || "";
       const bTime = b2.sessions[0]?.modified || "";
@@ -59836,6 +60921,7 @@ function createSessionsModule({ log: log2, broadcast: broadcast2, json, error, r
     cleanup,
     // DB-as-spine
     reconcileSessionsToDb,
+    backfillProjectPaths,
     reconcileSessionTurnsToDb,
     backfillSessionTurnsToDb,
     repairNoTextSessionTurnsToDb,
@@ -60041,13 +61127,13 @@ function runStartupTasks({ log: log2 }) {
       SELECT DISTINCT s.run_group_id
       FROM session_runtime_state srs
       JOIN sessions s ON s.id = srs.session_id
-      WHERE srs.status IN ('starting', 'running')
+      WHERE srs.status IN ('starting', 'running', 'retrying')
         AND s.run_group_id IS NOT NULL
     `).all().map((r2) => r2.run_group_id);
     const staleRows = db3.prepare(`
       SELECT session_id
       FROM session_runtime_state
-      WHERE status IN ('starting', 'running')
+      WHERE status IN ('starting', 'running', 'retrying')
     `).all();
     let staleCount = 0;
     for (const row of staleRows) {
@@ -61658,12 +62744,12 @@ function buildAnalyticsRoutes(ctx) {
 }
 
 // src/commands/serve/routes/plans.js
-var import_node_fs3 = require("node:fs");
-var import_node_path = require("node:path");
+var import_node_fs4 = require("node:fs");
+var import_node_path2 = require("node:path");
 var import_node_os2 = require("node:os");
 function buildPlansRoutes(ctx) {
   const { json, error } = ctx;
-  const plansDir = (0, import_node_path.join)((0, import_node_os2.homedir)(), ".claude", "plans");
+  const plansDir = (0, import_node_path2.join)((0, import_node_os2.homedir)(), ".claude", "plans");
   function extractTitle(content) {
     const match = content.match(/^#\s+(.+)$/m);
     return match ? match[1].trim() : null;
@@ -61671,19 +62757,19 @@ function buildPlansRoutes(ctx) {
   function handle(req, res, url) {
     if (req.method !== "GET") return false;
     if (url.pathname === "/plans") {
-      if (!(0, import_node_fs3.existsSync)(plansDir)) {
+      if (!(0, import_node_fs4.existsSync)(plansDir)) {
         json(res, { plans: [] });
         return true;
       }
       try {
-        const files = (0, import_node_fs3.readdirSync)(plansDir).filter((f2) => f2.endsWith(".md"));
+        const files = (0, import_node_fs4.readdirSync)(plansDir).filter((f2) => f2.endsWith(".md"));
         const plans = files.map((f2) => {
-          const filePath = (0, import_node_path.join)(plansDir, f2);
-          const stat = (0, import_node_fs3.statSync)(filePath);
+          const filePath = (0, import_node_path2.join)(plansDir, f2);
+          const stat = (0, import_node_fs4.statSync)(filePath);
           const id = f2.replace(/\.md$/, "");
           let title = id;
           try {
-            const content = (0, import_node_fs3.readFileSync)(filePath, "utf-8");
+            const content = (0, import_node_fs4.readFileSync)(filePath, "utf-8");
             const extracted = extractTitle(content);
             if (extracted) title = extracted;
           } catch {
@@ -61708,14 +62794,14 @@ function buildPlansRoutes(ctx) {
         error(res, "Invalid plan ID", 400);
         return true;
       }
-      const filePath = (0, import_node_path.join)(plansDir, `${id}.md`);
-      if (!(0, import_node_fs3.existsSync)(filePath)) {
+      const filePath = (0, import_node_path2.join)(plansDir, `${id}.md`);
+      if (!(0, import_node_fs4.existsSync)(filePath)) {
         error(res, "Plan not found", 404);
         return true;
       }
       try {
-        const content = (0, import_node_fs3.readFileSync)(filePath, "utf-8");
-        const stat = (0, import_node_fs3.statSync)(filePath);
+        const content = (0, import_node_fs4.readFileSync)(filePath, "utf-8");
+        const stat = (0, import_node_fs4.statSync)(filePath);
         const title = extractTitle(content) || id;
         json(res, {
           id,
@@ -61736,10 +62822,11 @@ function buildPlansRoutes(ctx) {
 
 // src/commands/serve/routes/packages.js
 var import_crypto13 = __toESM(require("crypto"), 1);
-var fs57 = __toESM(require("fs/promises"), 1);
+var fs58 = __toESM(require("fs/promises"), 1);
 var fsSync3 = __toESM(require("fs"), 1);
 var import_path59 = __toESM(require("path"), 1);
 var import_child_process30 = require("child_process");
+init_src5();
 init_src4();
 var VALID_KINDS = /* @__PURE__ */ new Set(["stack", "prompt", "runtime", "binary", "agent"]);
 var SECRET_NAME_RE = /^[A-Z][A-Z0-9_]*$/;
@@ -61792,7 +62879,7 @@ function projectInstalledStacks(config) {
 async function loadManifest3(installPath) {
   const manifestPath = import_path59.default.join(installPath, "manifest.json");
   try {
-    const content = await fs57.readFile(manifestPath, "utf-8");
+    const content = await fs58.readFile(manifestPath, "utf-8");
     return JSON.parse(content);
   } catch {
     return null;
@@ -61937,7 +63024,7 @@ async function checkSecrets3(manifest, deps) {
 async function parseEnvExample2(installPath) {
   const examplePath = import_path59.default.join(installPath, ".env.example");
   try {
-    const content = await fs57.readFile(examplePath, "utf-8");
+    const content = await fs58.readFile(examplePath, "utf-8");
     const keys = [];
     for (const line of content.split("\n")) {
       const trimmed = line.trim();
@@ -61953,7 +63040,7 @@ async function parseEnvExample2(installPath) {
 async function cleanupFailedStackInstall2(stackId, stackPath, removeConfig, deps) {
   if (stackPath) {
     try {
-      await fs57.rm(stackPath, { recursive: true, force: true });
+      await fs58.rm(stackPath, { recursive: true, force: true });
     } catch {
     }
   }
@@ -62388,6 +63475,7 @@ async function cmdServe(args, flags) {
     handleWsDisconnect: handleSessionsWsDisconnect,
     cleanup: cleanupSessions,
     reconcileSessionsToDb,
+    backfillProjectPaths,
     reconcileSessionTurnsToDb,
     backfillSessionTurnsToDb,
     repairNoTextSessionTurnsToDb,
@@ -62733,6 +63821,12 @@ async function cmdServe(args, flags) {
       if (!isDbSpineEnabled()) {
         enableDbSpine();
         log2("sessions", "info", "DB-as-spine enabled after reconciliation");
+      }
+      try {
+        const db4 = sessionsResolveDb();
+        await backfillProjectPaths(db4);
+      } catch (bfErr) {
+        log2("sessions", "warn", `[backfill] project paths failed: ${bfErr.message}`);
       }
       try {
         const db4 = sessionsResolveDb();
