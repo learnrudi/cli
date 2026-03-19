@@ -2996,7 +2996,7 @@ var require_merge = __commonJS({
 var require_addPairToJSMap = __commonJS({
   "node_modules/.pnpm/yaml@2.8.2/node_modules/yaml/dist/nodes/addPairToJSMap.js"(exports2) {
     "use strict";
-    var log2 = require_log();
+    var log = require_log();
     var merge = require_merge();
     var stringify2 = require_stringify();
     var identity = require_identity();
@@ -3045,7 +3045,7 @@ var require_addPairToJSMap = __commonJS({
           let jsonStr = JSON.stringify(strKey);
           if (jsonStr.length > 40)
             jsonStr = jsonStr.substring(0, 36) + '..."';
-          log2.warn(ctx.doc.options.logLevel, `Keys with collection values will be stringified due to JS Object restrictions: ${jsonStr}. Set mapAsMap: true to use object keys.`);
+          log.warn(ctx.doc.options.logLevel, `Keys with collection values will be stringified due to JS Object restrictions: ${jsonStr}. Set mapAsMap: true to use object keys.`);
           ctx.mapKeyWarned = true;
         }
         return strKey;
@@ -8429,7 +8429,7 @@ var require_public_api = __commonJS({
     var composer = require_composer();
     var Document = require_Document();
     var errors = require_errors();
-    var log2 = require_log();
+    var log = require_log();
     var identity = require_identity();
     var lineCounter = require_line_counter();
     var parser = require_parser();
@@ -8481,7 +8481,7 @@ var require_public_api = __commonJS({
       const doc = parseDocument(src, options);
       if (!doc)
         return null;
-      doc.warnings.forEach((warning) => log2.warn(doc.options.logLevel, warning));
+      doc.warnings.forEach((warning) => log.warn(doc.options.logLevel, warning));
       if (doc.errors.length > 0) {
         if (doc.options.logLevel !== "silent")
           throw doc.errors[0];
@@ -10302,7 +10302,7 @@ function getStackSecrets(stackConfig) {
   return { secrets, missing };
 }
 async function discoverStackTools(stackId, stackConfig, options = {}) {
-  const { timeout = REQUEST_TIMEOUT_MS, log: log2 = () => {
+  const { timeout = REQUEST_TIMEOUT_MS, log = () => {
   } } = options;
   const launch = stackConfig.launch;
   if (!launch || !launch.bin) {
@@ -10329,7 +10329,7 @@ async function discoverStackTools(stackId, stackConfig, options = {}) {
   if (runtimePaths.length > 0) {
     env.PATH = runtimePaths.join(path9.delimiter) + path9.delimiter + (env.PATH || "");
   }
-  log2(`  Spawning ${stackId}...`);
+  log(`  Spawning ${stackId}...`);
   return new Promise((resolve) => {
     let resolved = false;
     let childProcess;
@@ -10493,7 +10493,7 @@ function createToolIndex() {
   };
 }
 async function indexAllStacks(options = {}) {
-  const { stacks: stackFilter, log: log2 = console.log, timeout } = options;
+  const { stacks: stackFilter, log = console.log, timeout } = options;
   const config = readRudiConfig();
   if (!config) {
     throw new Error("rudi.json not found");
@@ -10505,17 +10505,17 @@ async function indexAllStacks(options = {}) {
   for (const stackId of stackIds) {
     const stackConfig = config.stacks[stackId];
     if (!stackConfig) {
-      log2(`  \u26A0 Stack not found: ${stackId}`);
+      log(`  \u26A0 Stack not found: ${stackId}`);
       failed++;
       continue;
     }
     if (!stackConfig.installed) {
-      log2(`  \u26A0 Stack not installed: ${stackId}`);
+      log(`  \u26A0 Stack not installed: ${stackId}`);
       failed++;
       continue;
     }
-    log2(`Indexing ${stackId}...`);
-    const result = await discoverStackTools(stackId, stackConfig, { timeout, log: log2 });
+    log(`Indexing ${stackId}...`);
+    const result = await discoverStackTools(stackId, stackConfig, { timeout, log });
     index.byStack[stackId] = {
       indexedAt: (/* @__PURE__ */ new Date()).toISOString(),
       tools: result.tools,
@@ -10523,10 +10523,10 @@ async function indexAllStacks(options = {}) {
       missingSecrets: result.missingSecrets.length > 0 ? result.missingSecrets : void 0
     };
     if (result.error) {
-      log2(`  \u2717 ${result.error}`);
+      log(`  \u2717 ${result.error}`);
       failed++;
     } else {
-      log2(`  \u2713 ${result.tools.length} tools`);
+      log(`  \u2713 ${result.tools.length} tools`);
       indexed++;
     }
   }
@@ -15543,11 +15543,11 @@ var require_core = __commonJS({
     Ajv2.ValidationError = validation_error_1.default;
     Ajv2.MissingRefError = ref_error_1.default;
     exports2.default = Ajv2;
-    function checkOptions(checkOpts, options, msg, log2 = "error") {
+    function checkOptions(checkOpts, options, msg, log = "error") {
       for (const key in checkOpts) {
         const opt = key;
         if (opt in options)
-          this.logger[log2](`${msg}: option ${key}. ${checkOpts[opt]}`);
+          this.logger[log](`${msg}: option ${key}. ${checkOpts[opt]}`);
       }
     }
     function getSchEnv(keyRef) {
@@ -45904,12 +45904,12 @@ Use --force to re-index.`);
     console.log(`Indexing ${stacksToIndex.length} stack(s)...
 `);
   }
-  const log2 = jsonOutput ? () => {
+  const log = jsonOutput ? () => {
   } : console.log;
   try {
     const result = await indexAllStacks({
       stacks: stacksToIndex,
-      log: log2,
+      log,
       timeout: 2e4
       // 20s per stack
     });
@@ -48124,7 +48124,7 @@ function generatePermissionPattern(toolName, toolInput) {
   }
   return toolName;
 }
-function saveToolPermission(projectCwd, pattern, log2) {
+function saveToolPermission(projectCwd, pattern, log) {
   try {
     const settingsPath = import_path31.default.join(projectCwd, ".claude", "settings.local.json");
     let settings = {};
@@ -48137,12 +48137,12 @@ function saveToolPermission(projectCwd, pattern, log2) {
     settings.permissions.allow.push(pattern);
     import_fs33.default.mkdirSync(import_path31.default.dirname(settingsPath), { recursive: true });
     import_fs33.default.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
-    log2("agent", "info", "saved tool permission to settings.local.json", { pattern, path: settingsPath });
+    log("agent", "info", "saved tool permission to settings.local.json", { pattern, path: settingsPath });
   } catch (err) {
-    log2("agent", "warn", `failed to save tool permission: ${err.message}`);
+    log("agent", "warn", `failed to save tool permission: ${err.message}`);
   }
 }
-function ensurePermissionHook(log2) {
+function ensurePermissionHook(log) {
   const hookBinPath = import_path31.default.join(PATHS.home, "bins", "permission-hook");
   const hookScriptPath = import_path31.default.join(PATHS.home, "router", "permission-hook.js");
   const settingsPath = import_path31.default.join(import_os13.default.homedir(), ".claude", "settings.json");
@@ -48161,7 +48161,7 @@ function ensurePermissionHook(log2) {
       ""
     ].join("\n");
     import_fs33.default.writeFileSync(hookBinPath, shim, { mode: 493 });
-    log2("agent", "info", "installed permission hook shim", { path: hookBinPath });
+    log("agent", "info", "installed permission hook shim", { path: hookBinPath });
   }
   try {
     let settings = {};
@@ -48190,15 +48190,15 @@ function ensurePermissionHook(log2) {
       ];
       import_fs33.default.mkdirSync(import_path31.default.dirname(settingsPath), { recursive: true });
       import_fs33.default.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
-      log2("agent", "info", "installed PreToolUse hook in Claude settings", { path: settingsPath });
-      log2("agent", "warn", "Permission hook installed \u2014 you may need to approve it via /hooks in Claude CLI on first use");
+      log("agent", "info", "installed PreToolUse hook in Claude settings", { path: settingsPath });
+      log("agent", "warn", "Permission hook installed \u2014 you may need to approve it via /hooks in Claude CLI on first use");
     }
   } catch (err) {
-    log2("agent", "warn", `failed to update Claude settings for permission hook: ${err.message}`);
+    log("agent", "warn", `failed to update Claude settings for permission hook: ${err.message}`);
   }
 }
 function buildPermissionRoutes(ctx) {
-  const { json, error, readBody, log: log2, broadcast, agentProcesses, pendingPermissions, sessionAlwaysAllowed, groupAlwaysAllowed } = ctx;
+  const { json, error, readBody, log, broadcast, agentProcesses, pendingPermissions, sessionAlwaysAllowed, groupAlwaysAllowed } = ctx;
   return async (req, res, url) => {
     if (req.method === "POST" && url.pathname === "/agent/permission-request") {
       const body = await readBody(req);
@@ -48206,7 +48206,7 @@ function buildPermissionRoutes(ctx) {
       if (!requestId || !rudiSessionId) return error(res, "requestId and rudiSessionId required");
       const createdAt = Date.now();
       const batchId = deriveBatchId(rudiSessionId, toolName, createdAt);
-      log2("agent", "info", "permission request from hook", {
+      log("agent", "info", "permission request from hook", {
         requestId: requestId.slice(0, 8),
         rudiSessionId: rudiSessionId.slice(0, 8),
         toolName,
@@ -48214,7 +48214,7 @@ function buildPermissionRoutes(ctx) {
       });
       const allowed = sessionAlwaysAllowed.get(rudiSessionId);
       if (allowed && allowed.has(toolName)) {
-        log2("agent", "debug", "auto-allowing tool (session always-allowed)", { toolName, sessionId: rudiSessionId.slice(0, 8) });
+        log("agent", "debug", "auto-allowing tool (session always-allowed)", { toolName, sessionId: rudiSessionId.slice(0, 8) });
         pendingPermissions.set(requestId, {
           rudiSessionId,
           claudeSessionId,
@@ -48232,7 +48232,7 @@ function buildPermissionRoutes(ctx) {
       }
       const processEntry = agentProcesses.get(rudiSessionId);
       if (processEntry && processEntry.permissionMode === "dangerouslySkipPermissions") {
-        log2("agent", "debug", "auto-allowing tool (YOLO mode)", { toolName, sessionId: rudiSessionId.slice(0, 8) });
+        log("agent", "debug", "auto-allowing tool (YOLO mode)", { toolName, sessionId: rudiSessionId.slice(0, 8) });
         pendingPermissions.set(requestId, {
           rudiSessionId,
           claudeSessionId,
@@ -48251,7 +48251,7 @@ function buildPermissionRoutes(ctx) {
       if (processEntry?.runGroupId) {
         const groupAllowed = groupAlwaysAllowed?.get(processEntry.runGroupId);
         if (groupAllowed?.has(toolName) || processEntry.permissionMode === "dangerouslySkipPermissions") {
-          log2("agent", "debug", "auto-allowing tool (run-group)", { toolName, sessionId: rudiSessionId.slice(0, 8), groupId: processEntry.runGroupId });
+          log("agent", "debug", "auto-allowing tool (run-group)", { toolName, sessionId: rudiSessionId.slice(0, 8), groupId: processEntry.runGroupId });
           pendingPermissions.set(requestId, {
             rudiSessionId,
             claudeSessionId,
@@ -48270,7 +48270,7 @@ function buildPermissionRoutes(ctx) {
       }
       const projectCwd = processEntry?.cwd;
       if (projectCwd && isToolAllowedByProject(projectCwd, toolName, toolInput)) {
-        log2("agent", "debug", "auto-allowing tool (project settings)", { toolName, sessionId: rudiSessionId.slice(0, 8) });
+        log("agent", "debug", "auto-allowing tool (project settings)", { toolName, sessionId: rudiSessionId.slice(0, 8) });
         pendingPermissions.set(requestId, {
           rudiSessionId,
           claudeSessionId,
@@ -48381,25 +48381,25 @@ function buildPermissionRoutes(ctx) {
               sessionAlwaysAllowed.set(entry.rudiSessionId, /* @__PURE__ */ new Set());
             }
             sessionAlwaysAllowed.get(entry.rudiSessionId).add(entry.toolName);
-            log2("agent", "info", "added to always-allowed", { toolName: entry.toolName, sessionId: entry.rudiSessionId.slice(0, 8) });
+            log("agent", "info", "added to always-allowed", { toolName: entry.toolName, sessionId: entry.rudiSessionId.slice(0, 8) });
             const proc_ = agentProcesses.get(entry.rudiSessionId);
             if (proc_?.runGroupId && groupAlwaysAllowed) {
               if (!groupAlwaysAllowed.has(proc_.runGroupId)) {
                 groupAlwaysAllowed.set(proc_.runGroupId, /* @__PURE__ */ new Set());
               }
               groupAlwaysAllowed.get(proc_.runGroupId).add(entry.toolName);
-              log2("agent", "info", "added to group always-allowed", { toolName: entry.toolName, groupId: proc_.runGroupId });
+              log("agent", "info", "added to group always-allowed", { toolName: entry.toolName, groupId: proc_.runGroupId });
             }
             const proc = agentProcesses.get(entry.rudiSessionId);
             if (proc?.cwd) {
               const pattern = generatePermissionPattern(entry.toolName, entry.toolInput);
-              saveToolPermission(proc.cwd, pattern, log2);
+              saveToolPermission(proc.cwd, pattern, log);
             }
           }
         } else {
           decision = { permissionDecision: "deny", reason: "Denied by user in RUDI" };
         }
-        log2("agent", "info", "permission response via hook", {
+        log("agent", "info", "permission response via hook", {
           requestId: requestId.slice(0, 8),
           response,
           permissionDecision: decision.permissionDecision,
@@ -48420,7 +48420,7 @@ function buildPermissionRoutes(ctx) {
             }
           }
           if (batchResolved > 0) {
-            log2("agent", "info", `batch-resolved ${batchResolved} sibling(s)`, {
+            log("agent", "info", `batch-resolved ${batchResolved} sibling(s)`, {
               batchId: entry.batchId.slice(-12)
             });
           }
@@ -48429,7 +48429,7 @@ function buildPermissionRoutes(ctx) {
         return true;
       }
       if (!requestId) {
-        log2("agent", "warn", "permission response missing requestId \u2014 legacy stdin path removed", { sessionId: sessionId?.slice(0, 8), response });
+        log("agent", "warn", "permission response missing requestId \u2014 legacy stdin path removed", { sessionId: sessionId?.slice(0, 8), response });
         return error(res, "requestId required (legacy stdin path removed)", 400);
       }
       return error(res, "sessionId or requestId required");
@@ -49927,7 +49927,7 @@ function transitionSessionStatus(db3, sessionId, toStatus, options = {}) {
   warnRejectedTransition(sessionId, toStatus, validFromStates, row?.status || null);
   return false;
 }
-function autoNameSession(entry, providerSessionId, firstMessage, cwd, broadcast, log2) {
+function autoNameSession(entry, providerSessionId, firstMessage, cwd, broadcast, log) {
   setImmediate(async () => {
     try {
       const binaryPath = resolveClaudeBinary();
@@ -49979,9 +49979,9 @@ User request: ${(firstMessage || "").slice(0, 1e3)}`;
         `).run(title, (/* @__PURE__ */ new Date()).toISOString(), providerSessionId);
       });
       broadcast("session:titled", { sessionId: providerSessionId, title });
-      log2("agent", "info", `auto-named session ${providerSessionId.slice(0, 8)}: "${title}"`);
+      log("agent", "info", `auto-named session ${providerSessionId.slice(0, 8)}: "${title}"`);
     } catch (err) {
-      log2("agent", "warn", `auto-name failed: ${err.message}`);
+      log("agent", "warn", `auto-name failed: ${err.message}`);
     }
   });
 }
@@ -50036,7 +50036,7 @@ function broadcastProcessCount({ broadcast, agentProcesses, maxConcurrent }) {
 function normalizeHeader(val) {
   return Array.isArray(val) ? val[0] : val || "";
 }
-function buildUserContent(text, images, cwd, log2) {
+function buildUserContent(text, images, cwd, log) {
   if (!images || images.length === 0) return text;
   const imgDir = import_path37.default.join(cwd || import_os16.default.homedir(), ".rudi", "images");
   import_fs38.default.mkdirSync(imgDir, { recursive: true });
@@ -50047,7 +50047,7 @@ function buildUserContent(text, images, cwd, log2) {
     const filePath = import_path37.default.join(imgDir, filename);
     import_fs38.default.writeFileSync(filePath, Buffer.from(img.data, "base64"));
     paths.push(filePath);
-    log2("agent", "info", `saved pasted image to ${filePath}`, { size: img.data.length, mediaType: img.mediaType });
+    log("agent", "info", `saved pasted image to ${filePath}`, { size: img.data.length, mediaType: img.mediaType });
   }
   const imageRefs = paths.map((p2) => `[Pasted image: ${p2}]`).join("\n");
   return text ? `${imageRefs}
@@ -50068,7 +50068,7 @@ function getRepoRoot(cwd) {
   const absGitDir = import_path38.default.resolve(cwd, gitCommonDir);
   return import_path38.default.dirname(absGitDir);
 }
-function createSessionWorktree({ repoRoot, currentBranch, shortId, log: log2 }) {
+function createSessionWorktree({ repoRoot, currentBranch, shortId, log }) {
   const safeBranchDir = (currentBranch || "detached").replace(/\//g, "-");
   const worktreesBase = import_path38.default.join(repoRoot, ".rudi", "worktrees");
   let worktreeDir = import_path38.default.join(worktreesBase, safeBranchDir);
@@ -50103,9 +50103,9 @@ function createSessionWorktree({ repoRoot, currentBranch, shortId, log: log2 }) 
       worktreePath = worktreeDir;
       worktreeBranch = branchName;
     } else {
-      log2("agent", "warn", `worktree dir missing after creation, using shared cwd`, { sessionId: shortId });
+      log("agent", "warn", `worktree dir missing after creation, using shared cwd`, { sessionId: shortId });
     }
-    log2("agent", "info", `worktree created on branch ${branchName}: ${worktreeDir}`, { sessionId: shortId });
+    log("agent", "info", `worktree created on branch ${branchName}: ${worktreeDir}`, { sessionId: shortId });
     let gitignoreWarning = false;
     try {
       const gitignorePath = import_path38.default.join(repoRoot, ".gitignore");
@@ -50118,18 +50118,18 @@ function createSessionWorktree({ repoRoot, currentBranch, shortId, log: log2 }) 
     }
     return { worktreePath, worktreeBranch, gitignoreWarning };
   } catch (wtErr) {
-    log2("agent", "warn", `worktree creation failed, using shared cwd: ${wtErr.message}`, { sessionId: shortId });
+    log("agent", "warn", `worktree creation failed, using shared cwd: ${wtErr.message}`, { sessionId: shortId });
     return { worktreePath: null, worktreeBranch: null, gitignoreWarning: false };
   }
 }
-function restoreSessionWorktree({ resumeSessionId, repoRoot, currentBranch, shortId, log: log2 }) {
+function restoreSessionWorktree({ resumeSessionId, repoRoot, currentBranch, shortId, log }) {
   try {
     const db3 = getDb();
     const row = db3.prepare(
       "SELECT worktree_path, worktree_branch, base_branch FROM session_runtime_state WHERE session_id = ? OR resume_session_id = ?"
     ).get(resumeSessionId, resumeSessionId);
     if (row?.worktree_path && import_fs39.default.existsSync(row.worktree_path)) {
-      log2("agent", "info", `resumed into existing worktree: ${row.worktree_path}`, { sessionId: shortId });
+      log("agent", "info", `resumed into existing worktree: ${row.worktree_path}`, { sessionId: shortId });
       return {
         worktreePath: row.worktree_path,
         worktreeBranch: row.worktree_branch,
@@ -50145,22 +50145,22 @@ function restoreSessionWorktree({ resumeSessionId, repoRoot, currentBranch, shor
           `git worktree add ${JSON.stringify(worktreeDir)} ${row.worktree_branch}`,
           { cwd: repoRoot, stdio: "pipe" }
         );
-        log2("agent", "info", `recreated worktree from existing branch: ${worktreeDir}`, { sessionId: shortId });
+        log("agent", "info", `recreated worktree from existing branch: ${worktreeDir}`, { sessionId: shortId });
         return {
           worktreePath: worktreeDir,
           worktreeBranch: row.worktree_branch,
           baseBranch: row.base_branch || currentBranch
         };
       } catch (recreateErr) {
-        log2("agent", "warn", `worktree recreate failed: ${recreateErr.message}`, { sessionId: shortId });
+        log("agent", "warn", `worktree recreate failed: ${recreateErr.message}`, { sessionId: shortId });
       }
     }
   } catch (dbErr) {
-    log2("agent", "warn", `worktree DB lookup failed: ${dbErr.message}`, { sessionId: shortId });
+    log("agent", "warn", `worktree DB lookup failed: ${dbErr.message}`, { sessionId: shortId });
   }
   return { worktreePath: null, worktreeBranch: null, baseBranch: currentBranch };
 }
-function createChildWorktree({ parentRepoRoot, sanitizedDesc, resolvedBaseRef, shortId, log: log2 }) {
+function createChildWorktree({ parentRepoRoot, sanitizedDesc, resolvedBaseRef, shortId, log }) {
   const worktreesBase = import_path38.default.join(parentRepoRoot, ".rudi", "worktrees");
   import_fs39.default.mkdirSync(worktreesBase, { recursive: true });
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -50183,7 +50183,7 @@ function createChildWorktree({ parentRepoRoot, sanitizedDesc, resolvedBaseRef, s
       } catch {
       }
       if (attempt === 4) {
-        log2("agent", "error", `worktree creation failed after 5 attempts: ${wtErr.message}`, { sessionId: shortId });
+        log("agent", "error", `worktree creation failed after 5 attempts: ${wtErr.message}`, { sessionId: shortId });
         throw new Error("WORKTREE_BRANCH_COLLISION");
       }
     }
@@ -50671,6 +50671,66 @@ function _safeStringify(value) {
 function _toNumber(value, fallback = 0) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
+function _truncateSnippet(text, maxChars = 200) {
+  if (typeof text !== "string") return null;
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  return trimmed.length <= maxChars ? trimmed : trimmed.slice(0, maxChars);
+}
+function _contentToSnippet(content, maxChars = 200) {
+  if (!Array.isArray(content)) return null;
+  for (let idx = content.length - 1; idx >= 0; idx -= 1) {
+    const block = content[idx];
+    if (!block || typeof block !== "object") continue;
+    if (block.type === "text") {
+      const snippet = _truncateSnippet(block.text, maxChars);
+      if (snippet) return snippet;
+    }
+    if (block.type === "thinking") {
+      const snippet = _truncateSnippet(block.thinking, maxChars);
+      if (snippet) return snippet;
+    }
+    if (block.type === "tool_result") {
+      if (typeof block.content === "string") {
+        const snippet = _truncateSnippet(block.content, maxChars);
+        if (snippet) return snippet;
+      }
+      if (Array.isArray(block.content)) {
+        for (const item of block.content) {
+          const snippet = _truncateSnippet(item?.text, maxChars);
+          if (snippet) return snippet;
+        }
+      }
+    }
+    if (block.type === "tool_use" && typeof block.name === "string" && block.name.trim()) {
+      return `Tool: ${block.name.trim()}`;
+    }
+  }
+  return null;
+}
+function extractEventSnippet(event, maxChars = 200) {
+  if (!event || typeof event !== "object") return null;
+  if (event.type === "assistant") {
+    return _contentToSnippet(event.content, maxChars);
+  }
+  if (event.type === "result") {
+    return _truncateSnippet(event.result, maxChars);
+  }
+  if (event.type === "system") {
+    return _truncateSnippet(event.message, maxChars);
+  }
+  if (event.type === "error") {
+    return _truncateSnippet(event.message, maxChars);
+  }
+  return null;
+}
+function _updateLiveProgress(entry, event) {
+  const snippet = extractEventSnippet(event);
+  if (!snippet) return;
+  entry.lastProgressSnippet = snippet;
+  entry.lastProgressType = event.type;
+  entry.lastProgressAt = (/* @__PURE__ */ new Date()).toISOString();
+}
 function _normalizeCompaction(compaction) {
   if (!compaction || typeof compaction !== "object") return null;
   const normalized = {
@@ -50820,6 +50880,7 @@ function attachStdoutHandler(ctx, sessionId, entry, options = {}) {
             rawEvent: raw
             // provider-native (for debugging + future upgrades)
           });
+          _updateLiveProgress(entry, event);
           _persistRuntimeMilestone(sessionId, entry, event, raw);
           if (event.type === "result" && onResult) {
             onResult(event);
@@ -50877,6 +50938,7 @@ function flushStdoutBuffer(ctx, sessionId, entry) {
     }
     for (const { normalized, raw } of results) {
       if (!normalized) continue;
+      _updateLiveProgress(entry, normalized);
       _persistRuntimeMilestone(sessionId, entry, normalized, raw);
       ctx.broadcast("agent:event", {
         sessionId,
@@ -51020,14 +51082,14 @@ function reserveRetryDelay(entry) {
   return delay;
 }
 function respawnFromRetryContext(ctx, sessionId, entry) {
-  const { log: log2, broadcast, agentProcesses } = ctx;
+  const { log, broadcast, agentProcesses } = ctx;
   const rc = entry._retryContext;
   const shortId = sessionId.slice(0, 8);
   clearRetryTimer(entry);
   if (entry._terminationReason === "stopped" || !agentProcesses.has(sessionId)) {
     return;
   }
-  log2("agent", "info", "retry respawn started", {
+  log("agent", "info", "retry respawn started", {
     sessionId: shortId,
     attempt: entry._retryState.count + 1
   });
@@ -51064,7 +51126,7 @@ function respawnFromRetryContext(ctx, sessionId, entry) {
           entry._stderrText
         ].filter(Boolean).join(" ");
         const classification = classifyError(errorText, exitCode);
-        log2("agent", "info", "error classified", {
+        log("agent", "info", "error classified", {
           sessionId: shortId,
           code: classification.code,
           category: classification.category,
@@ -51073,7 +51135,7 @@ function respawnFromRetryContext(ctx, sessionId, entry) {
         });
         if (isRetryable(classification) && canRetry(entry._retryState)) {
           const delay = reserveRetryDelay(entry);
-          log2("agent", "info", "retry scheduled", {
+          log("agent", "info", "retry scheduled", {
             sessionId: shortId,
             retryCount: entry._retryState.count,
             maxRetries: entry._retryState.maxRetries,
@@ -51103,7 +51165,7 @@ function respawnFromRetryContext(ctx, sessionId, entry) {
         }
       }
       retryFinalized = true;
-      log2("agent", "info", `retry process exited code=${exitCode}`, { sessionId: shortId });
+      log("agent", "info", `retry process exited code=${exitCode}`, { sessionId: shortId });
       flushStdoutBuffer(ctx, sessionId, entry);
       const finalStatus = entry._terminationReason || (exitCode === 0 ? "completed" : "error");
       dbWrite((db3) => {
@@ -51128,7 +51190,7 @@ function respawnFromRetryContext(ctx, sessionId, entry) {
         }
       });
       if (finalStatus === "error") {
-        log2("agent", "warn", "retry exhausted", {
+        log("agent", "warn", "retry exhausted", {
           sessionId: shortId,
           finalErrorCode: "PROCESS_EXIT",
           totalAttempts: entry._retryState.count + 1
@@ -51160,13 +51222,13 @@ function respawnFromRetryContext(ctx, sessionId, entry) {
           providerSessionId: entry.providerSessionId || null,
           runGroupId: rc.runGroupId
         })).catch((err) => {
-          log2("agent", "warn", `retry close handler failed: ${err.message}`, { sessionId: shortId });
+          log("agent", "warn", `retry close handler failed: ${err.message}`, { sessionId: shortId });
         });
       }
     });
     proc.on("error", (err) => {
       if (retryFinalized) return;
-      log2("agent", "error", `retry spawn error: ${err.message}`, { sessionId: shortId });
+      log("agent", "error", `retry spawn error: ${err.message}`, { sessionId: shortId });
       const errorText = err.message + " " + (entry._stderrText || "");
       const classification = classifyError(errorText, null);
       if (isRetryable(classification) && canRetry(entry._retryState)) {
@@ -51221,7 +51283,7 @@ function respawnFromRetryContext(ctx, sessionId, entry) {
         type: "user",
         message: {
           role: "user",
-          content: buildUserContent(rc.prompt, rc.images, entry.cwd, log2)
+          content: buildUserContent(rc.prompt, rc.images, entry.cwd, log)
         }
       }) + "\n";
       proc.stdin.write(inputMsg);
@@ -51230,10 +51292,10 @@ function respawnFromRetryContext(ctx, sessionId, entry) {
       proc.stdin.end();
     }
     proc.stdin.on("error", (err) => {
-      log2("agent", "warn", `retry stdin error (EPIPE/destroyed): ${err.message}`, { sessionId: shortId });
+      log("agent", "warn", `retry stdin error (EPIPE/destroyed): ${err.message}`, { sessionId: shortId });
     });
   } catch (err) {
-    log2("agent", "error", `retry respawn failed: ${err.message}`, { sessionId: shortId });
+    log("agent", "error", `retry respawn failed: ${err.message}`, { sessionId: shortId });
     dbWrite((db3) => {
       const now = (/* @__PURE__ */ new Date()).toISOString();
       transitionSessionStatus(db3, sessionId, "error", {
@@ -51249,7 +51311,7 @@ function respawnFromRetryContext(ctx, sessionId, entry) {
 }
 function spawnAgentProcess(ctx, options) {
   const {
-    log: log2,
+    log,
     broadcast,
     agentProcesses,
     queueSessionsUpdated,
@@ -51378,24 +51440,24 @@ function spawnAgentProcess(ctx, options) {
     workingDir,
     effectiveCwd
   };
-  log2("agent", "info", `process spawned pid=${proc.pid}`, { sessionId: shortId, provider });
+  log("agent", "info", `process spawned pid=${proc.pid}`, { sessionId: shortId, provider });
   const stdinMode = stdinModeOverride || providerConfig?.headless?.stdin;
   if (stdinMode === "pipe" && !stdinModeOverride && hasCapability(providerConfig, "inputStreaming")) {
     const inputMsg = JSON.stringify({
       type: "user",
-      message: { role: "user", content: buildUserContent(prompt, images, effectiveCwd, log2) }
+      message: { role: "user", content: buildUserContent(prompt, images, effectiveCwd, log) }
     }) + "\n";
     if (proc.stdin.writable) {
       proc.stdin.write(inputMsg);
-      log2("agent", "debug", "wrote first prompt to stdin (stream-json)", { sessionId: shortId });
+      log("agent", "debug", "wrote first prompt to stdin (stream-json)", { sessionId: shortId });
     } else {
-      log2("agent", "warn", "stdin not writable, skipping initial prompt write", { sessionId: shortId });
+      log("agent", "warn", "stdin not writable, skipping initial prompt write", { sessionId: shortId });
     }
   } else if (stdinMode === "close") {
     proc.stdin.end();
-    log2("agent", "debug", "closed stdin (prompt delivered via args)", { sessionId: shortId });
+    log("agent", "debug", "closed stdin (prompt delivered via args)", { sessionId: shortId });
   } else if (stdinMode === "pipe") {
-    log2("agent", "debug", "stdin pipe open (prompt delivered via args)", { sessionId: shortId });
+    log("agent", "debug", "stdin pipe open (prompt delivered via args)", { sessionId: shortId });
   }
   attachStdoutHandler(ctx, sessionId, entry, {
     setRunningOnCapture,
@@ -51475,7 +51537,7 @@ function spawnAgentProcess(ctx, options) {
         }
       });
       if (autoNameOnFirstTurn && turnNumber === 1 && providerSid) {
-        autoNameSession(entry, providerSid, turnPrompt, workingDir, broadcast, log2);
+        autoNameSession(entry, providerSid, turnPrompt, workingDir, broadcast, log);
       }
       if (typeof onTurnResult === "function") {
         onTurnResult({
@@ -51529,7 +51591,7 @@ function spawnAgentProcess(ctx, options) {
         entry._stderrText
       ].filter(Boolean).join(" ");
       const classification = classifyError(errorText, exitCode);
-      log2("agent", "info", "error classified", {
+      log("agent", "info", "error classified", {
         sessionId: shortId,
         code: classification.code,
         category: classification.category,
@@ -51538,7 +51600,7 @@ function spawnAgentProcess(ctx, options) {
       });
       if (isRetryable(classification) && canRetry(entry._retryState)) {
         const delay = reserveRetryDelay(entry);
-        log2("agent", "info", "retry scheduled", {
+        log("agent", "info", "retry scheduled", {
           sessionId: shortId,
           retryCount: entry._retryState.count,
           maxRetries: entry._retryState.maxRetries,
@@ -51568,7 +51630,7 @@ function spawnAgentProcess(ctx, options) {
       }
     }
     finalized = true;
-    log2("agent", "info", `process exited code=${exitCode}`, { sessionId: shortId, provider, source });
+    log("agent", "info", `process exited code=${exitCode}`, { sessionId: shortId, provider, source });
     flushStdoutBuffer(ctx, sessionId, entry);
     const finalStatus = entry._terminationReason || (exitCode === 0 ? "completed" : "error");
     dbWrite((db3) => {
@@ -51627,20 +51689,20 @@ function spawnAgentProcess(ctx, options) {
         providerSessionId: entry.providerSessionId || null,
         runGroupId
       })).catch((err) => {
-        log2("agent", "warn", `process close handler failed: ${err.message}`, { sessionId: shortId, provider });
+        log("agent", "warn", `process close handler failed: ${err.message}`, { sessionId: shortId, provider });
       });
     }
   };
   proc.on("close", (exitCode) => finalizeClose(exitCode, "close"));
   proc.on("exit", () => maybeCleanupMcpConfig());
   proc.stdin.on("error", (err) => {
-    log2("agent", "warn", `stdin error (EPIPE/destroyed): ${err.message}`, { sessionId: shortId });
+    log("agent", "warn", `stdin error (EPIPE/destroyed): ${err.message}`, { sessionId: shortId });
   });
   proc.on("error", (err) => {
     if (finalized) return;
     const errorText = err.message + " " + (entry._stderrText || "");
     const classification = classifyError(errorText, null);
-    log2("agent", "info", "error classified", {
+    log("agent", "info", "error classified", {
       sessionId: shortId,
       code: classification.code,
       category: classification.category,
@@ -51649,7 +51711,7 @@ function spawnAgentProcess(ctx, options) {
     });
     if (isRetryable(classification) && canRetry(entry._retryState)) {
       const delay = reserveRetryDelay(entry);
-      log2("agent", "info", "retry scheduled", {
+      log("agent", "info", "retry scheduled", {
         sessionId: shortId,
         retryCount: entry._retryState.count,
         maxRetries: entry._retryState.maxRetries,
@@ -51678,7 +51740,7 @@ function spawnAgentProcess(ctx, options) {
       return;
     }
     finalized = true;
-    log2("agent", "error", `spawn error: ${err.message}`, { sessionId: shortId, provider });
+    log("agent", "error", `spawn error: ${err.message}`, { sessionId: shortId, provider });
     broadcast("agent:error", { sessionId, error: err.message });
     dbWrite((db3) => {
       const now = (/* @__PURE__ */ new Date()).toISOString();
@@ -51727,7 +51789,7 @@ function buildStartRoute(ctx) {
     json,
     error,
     readBody,
-    log: log2,
+    log,
     broadcast,
     agentProcesses,
     queueSessionsUpdated,
@@ -51742,7 +51804,7 @@ function buildStartRoute(ctx) {
   return async (req, res, url) => {
     if (req.method !== "POST" || url.pathname !== "/agent/start") return false;
     const body = await readBody(req, { maxBodySize: MAX_AGENT_BODY_SIZE });
-    log2("agent", "info", "received /agent/start request", { bodyKeys: Object.keys(body), resumeSessionId: body.resumeSessionId || null });
+    log("agent", "info", "received /agent/start request", { bodyKeys: Object.keys(body), resumeSessionId: body.resumeSessionId || null });
     const {
       prompt,
       provider: requestedProvider,
@@ -51771,7 +51833,7 @@ function buildStartRoute(ctx) {
       const reusable = resolveReusableEntry(resumeSessionId, { agentProcesses, resumeSessionIndex });
       if (reusable) {
         const { sessionId: existingId, entry } = reusable;
-        log2("agent", "info", `reusing existing process for resume ${resumeSessionId.slice(0, 8)}`, {
+        log("agent", "info", `reusing existing process for resume ${resumeSessionId.slice(0, 8)}`, {
           existingSessionId: existingId.slice(0, 8)
         });
         entry.turnActive = true;
@@ -51788,9 +51850,9 @@ function buildStartRoute(ctx) {
             UPDATE session_runtime_state SET updated_at = ? WHERE session_id = ?
           `).run((/* @__PURE__ */ new Date()).toISOString(), existingId);
         });
-        const inputMsg = JSON.stringify({ type: "user", message: { role: "user", content: buildUserContent(prompt, images, entry.cwd, log2) } }) + "\n";
+        const inputMsg = JSON.stringify({ type: "user", message: { role: "user", content: buildUserContent(prompt, images, entry.cwd, log) } }) + "\n";
         if (!entry.proc.stdin.writable) {
-          log2("agent", "warn", "reused process stdin not writable, cannot resume", { sessionId: existingId.slice(0, 8) });
+          log("agent", "warn", "reused process stdin not writable, cannot resume", { sessionId: existingId.slice(0, 8) });
         } else {
           entry.proc.stdin.write(inputMsg);
           broadcast("agent:event", {
@@ -51808,17 +51870,17 @@ function buildStartRoute(ctx) {
       }
     }
     if (resumeSessionId && pendingStarts.has(resumeSessionId)) {
-      log2("agent", "info", "concurrent start for same session, waiting for in-flight request", { resumeSessionId: resumeSessionId.slice(0, 8) });
+      log("agent", "info", "concurrent start for same session, waiting for in-flight request", { resumeSessionId: resumeSessionId.slice(0, 8) });
       try {
         const result = await pendingStarts.get(resumeSessionId);
         return json(res, { ...result, reused: true });
       } catch (err) {
-        log2("agent", "warn", "in-flight start failed, proceeding with new start", { resumeSessionId: resumeSessionId.slice(0, 8), error: err.message });
+        log("agent", "warn", "in-flight start failed, proceeding with new start", { resumeSessionId: resumeSessionId.slice(0, 8), error: err.message });
       }
     }
     const aliveCount = countAlive(agentProcesses);
     if (aliveCount >= maxConcurrent) {
-      log2("agent", "warn", `max concurrent limit reached (${aliveCount}/${maxConcurrent})`);
+      log("agent", "warn", `max concurrent limit reached (${aliveCount}/${maxConcurrent})`);
       json(res, {
         error: `Too many active agent processes (${aliveCount}/${maxConcurrent}). Stop an existing session or wait for one to finish.`
       }, 429);
@@ -51826,7 +51888,7 @@ function buildStartRoute(ctx) {
     }
     const binaryPath = resolveProviderBinary(providerConfig);
     if (!binaryPath) {
-      log2("agent", "error", `${providerConfig.name} CLI not found`);
+      log("agent", "error", `${providerConfig.name} CLI not found`);
       return error(res, `${providerConfig.name} CLI not found. Run: rudi install agent:${provider}`, 500);
     }
     const sessionId = import_crypto6.default.randomUUID();
@@ -51855,16 +51917,16 @@ function buildStartRoute(ctx) {
           `).get(resumeSessionId, resumeSessionId, resumeSessionId);
           resolvedResumeSid = row?.provider_session_id || null;
         } catch (err) {
-          log2("agent", "warn", `Failed to look up provider session ID: ${err.message}`, { resumeSessionId: resumeSessionId.slice(0, 8) });
+          log("agent", "warn", `Failed to look up provider session ID: ${err.message}`, { resumeSessionId: resumeSessionId.slice(0, 8) });
         }
       }
       if (!resolvedResumeSid && resumeSessionId.length > 20) {
         resolvedResumeSid = resumeSessionId;
       }
       if (resolvedResumeSid) {
-        log2("agent", "info", `resuming with provider session: ${resolvedResumeSid.slice(0, 8)}`, { resumeSessionId: resumeSessionId.slice(0, 8) });
+        log("agent", "info", `resuming with provider session: ${resolvedResumeSid.slice(0, 8)}`, { resumeSessionId: resumeSessionId.slice(0, 8) });
       } else {
-        log2("agent", "warn", `No provider session ID found for resume, starting fresh session`, { resumeSessionId: resumeSessionId.slice(0, 8) });
+        log("agent", "warn", `No provider session ID found for resume, starting fresh session`, { resumeSessionId: resumeSessionId.slice(0, 8) });
       }
     }
     let permissionModeKey = null;
@@ -51911,7 +51973,7 @@ function buildStartRoute(ctx) {
         const fallbackKey = modes.agent ? "agent" : Object.keys(modes)[0];
         if (fallbackKey) {
           args.push(...getPermissionArgs(providerConfig, fallbackKey));
-          log2("agent", "info", `permission mode '${permissionModeKey}' not available for ${provider}, using '${fallbackKey}'`);
+          log("agent", "info", `permission mode '${permissionModeKey}' not available for ${provider}, using '${fallbackKey}'`);
         }
       }
     }
@@ -51946,9 +52008,9 @@ function buildStartRoute(ctx) {
             ...expandConditional(providerConfig, "mcpConfig", mcpConfigPath),
             ...expandConditional(providerConfig, "strictMcpConfig", true)
           );
-          log2("agent", "info", `injected spawn MCP config: ${mcpConfigPath}`, { sessionId: shortId, serverCount: Object.keys(mergedConfig.mcpServers).length });
+          log("agent", "info", `injected spawn MCP config: ${mcpConfigPath}`, { sessionId: shortId, serverCount: Object.keys(mergedConfig.mcpServers).length });
         } catch (mcpErr) {
-          log2("agent", "warn", `MCP config injection failed: ${mcpErr.message}`, { sessionId: shortId });
+          log("agent", "warn", `MCP config injection failed: ${mcpErr.message}`, { sessionId: shortId });
         }
       }
     }
@@ -51986,7 +52048,7 @@ function buildStartRoute(ctx) {
     if (isGitRepo && repoRoot && currentBranch) {
       if (!resumeSessionId) {
         if (shouldUseWorktree) {
-          const wt2 = createSessionWorktree({ repoRoot, currentBranch, shortId, log: log2 });
+          const wt2 = createSessionWorktree({ repoRoot, currentBranch, shortId, log });
           if (wt2.worktreePath) {
             worktreePath = wt2.worktreePath;
             worktreeBranch = wt2.worktreeBranch;
@@ -51995,7 +52057,7 @@ function buildStartRoute(ctx) {
           }
         }
       } else {
-        const restored = restoreSessionWorktree({ resumeSessionId, repoRoot, currentBranch, shortId, log: log2 });
+        const restored = restoreSessionWorktree({ resumeSessionId, repoRoot, currentBranch, shortId, log });
         if (restored.worktreePath) {
           worktreePath = restored.worktreePath;
           worktreeBranch = restored.worktreeBranch;
@@ -52019,7 +52081,7 @@ function buildStartRoute(ctx) {
         }
       });
       if (fallback) {
-        log2("agent", "warn", `spawn cwd missing, falling back to: ${fallback}`, {
+        log("agent", "warn", `spawn cwd missing, falling back to: ${fallback}`, {
           sessionId: shortId,
           missingCwd: effectiveCwd
         });
@@ -52027,7 +52089,7 @@ function buildStartRoute(ctx) {
         effectiveCwd = fallback;
       }
     }
-    log2("agent", "info", `spawning ${provider} agent`, {
+    log("agent", "info", `spawning ${provider} agent`, {
       sessionId: shortId,
       provider,
       binary: binaryPath,
@@ -52109,7 +52171,7 @@ function buildStartRoute(ctx) {
           completedAt: (/* @__PURE__ */ new Date()).toISOString()
         });
       });
-      log2("agent", "error", `Failed to spawn: ${err.message}`);
+      log("agent", "error", `Failed to spawn: ${err.message}`);
       error(res, `Failed to spawn agent: ${err.message}`, 500);
     } finally {
       if (resumeSessionId) pendingStarts.delete(resumeSessionId);
@@ -52125,7 +52187,7 @@ function buildLifecycleRoutes(ctx) {
     json,
     error,
     readBody,
-    log: log2,
+    log,
     broadcast,
     agentProcesses,
     maxConcurrent,
@@ -52192,7 +52254,7 @@ function buildLifecycleRoutes(ctx) {
       if (!entry || !entry.proc || entry.proc.killed) {
         return error(res, "No active process for this session \u2014 start a new one via /agent/start", 400);
       }
-      log2("agent", "info", "sending follow-up via stdin", {
+      log("agent", "info", "sending follow-up via stdin", {
         sessionId: body.sessionId.slice(0, 8),
         prompt: body.message.slice(0, 80)
       });
@@ -52209,7 +52271,7 @@ function buildLifecycleRoutes(ctx) {
         entry._turnCacheReadTokens = 0;
         entry._turnCacheCreationTokens = 0;
         entry._turnToolsUsed = [];
-        const inputMsg = JSON.stringify({ type: "user", message: { role: "user", content: buildUserContent(body.message, body.images, entry.cwd, log2) } }) + "\n";
+        const inputMsg = JSON.stringify({ type: "user", message: { role: "user", content: buildUserContent(body.message, body.images, entry.cwd, log) } }) + "\n";
         if (!entry.proc.stdin.writable) {
           return error(res, "Process stdin is no longer writable \u2014 the agent may have exited", 410);
         }
@@ -52227,7 +52289,7 @@ function buildLifecycleRoutes(ctx) {
       if (!entry || !entry.proc || entry.proc.killed) {
         return error(res, "No active process for this session", 400);
       }
-      log2("agent", "info", "sending tool result via stdin", {
+      log("agent", "info", "sending tool result via stdin", {
         sessionId: body.sessionId.slice(0, 8),
         toolUseId: body.toolUseId.slice(0, 12)
       });
@@ -52310,7 +52372,7 @@ function buildLifecycleRoutes(ctx) {
           broadcast("agent:stopped", { sessionId });
         }
       }
-      log2("agent", "warn", `kill-all: terminated ${killed.length} processes`);
+      log("agent", "warn", `kill-all: terminated ${killed.length} processes`);
       json(res, { ok: true, killed: killed.length });
       return true;
     }
@@ -52335,7 +52397,7 @@ function buildSpawnChildRoutes(ctx) {
     json,
     error,
     readBody,
-    log: log2,
+    log,
     broadcast,
     agentProcesses,
     queueSessionsUpdated,
@@ -52412,7 +52474,7 @@ function buildSpawnChildRoutes(ctx) {
             `).run((/* @__PURE__ */ new Date()).toISOString(), childSessionId);
           }
         });
-        log2("agent", "info", `child process spawned pid=${proc.pid}`, {
+        log("agent", "info", `child process spawned pid=${proc.pid}`, {
           sessionId: shortId,
           parentSessionId: parentSessionId.slice(0, 8),
           worktreeBranch,
@@ -52428,7 +52490,7 @@ function buildSpawnChildRoutes(ctx) {
         const STARTUP_TIMEOUT_MS = 12e4;
         let startupTimer = setTimeout(() => {
           if (entry.turnActive && entry.lastActivityAt === entry.startedAt) {
-            log2("agent", "error", `child startup stall \u2014 no output in ${STARTUP_TIMEOUT_MS / 1e3}s`, { sessionId: shortId });
+            log("agent", "error", `child startup stall \u2014 no output in ${STARTUP_TIMEOUT_MS / 1e3}s`, { sessionId: shortId });
             entry._terminationReason = "startup_stall";
             killWithFallback(proc);
           }
@@ -52436,7 +52498,7 @@ function buildSpawnChildRoutes(ctx) {
         const RUNTIME_TIMEOUT_MS = 15 * 60 * 1e3;
         const runtimeTimer = setTimeout(() => {
           if (entry.proc && !entry.proc.killed) {
-            log2("agent", "warn", `child runtime timeout (${RUNTIME_TIMEOUT_MS / 1e3}s)`, { sessionId: shortId });
+            log("agent", "warn", `child runtime timeout (${RUNTIME_TIMEOUT_MS / 1e3}s)`, { sessionId: shortId });
             entry._terminationReason = "timeout";
             killWithFallback(proc);
           }
@@ -52456,7 +52518,7 @@ function buildSpawnChildRoutes(ctx) {
           onFirstData: (chunk, totalBytes) => {
             clearStartupTimer();
             if (totalBytes <= 2e3) {
-              log2("agent", "debug", `child stdout (${chunk.length}b, total=${totalBytes}): ${chunk.toString().slice(0, 200)}`, { sessionId: shortId });
+              log("agent", "debug", `child stdout (${chunk.length}b, total=${totalBytes}): ${chunk.toString().slice(0, 200)}`, { sessionId: shortId });
             }
           },
           onResult: (event) => {
@@ -52514,7 +52576,7 @@ function buildSpawnChildRoutes(ctx) {
               entry._stderrText
             ].filter(Boolean).join(" ") || `Process exited with code ${exitCode}`;
             const classification = classifyError(errorText, exitCode);
-            log2("agent", "info", "error classified", {
+            log("agent", "info", "error classified", {
               sessionId: shortId,
               code: classification.code,
               category: classification.category,
@@ -52528,7 +52590,7 @@ function buildSpawnChildRoutes(ctx) {
           }
           finalized = true;
           try {
-            log2("agent", "info", `child process exited code=${exitCode} (${source})`, { sessionId: shortId });
+            log("agent", "info", `child process exited code=${exitCode} (${source})`, { sessionId: shortId });
             const finalStatus = entry._terminationReason === "stopped" ? "stopped" : exitCode === 0 ? "completed" : "error";
             const finalError = exitCode === 0 ? void 0 : entry._terminationReason && entry._terminationReason !== "stopped" ? entry._terminationReason : `Process exited with code ${exitCode}`;
             dbWrite((db3) => {
@@ -52557,7 +52619,7 @@ function buildSpawnChildRoutes(ctx) {
               refreshProjects: true
             });
           } catch (cleanupErr) {
-            log2("agent", "error", `child cleanup error: ${cleanupErr.message}`, { sessionId: shortId });
+            log("agent", "error", `child cleanup error: ${cleanupErr.message}`, { sessionId: shortId });
           }
           agentProcesses.delete(childSessionId);
           broadcastProcessCount(ctx);
@@ -52569,7 +52631,7 @@ function buildSpawnChildRoutes(ctx) {
           clearTimers();
           const errorText = [err.message, entry._stderrText || ""].filter(Boolean).join(" ");
           const classification = classifyError(errorText, null);
-          log2("agent", "info", "error classified", {
+          log("agent", "info", "error classified", {
             sessionId: shortId,
             code: classification.code,
             category: classification.category,
@@ -52581,7 +52643,7 @@ function buildSpawnChildRoutes(ctx) {
             return;
           }
           finalized = true;
-          log2("agent", "error", `child spawn error: ${err.message}`, { sessionId: shortId });
+          log("agent", "error", `child spawn error: ${err.message}`, { sessionId: shortId });
           try {
             dbWrite((db3) => {
               const now2 = (/* @__PURE__ */ new Date()).toISOString();
@@ -52594,7 +52656,7 @@ function buildSpawnChildRoutes(ctx) {
               `).run(err.message, now2, childSessionId);
             });
           } catch (dbErr) {
-            log2("agent", "error", `child error handler DB write failed: ${dbErr.message}`, { sessionId: shortId });
+            log("agent", "error", `child error handler DB write failed: ${dbErr.message}`, { sessionId: shortId });
           }
           broadcast("agent:error", { sessionId: childSessionId, error: err.message });
           agentProcesses.delete(childSessionId);
@@ -52737,14 +52799,14 @@ function buildSpawnChildRoutes(ctx) {
       let worktreeBranch = null;
       let worktreePath = null;
       try {
-        const wt2 = createChildWorktree({ parentRepoRoot, sanitizedDesc, resolvedBaseRef, shortId, log: log2 });
+        const wt2 = createChildWorktree({ parentRepoRoot, sanitizedDesc, resolvedBaseRef, shortId, log });
         worktreeBranch = wt2.worktreeBranch;
         worktreePath = wt2.worktreePath;
       } catch (wtErr) {
         return json(res, { error: "WORKTREE_BRANCH_COLLISION", message: "Could not create worktree after 5 attempts" }, 500);
       }
       const nowIso = (/* @__PURE__ */ new Date()).toISOString();
-      log2("agent", "info", `spawn-child request`, { origin, provider, parentSessionId: parentSessionId.slice(0, 8) });
+      log("agent", "info", `spawn-child request`, { origin, provider, parentSessionId: parentSessionId.slice(0, 8) });
       dbWrite((db3) => {
         db3.prepare(`
           INSERT INTO sessions
@@ -52822,7 +52884,7 @@ function buildSpawnChildRoutes(ctx) {
           return false;
         }
         const delay = reserveRetryDelay2(entry);
-        log2("agent", "info", "retry scheduled", {
+        log("agent", "info", "retry scheduled", {
           sessionId: shortId,
           retryCount: entry._retryState.count,
           maxRetries: entry._retryState.maxRetries,
@@ -52850,7 +52912,7 @@ function buildSpawnChildRoutes(ctx) {
           try {
             spawnChildAttempt({ isRetry: true });
           } catch (retryErr) {
-            log2("agent", "error", `child retry respawn failed: ${retryErr.message}`, { sessionId: shortId });
+            log("agent", "error", `child retry respawn failed: ${retryErr.message}`, { sessionId: shortId });
             dbWrite((db3) => {
               const now2 = (/* @__PURE__ */ new Date()).toISOString();
               transitionSessionStatus(db3, childSessionId, "error", {
@@ -52886,7 +52948,7 @@ function buildSpawnChildRoutes(ctx) {
           status: "spawned"
         });
       } catch (spawnErr) {
-        log2("agent", "error", `child spawn failed: ${spawnErr.message}`, { sessionId: shortId });
+        log("agent", "error", `child spawn failed: ${spawnErr.message}`, { sessionId: shortId });
         try {
           (0, import_child_process21.execFileSync)("git", ["worktree", "remove", "--force", worktreePath], { cwd: parentRepoRoot, stdio: "pipe" });
           try {
@@ -52969,7 +53031,7 @@ var import_fs43 = __toESM(require("fs"), 1);
 var import_child_process22 = require("child_process");
 var import_path41 = __toESM(require("path"), 1);
 function buildWorktreeRoutes(ctx) {
-  const { json, error, readBody, log: log2 } = ctx;
+  const { json, error, readBody, log } = ctx;
   return async (req, res, url) => {
     if (req.method === "POST" && url.pathname === "/agent/cleanup-worktree") {
       const body = await readBody(req);
@@ -53028,7 +53090,7 @@ ${unmerged}`;
         }
         db3.prepare("UPDATE session_runtime_state SET worktree_path = NULL WHERE session_id = ?").run(body.sessionId);
         json(res, { ok: true, branchRetained, branch: branchRetained ? row.worktree_branch : null });
-        log2("agent", "info", `worktree cleaned up for session ${body.sessionId.slice(0, 8)}`, { branchRetained });
+        log("agent", "info", `worktree cleaned up for session ${body.sessionId.slice(0, 8)}`, { branchRetained });
       } catch (err) {
         error(res, `Cleanup failed: ${err.message}`, 500);
       }
@@ -53059,7 +53121,7 @@ ${unmerged}`;
         }
         db3.prepare("UPDATE session_runtime_state SET worktree_branch = NULL WHERE session_id = ?").run(body.sessionId);
         json(res, { ok: true });
-        log2("agent", "info", `worktree branch deleted for session ${body.sessionId.slice(0, 8)}`, { branch: row.worktree_branch });
+        log("agent", "info", `worktree branch deleted for session ${body.sessionId.slice(0, 8)}`, { branch: row.worktree_branch });
       } catch (err) {
         error(res, `Branch delete failed: ${err.message}`, 500);
       }
@@ -53874,7 +53936,7 @@ function checkExpectedPathType(expectedType, targetPath) {
     throw new Error(`expected directory at ${targetPath}`);
   }
 }
-async function runCommandValidation(command, { cwd, allowValidationCommands, log: log2 }) {
+async function runCommandValidation(command, { cwd, allowValidationCommands, log }) {
   if (!Array.isArray(command) || command.length === 0) {
     return { ok: true, stdout: "", stderr: "" };
   }
@@ -53895,7 +53957,7 @@ async function runCommandValidation(command, { cwd, allowValidationCommands, log
       timeout: VALIDATION_TIMEOUT_MS,
       maxBuffer: 1024 * 1024
     });
-    log2?.("agent", "info", "validation command executed", {
+    log?.("agent", "info", "validation command executed", {
       command,
       cwd,
       exitCode: 0,
@@ -53909,7 +53971,7 @@ async function runCommandValidation(command, { cwd, allowValidationCommands, log
       stderr: truncateText(result.stderr)
     };
   } catch (error) {
-    log2?.("agent", "warn", "validation command failed", {
+    log?.("agent", "warn", "validation command failed", {
       command,
       cwd,
       exitCode: typeof error.code === "number" ? error.code : null,
@@ -53994,7 +54056,7 @@ async function validateTaskContract({
   runGroupId,
   task,
   cwd,
-  log: log2,
+  log,
   allowValidationCommands = false
 }) {
   const taskIndex = Number(task?.taskIndex ?? -1);
@@ -54019,7 +54081,7 @@ async function validateTaskContract({
       const commandResult = await runCommandValidation(task.evidence.command, {
         cwd,
         allowValidationCommands,
-        log: log2
+        log
       });
       if (!commandResult.ok) {
         errors.push(commandResult.stderr || "evidence command failed");
@@ -54029,7 +54091,7 @@ async function validateTaskContract({
       const commandResult = await runCommandValidation(task.validation.command, {
         cwd,
         allowValidationCommands,
-        log: log2
+        log
       });
       if (!commandResult.ok) {
         errors.push(commandResult.stderr || "validation command failed");
@@ -54277,6 +54339,72 @@ function createTaskRuntimeStatusMap(db3, groupId) {
   `).all(groupId);
   return new Map(rows.filter((row) => row.runtime_status).map((row) => [row.session_id, row.runtime_status]));
 }
+function readLastRunGroupRuntimeProgress(db3, sessionId) {
+  if (!db3 || !sessionId) return null;
+  try {
+    const rows = db3.prepare(`
+      SELECT type, payload_json, ts
+      FROM session_runtime_events
+      WHERE session_id = ?
+        AND type IN ('assistant', 'result', 'system', 'error')
+      ORDER BY seq DESC
+      LIMIT 10
+    `).all(sessionId);
+    for (const row of rows || []) {
+      if (!row?.payload_json) continue;
+      let payload;
+      try {
+        payload = JSON.parse(row.payload_json);
+      } catch {
+        continue;
+      }
+      const snippet = extractEventSnippet(payload);
+      if (!snippet) continue;
+      return {
+        snippet,
+        type: row.type || payload.type || null,
+        ts: row.ts || null,
+        source: "runtime_event"
+      };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+function resolveRunGroupSessionProgress(liveEntry, persistedProgress = null) {
+  if (liveEntry?.lastProgressSnippet) {
+    return {
+      snippet: liveEntry.lastProgressSnippet,
+      type: liveEntry.lastProgressType || null,
+      ts: liveEntry.lastProgressAt || null,
+      source: "live"
+    };
+  }
+  if (persistedProgress?.snippet) {
+    return {
+      snippet: persistedProgress.snippet,
+      type: persistedProgress.type || null,
+      ts: persistedProgress.ts || null,
+      source: persistedProgress.source || "runtime_event"
+    };
+  }
+  return {
+    snippet: null,
+    type: null,
+    ts: null,
+    source: null
+  };
+}
+function emitRunGroupRouteLog(logFn, level, message, data = void 0) {
+  if (typeof logFn !== "function") return false;
+  try {
+    logFn("agent", level, message, data);
+    return true;
+  } catch {
+    return false;
+  }
+}
 function markRunGroupTasksStopped(db3, group, tasks, reason) {
   if (!Array.isArray(tasks) || tasks.length === 0) return [];
   const now = (/* @__PURE__ */ new Date()).toISOString();
@@ -54432,7 +54560,7 @@ function refreshRunGroupAggregates(db3, groupId) {
 }
 function launchRunGroupTask(ctx, group, task, settledFn) {
   const {
-    log: log2,
+    log,
     broadcast,
     getSidecarPort,
     getSidecarToken
@@ -54483,7 +54611,7 @@ function launchRunGroupTask(ctx, group, task, settledFn) {
         repoRoot,
         currentBranch: baseBranch,
         shortId,
-        log: log2
+        log
       });
       if (wt2.worktreePath) {
         worktreePath = wt2.worktreePath;
@@ -54654,7 +54782,7 @@ function launchRunGroupTask(ctx, group, task, settledFn) {
             runGroupId: group.id,
             task,
             cwd: effectiveCwd,
-            log: log2,
+            log,
             allowValidationCommands
           });
         }
@@ -54665,7 +54793,7 @@ function launchRunGroupTask(ctx, group, task, settledFn) {
       }
     });
     if (gitignoreWarning) {
-      log2("agent", "warn", "run-group worktree created but .rudi/ is not in .gitignore", {
+      log("agent", "warn", "run-group worktree created but .rudi/ is not in .gitignore", {
         groupId: group.id,
         sessionId: shortId
       });
@@ -54694,7 +54822,7 @@ function launchRunGroupTask(ctx, group, task, settledFn) {
 }
 function maybeAdvanceRunGroup(ctx, groupId, { settledFn } = {}) {
   const db3 = getDb();
-  const log2 = ctx.log || (() => {
+  const log = ctx.log || (() => {
   });
   const startedSessionIds = [];
   const blockedSessionIds = [];
@@ -54755,7 +54883,7 @@ function maybeAdvanceRunGroup(ctx, groupId, { settledFn } = {}) {
       blockedSessionIds.push(...blocked);
       refreshRunGroupAggregates(db3, groupId);
       if (blocked.length > 0) {
-        log2("agent", "warn", "blocked downstream run-group phase after upstream failure", {
+        log("agent", "warn", "blocked downstream run-group phase after upstream failure", {
           groupId,
           phaseIndex: evaluation.phaseIndex,
           blockedCount: blocked.length
@@ -54768,7 +54896,7 @@ function maybeAdvanceRunGroup(ctx, groupId, { settledFn } = {}) {
       blockedSessionIds.push(...blocked);
       refreshRunGroupAggregates(db3, groupId);
       if (blocked.length > 0) {
-        log2("agent", "warn", "blocked run-group tasks due to dependency deadlock", {
+        log("agent", "warn", "blocked run-group tasks due to dependency deadlock", {
           groupId,
           blockedCount: blocked.length
         });
@@ -54788,7 +54916,7 @@ function maybeAdvanceRunGroup(ctx, groupId, { settledFn } = {}) {
 }
 async function createRunGroupFromRequest(ctx, body, opts = {}) {
   const {
-    log: log2,
+    log,
     broadcast,
     agentProcesses,
     maxConcurrent
@@ -54860,7 +54988,7 @@ async function createRunGroupFromRequest(ctx, body, opts = {}) {
   const nowIso = (/* @__PURE__ */ new Date()).toISOString();
   const db3 = getDb();
   if (requestedCoordinationMode === "supervisor") {
-    log2("agent", "warn", "supervisor coordination requested; falling back to flat execution for this run-group", {
+    log("agent", "warn", "supervisor coordination requested; falling back to flat execution for this run-group", {
       groupId
     });
   }
@@ -54879,7 +55007,7 @@ async function createRunGroupFromRequest(ctx, body, opts = {}) {
           WHERE id = ?
         `).run((/* @__PURE__ */ new Date()).toISOString(), gId);
         const stoppedCount = stopActiveRunGroupSessions(ctx, gId, sId);
-        log2("agent", "warn", "run-group stop-all failure policy triggered", {
+        log("agent", "warn", "run-group stop-all failure policy triggered", {
           groupId: gId,
           sessionId: sId.slice(0, 8),
           stoppedCount,
@@ -54887,7 +55015,7 @@ async function createRunGroupFromRequest(ctx, body, opts = {}) {
           status
         });
       } else if (failurePolicy === "escalate") {
-        log2("agent", "warn", "run-group task escalated for review", {
+        log("agent", "warn", "run-group task escalated for review", {
           groupId: gId,
           sessionId: sId.slice(0, 8),
           failedValidation,
@@ -54900,7 +55028,7 @@ async function createRunGroupFromRequest(ctx, body, opts = {}) {
     try {
       updated = maybeAdvanceRunGroup(ctx, gId, { settledFn }).group;
     } catch (err) {
-      log2("agent", "warn", `run-group aggregate refresh failed: ${err.message}`, { groupId: gId });
+      log("agent", "warn", `run-group aggregate refresh failed: ${err.message}`, { groupId: gId });
       return;
     }
     broadcast("run-group:session-done", {
@@ -55044,7 +55172,7 @@ async function createRunGroupFromRequest(ctx, body, opts = {}) {
   };
 }
 function buildRunGroupRoutes(ctx) {
-  const { json, error, readBody, agentProcesses, broadcast } = ctx;
+  const { json, error, readBody, agentProcesses, broadcast, log } = ctx;
   return async (req, res, url) => {
     if (req.method === "POST" && url.pathname === "/agent/run-group") {
       const body = await readBody(req);
@@ -55158,6 +55286,10 @@ function buildRunGroupRoutes(ctx) {
       const sessionDetails = sessions.map((row) => {
         const live = agentProcesses.get(row.id);
         const alive = Boolean(live?.proc && !live.proc.killed);
+        const progress = resolveRunGroupSessionProgress(
+          live,
+          readLastRunGroupRuntimeProgress(db3, row.id)
+        );
         return {
           ...row,
           status: deriveRunGroupSessionStatus({
@@ -55169,6 +55301,10 @@ function buildRunGroupRoutes(ctx) {
           alive,
           turn_active: Boolean(live?.turnActive),
           pid: live?.proc?.pid || null,
+          last_progress_snippet: progress.snippet,
+          last_progress_type: progress.type,
+          last_progress_at: progress.ts,
+          last_progress_source: progress.source,
           validation_passed: row.validation_passed == null ? null : Number(row.validation_passed) === 1,
           validation_errors: row.validation_errors_json ? JSON.parse(row.validation_errors_json) : [],
           validation_warnings: row.validation_warnings_json ? JSON.parse(row.validation_warnings_json) : [],
@@ -55212,32 +55348,24 @@ function buildRunGroupRoutes(ctx) {
           sessionStatus: row.session_status,
           groupStatus: group.status
         });
-        let lastSnippet = null;
-        try {
-          const lastEvent = db3.prepare(`
-            SELECT payload FROM session_runtime_events
-            WHERE session_id = ? AND event_type IN ('assistant', 'result')
-            ORDER BY seq DESC LIMIT 1
-          `).get(row.id);
-          if (lastEvent?.payload) {
-            const parsed = JSON.parse(lastEvent.payload);
-            const textBlocks = (parsed.content || []).filter((b2) => b2.type === "text");
-            if (textBlocks.length > 0) {
-              lastSnippet = textBlocks[textBlocks.length - 1].text?.slice(0, 200) || null;
-            }
-          }
-        } catch {
-        }
+        const progress = resolveRunGroupSessionProgress(
+          entry,
+          readLastRunGroupRuntimeProgress(db3, row.id)
+        );
         return {
           sessionId: row.id,
           name: row.title_override || row.title || row.id.slice(0, 8),
           status,
           alive,
+          turnActive: Boolean(entry?.turnActive),
           turnCount: Number(row.runtime_turn_count || 0),
           costTotal: Number(row.runtime_cost_total || 0),
           tokensTotal: Number(row.runtime_tokens_total || 0),
           lastError: row.runtime_last_error || null,
-          lastSnippet,
+          lastSnippet: progress.snippet,
+          lastProgressType: progress.type,
+          lastProgressAt: progress.ts,
+          lastProgressSource: progress.source,
           worktreeBranch: row.worktree_branch || null,
           validationPassed: row.validation_passed == null ? null : Number(row.validation_passed) === 1
         };
@@ -55349,7 +55477,10 @@ function buildRunGroupRoutes(ctx) {
             { cwd: row.project_root, stdio: "pipe" }
           );
           results.push({ sessionId, branch: row.worktree_branch, ok: true });
-          log("agent", "info", `merged ${row.worktree_branch} into ${mergeTo}`, { groupId, sessionId: sessionId.slice(0, 8) });
+          emitRunGroupRouteLog(log, "info", `merged ${row.worktree_branch} into ${mergeTo}`, {
+            groupId,
+            sessionId: sessionId.slice(0, 8)
+          });
         } catch (mergeErr) {
           let conflictFiles = [];
           try {
@@ -55368,7 +55499,11 @@ function buildRunGroupRoutes(ctx) {
             error: mergeErr.message,
             conflictFiles
           });
-          log("agent", "warn", `merge conflict for ${row.worktree_branch}`, { groupId, sessionId: sessionId.slice(0, 8), conflictFiles });
+          emitRunGroupRouteLog(log, "warn", `merge conflict for ${row.worktree_branch}`, {
+            groupId,
+            sessionId: sessionId.slice(0, 8),
+            conflictFiles
+          });
         }
       }
       json(res, { results });
@@ -55419,7 +55554,10 @@ function buildRunGroupRoutes(ctx) {
         }
       }
       json(res, { ok: errors.length === 0, cleaned, errors });
-      log("agent", "info", `run-group cleanup: ${cleaned} worktrees`, { groupId, errors: errors.length });
+      emitRunGroupRouteLog(log, "info", `run-group cleanup: ${cleaned} worktrees`, {
+        groupId,
+        errors: errors.length
+      });
       return true;
     }
     return false;
@@ -55529,7 +55667,7 @@ function buildOrchestrateRoutes(ctx) {
     json,
     error,
     readBody,
-    log: log2,
+    log,
     broadcast,
     agentProcesses,
     getSidecarPort,
@@ -55634,19 +55772,19 @@ function buildOrchestrateRoutes(ctx) {
             autoNameOnFirstTurn: false,
             onProcessClose: ({ finalStatus }) => {
               if (finalStatus === "completed") {
-                log2("agent", "info", `Explorer ${config.name} completed`, {
+                log("agent", "info", `Explorer ${config.name} completed`, {
                   orchestrationId: orchestrationId.slice(0, 8)
                 });
                 resolve({ name: config.name, status: "completed" });
               } else {
-                log2("agent", "warn", `Explorer ${config.name} failed: ${finalStatus}`, {
+                log("agent", "warn", `Explorer ${config.name} failed: ${finalStatus}`, {
                   orchestrationId: orchestrationId.slice(0, 8)
                 });
                 reject(new Error(`Explorer ${config.name} failed: ${finalStatus}`));
               }
             },
             onProcessError: (err) => {
-              log2("agent", "error", `Explorer ${config.name} error: ${err.message}`, {
+              log("agent", "error", `Explorer ${config.name} error: ${err.message}`, {
                 orchestrationId: orchestrationId.slice(0, 8)
               });
               reject(err);
@@ -55660,13 +55798,13 @@ function buildOrchestrateRoutes(ctx) {
     const results = await Promise.allSettled(explorerPromises);
     const succeeded = results.filter((r2) => r2.status === "fulfilled").length;
     const failed = results.filter((r2) => r2.status === "rejected").length;
-    log2("agent", "info", `Explorers completed: ${succeeded} succeeded, ${failed} failed`, {
+    log("agent", "info", `Explorers completed: ${succeeded} succeeded, ${failed} failed`, {
       orchestrationId: orchestrationId.slice(0, 8)
     });
     const codebaseMapContent = synthesizeCodebaseMap(artifactDir);
     const codebaseMapPath = import_path45.default.join(artifactDir, "codebase-map.md");
     import_fs47.default.writeFileSync(codebaseMapPath, codebaseMapContent, "utf-8");
-    log2("agent", "info", "Codebase map synthesized", {
+    log("agent", "info", "Codebase map synthesized", {
       orchestrationId: orchestrationId.slice(0, 8),
       path: codebaseMapPath
     });
@@ -55728,7 +55866,7 @@ function buildOrchestrateRoutes(ctx) {
           binaryPath
         });
       } catch (explorerErr) {
-        log2("agent", "warn", `Explorer phase failed: ${explorerErr.message}`, {
+        log("agent", "warn", `Explorer phase failed: ${explorerErr.message}`, {
           orchestrationId: orchestrationId.slice(0, 8)
         });
       }
@@ -55838,7 +55976,7 @@ function buildOrchestrateRoutes(ctx) {
                 plannerSessionId,
                 plan: capturedStructuredOutput
               });
-              log2("agent", "info", "orchestration plan ready", {
+              log("agent", "info", "orchestration plan ready", {
                 orchestrationId: orchestrationId.slice(0, 8)
               });
             } else {
@@ -55866,7 +56004,7 @@ function buildOrchestrateRoutes(ctx) {
                 plannerSessionId,
                 reason: errorMessage
               });
-              log2("agent", "warn", "orchestration planning failed", {
+              log("agent", "warn", "orchestration planning failed", {
                 orchestrationId: orchestrationId.slice(0, 8),
                 finalStatus,
                 errorMessage
@@ -56047,7 +56185,7 @@ function buildOrchestrateRoutes(ctx) {
 
 // src/commands/agent/index.js
 function createAgentHandler({
-  log: log2,
+  log,
   broadcast,
   json,
   error,
@@ -56067,7 +56205,7 @@ function createAgentHandler({
   const sessionAlwaysAllowed = /* @__PURE__ */ new Map();
   const groupAlwaysAllowed = /* @__PURE__ */ new Map();
   const ctx = {
-    log: log2,
+    log,
     broadcast,
     json,
     error,
@@ -56087,9 +56225,9 @@ function createAgentHandler({
     MAX_CHILDREN_PER_PARENT
   };
   try {
-    ensurePermissionHook(log2);
+    ensurePermissionHook(log);
   } catch (err) {
-    log2("agent", "warn", `ensurePermissionHook failed: ${err.message}`);
+    log("agent", "warn", `ensurePermissionHook failed: ${err.message}`);
   }
   const routeStart = buildStartRoute(ctx);
   const routeLifecycle = buildLifecycleRoutes(ctx);
@@ -56107,7 +56245,7 @@ function createAgentHandler({
 function createIdleReaper({
   agentProcesses,
   broadcast,
-  log: log2,
+  log,
   idleTimeoutMs = 10 * 60 * 1e3,
   // 10 min default
   maxConcurrent = 6
@@ -56119,7 +56257,7 @@ function createIdleReaper({
       if (entry.turnActive) continue;
       const idle = now - (entry.lastActivityAt || entry.startedAt || now);
       if (idle > idleTimeoutMs) {
-        log2("agent", "warn", `idle reaper: killing session ${sessionId.slice(0, 8)} (idle ${Math.round(idle / 1e3)}s)`);
+        log("agent", "warn", `idle reaper: killing session ${sessionId.slice(0, 8)} (idle ${Math.round(idle / 1e3)}s)`);
         entry._terminationReason = "stopped";
         entry.proc.kill("SIGTERM");
         const killTimer = setTimeout(() => {
@@ -57039,7 +57177,7 @@ function normalizeProjectPath(p2) {
   const normalized = import_path50.default.normalize(p2);
   return normalized === import_path50.default.sep ? import_path50.default.sep : normalized.replace(/\/+$/, "");
 }
-function createSessionsDbModule({ log: log2, resolveDb: resolveDb2, caches, onProjectsReady }) {
+function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjectsReady }) {
   const { diffStatsCache, gitStatusCache, sessionPathMap, GIT_STATUS_TTL_MS } = caches;
   let useDbSpine = false;
   let _reconcileInterval = null;
@@ -57097,14 +57235,14 @@ function createSessionsDbModule({ log: log2, resolveDb: resolveDb2, caches, onPr
       }
     }
     if (normalizedCount > 0) {
-      log2("sessions", "info", `[backfill] normalized ${normalizedCount} project_path values`);
+      log("sessions", "info", `[backfill] normalized ${normalizedCount} project_path values`);
     }
     const remaining = db3.prepare(`
       SELECT COUNT(*) as cnt FROM sessions
       WHERE (project_path IS NULL OR project_path = '')
         AND deleted_at IS NULL
     `).get().cnt;
-    log2("sessions", "info", `[backfill] project_path: ${cwdFixed} from cwd, ${claudeFixed} from origin_native_file, ${remaining} unresolved`);
+    log("sessions", "info", `[backfill] project_path: ${cwdFixed} from cwd, ${claudeFixed} from origin_native_file, ${remaining} unresolved`);
     return { cwdFixed, claudeFixed, remaining };
   }
   async function reconcileSessionsToDb() {
@@ -57130,7 +57268,7 @@ function createSessionsDbModule({ log: log2, resolveDb: resolveDb2, caches, onPr
         try {
           stat = await import_promises6.default.stat(projPath);
         } catch (err) {
-          log2("sessions", "warn", `[reconcile] stat failed for ${projPath}: ${err.message}`);
+          log("sessions", "warn", `[reconcile] stat failed for ${projPath}: ${err.message}`);
           continue;
         }
         if (!stat.isDirectory()) continue;
@@ -57162,7 +57300,7 @@ function createSessionsDbModule({ log: log2, resolveDb: resolveDb2, caches, onPr
         try {
           files = await import_promises6.default.readdir(projPath);
         } catch (err) {
-          log2("sessions", "warn", `[reconcile] readdir failed for ${projPath}: ${err.message}`);
+          log("sessions", "warn", `[reconcile] readdir failed for ${projPath}: ${err.message}`);
           continue;
         }
         for (const file of files) {
@@ -57240,7 +57378,7 @@ function createSessionsDbModule({ log: log2, resolveDb: resolveDb2, caches, onPr
               messageCount
             );
           } catch (dbErr) {
-            log2?.("sessions", "warn", `[reconcile.claude] INSERT failed: ${dbErr.message}`, { sessionId, filePath: fullPath });
+            log?.("sessions", "warn", `[reconcile.claude] INSERT failed: ${dbErr.message}`, { sessionId, filePath: fullPath });
             continue;
           }
           if (existed) updated++;
@@ -57320,7 +57458,7 @@ function createSessionsDbModule({ log: log2, resolveDb: resolveDb2, caches, onPr
               messageCount
             );
           } catch (dbErr) {
-            log2?.("sessions", "warn", `[reconcile.crossdir] INSERT failed: ${dbErr.message}`, { sessionId, filePath: extPath });
+            log?.("sessions", "warn", `[reconcile.crossdir] INSERT failed: ${dbErr.message}`, { sessionId, filePath: extPath });
             continue;
           }
           if (existed) updated++;
@@ -57434,7 +57572,7 @@ function createSessionsDbModule({ log: log2, resolveDb: resolveDb2, caches, onPr
                 fstat.mtime.toISOString()
               );
             } catch (dbErr) {
-              log2?.("sessions", "warn", `[reconcile.subagent] INSERT failed: ${dbErr.message}`, { sessionId: agentSessionId, filePath: fullPath, parentSessionId: entry });
+              log?.("sessions", "warn", `[reconcile.subagent] INSERT failed: ${dbErr.message}`, { sessionId: agentSessionId, filePath: fullPath, parentSessionId: entry });
               continue;
             }
             if (existing) updated++;
@@ -57506,7 +57644,7 @@ function createSessionsDbModule({ log: log2, resolveDb: resolveDb2, caches, onPr
             fstat.mtime.toISOString()
           );
         } catch (dbErr) {
-          log2?.("sessions", "warn", `[reconcile.codex] INSERT failed: ${dbErr.message}`, { sessionId, filePath });
+          log?.("sessions", "warn", `[reconcile.codex] INSERT failed: ${dbErr.message}`, { sessionId, filePath });
           continue;
         }
         if (existed) updated++;
@@ -57554,13 +57692,13 @@ function createSessionsDbModule({ log: log2, resolveDb: resolveDb2, caches, onPr
       WHERE session_id IN (SELECT id FROM sessions WHERE status = 'deleted')
     `).run().changes;
     if (purgedDeletedTurns > 0) {
-      log2("sessions", "info", `[reconcile] purged ${purgedDeletedTurns} turns from deleted sessions`);
+      log("sessions", "info", `[reconcile] purged ${purgedDeletedTurns} turns from deleted sessions`);
     }
     const duration = Date.now() - start;
     const dbCount = db3.prepare(
       `SELECT COUNT(*) as c FROM sessions WHERE status != 'deleted'`
     ).get().c;
-    log2(
+    log(
       "sessions",
       "info",
       `[reconcile] DB=${dbCount} fs=${fsCount} added=${added} pruned=${pruned} updated=${updated} duration=${duration}ms`
@@ -57568,7 +57706,7 @@ function createSessionsDbModule({ log: log2, resolveDb: resolveDb2, caches, onPr
     try {
       await backfillProjectPaths(db3);
     } catch (err) {
-      log2("sessions", "warn", `[backfill] failed: ${err.message}`);
+      log("sessions", "warn", `[backfill] failed: ${err.message}`);
     }
   }
   async function periodicReconcile() {
@@ -58009,20 +58147,20 @@ function createSessionsDbModule({ log: log2, resolveDb: resolveDb2, caches, onPr
         `).run(nowIso, provider, existing.id);
       }
     } catch (err) {
-      log2("sessions", "warn", `watcher DB upsert failed for ${resolvedSessionId}: ${err.message}`);
+      log("sessions", "warn", `watcher DB upsert failed for ${resolvedSessionId}: ${err.message}`);
     }
   }
   function startPeriodicReconcile() {
     if (_reconcileInterval) return;
     _reconcileInterval = setInterval(() => {
       periodicReconcile().catch((err) => {
-        log2("sessions", "warn", `periodic reconcile failed: ${err.message}`);
+        log("sessions", "warn", `periodic reconcile failed: ${err.message}`);
       });
     }, RECONCILE_INTERVAL_MS);
   }
   function enableDbSpine() {
     useDbSpine = true;
-    log2("sessions", "info", "DB-as-spine enabled for sidebar queries");
+    log("sessions", "info", "DB-as-spine enabled for sidebar queries");
   }
   function isDbSpineEnabled() {
     return useDbSpine;
@@ -58051,7 +58189,7 @@ var import_promises7 = __toESM(require("fs/promises"), 1);
 var MAX_FOLLOWED_SESSIONS = 10;
 var TAIL_FALLBACK_INTERVAL_MS = 5e3;
 var TAIL_IDLE_TIMEOUT_MS = 5 * 60 * 1e3;
-function createSessionsTailModule({ log: log2, broadcast, findSessionFile }) {
+function createSessionsTailModule({ log, broadcast, findSessionFile }) {
   const followedSessions = /* @__PURE__ */ new Map();
   const clientFollows = /* @__PURE__ */ new WeakMap();
   const pendingFollows = /* @__PURE__ */ new Set();
@@ -58395,7 +58533,7 @@ function createSessionsTailModule({ log: log2, broadcast, findSessionFile }) {
         await fd.close();
       }
     } catch (err) {
-      log2("sessions", "warn", `tail error for ${entry.sessionId}: ${err.message}`);
+      log("sessions", "warn", `tail error for ${entry.sessionId}: ${err.message}`);
     } finally {
       entry.tailQueued = false;
     }
@@ -58415,7 +58553,7 @@ function createSessionsTailModule({ log: log2, broadcast, findSessionFile }) {
         }
       });
     } catch (err) {
-      log2("sessions", "warn", `failed to watch ${entry.filePath}: ${err.message}`);
+      log("sessions", "warn", `failed to watch ${entry.filePath}: ${err.message}`);
     }
   }
   function stopFollowEntry(sessionId) {
@@ -58433,7 +58571,7 @@ function createSessionsTailModule({ log: log2, broadcast, findSessionFile }) {
     const { sessionId, fromOffset } = data || {};
     if (!sessionId || typeof sessionId !== "string") return;
     if (!followedSessions.has(sessionId) && followedSessions.size >= MAX_FOLLOWED_SESSIONS) {
-      log2("sessions", "warn", `follow limit reached (${MAX_FOLLOWED_SESSIONS}), rejecting ${sessionId}`);
+      log("sessions", "warn", `follow limit reached (${MAX_FOLLOWED_SESSIONS}), rejecting ${sessionId}`);
       try {
         ws.send(JSON.stringify({
           type: "session:follow-error",
@@ -58453,11 +58591,11 @@ function createSessionsTailModule({ log: log2, broadcast, findSessionFile }) {
         entry.subscriberCount++;
         clientSet.add(sessionId);
       }
-      log2("sessions", "debug", `follow: existing ${sessionId} (subscribers: ${entry.subscriberCount})`);
+      log("sessions", "debug", `follow: existing ${sessionId} (subscribers: ${entry.subscriberCount})`);
       return;
     }
     if (pendingFollows.has(sessionId)) {
-      log2("sessions", "debug", `follow: waiting for pending setup of ${sessionId}`);
+      log("sessions", "debug", `follow: waiting for pending setup of ${sessionId}`);
       const waitForSetup = () => new Promise((resolve) => {
         const check = () => {
           if (!pendingFollows.has(sessionId)) {
@@ -58475,17 +58613,17 @@ function createSessionsTailModule({ log: log2, broadcast, findSessionFile }) {
           entry.subscriberCount++;
           clientSet.add(sessionId);
         }
-        log2("sessions", "debug", `follow: joined after setup ${sessionId} (subscribers: ${entry.subscriberCount})`);
+        log("sessions", "debug", `follow: joined after setup ${sessionId} (subscribers: ${entry.subscriberCount})`);
         return;
       }
-      log2("sessions", "warn", `follow: setup failed for ${sessionId}, retrying`);
+      log("sessions", "warn", `follow: setup failed for ${sessionId}, retrying`);
     }
     pendingFollows.add(sessionId);
     let found;
     try {
       found = await findSessionFile(sessionId);
       if (!found?.filePath) {
-        log2("sessions", "warn", `follow: session file not found for ${sessionId}`);
+        log("sessions", "warn", `follow: session file not found for ${sessionId}`);
         try {
           ws.send(JSON.stringify({
             type: "session:follow-error",
@@ -58514,7 +58652,7 @@ function createSessionsTailModule({ log: log2, broadcast, findSessionFile }) {
         tailFallbackTimer = setInterval(tailFallbackTick, TAIL_FALLBACK_INTERVAL_MS);
       }
       setImmediate(() => tailSession(entry));
-      log2("sessions", "info", `follow: started ${sessionId} from offset ${entry.byteOffset}`);
+      log("sessions", "info", `follow: started ${sessionId} from offset ${entry.byteOffset}`);
     } finally {
       pendingFollows.delete(sessionId);
     }
@@ -58530,9 +58668,9 @@ function createSessionsTailModule({ log: log2, broadcast, findSessionFile }) {
     entry.subscriberCount--;
     if (entry.subscriberCount <= 0) {
       stopFollowEntry(sessionId);
-      log2("sessions", "info", `unfollow: stopped ${sessionId} (no subscribers)`);
+      log("sessions", "info", `unfollow: stopped ${sessionId} (no subscribers)`);
     } else {
-      log2("sessions", "debug", `unfollow: ${sessionId} (subscribers: ${entry.subscriberCount})`);
+      log("sessions", "debug", `unfollow: ${sessionId} (subscribers: ${entry.subscriberCount})`);
     }
     if (followedSessions.size === 0 && tailFallbackTimer) {
       clearInterval(tailFallbackTimer);
@@ -58548,7 +58686,7 @@ function createSessionsTailModule({ log: log2, broadcast, findSessionFile }) {
       entry.subscriberCount--;
       if (entry.subscriberCount <= 0) {
         stopFollowEntry(sessionId);
-        log2("sessions", "debug", `ws disconnect: stopped following ${sessionId}`);
+        log("sessions", "debug", `ws disconnect: stopped following ${sessionId}`);
       }
     }
     if (followedSessions.size === 0 && tailFallbackTimer) {
@@ -58560,7 +58698,7 @@ function createSessionsTailModule({ log: log2, broadcast, findSessionFile }) {
     const now = Date.now();
     for (const [sessionId, entry] of followedSessions) {
       if (now - entry.lastGrowth > TAIL_IDLE_TIMEOUT_MS) {
-        log2("sessions", "info", `idle cleanup: ${sessionId} (no growth for ${TAIL_IDLE_TIMEOUT_MS / 1e3}s)`);
+        log("sessions", "info", `idle cleanup: ${sessionId} (no growth for ${TAIL_IDLE_TIMEOUT_MS / 1e3}s)`);
         broadcast("session:follow-ended", { sessionId, reason: "idle" });
         stopFollowEntry(sessionId);
         continue;
@@ -59231,7 +59369,7 @@ function _recordError(state, errData) {
   }
 }
 function createSessionsIngesterModule({
-  log: log2,
+  log,
   resolveDb: resolveDb2,
   paths = {},
   reconcileIntervalMs = DEFAULT_RECONCILE_INTERVAL_MS
@@ -59555,7 +59693,7 @@ function createSessionsIngesterModule({
       state.totalFilesIngested += 1;
       state.totalTurnsAdded += turnsAdded;
       state.totalTurnsUpdated += turnsUpdated;
-      log2?.("sessions", "debug", "[ingester.file] ingested", {
+      log?.("sessions", "debug", "[ingester.file] ingested", {
         sessionId: _shortSid(sessionId),
         provider,
         turnsAdded,
@@ -59665,7 +59803,7 @@ function createSessionsIngesterModule({
         errors,
         durationMs: Date.now() - t0
       };
-      log2?.("sessions", "info", "[ingester.repair] done", summary);
+      log?.("sessions", "info", "[ingester.repair] done", summary);
       return summary;
     })().catch((err) => {
       const errData = {
@@ -59673,7 +59811,7 @@ function createSessionsIngesterModule({
         at: (/* @__PURE__ */ new Date()).toISOString()
       };
       _recordError(state, errData);
-      log2?.("sessions", "warn", `[ingester.repair] failed: ${errData.error}`);
+      log?.("sessions", "warn", `[ingester.repair] failed: ${errData.error}`);
       return { skipped: true, reason: "error", ...errData };
     }).finally(() => {
       state.repairInFlight = null;
@@ -59694,7 +59832,7 @@ function createSessionsIngesterModule({
         at: (/* @__PURE__ */ new Date()).toISOString()
       };
       _recordError(state, errData);
-      log2?.("sessions", "warn", `[ingester.file] failed: ${errData.error}`, errData);
+      log?.("sessions", "warn", `[ingester.file] failed: ${errData.error}`, errData);
       return { skipped: true, reason: "error", ...errData };
     }).finally(() => {
       state.inFlight.delete(key);
@@ -59726,7 +59864,7 @@ function createSessionsIngesterModule({
       }
     }
     state.lastReconcileAt = (/* @__PURE__ */ new Date()).toISOString();
-    log2?.("sessions", "info", "[ingester.reconcile] done", {
+    log?.("sessions", "info", "[ingester.reconcile] done", {
       filesScanned: files.length,
       filesIngested,
       turnsAdded,
@@ -59829,7 +59967,7 @@ function createSessionsIngesterModule({
         errors,
         durationMs: Date.now() - t0
       };
-      log2?.("sessions", "info", "[ingester.backfill] done", summary);
+      log?.("sessions", "info", "[ingester.backfill] done", summary);
       return summary;
     })().catch((err) => {
       const errData = {
@@ -59837,7 +59975,7 @@ function createSessionsIngesterModule({
         at: (/* @__PURE__ */ new Date()).toISOString()
       };
       _recordError(state, errData);
-      log2?.("sessions", "warn", `[ingester.backfill] failed: ${errData.error}`);
+      log?.("sessions", "warn", `[ingester.backfill] failed: ${errData.error}`);
       return { skipped: true, reason: "error", ...errData };
     }).finally(() => {
       state.backfillInFlight = null;
@@ -59854,7 +59992,7 @@ function createSessionsIngesterModule({
           at: (/* @__PURE__ */ new Date()).toISOString()
         };
         _recordError(state, errData);
-        log2?.("sessions", "warn", `[ingester.reconcile] failed: ${errData.error}`);
+        log?.("sessions", "warn", `[ingester.reconcile] failed: ${errData.error}`);
       });
     }, reconcileIntervalMs);
   }
@@ -60029,7 +60167,7 @@ function writeEnrichment(db3, sessionId, { title, description, tags }) {
   });
   return tx();
 }
-function parseEnrichmentResponse(responseText, log2) {
+function parseEnrichmentResponse(responseText, log) {
   let jsonStr = responseText.trim();
   const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenceMatch) {
@@ -60039,18 +60177,18 @@ function parseEnrichmentResponse(responseText, log2) {
   try {
     parsed = JSON.parse(jsonStr);
   } catch {
-    log2?.("sessions", "debug", `[enrichment] JSON parse failed: ${jsonStr.slice(0, 200)}`);
+    log?.("sessions", "debug", `[enrichment] JSON parse failed: ${jsonStr.slice(0, 200)}`);
     return null;
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    log2?.("sessions", "debug", "[enrichment] response is not an object");
+    log?.("sessions", "debug", "[enrichment] response is not an object");
     return null;
   }
   const title = typeof parsed.title === "string" ? parsed.title.trim().replace(/['"]+$/g, "").replace(/^['"]+/g, "").slice(0, 100) : null;
   const description = typeof parsed.description === "string" ? parsed.description.trim().slice(0, 500) : null;
   const tags = Array.isArray(parsed.tags) ? parsed.tags.filter((t2) => typeof t2 === "string" && t2.trim().length > 0).slice(0, 5).map((t2) => t2.trim().toLowerCase().replace(/[^a-z0-9-_/ ]/g, "").slice(0, 30)).filter((t2) => t2.length > 0) : [];
   if (!title && !description) {
-    log2?.("sessions", "debug", "[enrichment] no title or description in response");
+    log?.("sessions", "debug", "[enrichment] no title or description in response");
     return null;
   }
   return { title, description, tags };
@@ -60081,10 +60219,10 @@ Sample turns:
 ${normalizedSampleTurns}` : ""
   ].filter(Boolean).join("\n");
 }
-async function _runClaudeEnrichment(prompt, { timeoutMs }, log2) {
+async function _runClaudeEnrichment(prompt, { timeoutMs }, log) {
   const binaryPath = resolveClaudeBinary();
   if (!binaryPath) {
-    log2?.("sessions", "warn", "[enrichment] no claude binary");
+    log?.("sessions", "warn", "[enrichment] no claude binary");
     return { enrichment: null, failureType: "missing_binary" };
   }
   return new Promise((resolve) => {
@@ -60111,7 +60249,7 @@ async function _runClaudeEnrichment(prompt, { timeoutMs }, log2) {
     });
     const timer = setTimeout(() => {
       timedOut = true;
-      log2?.("sessions", "warn", `[enrichment] LLM timeout after ${timeoutMs}ms`);
+      log?.("sessions", "warn", `[enrichment] LLM timeout after ${timeoutMs}ms`);
       try {
         child.kill("SIGTERM");
       } catch {
@@ -60128,31 +60266,31 @@ async function _runClaudeEnrichment(prompt, { timeoutMs }, log2) {
       clearTimeout(timer);
       if (hardKillTimer) clearTimeout(hardKillTimer);
       if (timedOut) {
-        log2?.("sessions", "debug", `[enrichment] haiku timeout exit=${code} signal=${signal || "none"} stderr=${stderr.slice(0, 200)}`);
+        log?.("sessions", "debug", `[enrichment] haiku timeout exit=${code} signal=${signal || "none"} stderr=${stderr.slice(0, 200)}`);
         resolve({ enrichment: null, failureType: "timeout", exitCode: code, signal, stderr });
         return;
       }
       if (code !== 0) {
-        log2?.("sessions", "debug", `[enrichment] haiku exit=${code} signal=${signal || "none"} stderr=${stderr.slice(0, 200)}`);
+        log?.("sessions", "debug", `[enrichment] haiku exit=${code} signal=${signal || "none"} stderr=${stderr.slice(0, 200)}`);
         resolve({ enrichment: null, failureType: "nonzero_exit", exitCode: code, signal, stderr });
         return;
       }
       if (!stdout.trim()) {
-        log2?.("sessions", "debug", `[enrichment] empty stdout stderr=${stderr.slice(0, 200)}`);
+        log?.("sessions", "debug", `[enrichment] empty stdout stderr=${stderr.slice(0, 200)}`);
         resolve({ enrichment: null, failureType: "empty_output", exitCode: code, signal, stderr });
         return;
       }
       try {
         const cliOutput = JSON.parse(stdout);
         const resultText = (cliOutput.result || "").trim();
-        const enrichment2 = parseEnrichmentResponse(resultText, log2);
+        const enrichment2 = parseEnrichmentResponse(resultText, log);
         if (enrichment2) {
           resolve({ enrichment: enrichment2, failureType: null, exitCode: code, signal: signal || null });
           return;
         }
       } catch {
       }
-      const enrichment = parseEnrichmentResponse(stdout, log2);
+      const enrichment = parseEnrichmentResponse(stdout, log);
       if (enrichment) {
         resolve({ enrichment, failureType: null, exitCode: code, signal: signal || null });
         return;
@@ -60168,12 +60306,12 @@ async function _runClaudeEnrichment(prompt, { timeoutMs }, log2) {
     child.on("error", (err) => {
       clearTimeout(timer);
       if (hardKillTimer) clearTimeout(hardKillTimer);
-      log2?.("sessions", "warn", `[enrichment] spawn error: ${err.message}`);
+      log?.("sessions", "warn", `[enrichment] spawn error: ${err.message}`);
       resolve({ enrichment: null, failureType: "spawn_error", errorMessage: err.message });
     });
   });
 }
-async function _generateEnrichment(firstMessage, sampleTurns, context, runtimeConfig, log2) {
+async function _generateEnrichment(firstMessage, sampleTurns, context, runtimeConfig, log) {
   let lastFailureType = "unknown";
   let attempts = 0;
   for (let attempt = 1; attempt <= runtimeConfig.maxAttempts; attempt++) {
@@ -60181,7 +60319,7 @@ async function _generateEnrichment(firstMessage, sampleTurns, context, runtimeCo
     const compact = attempt > 1;
     const prompt = buildEnrichmentPrompt(firstMessage, sampleTurns, context, { compact });
     const timeoutMs = getAttemptTimeoutMs(runtimeConfig.timeoutMs, attempt);
-    const result = await _runClaudeEnrichment(prompt, { timeoutMs }, log2);
+    const result = await _runClaudeEnrichment(prompt, { timeoutMs }, log);
     if (result.enrichment) {
       return {
         enrichment: result.enrichment,
@@ -60195,7 +60333,7 @@ async function _generateEnrichment(firstMessage, sampleTurns, context, runtimeCo
       break;
     }
     const delayMs = getRetryDelayMs(attempt, runtimeConfig.retryBaseDelayMs);
-    log2?.(
+    log?.(
       "sessions",
       "warn",
       `[enrichment] retrying after ${lastFailureType} (attempt ${attempt}/${runtimeConfig.maxAttempts}, delay=${delayMs}ms)`
@@ -60212,7 +60350,7 @@ async function _generateEnrichment(firstMessage, sampleTurns, context, runtimeCo
 function _sleep(ms) {
   return new Promise((r2) => setTimeout(r2, ms));
 }
-function createTitleBackfillModule({ log: log2, resolveDb: resolveDb2, broadcast }) {
+function createTitleBackfillModule({ log, resolveDb: resolveDb2, broadcast }) {
   const state = {
     backfillInFlight: null,
     lastRunAt: null,
@@ -60255,7 +60393,7 @@ function createTitleBackfillModule({ log: log2, resolveDb: resolveDb2, broadcast
       };
       state.lastRunAt = (/* @__PURE__ */ new Date()).toISOString();
       state.lastResult = result2;
-      log2?.("sessions", "info", `[enrichment] no unenriched sessions (minTurns=${minTurns})`);
+      log?.("sessions", "info", `[enrichment] no unenriched sessions (minTurns=${minTurns})`);
       return result2;
     }
     state.total = unenriched.length;
@@ -60265,7 +60403,7 @@ function createTitleBackfillModule({ log: log2, resolveDb: resolveDb2, broadcast
     state.succeededAfterRetry = 0;
     state.processed = 0;
     state.failureCounts = createFailureCounts();
-    log2?.(
+    log?.(
       "sessions",
       "info",
       `[enrichment] starting: ${unenriched.length} sessions (minTurns=${minTurns}, workers=${runtimeConfig.maxConcurrency}, timeout=${runtimeConfig.timeoutMs}ms, attempts=${runtimeConfig.maxAttempts})`
@@ -60296,10 +60434,10 @@ function createTitleBackfillModule({ log: log2, resolveDb: resolveDb2, broadcast
       };
       state.lastRunAt = (/* @__PURE__ */ new Date()).toISOString();
       state.lastResult = result2;
-      log2?.("sessions", "info", `[enrichment] llm disabled or no messages, skipped ${noMessage}`);
+      log?.("sessions", "info", `[enrichment] llm disabled or no messages, skipped ${noMessage}`);
       return result2;
     }
-    log2?.("sessions", "info", `[enrichment] generating enrichments for ${sessions.length} sessions (${noMessage} skipped, no message)`);
+    log?.("sessions", "info", `[enrichment] generating enrichments for ${sessions.length} sessions (${noMessage} skipped, no message)`);
     let cursor = 0;
     const next = () => cursor < sessions.length ? sessions[cursor++] : null;
     const worker = async (workerId) => {
@@ -60312,7 +60450,7 @@ function createTitleBackfillModule({ log: log2, resolveDb: resolveDb2, broadcast
             sess._sampleTurns,
             { cwd, model: sess.model, sessionType: sess.session_type, parentSessionId: sess.parent_session_id },
             runtimeConfig,
-            log2
+            log
           );
           state.retries += result2.retries;
           if (result2.enrichment) {
@@ -60331,7 +60469,7 @@ function createTitleBackfillModule({ log: log2, resolveDb: resolveDb2, broadcast
           } else {
             state.errors++;
             incrementFailureCount(state.failureCounts, result2.failureType);
-            log2?.(
+            log?.(
               "sessions",
               "warn",
               `[enrichment] worker ${workerId} failed on ${sess.id} after ${result2.attempts} attempt(s): ${result2.failureType || "unknown"}`
@@ -60340,11 +60478,11 @@ function createTitleBackfillModule({ log: log2, resolveDb: resolveDb2, broadcast
         } catch (err) {
           state.errors++;
           incrementFailureCount(state.failureCounts, "write_error");
-          log2?.("sessions", "warn", `[enrichment] worker ${workerId} error on ${sess.id}: ${err.message}`);
+          log?.("sessions", "warn", `[enrichment] worker ${workerId} error on ${sess.id}: ${err.message}`);
         } finally {
           state.processed++;
           if (state.processed % 25 === 0 || state.processed === sessions.length) {
-            log2?.(
+            log?.(
               "sessions",
               "info",
               `[enrichment] progress: ${state.processed}/${sessions.length} processed, ${state.enriched} enriched, ${state.errors} errors, ${state.retries} retries`
@@ -60373,7 +60511,7 @@ function createTitleBackfillModule({ log: log2, resolveDb: resolveDb2, broadcast
     };
     state.lastRunAt = (/* @__PURE__ */ new Date()).toISOString();
     state.lastResult = result;
-    log2?.(
+    log?.(
       "sessions",
       "info",
       `[enrichment] done: ${state.enriched} enriched, ${state.errors} errors, ${noMessage} skipped, ${state.retries} retries (${result.durationMs}ms)`
@@ -60566,7 +60704,7 @@ function _updateSessionMetadata(db3, sessionId, meta) {
     sessionId
   );
 }
-function createMetadataBackfillModule({ log: log2, resolveDb: resolveDb2, broadcast }) {
+function createMetadataBackfillModule({ log, resolveDb: resolveDb2, broadcast }) {
   const state = {
     backfillInFlight: null,
     lastRunAt: null,
@@ -60590,7 +60728,7 @@ function createMetadataBackfillModule({ log: log2, resolveDb: resolveDb2, broadc
     state.enriched = 0;
     state.errors = 0;
     const agentFiles = await _walkAgentFiles();
-    log2?.("sessions", "info", `[metadata-backfill] found ${agentFiles.length} agent files on disk`);
+    log?.("sessions", "info", `[metadata-backfill] found ${agentFiles.length} agent files on disk`);
     const fileMap = /* @__PURE__ */ new Map();
     for (const af of agentFiles) {
       fileMap.set(af.sessionId, af);
@@ -60601,7 +60739,7 @@ function createMetadataBackfillModule({ log: log2, resolveDb: resolveDb2, broadc
     );
     const orphans = agentFiles.filter((af) => !dbIds.has(af.sessionId));
     state.total = needsMeta.length + orphans.length;
-    log2?.(
+    log?.(
       "sessions",
       "info",
       `[metadata-backfill] ${needsMeta.length} sessions need enrichment, ${orphans.length} orphan agent files`
@@ -60633,7 +60771,7 @@ function createMetadataBackfillModule({ log: log2, resolveDb: resolveDb2, broadc
         state.enriched++;
       } catch (err) {
         state.errors++;
-        log2?.("sessions", "debug", `[metadata-backfill] error enriching ${sess.id}: ${err.message}`);
+        log?.("sessions", "debug", `[metadata-backfill] error enriching ${sess.id}: ${err.message}`);
       }
     }
     for (const af of orphans) {
@@ -60683,7 +60821,7 @@ function createMetadataBackfillModule({ log: log2, resolveDb: resolveDb2, broadc
         state.enriched++;
       } catch (err) {
         state.errors++;
-        log2?.("sessions", "debug", `[metadata-backfill] error inserting orphan ${af.sessionId}: ${err.message}`);
+        log?.("sessions", "debug", `[metadata-backfill] error inserting orphan ${af.sessionId}: ${err.message}`);
       }
     }
     const result = {
@@ -60695,7 +60833,7 @@ function createMetadataBackfillModule({ log: log2, resolveDb: resolveDb2, broadc
     };
     state.lastRunAt = (/* @__PURE__ */ new Date()).toISOString();
     state.lastResult = result;
-    log2?.(
+    log?.(
       "sessions",
       "info",
       `[metadata-backfill] done: ${state.enriched} enriched, ${state.errors} errors (${result.durationMs}ms)`
@@ -61276,7 +61414,7 @@ function shouldRefreshProjectsForSessionUpdate(watchRoot, relPath) {
   if (normalized.endsWith(".jsonl")) return false;
   return true;
 }
-function createSessionsModule({ log: log2, broadcast, json, error, readBody, getProjectGitStatus: getProjectGitStatus2, resolveDb: resolveDb2 }) {
+function createSessionsModule({ log, broadcast, json, error, readBody, getProjectGitStatus: getProjectGitStatus2, resolveDb: resolveDb2 }) {
   const sessionsProjectsCache = {
     value: null,
     fetchedAt: 0,
@@ -61421,7 +61559,7 @@ function createSessionsModule({ log: log2, broadcast, json, error, readBody, get
     }, ENRICHMENT_DEBOUNCE_MS);
   }
   const dbModule = createSessionsDbModule({
-    log: log2,
+    log,
     resolveDb: resolveDb2,
     caches: { diffStatsCache: _diffStatsCache, gitStatusCache: _gitStatusCache, sessionPathMap: _sessionPathMap, GIT_STATUS_TTL_MS },
     onProjectsReady: _scheduleEnrichment
@@ -61436,7 +61574,7 @@ function createSessionsModule({ log: log2, broadcast, json, error, readBody, get
     isDbSpineEnabled
   } = dbModule;
   const ingesterModule = createSessionsIngesterModule({
-    log: log2,
+    log,
     resolveDb: resolveDb2
   });
   const {
@@ -61448,7 +61586,7 @@ function createSessionsModule({ log: log2, broadcast, json, error, readBody, get
     getStats: getTurnIngestStats
   } = ingesterModule;
   const titleBackfillModule = createTitleBackfillModule({
-    log: log2,
+    log,
     resolveDb: resolveDb2,
     broadcast
   });
@@ -61457,7 +61595,7 @@ function createSessionsModule({ log: log2, broadcast, json, error, readBody, get
     getStats: getTitleBackfillStats
   } = titleBackfillModule;
   const metadataBackfillModule = createMetadataBackfillModule({
-    log: log2,
+    log,
     resolveDb: resolveDb2,
     broadcast
   });
@@ -61466,7 +61604,7 @@ function createSessionsModule({ log: log2, broadcast, json, error, readBody, get
     getStats: getMetadataBackfillStats
   } = metadataBackfillModule;
   const tailModule = createSessionsTailModule({
-    log: log2,
+    log,
     broadcast,
     findSessionFile: (sid) => findSessionFileEntry(sid, { resolveDb: resolveDb2 })
   });
@@ -61522,7 +61660,7 @@ function createSessionsModule({ log: log2, broadcast, json, error, readBody, get
       watcherSpecs.push({ provider: "codex", rootPath: CODEX_ROOT_DIR });
     }
     if (watcherSpecs.length === 0) {
-      log2("sessions", "debug", "sessions watcher skipped (no provider session directories found)");
+      log("sessions", "debug", "sessions watcher skipped (no provider session directories found)");
       if (!sessionsWatcherRetryTimer) {
         sessionsWatcherRetryTimer = setTimeout(() => {
           sessionsWatcherRetryTimer = null;
@@ -61610,9 +61748,9 @@ function createSessionsModule({ log: log2, broadcast, json, error, readBody, get
           queueSessionsUpdated(updateData);
         });
         watchers.push({ watcher, rootPath, provider });
-        log2("sessions", "info", `watching ${rootPath} for ${provider} session updates`);
+        log("sessions", "info", `watching ${rootPath} for ${provider} session updates`);
       } catch (err) {
-        log2("sessions", "warn", `failed to watch sessions path: ${err.message}`, { rootPath, provider });
+        log("sessions", "warn", `failed to watch sessions path: ${err.message}`, { rootPath, provider });
       }
     }
     if (watchers.length === 0) {
@@ -61929,7 +62067,7 @@ function createSessionsModule({ log: log2, broadcast, json, error, readBody, get
           }
         }
       } catch (err) {
-        log2("sessions", "warn", `DB title merge failed: ${err.message}`);
+        log("sessions", "warn", `DB title merge failed: ${err.message}`);
       }
     }
     const worktreeMarker = "/.rudi/worktrees/";
@@ -61970,7 +62108,7 @@ function createSessionsModule({ log: log2, broadcast, json, error, readBody, get
       );
     }
     const totalSessions = mergedProjects.reduce((s2, p2) => s2 + p2.sessions.length, 0);
-    log2("sessions", "debug", `built ${mergedProjects.length} projects from ${totalSessions} sessions`);
+    log("sessions", "debug", `built ${mergedProjects.length} projects from ${totalSessions} sessions`);
     mergedProjects.sort((a2, b2) => {
       const aTime = a2.sessions[0]?.modified || "";
       const bTime = b2.sessions[0]?.modified || "";
@@ -62080,7 +62218,7 @@ function createSessionsModule({ log: log2, broadcast, json, error, readBody, get
             }
           }
           if (!paginationOpts.cursor && (result.messages?.length || 0) === 0 && (result.totalTurns || 0) === 0) {
-            log2("sessions", "debug", "DB messages empty on initial page after warmup", {
+            log("sessions", "debug", "DB messages empty on initial page after warmup", {
               sessionId: sessionId.slice(0, 8)
             });
           }
@@ -62152,11 +62290,11 @@ function createSessionsModule({ log: log2, broadcast, json, error, readBody, get
                   usage.totalInputTokens,
                   usage.totalOutputTokens
                 );
-                log2("sessions", "info", "lazy backfill: created DB row", { sessionId: sessionId.slice(0, 8) });
+                log("sessions", "info", "lazy backfill: created DB row", { sessionId: sessionId.slice(0, 8) });
               }
             }
           } catch (dbErr) {
-            log2("sessions", "warn", "lazy backfill failed", { error: dbErr.message });
+            log("sessions", "warn", "lazy backfill failed", { error: dbErr.message });
           }
         }
       } catch (err) {
@@ -62252,7 +62390,7 @@ function createSessionsModule({ log: log2, broadcast, json, error, readBody, get
         `).run(title, title, now, targetSessionId);
         json(res, { ok: true, title });
       } catch (err) {
-        log2("sessions", "warn", `title update failed: ${err.message}`);
+        log("sessions", "warn", `title update failed: ${err.message}`);
         json(res, { ok: true, title });
       }
       return true;
@@ -62342,7 +62480,7 @@ function createInfrastructure() {
   function getSseClients() {
     return _sseClients;
   }
-  function log2(source, level, message, data) {
+  function log(source, level, message, data) {
     const entry = {
       ts: Date.now(),
       time: (/* @__PURE__ */ new Date()).toISOString().slice(11, 23),
@@ -62375,7 +62513,7 @@ function createInfrastructure() {
   function broadcast(type, data) {
     if (!_wss) return;
     const msg = JSON.stringify({ type, data });
-    log2("ws", "debug", `broadcast ${type}`, { type, sessionId: data?.sessionId });
+    log("ws", "debug", `broadcast ${type}`, { type, sessionId: data?.sessionId });
     _wss.clients.forEach((client) => {
       if (client.readyState === 1) {
         client.send(msg);
@@ -62475,7 +62613,7 @@ function createInfrastructure() {
     getLogs,
     getSseClients,
     // Functions
-    log: log2,
+    log,
     broadcast,
     json,
     error,
@@ -62491,7 +62629,7 @@ function createInfrastructure() {
 var import_fs52 = __toESM(require("fs"), 1);
 var import_path55 = __toESM(require("path"), 1);
 var import_child_process27 = require("child_process");
-function runStartupTasks({ log: log2 }) {
+function runStartupTasks({ log }) {
   try {
     initSchema();
   } catch (err) {
@@ -62519,7 +62657,7 @@ function runStartupTasks({ log: log2 }) {
       }
     }
     if (staleCount > 0) {
-      log2("serve", "info", `Marked ${staleCount} stale session(s) as crashed`);
+      log("serve", "info", `Marked ${staleCount} stale session(s) as crashed`);
     }
     for (const groupId of affectedGroups) {
       const stats = db3.prepare(`
@@ -62566,7 +62704,7 @@ function runStartupTasks({ log: log2 }) {
           WHERE id = ?
         `).run(finalStatus, now, groupId);
       }
-      log2("serve", "info", `Refreshed run_group ${groupId.slice(0, 8)} aggregates (status=${finalStatus})`);
+      log("serve", "info", `Refreshed run_group ${groupId.slice(0, 8)} aggregates (status=${finalStatus})`);
     }
     const stuckGroups = db3.prepare(`
       SELECT rg.id FROM run_groups rg
@@ -62598,7 +62736,7 @@ function runStartupTasks({ log: log2 }) {
         SET completed_count = ?, failed_count = ?, status = ?, completed_at = COALESCE(completed_at, ?), updated_at = ?
         WHERE id = ?
       `).run(cc, fc, status, now, now, groupId);
-      log2("serve", "info", `Fixed stuck run_group ${groupId.slice(0, 8)} \u2192 ${status}`);
+      log("serve", "info", `Fixed stuck run_group ${groupId.slice(0, 8)} \u2192 ${status}`);
     }
   } catch (err) {
     console.warn("[serve] Failed to sweep stale sessions:", err.message);
@@ -62618,7 +62756,7 @@ function runStartupTasks({ log: log2 }) {
       };
     }).filter((entry) => entry && entry.ppid <= 1 && entry.command.includes("claude") && entry.command.includes("--output-format stream-json") && entry.command.includes("--input-format stream-json")).map((entry) => entry.pid);
     if (orphanPids.length > 0) {
-      log2("serve", "warn", `Killing ${orphanPids.length} orphaned Claude CLI process(es)`, { pids: orphanPids });
+      log("serve", "warn", `Killing ${orphanPids.length} orphaned Claude CLI process(es)`, { pids: orphanPids });
       for (const pid of orphanPids) {
         try {
           process.kill(pid, "SIGTERM");
@@ -62659,7 +62797,7 @@ function runStartupTasks({ log: log2 }) {
       try {
         const uncommitted = (0, import_child_process27.execSync)("git status --porcelain", { cwd: row.worktree_path, stdio: "pipe" }).toString().trim();
         if (uncommitted) {
-          log2("serve", "warn", `orphan worktree has uncommitted changes, skipping: ${row.worktree_path}`);
+          log("serve", "warn", `orphan worktree has uncommitted changes, skipping: ${row.worktree_path}`);
           continue;
         }
         let unmerged = "";
@@ -62673,7 +62811,7 @@ function runStartupTasks({ log: log2 }) {
           }
         }
         if (unmerged) {
-          log2("serve", "warn", `orphan worktree has unmerged commits, skipping: ${row.worktree_path}`);
+          log("serve", "warn", `orphan worktree has unmerged commits, skipping: ${row.worktree_path}`);
           continue;
         }
         const repoDir = row.project_root || import_path55.default.dirname(import_path55.default.dirname(import_path55.default.dirname(row.worktree_path)));
@@ -62685,19 +62823,19 @@ function runStartupTasks({ log: log2 }) {
           }
         }
         db3.prepare("UPDATE session_runtime_state SET worktree_path = NULL, worktree_branch = NULL WHERE session_id = ?").run(row.session_id);
-        log2("serve", "info", `cleaned up orphan worktree: ${row.worktree_path}`);
+        log("serve", "info", `cleaned up orphan worktree: ${row.worktree_path}`);
       } catch (err) {
-        log2("serve", "warn", `orphan worktree cleanup failed for ${row.worktree_path}: ${err.message}`);
+        log("serve", "warn", `orphan worktree cleanup failed for ${row.worktree_path}: ${err.message}`);
       }
     }
   } catch (err) {
-    log2("serve", "warn", `orphan worktree cleanup sweep failed: ${err.message}`);
+    log("serve", "warn", `orphan worktree cleanup sweep failed: ${err.message}`);
   }
 }
 
 // src/commands/serve/routes/logs.js
 function buildLogsRoutes(ctx) {
-  const { json, error, readBody, log: log2, getLogs, getSseClients, SSE_CLIENT_CAP: SSE_CLIENT_CAP2 } = ctx;
+  const { json, error, readBody, log, getLogs, getSseClients, SSE_CLIENT_CAP: SSE_CLIENT_CAP2 } = ctx;
   async function handle(req, res, url) {
     if (req.method === "GET" && url.pathname === "/logs") {
       const limit2 = parseInt(url.searchParams.get("limit") || "50", 10);
@@ -62712,7 +62850,7 @@ function buildLogsRoutes(ctx) {
     }
     if (req.method === "POST" && url.pathname === "/logs") {
       const body = await readBody(req);
-      log2(body.source || "frontend", body.level || "info", body.message || "", body.data);
+      log(body.source || "frontend", body.level || "info", body.message || "", body.data);
       json(res, { ok: true });
       return true;
     }
@@ -62752,7 +62890,7 @@ var import_path56 = __toESM(require("path"), 1);
 var FS_READDIR_CACHE_TTL_MS = 1200;
 var MAX_FS_WRITE_BODY_SIZE = 50 * 1024 * 1024;
 function buildFsRoutes(ctx) {
-  const { json, error, readBody, log: log2, broadcast } = ctx;
+  const { json, error, readBody, log, broadcast } = ctx;
   const fsWatchers = /* @__PURE__ */ new Map();
   const fsReaddirCache = /* @__PURE__ */ new Map();
   const fsReaddirInFlight = /* @__PURE__ */ new Map();
@@ -62980,7 +63118,7 @@ function buildFsRoutes(ctx) {
           }, 100);
         });
         fsWatchers.set(watchPath, { watcher, debounceTimer: null });
-        log2("fs", "info", `watching ${watchPath}`);
+        log("fs", "info", `watching ${watchPath}`);
         json(res, { ok: true });
       } catch (err) {
         error(res, err.message, 500);
@@ -62995,7 +63133,7 @@ function buildFsRoutes(ctx) {
         clearTimeout(entry.debounceTimer);
         entry.watcher.close();
         fsWatchers.delete(body.path);
-        log2("fs", "info", `unwatched ${body.path}`);
+        log("fs", "info", `unwatched ${body.path}`);
       }
       json(res, { ok: true });
       return true;
@@ -63022,7 +63160,7 @@ var import_os23 = __toESM(require("os"), 1);
 var import_child_process28 = require("child_process");
 init_src();
 function buildAuthRoutes(ctx) {
-  const { json, error, readBody, log: log2 } = ctx;
+  const { json, error, readBody, log } = ctx;
   async function handle(req, res, url) {
     if (req.method === "GET" && url.pathname === "/auth/status") {
       const provider = url.searchParams.get("provider") || "claude";
@@ -63055,19 +63193,19 @@ function buildAuthRoutes(ctx) {
 CLAUDE_CODE_OAUTH_TOKEN=${body.oauthToken}
 `;
             process.env.CLAUDE_CODE_OAUTH_TOKEN = body.oauthToken;
-            log2("auth", "info", "OAuth token saved to .env");
+            log("auth", "info", "OAuth token saved to .env");
           } else {
             content = content.replace(/^ANTHROPIC_API_KEY=.*$/m, "").trim();
             content += `
 ANTHROPIC_API_KEY=${body.apiKey}
 `;
             process.env.ANTHROPIC_API_KEY = body.apiKey;
-            log2("auth", "info", "API key saved to .env");
+            log("auth", "info", "API key saved to .env");
           }
           import_fs54.default.writeFileSync(envPath, content.trim() + "\n");
           json(res, { ok: true });
         } catch (err) {
-          log2("auth", "error", `Failed to save credential: ${err.message}`);
+          log("auth", "error", `Failed to save credential: ${err.message}`);
           error(res, `Failed to save credential: ${err.message}`, 500);
         }
       } else {
@@ -63100,10 +63238,10 @@ ANTHROPIC_API_KEY=${body.apiKey}
             ].join("\n");
             import_fs54.default.writeFileSync(helperPath, script, { mode: 493 });
             (0, import_child_process28.execSync)(`osascript -e 'tell application "Terminal" to do script "${helperPath}"'`, { stdio: "pipe" });
-            log2("auth", "info", "Launched login helper in Terminal.app");
+            log("auth", "info", "Launched login helper in Terminal.app");
             json(res, { ok: true, launched: true });
           } catch (err) {
-            log2("auth", "warn", `Failed to launch login helper: ${err.message}`);
+            log("auth", "warn", `Failed to launch login helper: ${err.message}`);
             json(res, { ok: true, message: `Run 'claude setup-token' in a terminal to authenticate` });
           }
         } else {
@@ -63505,7 +63643,7 @@ function buildTerminalRoutes(ctx) {
 var import_os24 = __toESM(require("os"), 1);
 var import_child_process30 = require("child_process");
 function buildSuggestRoutes(ctx) {
-  const { json, error, readBody, log: log2 } = ctx;
+  const { json, error, readBody, log } = ctx;
   let _activeSuggestProcess = null;
   async function handleSuggest(req, res, url) {
     if (req.method !== "POST" || url.pathname !== "/agent/suggest") return false;
@@ -63604,7 +63742,7 @@ ${lastMessage}${gitContext}`;
       }
       json(res, { suggestions: suggestions.slice(0, 4) });
     } catch (err) {
-      log2("suggest", "warn", `suggestion failed: ${err.message}`);
+      log("suggest", "warn", `suggestion failed: ${err.message}`);
       _activeSuggestProcess = null;
       json(res, { suggestions: [] });
     }
@@ -63670,7 +63808,7 @@ Title:`;
       const title = (parsed.result || "").trim();
       json(res, { title });
     } catch (err) {
-      log2("name-session", "warn", `naming failed: ${err.message}`);
+      log("name-session", "warn", `naming failed: ${err.message}`);
       json(res, { title: "" });
     }
     return true;
@@ -63718,7 +63856,7 @@ Branch name:`;
       });
       const exitCode = await new Promise((resolve) => {
         const timer = setTimeout(() => {
-          log2("generate-branch-name", "warn", "timeout \u2014 killing process");
+          log("generate-branch-name", "warn", "timeout \u2014 killing process");
           try {
             child.kill();
           } catch {
@@ -63730,22 +63868,22 @@ Branch name:`;
         });
         child.on("error", (e2) => {
           clearTimeout(timer);
-          log2("generate-branch-name", "warn", `spawn error: ${e2.message}`);
+          log("generate-branch-name", "warn", `spawn error: ${e2.message}`);
           resolve(1);
         });
       });
-      log2("generate-branch-name", "info", `exit=${exitCode} stdout=${stdout.length}b stderr=${stderr.slice(0, 200)}`);
+      log("generate-branch-name", "info", `exit=${exitCode} stdout=${stdout.length}b stderr=${stderr.slice(0, 200)}`);
       if (exitCode !== 0 || !stdout) {
         json(res, { branchName: "" });
         return true;
       }
       const parsed = JSON.parse(stdout);
       const raw = (parsed.result || "").trim();
-      log2("generate-branch-name", "info", `raw="${raw}"`);
+      log("generate-branch-name", "info", `raw="${raw}"`);
       const branchName = raw.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
       json(res, { branchName });
     } catch (err) {
-      log2("generate-branch-name", "warn", `generation failed: ${err.message}`);
+      log("generate-branch-name", "warn", `generation failed: ${err.message}`);
       json(res, { branchName: "" });
     }
     return true;
@@ -63770,7 +63908,7 @@ Branch name:`;
 
 // src/commands/serve/routes/providers.js
 function buildProviderRoutes(ctx) {
-  const { json, error, log: log2 } = ctx;
+  const { json, error, log } = ctx;
   async function handle(req, res, url) {
     if (req.method !== "GET" || url.pathname !== "/agent/providers") return false;
     try {
@@ -63789,7 +63927,7 @@ function buildProviderRoutes(ctx) {
       });
       json(res, { providers });
     } catch (err) {
-      log2("agent", "error", `Failed to load providers: ${err.message}`);
+      log("agent", "error", `Failed to load providers: ${err.message}`);
       error(res, `Failed to load providers: ${err.message}`, 500);
     }
     return true;
@@ -64511,7 +64649,7 @@ async function defaultInstallAndRegisterPackage({ id, force, onProgress }, deps)
   }
 }
 function buildPackageRoutes(ctx, overrides = {}) {
-  const { json, error, readBody, log: log2, broadcast } = ctx;
+  const { json, error, readBody, log, broadcast } = ctx;
   const deps = { ...defaultDeps, ...overrides };
   if (!overrides.installAndRegisterPackage) {
     deps.installAndRegisterPackage = (options) => defaultInstallAndRegisterPackage(options, deps);
@@ -64563,7 +64701,7 @@ function buildPackageRoutes(ctx, overrides = {}) {
         const packages = await deps.searchPackages(query, kind2 ? { kind: kind2 } : {});
         json(res, { packages: packages.map((pkg) => projectPackage(pkg)) });
       } catch (err) {
-        log2("packages", "error", `package search failed: ${err.message}`);
+        log("packages", "error", `package search failed: ${err.message}`);
         error(res, `Package search failed: ${err.message}`, 500);
       }
       return true;
@@ -64575,7 +64713,7 @@ function buildPackageRoutes(ctx, overrides = {}) {
         const packages = await deps.listPackages(kind2);
         json(res, { packages: packages.map((pkg) => projectPackage(pkg, kind2)) });
       } catch (err) {
-        log2("packages", "error", `package list failed: ${err.message}`);
+        log("packages", "error", `package list failed: ${err.message}`);
         error(res, `Package list failed: ${err.message}`, 500);
       }
       return true;
@@ -64585,7 +64723,7 @@ function buildPackageRoutes(ctx, overrides = {}) {
         const config = deps.readRudiConfig() || { stacks: {} };
         json(res, { stacks: projectInstalledStacks(config) });
       } catch (err) {
-        log2("packages", "error", `installed package read failed: ${err.message}`);
+        log("packages", "error", `installed package read failed: ${err.message}`);
         error(res, `Failed to read installed packages: ${err.message}`, 500);
       }
       return true;
@@ -64665,7 +64803,7 @@ function buildPackageRoutes(ctx, overrides = {}) {
             success: true,
             result
           });
-          log2("packages", "info", "package install completed", { jobId, id });
+          log("packages", "info", "package install completed", { jobId, id });
         } catch (err) {
           job.status = "failed";
           job.error = err.message;
@@ -64677,7 +64815,7 @@ function buildPackageRoutes(ctx, overrides = {}) {
             success: false,
             error: err.message
           });
-          log2("packages", "warn", `package install failed: ${err.message}`, { jobId, id });
+          log("packages", "warn", `package install failed: ${err.message}`, { jobId, id });
         } finally {
           activeInstallJobs.delete(id);
           if (activeInstallJobId === jobId) activeInstallJobId = null;
@@ -64692,7 +64830,7 @@ function buildPackageRoutes(ctx, overrides = {}) {
         const secrets = await deps.getMaskedSecrets();
         json(res, { secrets });
       } catch (err) {
-        log2("packages", "error", `secret list failed: ${err.message}`);
+        log("packages", "error", `secret list failed: ${err.message}`);
         error(res, `Failed to read secrets: ${err.message}`, 500);
       }
       return true;
@@ -64713,7 +64851,7 @@ function buildPackageRoutes(ctx, overrides = {}) {
         }
         json(res, { ok: true });
       } catch (err) {
-        log2("packages", "error", `secret set failed: ${err.message}`);
+        log("packages", "error", `secret set failed: ${err.message}`);
         error(res, `Failed to save secret: ${err.message}`, 500);
       }
       return true;
@@ -64732,7 +64870,7 @@ function buildPackageRoutes(ctx, overrides = {}) {
         }
         json(res, { ok: true });
       } catch (err) {
-        log2("packages", "error", `secret delete failed: ${err.message}`);
+        log("packages", "error", `secret delete failed: ${err.message}`);
         error(res, `Failed to delete secret: ${err.message}`, 500);
       }
       return true;
@@ -64811,7 +64949,7 @@ var MIME_TYPES = {
 };
 async function cmdServe(args, flags) {
   const ctx = createInfrastructure();
-  const { log: log2, broadcast, json, error, readBody, checkAuth: checkAuth4, generateToken, setWss, setToken } = ctx;
+  const { log, broadcast, json, error, readBody, checkAuth: checkAuth4, generateToken, setWss, setToken } = ctx;
   const webRoot = flags["web-root"] ? import_path61.default.resolve(flags["web-root"]) : null;
   if (webRoot) {
     if (!import_fs56.default.existsSync(import_path61.default.join(webRoot, "index.html"))) {
@@ -64836,7 +64974,7 @@ async function cmdServe(args, flags) {
     return _sessionsDb;
   }
   const sessionsModule = createSessionsModule({
-    log: log2,
+    log,
     broadcast,
     json,
     error,
@@ -64866,7 +65004,7 @@ async function cmdServe(args, flags) {
     backfillSessionMetadata,
     getMetadataBackfillStats
   } = sessionsModule;
-  runStartupTasks({ log: log2 });
+  runStartupTasks({ log });
   let sidecarPort = 0;
   let sidecarToken = "";
   const logsRoutes = buildLogsRoutes(ctx);
@@ -64888,7 +65026,7 @@ async function cmdServe(args, flags) {
     readBody,
     error,
     json,
-    log: log2,
+    log,
     broadcast,
     queueSessionsUpdated,
     maxConcurrent: MAX_CONCURRENT,
@@ -64923,7 +65061,7 @@ async function cmdServe(args, flags) {
       return;
     }
     if (!checkAuth4(req)) {
-      log2("http", "warn", `401 ${req.method} ${url.pathname}`);
+      log("http", "warn", `401 ${req.method} ${url.pathname}`);
       error(res, "Unauthorized", 401);
       return;
     }
@@ -64977,7 +65115,7 @@ async function cmdServe(args, flags) {
       if (url.pathname === "/admin/backfill" && req.method === "POST") {
         const stats = getTurnIngestStats();
         if (!stats.backfillRunning) {
-          backfillSessionTurnsToDb().then((result) => log2("sessions", "info", "Manual backfill complete", result)).catch((err) => log2("sessions", "warn", `Manual backfill failed: ${err.message}`));
+          backfillSessionTurnsToDb().then((result) => log("sessions", "info", "Manual backfill complete", result)).catch((err) => log("sessions", "warn", `Manual backfill failed: ${err.message}`));
           const next = getTurnIngestStats();
           json(res, {
             status: "started",
@@ -65004,7 +65142,7 @@ async function cmdServe(args, flags) {
         if (!stats.repairRunning) {
           const limitRaw = url.searchParams.get("limit");
           const limit2 = limitRaw ? Number.parseInt(limitRaw, 10) : 0;
-          repairNoTextSessionTurnsToDb({ limit: Number.isFinite(limit2) ? limit2 : 0 }).then((result) => log2("sessions", "info", "Manual no-text repair complete", result)).catch((err) => log2("sessions", "warn", `Manual no-text repair failed: ${err.message}`));
+          repairNoTextSessionTurnsToDb({ limit: Number.isFinite(limit2) ? limit2 : 0 }).then((result) => log("sessions", "info", "Manual no-text repair complete", result)).catch((err) => log("sessions", "warn", `Manual no-text repair failed: ${err.message}`));
           const next = getTurnIngestStats();
           json(res, {
             status: "started",
@@ -65037,7 +65175,7 @@ async function cmdServe(args, flags) {
           const minTurnsRaw = url.searchParams.get("minTurns");
           const parsedMinTurns = minTurnsRaw == null ? 1 : Number.parseInt(minTurnsRaw, 10);
           const minTurns = Number.isFinite(parsedMinTurns) && parsedMinTurns >= 0 ? parsedMinTurns : 1;
-          backfillSessionTitles({ llm: useLlm, minTurns }).then((result) => log2("sessions", "info", "Manual title backfill complete", result)).catch((err) => log2("sessions", "warn", `Manual title backfill failed: ${err.message}`));
+          backfillSessionTitles({ llm: useLlm, minTurns }).then((result) => log("sessions", "info", "Manual title backfill complete", result)).catch((err) => log("sessions", "warn", `Manual title backfill failed: ${err.message}`));
           json(res, { status: "started", ...getTitleBackfillStats() });
         } else {
           json(res, { status: "running", ...stats });
@@ -65051,7 +65189,7 @@ async function cmdServe(args, flags) {
       if (url.pathname === "/admin/metadata-backfill" && req.method === "POST") {
         const stats = getMetadataBackfillStats();
         if (!stats.running) {
-          backfillSessionMetadata().then((result) => log2("sessions", "info", "Manual metadata backfill complete", result)).catch((err) => log2("sessions", "warn", `Manual metadata backfill failed: ${err.message}`));
+          backfillSessionMetadata().then((result) => log("sessions", "info", "Manual metadata backfill complete", result)).catch((err) => log("sessions", "warn", `Manual metadata backfill failed: ${err.message}`));
           json(res, { status: "started", ...getMetadataBackfillStats() });
         } else {
           json(res, { status: "running", ...stats });
@@ -65087,16 +65225,16 @@ async function cmdServe(args, flags) {
           return;
         }
       }
-      log2("http", "warn", `404 ${req.method} ${url.pathname}`);
+      log("http", "warn", `404 ${req.method} ${url.pathname}`);
       error(res, "Not found", 404);
     } catch (err) {
       const status = err.statusCode || 500;
-      log2("http", status >= 500 ? "error" : "warn", `${status} ${req.method} ${url.pathname}: ${err.message}`, { stack: status >= 500 ? err.stack : void 0 });
+      log("http", status >= 500 ? "error" : "warn", `${status} ${req.method} ${url.pathname}: ${err.message}`, { stack: status >= 500 ? err.stack : void 0 });
       error(res, err.message, status);
     } finally {
       const ms = Date.now() - start;
       if (!url.pathname.startsWith("/logs") && url.pathname !== "/health") {
-        log2("http", "info", `${req.method} ${url.pathname} ${ms}ms`);
+        log("http", "info", `${req.method} ${url.pathname} ${ms}ms`);
       }
     }
   });
@@ -65122,7 +65260,7 @@ async function cmdServe(args, flags) {
     const presentedToken = protocolToken ?? queryToken;
     const isSameOrigin = presentedToken === "same-origin" && (req.headers.host || "").match(/^(127\.0\.0\.1|localhost)(:|$)/);
     if (presentedToken !== token && !isSameOrigin) {
-      log2("ws", "warn", "upgrade auth failed", {
+      log("ws", "warn", "upgrade auth failed", {
         path: url.pathname,
         hasProtocolToken: !!protocolToken,
         hasQueryToken: !!queryToken
@@ -65135,7 +65273,7 @@ async function cmdServe(args, flags) {
     });
   });
   wss.on("connection", (ws) => {
-    log2("ws", "info", `client connected (total: ${wss.clients.size})`, { protocol: ws.protocol || null });
+    log("ws", "info", `client connected (total: ${wss.clients.size})`, { protocol: ws.protocol || null });
     ws.on("message", (raw) => {
       try {
         const msg = JSON.parse(typeof raw === "string" ? raw : raw.toString());
@@ -65144,7 +65282,7 @@ async function cmdServe(args, flags) {
       }
     });
     ws.on("close", () => {
-      log2("ws", "info", `client disconnected (total: ${wss.clients.size})`);
+      log("ws", "info", `client disconnected (total: ${wss.clients.size})`);
       handleSessionsWsDisconnect(ws);
     });
   });
@@ -65152,7 +65290,7 @@ async function cmdServe(args, flags) {
   const stopIdleReaper = createIdleReaper({
     agentProcesses,
     broadcast,
-    log: log2,
+    log,
     idleTimeoutMs: IDLE_TIMEOUT_MS,
     maxConcurrent: MAX_CONCURRENT
   });
@@ -65187,23 +65325,23 @@ async function cmdServe(args, flags) {
         const { c: c2 } = db3.prepare(`SELECT COUNT(*) as c FROM sessions WHERE status != 'deleted'`).get();
         if (c2 > 0) {
           enableDbSpine();
-          log2("sessions", "info", `DB-as-spine enabled immediately (${c2} existing rows)`);
+          log("sessions", "info", `DB-as-spine enabled immediately (${c2} existing rows)`);
         }
       } catch {
       }
     }
     reconcileSessionsToDb().catch((err) => {
-      log2("sessions", "warn", `Reconciliation failed (continuing): ${err.message}`);
+      log("sessions", "warn", `Reconciliation failed (continuing): ${err.message}`);
     }).then(async () => {
       if (!isDbSpineEnabled()) {
         enableDbSpine();
-        log2("sessions", "info", "DB-as-spine enabled after reconciliation");
+        log("sessions", "info", "DB-as-spine enabled after reconciliation");
       }
       try {
         const db4 = sessionsResolveDb();
         await backfillProjectPaths(db4);
       } catch (bfErr) {
-        log2("sessions", "warn", `[backfill] project paths failed: ${bfErr.message}`);
+        log("sessions", "warn", `[backfill] project paths failed: ${bfErr.message}`);
       }
       try {
         const db4 = sessionsResolveDb();
@@ -65214,17 +65352,17 @@ async function cmdServe(args, flags) {
           await reconcileSessionTurnsToDb();
         }
       } catch (ingestErr) {
-        log2("sessions", "warn", `Turn ingest reconcile failed: ${ingestErr.message}`);
+        log("sessions", "warn", `Turn ingest reconcile failed: ${ingestErr.message}`);
       }
       try {
         await backfillSessionTitles({ llm: true, minTurns: 1 });
       } catch (titleErr) {
-        log2("sessions", "warn", `Title backfill failed: ${titleErr.message}`);
+        log("sessions", "warn", `Title backfill failed: ${titleErr.message}`);
       }
       try {
         await backfillSessionMetadata();
       } catch (metaErr) {
-        log2("sessions", "warn", `Metadata backfill failed: ${metaErr.message}`);
+        log("sessions", "warn", `Metadata backfill failed: ${metaErr.message}`);
       }
     }).finally(() => {
       startPeriodicReconcile();
@@ -65261,11 +65399,11 @@ async function cmdServe(args, flags) {
   process.on("SIGINT", () => cleanup(0));
   process.on("SIGTERM", () => cleanup(0));
   process.on("uncaughtException", (err) => {
-    log2("serve", "error", `Uncaught exception: ${err.message}`);
+    log("serve", "error", `Uncaught exception: ${err.message}`);
     cleanup(1);
   });
   process.on("unhandledRejection", (err) => {
-    log2("serve", "error", `Unhandled rejection: ${err}`);
+    log("serve", "error", `Unhandled rejection: ${err}`);
     cleanup(1);
   });
 }

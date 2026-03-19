@@ -284,6 +284,16 @@ export function resolveRunGroupSessionProgress(liveEntry, persistedProgress = nu
   };
 }
 
+export function emitRunGroupRouteLog(logFn, level, message, data = undefined) {
+  if (typeof logFn !== 'function') return false;
+  try {
+    logFn('agent', level, message, data);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function markRunGroupTasksStopped(db, group, tasks, reason) {
   if (!Array.isArray(tasks) || tasks.length === 0) return [];
 
@@ -1144,7 +1154,7 @@ export async function createRunGroupFromRequest(ctx, body, opts = {}) {
 }
 
 export function buildRunGroupRoutes(ctx) {
-  const { json, error, readBody, agentProcesses, broadcast } = ctx;
+  const { json, error, readBody, agentProcesses, broadcast, log } = ctx;
 
   return async (req, res, url) => {
     if (req.method === 'POST' && url.pathname === '/agent/run-group') {
@@ -1491,7 +1501,10 @@ export function buildRunGroupRoutes(ctx) {
           );
 
           results.push({ sessionId, branch: row.worktree_branch, ok: true });
-          log('agent', 'info', `merged ${row.worktree_branch} into ${mergeTo}`, { groupId, sessionId: sessionId.slice(0, 8) });
+          emitRunGroupRouteLog(log, 'info', `merged ${row.worktree_branch} into ${mergeTo}`, {
+            groupId,
+            sessionId: sessionId.slice(0, 8),
+          });
         } catch (mergeErr) {
           // Attempt to detect conflict files
           let conflictFiles = [];
@@ -1515,7 +1528,11 @@ export function buildRunGroupRoutes(ctx) {
             error: mergeErr.message,
             conflictFiles,
           });
-          log('agent', 'warn', `merge conflict for ${row.worktree_branch}`, { groupId, sessionId: sessionId.slice(0, 8), conflictFiles });
+          emitRunGroupRouteLog(log, 'warn', `merge conflict for ${row.worktree_branch}`, {
+            groupId,
+            sessionId: sessionId.slice(0, 8),
+            conflictFiles,
+          });
         }
       }
 
@@ -1578,7 +1595,10 @@ export function buildRunGroupRoutes(ctx) {
       }
 
       json(res, { ok: errors.length === 0, cleaned, errors });
-      log('agent', 'info', `run-group cleanup: ${cleaned} worktrees`, { groupId, errors: errors.length });
+      emitRunGroupRouteLog(log, 'info', `run-group cleanup: ${cleaned} worktrees`, {
+        groupId,
+        errors: errors.length,
+      });
       return true;
     }
 

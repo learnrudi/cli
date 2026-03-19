@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { extractEventSnippet } from '../../commands/agent/process-io.js';
 import {
+  emitRunGroupRouteLog,
   readLastRunGroupRuntimeProgress,
   resolveRunGroupSessionProgress,
 } from '../../commands/agent/routes/run-group.js';
@@ -89,4 +90,34 @@ test('resolveRunGroupSessionProgress falls back to persisted runtime progress', 
     ts: '2026-03-18T18:20:00.000Z',
     source: 'runtime_event',
   });
+});
+
+test('emitRunGroupRouteLog is a safe no-op when logging is unavailable', () => {
+  assert.strictEqual(
+    emitRunGroupRouteLog(null, 'info', 'cleanup finished', { cleaned: 2 }),
+    false,
+  );
+});
+
+test('emitRunGroupRouteLog swallows logger failures so routes do not crash after work succeeds', () => {
+  assert.doesNotThrow(() => {
+    emitRunGroupRouteLog(() => {
+      throw new Error('logger exploded');
+    }, 'info', 'cleanup finished', { cleaned: 2 });
+  });
+});
+
+test('emitRunGroupRouteLog preserves the agent log contract when logging succeeds', () => {
+  const calls = [];
+  const logged = emitRunGroupRouteLog((source, level, message, data) => {
+    calls.push({ source, level, message, data });
+  }, 'warn', 'merge conflict', { groupId: 'g1' });
+
+  assert.strictEqual(logged, true);
+  assert.deepStrictEqual(calls, [{
+    source: 'agent',
+    level: 'warn',
+    message: 'merge conflict',
+    data: { groupId: 'g1' },
+  }]);
 });
