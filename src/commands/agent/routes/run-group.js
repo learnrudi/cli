@@ -256,6 +256,27 @@ function refreshRunGroupAggregates(db, groupId) {
   return db.prepare('SELECT * FROM run_groups WHERE id = ?').get(groupId);
 }
 
+function stopActiveRunGroupSessions(ctx, groupId, excludeSessionId = null) {
+  const db = getDb();
+  const rows = db.prepare('SELECT id FROM sessions WHERE run_group_id = ?').all(groupId);
+  let stopped = 0;
+
+  for (const row of rows) {
+    if (!row?.id || row.id === excludeSessionId) continue;
+    const entry = ctx.agentProcesses.get(row.id);
+    if (!entry?.proc || entry.proc.killed) continue;
+    entry._terminationReason = 'stopped';
+    entry.proc.kill('SIGTERM');
+    const killTimer = setTimeout(() => {
+      try { entry.proc.kill('SIGKILL'); } catch {}
+    }, 3000);
+    entry.proc.on('close', () => clearTimeout(killTimer));
+    stopped += 1;
+  }
+
+  return stopped;
+}
+
 function launchRunGroupTask(ctx, group, task, settledFn) {
   const {
     log,
@@ -828,7 +849,7 @@ export async function createRunGroupFromRequest(ctx, body, opts = {}) {
 }
 
 export function buildRunGroupRoutes(ctx) {
-  const { json, error, readBody } = ctx;
+  const { json, error, readBody, agentProcesses, broadcast } = ctx;
 
   return async (req, res, url) => {
     if (req.method === 'POST' && url.pathname === '/agent/run-group') {
@@ -883,22 +904,7 @@ export function buildRunGroupRoutes(ctx) {
     if (req.method === 'POST' && stopMatch) {
       const groupId = decodeURIComponent(stopMatch[1]);
       const db = getDb();
-      const sessions = db.prepare(`
-        SELECT id FROM sessions WHERE run_group_id = ?
-      `).all(groupId);
-
-      let stopped = 0;
-      for (const row of sessions) {
-        const entry = agentProcesses.get(row.id);
-        if (!entry || !entry.proc || entry.proc.killed) continue;
-        entry._terminationReason = 'stopped';
-        entry.proc.kill('SIGTERM');
-        const killTimer = setTimeout(() => {
-          try { entry.proc.kill('SIGKILL'); } catch {}
-        }, 3000);
-        entry.proc.on('close', () => clearTimeout(killTimer));
-        stopped++;
-      }
+      const stopped = stopActiveRunGroupSessions(ctx, groupId);
 
       db.prepare(`
         UPDATE run_groups

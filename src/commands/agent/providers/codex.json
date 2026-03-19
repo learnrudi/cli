@@ -338,6 +338,17 @@
     "default": "gpt-5.3-codex",
     "available": [
       {
+        "id": "gpt-5.4",
+        "alias": "5.4",
+        "name": "GPT-5.4",
+        "description": "Latest flagship GPT model with Codex support",
+        "released": "2026-03-04",
+        "pricing": { "inputPerMTok": 2.50, "outputPerMTok": 15.00, "cachedInputPerMTok": 0.25 },
+        "contextWindow": 272000,
+        "maxOutputTokens": 128000,
+        "notes": "Codex supports an experimental 1M context via model_context_window and model_auto_compact_token_limit."
+      },
+      {
         "id": "gpt-5.3-codex",
         "alias": "codex",
         "name": "GPT-5.3 Codex",
