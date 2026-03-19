@@ -1,0 +1,40 @@
+{
+  "name": "code-review-3task",
+  "description": "Explorer maps codebase, reviewer audits, reporter summarizes findings",
+  "coordinationMode": "dependency",
+  "executionMode": "read_only",
+  "tasks": [
+    {
+      "prompt": "Explore the codebase and produce a context document listing all key files, exported functions, types, and import paths. Write the output to context.md in the working directory.",
+      "name": "Explorer",
+      "role": "explorer",
+      "scope": "Read-only codebase exploration",
+      "output": { "type": "file", "path": "context.md" },
+      "evidence": { "type": "artifact_exists", "path": "context.md" },
+      "failurePolicy": "stop-all",
+      "mergePolicy": "manual"
+    },
+    {
+      "prompt": "Review the codebase using the context document provided. Identify code quality issues, potential bugs, security concerns, and architecture improvements. Write findings to review-findings.json as a JSON array of objects with fields: severity (critical/warning/info), file, line, message.",
+      "name": "Reviewer",
+      "role": "reviewer",
+      "scope": "Code review using context document",
+      "dependencies": [{ "taskIndex": 0, "artifact": "context.md" }],
+      "output": { "type": "file", "path": "review-findings.json" },
+      "evidence": { "type": "json_file", "path": "review-findings.json" },
+      "failurePolicy": "stop-downstream",
+      "mergePolicy": "manual"
+    },
+    {
+      "prompt": "Read the review findings JSON and produce a human-readable markdown report summarizing all issues grouped by severity. Write the report to review-report.md.",
+      "name": "Reporter",
+      "role": "reporter",
+      "scope": "Summarize review findings into a report",
+      "dependencies": [{ "taskIndex": 1, "artifact": "review-findings.json" }],
+      "output": { "type": "file", "path": "review-report.md" },
+      "evidence": { "type": "artifact_exists", "path": "review-report.md" },
+      "failurePolicy": "continue",
+      "mergePolicy": "manual"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "name": "parallel-build-2task",
+  "description": "Two independent builders with post-completion validation",
+  "coordinationMode": "flat",
+  "executionMode": "worktree",
+  "tasks": [
+    {
+      "prompt": "Build the first module. Commit your changes when done.",
+      "name": "Builder A",
+      "role": "builder",
+      "scope": "First module implementation",
+      "failurePolicy": "stop-downstream",
+      "mergePolicy": "git",
+      "validation": { "command": ["npm", "run", "build"] }
+    },
+    {
+      "prompt": "Build the second module. Commit your changes when done.",
+      "name": "Builder B",
+      "role": "builder",
+      "scope": "Second module implementation",
+      "failurePolicy": "stop-downstream",
+      "mergePolicy": "git",
+      "validation": { "command": ["npm", "run", "build"] }
+    }
+  ]
+}

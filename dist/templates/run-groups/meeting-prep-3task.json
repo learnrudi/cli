@@ -1,0 +1,51 @@
+{
+  "name": "meeting-prep-3task",
+  "description": "Build a meeting brief from company research, recent news, and a final prep memo",
+  "coordinationMode": "dependency",
+  "executionMode": "read_only",
+  "tasks": [
+    {
+      "prompt": "Research the company and write company-brief.json with keys: company, business_model, products, executives, current_priorities, recent_metrics, sources.",
+      "name": "Company Researcher",
+      "role": "researcher",
+      "goal": "Create a structured company brief",
+      "deliverable": "company-brief.json",
+      "scope": "Background research for the target company",
+      "tools": ["web-search", "content-extractor"],
+      "output": { "type": "file", "path": "company-brief.json" },
+      "evidence": { "type": "json_file", "path": "company-brief.json" },
+      "failurePolicy": "stop-downstream",
+      "mergePolicy": "manual"
+    },
+    {
+      "prompt": "Collect recent news and signals for the company. Write company-news.json with keys: headlines, launches, partnerships, risks, talking_points, sources.",
+      "name": "News Researcher",
+      "role": "researcher",
+      "goal": "Capture recent company developments",
+      "deliverable": "company-news.json",
+      "scope": "Recent news, launches, partnerships, and risks",
+      "tools": ["web-search", "content-extractor"],
+      "output": { "type": "file", "path": "company-news.json" },
+      "evidence": { "type": "json_file", "path": "company-news.json" },
+      "failurePolicy": "stop-downstream",
+      "mergePolicy": "manual"
+    },
+    {
+      "prompt": "Read company-brief.json and company-news.json. Produce meeting-prep.md with executive summary, priority talking points, risks, and suggested questions for the meeting.",
+      "name": "Briefing Writer",
+      "role": "synthesizer",
+      "goal": "Produce a concise meeting prep memo",
+      "deliverable": "meeting-prep.md",
+      "scope": "Synthesize company background and recent developments into a meeting brief",
+      "dependencies": [
+        { "taskIndex": 0, "artifact": "company-brief.json" },
+        { "taskIndex": 1, "artifact": "company-news.json" }
+      ],
+      "tools": ["markdown-writer"],
+      "output": { "type": "file", "path": "meeting-prep.md" },
+      "evidence": { "type": "artifact_exists", "path": "meeting-prep.md" },
+      "failurePolicy": "continue",
+      "mergePolicy": "manual"
+    }
+  ]
+}
