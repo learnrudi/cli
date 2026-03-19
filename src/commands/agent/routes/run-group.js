@@ -47,6 +47,7 @@ import {
   getTaskValidationResultMap,
   validateTaskContract,
 } from '../contract-validator.js';
+import { extractEventSnippet } from '../process-io.js';
  
 const TERMINAL_GROUP_STATUSES = new Set(['completed', 'partial', 'failed', 'stopped']);
 const SPAWN_CHILD_ALLOWED_TOOLS = [
@@ -217,6 +218,70 @@ function createTaskRuntimeStatusMap(db, groupId) {
   return new Map(rows
     .filter((row) => row.runtime_status)
     .map((row) => [row.session_id, row.runtime_status]));
+}
+
+export function readLastRunGroupRuntimeProgress(db, sessionId) {
+  if (!db || !sessionId) return null;
+
+  try {
+    const rows = db.prepare(`
+      SELECT type, payload_json, ts
+      FROM session_runtime_events
+      WHERE session_id = ?
+        AND type IN ('assistant', 'result', 'system', 'error')
+      ORDER BY seq DESC
+      LIMIT 10
+    `).all(sessionId);
+
+    for (const row of rows || []) {
+      if (!row?.payload_json) continue;
+      let payload;
+      try {
+        payload = JSON.parse(row.payload_json);
+      } catch {
+        continue;
+      }
+      const snippet = extractEventSnippet(payload);
+      if (!snippet) continue;
+      return {
+        snippet,
+        type: row.type || payload.type || null,
+        ts: row.ts || null,
+        source: 'runtime_event',
+      };
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+export function resolveRunGroupSessionProgress(liveEntry, persistedProgress = null) {
+  if (liveEntry?.lastProgressSnippet) {
+    return {
+      snippet: liveEntry.lastProgressSnippet,
+      type: liveEntry.lastProgressType || null,
+      ts: liveEntry.lastProgressAt || null,
+      source: 'live',
+    };
+  }
+
+  if (persistedProgress?.snippet) {
+    return {
+      snippet: persistedProgress.snippet,
+      type: persistedProgress.type || null,
+      ts: persistedProgress.ts || null,
+      source: persistedProgress.source || 'runtime_event',
+    };
+  }
+
+  return {
+    snippet: null,
+    type: null,
+    ts: null,
+    source: null,
+  };
 }
 
 function markRunGroupTasksStopped(db, group, tasks, reason) {
@@ -1205,6 +1270,10 @@ export function buildRunGroupRoutes(ctx) {
       const sessionDetails = sessions.map((row) => {
         const live = agentProcesses.get(row.id);
         const alive = Boolean(live?.proc && !live.proc.killed);
+        const progress = resolveRunGroupSessionProgress(
+          live,
+          readLastRunGroupRuntimeProgress(db, row.id),
+        );
         return {
           ...row,
           status: deriveRunGroupSessionStatus({
@@ -1216,6 +1285,10 @@ export function buildRunGroupRoutes(ctx) {
           alive,
           turn_active: Boolean(live?.turnActive),
           pid: live?.proc?.pid || null,
+          last_progress_snippet: progress.snippet,
+          last_progress_type: progress.type,
+          last_progress_at: progress.ts,
+          last_progress_source: progress.source,
           validation_passed: row.validation_passed == null ? null : Number(row.validation_passed) === 1,
           validation_errors: row.validation_errors_json ? JSON.parse(row.validation_errors_json) : [],
           validation_warnings: row.validation_warnings_json ? JSON.parse(row.validation_warnings_json) : [],
@@ -1265,37 +1338,25 @@ export function buildRunGroupRoutes(ctx) {
           sessionStatus: row.session_status,
           groupStatus: group.status,
         });
-
-        // Get last assistant message snippet from runtime events if available
-        let lastSnippet = null;
-        try {
-          const lastEvent = db.prepare(`
-            SELECT payload FROM session_runtime_events
-            WHERE session_id = ? AND event_type IN ('assistant', 'result')
-            ORDER BY seq DESC LIMIT 1
-          `).get(row.id);
-          if (lastEvent?.payload) {
-            const parsed = JSON.parse(lastEvent.payload);
-            // Extract text content from the event
-            const textBlocks = (parsed.content || []).filter(b => b.type === 'text');
-            if (textBlocks.length > 0) {
-              lastSnippet = textBlocks[textBlocks.length - 1].text?.slice(0, 200) || null;
-            }
-          }
-        } catch {
-          // Runtime events table may not exist or be empty
-        }
+        const progress = resolveRunGroupSessionProgress(
+          entry,
+          readLastRunGroupRuntimeProgress(db, row.id),
+        );
 
         return {
           sessionId: row.id,
           name: row.title_override || row.title || row.id.slice(0, 8),
           status,
           alive,
+          turnActive: Boolean(entry?.turnActive),
           turnCount: Number(row.runtime_turn_count || 0),
           costTotal: Number(row.runtime_cost_total || 0),
           tokensTotal: Number(row.runtime_tokens_total || 0),
           lastError: row.runtime_last_error || null,
-          lastSnippet,
+          lastSnippet: progress.snippet,
+          lastProgressType: progress.type,
+          lastProgressAt: progress.ts,
+          lastProgressSource: progress.source,
           worktreeBranch: row.worktree_branch || null,
           validationPassed: row.validation_passed == null ? null : Number(row.validation_passed) === 1,
         };

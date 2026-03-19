@@ -18,6 +18,81 @@ function _toNumber(value, fallback = 0) {
   return (typeof value === 'number' && Number.isFinite(value)) ? value : fallback;
 }
 
+function _truncateSnippet(text, maxChars = 200) {
+  if (typeof text !== 'string') return null;
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  return trimmed.length <= maxChars ? trimmed : trimmed.slice(0, maxChars);
+}
+
+function _contentToSnippet(content, maxChars = 200) {
+  if (!Array.isArray(content)) return null;
+
+  for (let idx = content.length - 1; idx >= 0; idx -= 1) {
+    const block = content[idx];
+    if (!block || typeof block !== 'object') continue;
+
+    if (block.type === 'text') {
+      const snippet = _truncateSnippet(block.text, maxChars);
+      if (snippet) return snippet;
+    }
+
+    if (block.type === 'thinking') {
+      const snippet = _truncateSnippet(block.thinking, maxChars);
+      if (snippet) return snippet;
+    }
+
+    if (block.type === 'tool_result') {
+      if (typeof block.content === 'string') {
+        const snippet = _truncateSnippet(block.content, maxChars);
+        if (snippet) return snippet;
+      }
+      if (Array.isArray(block.content)) {
+        for (const item of block.content) {
+          const snippet = _truncateSnippet(item?.text, maxChars);
+          if (snippet) return snippet;
+        }
+      }
+    }
+
+    if (block.type === 'tool_use' && typeof block.name === 'string' && block.name.trim()) {
+      return `Tool: ${block.name.trim()}`;
+    }
+  }
+
+  return null;
+}
+
+export function extractEventSnippet(event, maxChars = 200) {
+  if (!event || typeof event !== 'object') return null;
+
+  if (event.type === 'assistant') {
+    return _contentToSnippet(event.content, maxChars);
+  }
+
+  if (event.type === 'result') {
+    return _truncateSnippet(event.result, maxChars);
+  }
+
+  if (event.type === 'system') {
+    return _truncateSnippet(event.message, maxChars);
+  }
+
+  if (event.type === 'error') {
+    return _truncateSnippet(event.message, maxChars);
+  }
+
+  return null;
+}
+
+function _updateLiveProgress(entry, event) {
+  const snippet = extractEventSnippet(event);
+  if (!snippet) return;
+  entry.lastProgressSnippet = snippet;
+  entry.lastProgressType = event.type;
+  entry.lastProgressAt = new Date().toISOString();
+}
+
 function _normalizeCompaction(compaction) {
   if (!compaction || typeof compaction !== 'object') return null;
   const normalized = {
@@ -210,6 +285,7 @@ export function attachStdoutHandler(ctx, sessionId, entry, options = {}) {
             rawEvent: raw,   // provider-native (for debugging + future upgrades)
           });
 
+          _updateLiveProgress(entry, event);
           _persistRuntimeMilestone(sessionId, entry, event, raw);
 
           if (event.type === 'result' && onResult) {
@@ -297,6 +373,7 @@ export function flushStdoutBuffer(ctx, sessionId, entry) {
     }
     for (const { normalized, raw } of results) {
       if (!normalized) continue;
+      _updateLiveProgress(entry, normalized);
       _persistRuntimeMilestone(sessionId, entry, normalized, raw);
       ctx.broadcast('agent:event', {
         sessionId,
