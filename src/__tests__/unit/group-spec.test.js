@@ -19,6 +19,7 @@ test('normalizeCoordinationMode defaults invalid input to flat', () => {
   assert.strictEqual(normalizeCoordinationMode(null), 'flat');
   assert.strictEqual(normalizeCoordinationMode('invalid'), 'flat');
   assert.strictEqual(normalizeCoordinationMode('phased'), 'phased');
+  assert.strictEqual(normalizeCoordinationMode('dependency'), 'dependency');
 });
 
 test('normalizeGroupTasks preserves richer task metadata from orchestration plans', () => {
@@ -30,6 +31,15 @@ test('normalizeGroupTasks preserves richer task metadata from orchestration plan
       goal: 'Find auth boundary risks',
       deliverable: 'Short report',
       rationale: 'Authentication is changing',
+      scope: 'Review auth boundaries',
+      inputs: [{ type: 'file', path: 'docs/auth.md' }],
+      tools: ['Read', 'Glob'],
+      evidence: { type: 'artifact_exists', path: 'reports/auth-findings.md' },
+      output: { type: 'file', path: 'reports/auth-findings.md' },
+      dependencies: [{ taskIndex: 0, artifact: 'context.md' }],
+      failurePolicy: 'stop-downstream',
+      mergePolicy: 'manual',
+      validation: { command: ['node', '-e', 'process.exit(0)'] },
       provider: 'claude',
       model: 'haiku',
       files_touched: ['src/auth.ts'],
@@ -46,12 +56,21 @@ test('normalizeGroupTasks preserves richer task metadata from orchestration plan
   assert.deepStrictEqual(tasks[0], {
     prompt: 'Audit the auth flow',
     name: 'Auth audit',
+    scope: 'Review auth boundaries',
     provider: 'claude',
     model: 'haiku',
     role: 'reviewer',
     goal: 'Find auth boundary risks',
     deliverable: 'Short report',
     rationale: 'Authentication is changing',
+    inputs: [{ type: 'file', path: 'docs/auth.md', optional: false }],
+    tools: ['Read', 'Glob'],
+    evidence: { type: 'artifact_exists', path: 'reports/auth-findings.md', command: [] },
+    output: { type: 'file', path: 'reports/auth-findings.md' },
+    dependencies: [{ taskIndex: 0, artifact: 'context.md' }],
+    failurePolicy: 'stop-downstream',
+    mergePolicy: 'manual',
+    validation: { command: ['node', '-e', 'process.exit(0)'] },
     filesTouched: ['src/auth.ts'],
     dependsOn: [0],
     requiresWrite: false,

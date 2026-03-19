@@ -224,13 +224,15 @@ function respawnFromRetryContext(ctx, sessionId, entry) {
 
       if (typeof rc.onProcessClose === 'function') {
         flushDbWrites();
-        rc.onProcessClose({
+        Promise.resolve(rc.onProcessClose({
           sessionId,
           entry,
           exitCode,
           finalStatus,
           providerSessionId: entry.providerSessionId || null,
           runGroupId: rc.runGroupId,
+        })).catch((err) => {
+          log('agent', 'warn', `retry close handler failed: ${err.message}`, { sessionId: shortId });
         });
       }
     });
@@ -371,6 +373,7 @@ export function spawnAgentProcess(ctx, options) {
     runGroupId = null,
     images = null,
     mcpConfigPath = null,
+    taskSpec = null,
     sessionRowMode = 'providerSessionId', // 'providerSessionId' | 'existingSession'
     existingSessionId = null,
     queueEvent = 'result',
@@ -428,6 +431,7 @@ export function spawnAgentProcess(ctx, options) {
     _turnCacheCreationTokens: 0,
     _turnModel: model || null,
     _turnToolsUsed: [],
+    _taskSpec: taskSpec || null,
     _retryState: createRetryState(),
     _retryContext: null, // populated below
   };
@@ -457,6 +461,7 @@ export function spawnAgentProcess(ctx, options) {
     baseBranch,
     repoRoot,
     mcpConfigPath,
+    taskSpec,
     onProcessClose,
     onProcessError,
     onTurnResult,
@@ -748,13 +753,15 @@ export function spawnAgentProcess(ctx, options) {
       // Flush queued DB writes so status is committed before consumers read it
       // (e.g. run-group aggregate refresh reads session_runtime_state.status)
       flushDbWrites();
-      onProcessClose({
+      Promise.resolve(onProcessClose({
         sessionId,
         entry,
         exitCode,
         finalStatus,
         providerSessionId: entry.providerSessionId || null,
         runGroupId,
+      })).catch((err) => {
+        log('agent', 'warn', `process close handler failed: ${err.message}`, { sessionId: shortId, provider });
       });
     }
   };

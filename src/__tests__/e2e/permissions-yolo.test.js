@@ -7,12 +7,13 @@ import assert from 'node:assert/strict';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { spawn } from 'child_process';
 
 // Mock sidecar server state
 let sidecarPort;
 let sidecarToken;
 let testProjectDir;
+let sidecarAvailable = false;
+let skipReason = 'Sidecar not running';
 
 describe('Permissions E2E', () => {
   before(async () => {
@@ -21,11 +22,22 @@ describe('Permissions E2E', () => {
     const tokenPath = path.join(os.homedir(), '.rudi', '.rudi-lite-token');
 
     if (!fs.existsSync(portPath) || !fs.existsSync(tokenPath)) {
-      throw new Error('Sidecar not running — start RUDI Lite first');
+      skipReason = 'Sidecar not running — start RUDI Lite first';
+      return;
     }
 
     sidecarPort = fs.readFileSync(portPath, 'utf-8').trim();
     sidecarToken = fs.readFileSync(tokenPath, 'utf-8').trim();
+
+    try {
+      await fetch(`http://127.0.0.1:${sidecarPort}/`, {
+        headers: { 'x-rudi-token': sidecarToken },
+      });
+      sidecarAvailable = true;
+    } catch {
+      skipReason = 'Sidecar not reachable';
+      return;
+    }
 
     // Create temp project directory
     testProjectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rudi-perm-test-'));
@@ -38,8 +50,15 @@ describe('Permissions E2E', () => {
     }
   });
 
+  function skipIfSidecarUnavailable(t) {
+    if (sidecarAvailable) return false;
+    t.skip(skipReason);
+    return true;
+  }
+
   describe('YOLO mode', () => {
-    it('auto-approves tools without permission prompts', async () => {
+    it('auto-approves tools without permission prompts', async (t) => {
+      if (skipIfSidecarUnavailable(t)) return;
       const response = await fetch(`http://127.0.0.1:${sidecarPort}/agent/start`, {
         method: 'POST',
         headers: {
@@ -47,7 +66,7 @@ describe('Permissions E2E', () => {
           'x-rudi-token': sidecarToken,
         },
         body: JSON.stringify({
-          message: 'Test YOLO mode',
+          prompt: 'Test YOLO mode',
           cwd: testProjectDir,
           permissionMode: 'dangerouslySkipPermissions',
         }),
@@ -102,7 +121,8 @@ describe('Permissions E2E', () => {
   });
 
   describe('ASK mode', () => {
-    it('creates permission prompts for user approval', async () => {
+    it('creates permission prompts for user approval', async (t) => {
+      if (skipIfSidecarUnavailable(t)) return;
       const response = await fetch(`http://127.0.0.1:${sidecarPort}/agent/start`, {
         method: 'POST',
         headers: {
@@ -110,7 +130,7 @@ describe('Permissions E2E', () => {
           'x-rudi-token': sidecarToken,
         },
         body: JSON.stringify({
-          message: 'Test ASK mode',
+          prompt: 'Test ASK mode',
           cwd: testProjectDir,
           permissionMode: 'bypassPermissions',
         }),
@@ -181,7 +201,8 @@ describe('Permissions E2E', () => {
   });
 
   describe('Project settings', () => {
-    it('auto-allows tools in project allowlist', async () => {
+    it('auto-allows tools in project allowlist', async (t) => {
+      if (skipIfSidecarUnavailable(t)) return;
       // Create project settings file
       const settingsPath = path.join(testProjectDir, '.claude', 'settings.local.json');
       fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
@@ -201,7 +222,7 @@ describe('Permissions E2E', () => {
           'x-rudi-token': sidecarToken,
         },
         body: JSON.stringify({
-          message: 'Test project settings',
+          prompt: 'Test project settings',
           cwd: testProjectDir,
           permissionMode: 'bypassPermissions', // ASK mode
         }),
@@ -255,7 +276,8 @@ describe('Permissions E2E', () => {
   });
 
   describe('Session always-allowed', () => {
-    it('remembers "Always" approval for subsequent requests', async () => {
+    it('remembers "Always" approval for subsequent requests', async (t) => {
+      if (skipIfSidecarUnavailable(t)) return;
       const response = await fetch(`http://127.0.0.1:${sidecarPort}/agent/start`, {
         method: 'POST',
         headers: {
@@ -263,7 +285,7 @@ describe('Permissions E2E', () => {
           'x-rudi-token': sidecarToken,
         },
         body: JSON.stringify({
-          message: 'Test session always-allowed',
+          prompt: 'Test session always-allowed',
           cwd: testProjectDir,
           permissionMode: 'bypassPermissions',
         }),
@@ -342,7 +364,8 @@ describe('Permissions E2E', () => {
   });
 
   describe('Run-group with explicit mode', () => {
-    it('auto-allows tools when run-group has dangerouslySkipPermissions', async () => {
+    it('auto-allows tools when run-group has dangerouslySkipPermissions', async (t) => {
+      if (skipIfSidecarUnavailable(t)) return;
       // Create a run-group
       const groupResponse = await fetch(`http://127.0.0.1:${sidecarPort}/agent/run-group`, {
         method: 'POST',
@@ -354,10 +377,16 @@ describe('Permissions E2E', () => {
           name: 'test-group',
           cwd: testProjectDir,
           permissionMode: 'dangerouslySkipPermissions',
+          executionMode: 'shared_cwd',
+          useWorktree: false,
           tasks: [
             {
               label: 'task-1',
-              prompt: 'Test task',
+              prompt: 'Test task one',
+            },
+            {
+              label: 'task-2',
+              prompt: 'Test task two',
             },
           ],
         }),
@@ -366,55 +395,47 @@ describe('Permissions E2E', () => {
       assert.strictEqual(groupResponse.ok, true);
       const groupData = await groupResponse.json();
       const groupId = groupData.groupId;
+      const sessionId = Array.isArray(groupData.sessionIds) ? groupData.sessionIds[0] : null;
+
+      assert.ok(sessionId);
 
       // Wait for task to start
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      // Get group status
-      const statusResponse = await fetch(`http://127.0.0.1:${sidecarPort}/agent/run-group/${groupId}`, {
-        headers: { 'x-rudi-token': sidecarToken },
-      });
-
-      const statusData = await statusResponse.json();
-      const sessionId = statusData.tasks[0]?.sessionId;
-
-      if (sessionId) {
-        // Simulate permission request for the run-group session
-        await fetch(`http://127.0.0.1:${sidecarPort}/agent/permission-request`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-rudi-token': sidecarToken,
-          },
-          body: JSON.stringify({
-            rudiSessionId: sessionId,
-            claudeSessionId: 'test-claude-session',
-            requestId: 'test-request-6',
-            toolName: 'Bash',
-            toolInput: { command: 'echo test' },
-          }),
-        });
-
-        // Check pending — should be auto-approved
-        const pendingResponse = await fetch(
-          `http://127.0.0.1:${sidecarPort}/agent/permissions?sessionId=${sessionId}`,
-          {
-            headers: { 'x-rudi-token': sidecarToken },
-          }
-        );
-
-        const pendingData = await pendingResponse.json();
-        assert.strictEqual(pendingData.pending.length, 0);
-      }
-
-      // Cleanup run-group
-      await fetch(`http://127.0.0.1:${sidecarPort}/agent/run-group/${groupId}/cleanup`, {
+      // Simulate permission request for the run-group session
+      await fetch(`http://127.0.0.1:${sidecarPort}/agent/permission-request`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-rudi-token': sidecarToken,
         },
-        body: JSON.stringify({ deleteBranches: true }),
+        body: JSON.stringify({
+          rudiSessionId: sessionId,
+          claudeSessionId: 'test-claude-session',
+          requestId: 'test-request-6',
+          toolName: 'Bash',
+          toolInput: { command: 'echo test' },
+        }),
+      });
+
+      // Check pending — should be auto-approved
+      const pendingResponse = await fetch(
+        `http://127.0.0.1:${sidecarPort}/agent/permissions?sessionId=${sessionId}`,
+        {
+          headers: { 'x-rudi-token': sidecarToken },
+        }
+      );
+
+      const pendingData = await pendingResponse.json();
+      assert.strictEqual(pendingData.pending.length, 0);
+
+      // Cleanup run-group
+      await fetch(`http://127.0.0.1:${sidecarPort}/agent/run-group/${groupId}/stop`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-rudi-token': sidecarToken,
+        },
       });
     }, 20000);
   });

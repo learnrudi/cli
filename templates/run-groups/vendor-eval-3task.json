@@ -1,0 +1,51 @@
+{
+  "name": "vendor-eval-3task",
+  "description": "Research two vendors in parallel and synthesize a recommendation memo",
+  "coordinationMode": "dependency",
+  "executionMode": "read_only",
+  "tasks": [
+    {
+      "prompt": "Research vendor A using the available sources. Write vendor-a.json with keys: vendor, pricing, security, integrations, support, risks, recommendation_score, sources.",
+      "name": "Vendor A Researcher",
+      "role": "researcher",
+      "goal": "Produce a structured vendor brief for option A",
+      "deliverable": "vendor-a.json",
+      "scope": "Vendor A evaluation across commercial, technical, and risk dimensions",
+      "tools": ["web-search", "content-extractor"],
+      "output": { "type": "file", "path": "vendor-a.json" },
+      "evidence": { "type": "json_file", "path": "vendor-a.json" },
+      "failurePolicy": "stop-downstream",
+      "mergePolicy": "manual"
+    },
+    {
+      "prompt": "Research vendor B using the available sources. Write vendor-b.json with keys: vendor, pricing, security, integrations, support, risks, recommendation_score, sources.",
+      "name": "Vendor B Researcher",
+      "role": "researcher",
+      "goal": "Produce a structured vendor brief for option B",
+      "deliverable": "vendor-b.json",
+      "scope": "Vendor B evaluation across commercial, technical, and risk dimensions",
+      "tools": ["web-search", "content-extractor"],
+      "output": { "type": "file", "path": "vendor-b.json" },
+      "evidence": { "type": "json_file", "path": "vendor-b.json" },
+      "failurePolicy": "stop-downstream",
+      "mergePolicy": "manual"
+    },
+    {
+      "prompt": "Read vendor-a.json and vendor-b.json. Produce vendor-comparison.md with a side-by-side matrix, a recommendation, key tradeoffs, and open questions.",
+      "name": "Recommendation Writer",
+      "role": "synthesizer",
+      "goal": "Recommend the stronger vendor and explain the tradeoffs",
+      "deliverable": "vendor-comparison.md",
+      "scope": "Synthesize the two vendor briefs into a decision memo",
+      "dependencies": [
+        { "taskIndex": 0, "artifact": "vendor-a.json" },
+        { "taskIndex": 1, "artifact": "vendor-b.json" }
+      ],
+      "tools": ["markdown-writer"],
+      "output": { "type": "file", "path": "vendor-comparison.md" },
+      "evidence": { "type": "artifact_exists", "path": "vendor-comparison.md" },
+      "failurePolicy": "continue",
+      "mergePolicy": "manual"
+    }
+  ]
+}

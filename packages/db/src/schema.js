@@ -4,7 +4,7 @@
 
 import { getDb } from './index.js';
 
-export const SCHEMA_VERSION = 22;
+export const SCHEMA_VERSION = 26;
 
 export const SCHEMA_SQL = `
 -- Schema version tracking
@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS run_groups (
   execution_mode TEXT NOT NULL DEFAULT 'worktree'
     CHECK (execution_mode IN ('worktree','shared_cwd','read_only','detached')),
   coordination_mode TEXT NOT NULL DEFAULT 'flat'
-    CHECK (coordination_mode IN ('flat','phased','supervisor')),
+    CHECK (coordination_mode IN ('flat','phased','dependency','supervisor')),
   requires_git INTEGER NOT NULL DEFAULT 1,
   workspace_root TEXT,
   provider TEXT DEFAULT 'claude',
@@ -65,6 +65,40 @@ CREATE TABLE IF NOT EXISTS run_groups (
 
 CREATE INDEX IF NOT EXISTS idx_run_groups_status ON run_groups(status);
 CREATE INDEX IF NOT EXISTS idx_run_groups_created ON run_groups(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS task_artifacts (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  run_group_id TEXT NOT NULL,
+  task_index INTEGER NOT NULL,
+  artifact_name TEXT NOT NULL,
+  artifact_path TEXT NOT NULL,
+  artifact_kind TEXT NOT NULL CHECK (artifact_kind IN ('file', 'directory')),
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+  FOREIGN KEY (run_group_id) REFERENCES run_groups(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_artifacts_group_task
+  ON task_artifacts(run_group_id, task_index);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_task_artifacts_group_name
+  ON task_artifacts(run_group_id, task_index, artifact_name);
+
+CREATE TABLE IF NOT EXISTS task_validation_results (
+  session_id TEXT PRIMARY KEY,
+  run_group_id TEXT NOT NULL,
+  task_index INTEGER NOT NULL,
+  passed INTEGER NOT NULL DEFAULT 0,
+  errors_json TEXT,
+  warnings_json TEXT,
+  artifacts_json TEXT,
+  validated_at TEXT NOT NULL,
+  FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+  FOREIGN KEY (run_group_id) REFERENCES run_groups(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_validation_group
+  ON task_validation_results(run_group_id, task_index);
 
 -- Orchestration plans (natural language → run group decomposition)
 CREATE TABLE IF NOT EXISTS orchestration_plans (
@@ -500,13 +534,13 @@ CREATE INDEX IF NOT EXISTS idx_logs_session ON logs(session_id);
 CREATE INDEX IF NOT EXISTS idx_logs_duration ON logs(duration_ms) WHERE duration_ms IS NOT NULL;
 
 -- =============================================================================
--- PACKAGES (stacks, prompts, runtimes, binaries, agents)
+-- PACKAGES (stacks, skills, runtimes, binaries, agents)
 -- =============================================================================
 
 -- Installed packages
 CREATE TABLE IF NOT EXISTS packages (
   id TEXT PRIMARY KEY,              -- e.g., 'stack:pdf-creator', 'binary:ffmpeg', 'agent:claude'
-  kind TEXT NOT NULL CHECK (kind IN ('stack', 'prompt', 'runtime', 'binary', 'tool', 'agent')),
+  kind TEXT NOT NULL CHECK (kind IN ('stack', 'skill', 'prompt', 'runtime', 'binary', 'tool', 'agent')),
   name TEXT NOT NULL,
   version TEXT NOT NULL,
   description TEXT,
@@ -675,7 +709,7 @@ export function applySchemaUpdates(db) {
       execution_mode TEXT NOT NULL DEFAULT 'worktree'
         CHECK (execution_mode IN ('worktree','shared_cwd','read_only','detached')),
       coordination_mode TEXT NOT NULL DEFAULT 'flat'
-        CHECK (coordination_mode IN ('flat','phased','supervisor')),
+        CHECK (coordination_mode IN ('flat','phased','dependency','supervisor')),
       requires_git INTEGER NOT NULL DEFAULT 1,
       workspace_root TEXT,
       provider TEXT DEFAULT 'claude',
@@ -726,6 +760,51 @@ export function applySchemaUpdates(db) {
     db,
     'idx_run_groups_created',
     "CREATE INDEX IF NOT EXISTS idx_run_groups_created ON run_groups(created_at DESC)"
+  );
+
+  ensureTable(db, 'task_artifacts', `
+    CREATE TABLE IF NOT EXISTS task_artifacts (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      run_group_id TEXT NOT NULL,
+      task_index INTEGER NOT NULL,
+      artifact_name TEXT NOT NULL,
+      artifact_path TEXT NOT NULL,
+      artifact_kind TEXT NOT NULL CHECK (artifact_kind IN ('file', 'directory')),
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+      FOREIGN KEY (run_group_id) REFERENCES run_groups(id) ON DELETE CASCADE
+    );
+  `);
+  ensureIndex(
+    db,
+    'idx_task_artifacts_group_task',
+    'CREATE INDEX IF NOT EXISTS idx_task_artifacts_group_task ON task_artifacts(run_group_id, task_index)'
+  );
+  ensureIndex(
+    db,
+    'idx_task_artifacts_group_name',
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_task_artifacts_group_name ON task_artifacts(run_group_id, task_index, artifact_name)'
+  );
+
+  ensureTable(db, 'task_validation_results', `
+    CREATE TABLE IF NOT EXISTS task_validation_results (
+      session_id TEXT PRIMARY KEY,
+      run_group_id TEXT NOT NULL,
+      task_index INTEGER NOT NULL,
+      passed INTEGER NOT NULL DEFAULT 0,
+      errors_json TEXT,
+      warnings_json TEXT,
+      artifacts_json TEXT,
+      validated_at TEXT NOT NULL,
+      FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+      FOREIGN KEY (run_group_id) REFERENCES run_groups(id) ON DELETE CASCADE
+    );
+  `);
+  ensureIndex(
+    db,
+    'idx_task_validation_group',
+    'CREATE INDEX IF NOT EXISTS idx_task_validation_group ON task_validation_results(run_group_id, task_index)'
   );
 
   // Orchestration plans
@@ -2159,6 +2238,105 @@ function runMigrations(db, from, to) {
     22: (db) => {
       applySchemaUpdates(db);
     },
+
+    23: (db) => {
+      if (tableExists(db, 'run_groups')) {
+        db.exec(`
+          ALTER TABLE run_groups RENAME TO _run_groups_old;
+          CREATE TABLE run_groups (
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            status TEXT NOT NULL DEFAULT 'pending'
+              CHECK (status IN ('pending','running','completed','partial','failed','stopped')),
+            project_path TEXT,
+            base_branch TEXT,
+            execution_mode TEXT NOT NULL DEFAULT 'worktree'
+              CHECK (execution_mode IN ('worktree','shared_cwd','read_only','detached')),
+            coordination_mode TEXT NOT NULL DEFAULT 'flat'
+              CHECK (coordination_mode IN ('flat','phased','dependency','supervisor')),
+            requires_git INTEGER NOT NULL DEFAULT 1,
+            workspace_root TEXT,
+            provider TEXT DEFAULT 'claude',
+            model TEXT,
+            permission_mode TEXT,
+            session_count INTEGER NOT NULL DEFAULT 0,
+            completed_count INTEGER NOT NULL DEFAULT 0,
+            failed_count INTEGER NOT NULL DEFAULT 0,
+            total_cost REAL NOT NULL DEFAULT 0,
+            total_tokens INTEGER NOT NULL DEFAULT 0,
+            config_json TEXT,
+            created_at TEXT NOT NULL,
+            started_at TEXT,
+            completed_at TEXT,
+            updated_at TEXT NOT NULL
+          );
+          INSERT INTO run_groups (
+            id, name, status, project_path, base_branch, execution_mode, coordination_mode,
+            requires_git, workspace_root, provider, model, permission_mode,
+            session_count, completed_count, failed_count, total_cost, total_tokens,
+            config_json, created_at, started_at, completed_at, updated_at
+          )
+          SELECT
+            id, name, status, project_path, base_branch, execution_mode, coordination_mode,
+            requires_git, workspace_root, provider, model, permission_mode,
+            session_count, completed_count, failed_count, total_cost, total_tokens,
+            config_json, created_at, started_at, completed_at, updated_at
+          FROM _run_groups_old;
+          DROP TABLE _run_groups_old;
+        `);
+      }
+      applySchemaUpdates(db);
+    },
+
+    24: (db) => {
+      db.pragma('foreign_keys = OFF');
+      try {
+        repairRunGroupForeignKeyReference(db, 'sessions');
+        repairRunGroupForeignKeyReference(db, 'orchestration_plans');
+        applySchemaUpdates(db);
+      } finally {
+        db.pragma('foreign_keys = ON');
+      }
+    },
+
+    25: (db) => {
+      db.pragma('foreign_keys = OFF');
+      try {
+        repairBrokenForeignKeyTables(db);
+        applySchemaUpdates(db);
+      } finally {
+        db.pragma('foreign_keys = ON');
+      }
+    },
+
+    26: (db) => {
+      // Only migrate if packages table exists (created in migration 18)
+      const hasPackages = db.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='packages'"
+      ).get();
+      if (!hasPackages) return;
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS packages_new (
+          id TEXT PRIMARY KEY,
+          kind TEXT NOT NULL CHECK (kind IN ('stack', 'skill', 'prompt', 'runtime', 'binary', 'tool', 'agent')),
+          name TEXT NOT NULL,
+          version TEXT NOT NULL,
+          description TEXT,
+          source TEXT NOT NULL CHECK (source IN ('registry', 'local', 'bundled')),
+          source_url TEXT,
+          install_path TEXT NOT NULL,
+          installed_at TEXT NOT NULL,
+          updated_at TEXT,
+          manifest_json TEXT,
+          status TEXT DEFAULT 'installed' CHECK (status IN ('installed', 'disabled', 'broken'))
+        );
+        INSERT INTO packages_new SELECT * FROM packages;
+        UPDATE packages_new SET kind = 'skill', id = REPLACE(id, 'prompt:', 'skill:') WHERE kind = 'prompt';
+        DROP TABLE packages;
+        ALTER TABLE packages_new RENAME TO packages;
+      `);
+    },
   };
 
   for (let v = from + 1; v <= to; v++) {
@@ -2170,7 +2348,7 @@ function runMigrations(db, from, to) {
           .run(v, new Date().toISOString());
       };
 
-      if (v === 4 || v === 7) {
+      if (v === 4 || v === 7 || v === 24 || v === 25 || v === 26) {
         applyMigration();
       } else {
         db.transaction(applyMigration)();
@@ -2186,6 +2364,106 @@ function tableExists(db, table) {
     SELECT name FROM sqlite_master WHERE type='table' AND name=?
   `).get(table);
   return !!result;
+}
+
+function getCreateTableSql(db, table) {
+  const row = db.prepare(`
+    SELECT sql
+    FROM sqlite_master
+    WHERE type = 'table' AND name = ?
+  `).get(table);
+  return typeof row?.sql === 'string' ? row.sql : null;
+}
+
+function quoteIdentifier(identifier) {
+  return `"${String(identifier).replace(/"/g, '""')}"`;
+}
+
+function repairRunGroupForeignKeyReference(db, table) {
+  if (!tableExists(db, table)) return;
+
+  const foreignKeys = db.pragma(`foreign_key_list(${table})`);
+  const hasBrokenReference = foreignKeys.some((fk) => fk.table === '_run_groups_old');
+  if (!hasBrokenReference) return;
+
+  const createSql = getCreateTableSql(db, table);
+  if (!createSql) return;
+
+  const repairedSql = createSql.replace(
+    /REFERENCES\s+"?_run_groups_old"?\s*\(id\)/g,
+    'REFERENCES run_groups(id)'
+  );
+  if (repairedSql === createSql) return;
+
+  const tempTable = `_${table}_fk_fix_old`;
+  const columns = db.pragma(`table_info(${table})`).map((col) => quoteIdentifier(col.name));
+  const columnList = columns.join(', ');
+
+  db.exec(`
+    ALTER TABLE ${quoteIdentifier(table)} RENAME TO ${quoteIdentifier(tempTable)};
+    ${repairedSql};
+    INSERT INTO ${quoteIdentifier(table)} (${columnList})
+    SELECT ${columnList} FROM ${quoteIdentifier(tempTable)};
+    DROP TABLE ${quoteIdentifier(tempTable)};
+  `);
+}
+
+function resolveBrokenForeignKeyTarget(targetName) {
+  if (targetName === '_run_groups_old') return 'run_groups';
+  if (/^_.+_fk_fix_old$/.test(targetName)) {
+    return targetName.replace(/^_/, '').replace(/_fk_fix_old$/, '');
+  }
+  return null;
+}
+
+function repairBrokenForeignKeyTargetsInTable(db, table) {
+  const createSql = getCreateTableSql(db, table);
+  if (!createSql) return false;
+
+  const repairedSql = createSql.replace(
+    /REFERENCES\s+"?(_run_groups_old|_[A-Za-z0-9_]+_fk_fix_old)"?\s*\(id\)/g,
+    (fullMatch, brokenTarget) => {
+      const fixedTarget = resolveBrokenForeignKeyTarget(brokenTarget);
+      return fixedTarget ? `REFERENCES ${fixedTarget}(id)` : fullMatch;
+    }
+  );
+
+  if (repairedSql === createSql) return false;
+
+  const tempTable = `_${table}_fk_fix_old`;
+  const columns = db.pragma(`table_info(${table})`).map((col) => quoteIdentifier(col.name));
+  const columnList = columns.join(', ');
+
+  db.exec(`
+    ALTER TABLE ${quoteIdentifier(table)} RENAME TO ${quoteIdentifier(tempTable)};
+    ${repairedSql};
+    INSERT INTO ${quoteIdentifier(table)} (${columnList})
+    SELECT ${columnList} FROM ${quoteIdentifier(tempTable)};
+    DROP TABLE ${quoteIdentifier(tempTable)};
+  `);
+
+  return true;
+}
+
+function repairBrokenForeignKeyTables(db) {
+  for (let pass = 0; pass < 8; pass += 1) {
+    const rows = db.prepare(`
+      SELECT name
+      FROM sqlite_master
+      WHERE type = 'table'
+        AND sql IS NOT NULL
+        AND (sql LIKE '%_run_groups_old%' OR sql LIKE '%_fk_fix_old%')
+    `).all();
+
+    if (rows.length === 0) return;
+
+    let repairedAny = false;
+    for (const row of rows) {
+      repairedAny = repairBrokenForeignKeyTargetsInTable(db, row.name) || repairedAny;
+    }
+
+    if (!repairedAny) return;
+  }
 }
 
 function _createSessionsFtsTable(db) {

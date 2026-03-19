@@ -30,7 +30,8 @@ export const PATHS = {
   // Installed packages - shared with Studio for unified discovery
   packages: path.join(RUDI_HOME, 'packages'),
   stacks: path.join(RUDI_HOME, 'stacks'),     // Shared with Studio
-  prompts: path.join(RUDI_HOME, 'prompts'),   // Shared with Studio
+  skills: path.join(RUDI_HOME, 'skills'),     // Shared with Studio
+  prompts: path.join(RUDI_HOME, 'skills'),    // Backward compat alias -> skills
 
   // Runtimes (interpreters: node, python, deno, bun)
   runtimes: path.join(RUDI_HOME, 'runtimes'),
@@ -214,7 +215,7 @@ export function isWindows() {
 export function ensureDirectories() {
   const dirs = [
     PATHS.stacks,      // MCP servers (google-ai, notion-workspace, etc.)
-    PATHS.prompts,     // Reusable prompts
+    PATHS.skills,      // Reusable skills (formerly prompts)
     PATHS.runtimes,    // Language runtimes (node, python, bun, deno)
     PATHS.binaries,    // Utility binaries (ffmpeg, git, jq, etc.)
     PATHS.agents,      // AI CLI agents (claude, codex, gemini, copilot)
@@ -227,6 +228,29 @@ export function ensureDirectories() {
   for (const dir of dirs) {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
+    }
+  }
+
+  // Auto-migration: move .md files from prompts/ to skills/ if skills/ is empty
+  const oldPromptsDir = path.join(RUDI_HOME, 'prompts');
+  if (fs.existsSync(oldPromptsDir) && oldPromptsDir !== PATHS.skills) {
+    try {
+      const oldFiles = fs.readdirSync(oldPromptsDir).filter(f => f.endsWith('.md'));
+      const newFiles = fs.existsSync(PATHS.skills)
+        ? fs.readdirSync(PATHS.skills).filter(f => f.endsWith('.md'))
+        : [];
+
+      if (oldFiles.length > 0 && newFiles.length === 0) {
+        console.log(`Migrating ${oldFiles.length} prompt(s) to skills directory...`);
+        for (const file of oldFiles) {
+          const oldPath = path.join(oldPromptsDir, file);
+          const newPath = path.join(PATHS.skills, file);
+          fs.copyFileSync(oldPath, newPath);
+        }
+      }
+    } catch (err) {
+      // Migration is best-effort, don't fail
+      console.warn(`Warning: Could not migrate prompts to skills: ${err.message}`);
     }
   }
 }
@@ -246,7 +270,7 @@ export function areDirectoriesInitialized() {
 /**
  * All valid package kinds
  */
-export const PACKAGE_KINDS = ['stack', 'prompt', 'runtime', 'binary', 'agent'];
+export const PACKAGE_KINDS = ['stack', 'skill', 'prompt', 'runtime', 'binary', 'agent'];
 
 /**
  * Parse a package ID into kind and name
@@ -255,11 +279,13 @@ export const PACKAGE_KINDS = ['stack', 'prompt', 'runtime', 'binary', 'agent'];
  */
 export function parsePackageId(id) {
   // Allow 'npm:' prefix for dynamic npm installs
-  const match = id.match(/^(stack|prompt|runtime|binary|agent|npm):(.+)$/);
+  const match = id.match(/^(stack|skill|prompt|runtime|binary|agent|npm):(.+)$/);
   if (!match) {
     throw new Error(`Invalid package ID: ${id} (expected format: kind:name, where kind is one of: ${PACKAGE_KINDS.join(', ')}, npm)`);
   }
-  return [match[1], match[2]];
+  // Map 'prompt' to 'skill' for backward compatibility
+  const kind = match[1] === 'prompt' ? 'skill' : match[1];
+  return [kind, match[2]];
 }
 
 /**
@@ -283,9 +309,12 @@ export function getPackagePath(id) {
   switch (kind) {
     case 'stack':
       return path.join(PATHS.stacks, name);
+    case 'skill':
+      // Skills are single .md files, not directories
+      return path.join(PATHS.skills, `${name}.md`);
     case 'prompt':
-      // Prompts are single .md files, not directories
-      return path.join(PATHS.prompts, `${name}.md`);
+      // Backward compat: prompts map to skills directory
+      return path.join(PATHS.skills, `${name}.md`);
     case 'runtime':
       return path.join(PATHS.runtimes, name);
     case 'binary':
@@ -350,8 +379,8 @@ export function isPackageInstalled(id) {
   const packagePath = getPackagePath(id);
   const [kind, name] = parsePackageId(id);
 
-  // Prompts are single .md files
-  if (kind === 'prompt') {
+  // Skills (and prompts for backward compat) are single .md files
+  if (kind === 'skill' || kind === 'prompt') {
     return fs.existsSync(packagePath) && fs.statSync(packagePath).isFile();
   }
 
@@ -392,13 +421,14 @@ export function isPackageInstalled(id) {
 
 /**
  * Get list of installed packages by kind
- * @param {'stack' | 'prompt' | 'runtime' | 'binary' | 'agent'} kind
+ * @param {'stack' | 'skill' | 'prompt' | 'runtime' | 'binary' | 'agent'} kind
  * @returns {string[]} Package names
  */
 export function getInstalledPackages(kind) {
   const dir = {
     stack: PATHS.stacks,
-    prompt: PATHS.prompts,
+    skill: PATHS.skills,
+    prompt: PATHS.skills,  // Backward compat: prompts map to skills
     runtime: PATHS.runtimes,
     binary: PATHS.binaries,
     agent: PATHS.agents
@@ -408,8 +438,8 @@ export function getInstalledPackages(kind) {
     return [];
   }
 
-  // Prompts are .md files, not directories
-  if (kind === 'prompt') {
+  // Skills and prompts are .md files, not directories
+  if (kind === 'skill' || kind === 'prompt') {
     return fs.readdirSync(dir).filter(name => {
       if (!name.endsWith('.md') || name.startsWith('.')) return false;
       const stat = fs.statSync(path.join(dir, name));

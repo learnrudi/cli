@@ -405,7 +405,7 @@ async function cleanupFailedStackInstall(stackId, stackPath, removeConfig) {
 }
 
 export async function cmdInstall(args, flags) {
-  const pkgId = args[0];
+  let pkgId = args[0];
 
   if (!pkgId) {
     console.error('Usage: rudi install <package>');
@@ -415,6 +415,12 @@ export async function cmdInstall(args, flags) {
     console.error('  rudi secrets set <KEY>    # Configure required secrets');
     console.error('  rudi integrate all        # Wire up your agents');
     process.exit(1);
+  }
+
+  // Handle deprecated "prompt:" prefix
+  if (pkgId.startsWith('prompt:')) {
+    console.log('Note: "prompt:" has been renamed to "skill:". Converting automatically.\n');
+    pkgId = 'skill:' + pkgId.slice('prompt:'.length);
   }
 
   const force = flags.force || false;
@@ -519,6 +525,11 @@ export async function cmdInstall(args, flags) {
         for (const id of result.installed) {
           console.log(`    - ${id}`);
         }
+      }
+
+      // For skills, show required stacks if any
+      if (resolved.kind === 'skill' && resolved.requires?.stacks?.length > 0) {
+        console.log(`  Required stacks: ${resolved.requires.stacks.join(', ')}`);
       }
 
       console.log(`\n✓ Installed successfully.`);

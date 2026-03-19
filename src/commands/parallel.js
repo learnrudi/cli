@@ -8,6 +8,11 @@
 import fs from 'fs';
 import path from 'path';
 import { PATHS } from '@learnrudi/env';
+import {
+  listRunGroupTemplates,
+  loadRunGroupTemplate,
+  resolveTemplateToRunGroupBody,
+} from './agent/templates.js';
 
 const PORT_FILE = path.join(PATHS.home, '.rudi-lite-port');
 const TOKEN_FILE = path.join(PATHS.home, '.rudi-lite-token');
@@ -135,16 +140,28 @@ function printMergeHints(group, sessions) {
   }
 }
 
+function printTemplates() {
+  const templates = listRunGroupTemplates();
+  if (templates.length === 0) {
+    console.log('No run-group templates found.');
+    return;
+  }
+
+  console.log('Run-group templates:\n');
+  for (const template of templates) {
+    const suffix = template.description ? ` - ${template.description}` : '';
+    console.log(`  ${template.name} (${template.source})${suffix}`);
+  }
+}
+
 export async function cmdParallel(args, flags) {
+  if (flags['list-templates']) {
+    printTemplates();
+    return;
+  }
+
   const tasks = args.map((value) => String(value || '').trim()).filter(Boolean);
-  if (tasks.length < 2) {
-    console.error('Usage: rudi parallel "task one" "task two" [more tasks] [--name "Batch"] [--provider claude] [--model sonnet]');
-    process.exit(1);
-  }
-  if (tasks.length > 10) {
-    console.error('rudi parallel supports at most 10 tasks per run-group');
-    process.exit(1);
-  }
+  const templateName = typeof flags.template === 'string' ? flags.template.trim() : '';
 
   let sidecar;
   try {
@@ -154,20 +171,54 @@ export async function cmdParallel(args, flags) {
     process.exit(1);
   }
 
-  const payload = {
+  const explicitExecutionMode = typeof flags['execution-mode'] === 'string'
+    ? flags['execution-mode']
+    : (flags['no-worktree'] ? 'shared_cwd' : null);
+  const commonOverrides = {
     name: typeof flags.name === 'string' ? flags.name : null,
-    provider: typeof flags.provider === 'string' ? flags.provider : 'claude',
+    provider: typeof flags.provider === 'string' ? flags.provider : null,
     model: typeof flags.model === 'string' ? flags.model : null,
     baseBranch: typeof flags['base-branch'] === 'string' ? flags['base-branch'] : null,
     cwd: typeof flags.cwd === 'string' ? flags.cwd : process.cwd(),
     permissionMode: typeof flags['permission-mode'] === 'string' ? flags['permission-mode'] : null,
     systemPrompt: typeof flags['system-prompt'] === 'string' ? flags['system-prompt'] : null,
-    executionMode: typeof flags['execution-mode'] === 'string'
-      ? flags['execution-mode']
-      : (flags['no-worktree'] ? 'shared_cwd' : 'worktree'),
-    useWorktree: flags['no-worktree'] ? false : true,
-    tasks: tasks.map((prompt) => ({ prompt })),
+    coordinationMode: typeof flags['coordination-mode'] === 'string' ? flags['coordination-mode'] : null,
+    executionMode: explicitExecutionMode,
+    useWorktree: flags['no-worktree'] ? false : null,
+    allowValidationCommands: flags['allow-validation-commands'] === true ? true : null,
   };
+
+  let payload;
+  if (templateName) {
+    if (tasks.length > 0) {
+      console.error('Positional tasks cannot be combined with --template');
+      process.exit(1);
+    }
+    try {
+      const template = loadRunGroupTemplate(templateName);
+      payload = resolveTemplateToRunGroupBody(template, commonOverrides);
+    } catch (err) {
+      console.error(`Error loading template: ${err.message}`);
+      process.exit(1);
+    }
+  } else {
+    if (tasks.length < 2) {
+      console.error('Usage: rudi parallel "task one" "task two" [more tasks] [--name "Batch"] [--provider claude] [--model sonnet]');
+      console.error('   or: rudi parallel --template <name> [options]');
+      process.exit(1);
+    }
+    if (tasks.length > 10) {
+      console.error('rudi parallel supports at most 10 tasks per run-group');
+      process.exit(1);
+    }
+    payload = {
+      ...commonOverrides,
+      provider: commonOverrides.provider || 'claude',
+      executionMode: commonOverrides.executionMode || 'worktree',
+      useWorktree: commonOverrides.useWorktree === false ? false : true,
+      tasks: tasks.map((prompt) => ({ prompt })),
+    };
+  }
 
   let created;
   try {

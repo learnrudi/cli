@@ -6,11 +6,15 @@ import { fetchIndex, searchPackages, listPackages } from '@learnrudi/core';
 
 function pluralizeKind(kind) {
   if (!kind) return 'packages';
-  return kind === 'binary' ? 'binaries' : `${kind}s`;
+  if (kind === 'binary') return 'binaries';
+  if (kind === 'skill') return 'skills';
+  return `${kind}s`;
 }
 
 function headingForKind(kind) {
-  return kind === 'binary' ? 'BINARIES' : `${kind.toUpperCase()}S`;
+  if (kind === 'binary') return 'BINARIES';
+  if (kind === 'skill') return 'SKILLS';
+  return `${kind.toUpperCase()}S`;
 }
 
 export async function cmdSearch(args, flags) {
@@ -40,8 +44,8 @@ export async function cmdSearch(args, flags) {
   const binariesFlag = flags.binaries || flags.tools;
   const kind = flags.stacks
     ? 'stack'
-    : flags.prompts
-      ? 'prompt'
+    : (flags.skills || flags.prompts)
+      ? 'skill'
       : flags.runtimes
         ? 'runtime'
         : binariesFlag
@@ -49,6 +53,11 @@ export async function cmdSearch(args, flags) {
           : flags.agents
             ? 'agent'
             : null;
+
+  // Show deprecation note for --prompts flag
+  if (flags.prompts && !flags.skills) {
+    console.log('Note: --prompts has been renamed to --skills. Use --skills instead.\n');
+  }
 
   console.log(`Searching for "${query}"...`);
 
@@ -106,8 +115,8 @@ async function listAllPackages(flags) {
   const binariesFlag = flags.binaries || flags.tools;
   const kind = flags.stacks
     ? 'stack'
-    : flags.prompts
-      ? 'prompt'
+    : (flags.skills || flags.prompts)
+      ? 'skill'
       : flags.runtimes
         ? 'runtime'
         : binariesFlag
@@ -116,8 +125,13 @@ async function listAllPackages(flags) {
             ? 'agent'
             : null;
 
+  // Show deprecation note for --prompts flag
+  if (flags.prompts && !flags.skills) {
+    console.log('Note: --prompts has been renamed to --skills. Use --skills instead.\n');
+  }
+
   try {
-    const kinds = kind ? [kind] : ['stack', 'prompt', 'runtime', 'binary', 'agent'];
+    const kinds = kind ? [kind] : ['stack', 'skill', 'runtime', 'binary', 'agent'];
     const allPackages = {};
     let totalCount = 0;
 

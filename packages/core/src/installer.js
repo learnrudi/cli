@@ -652,8 +652,8 @@ async function installSinglePackage(pkg, options = {}) {
     try {
       await downloadPackage(pkg, installPath, { onProgress });
 
-      // Prompts are single .md files, no manifest.json needed
-      if (pkg.kind !== 'prompt') {
+      // Skills and prompts are single .md files, no manifest.json needed
+      if (pkg.kind !== 'prompt' && pkg.kind !== 'skill') {
         // Only write manifest.json if one wasn't downloaded from registry
         const manifestPath = path.join(installPath, 'manifest.json');
         if (!fs.existsSync(manifestPath)) {
@@ -690,9 +690,9 @@ async function installSinglePackage(pkg, options = {}) {
   }
 
   // Fallback: create placeholder
-  // For prompts, we can't create a placeholder - they must come from registry
-  if (pkg.kind === 'prompt') {
-    throw new Error(`Prompt ${pkg.id} not found in registry`);
+  // For skills and prompts, we can't create a placeholder - they must come from registry
+  if (pkg.kind === 'prompt' || pkg.kind === 'skill') {
+    throw new Error(`${pkg.kind === 'skill' ? 'Skill' : 'Prompt'} ${pkg.id} not found in registry`);
   }
 
   if (fs.existsSync(installPath)) {
@@ -737,7 +737,7 @@ export async function uninstallPackage(id) {
     // Read manifest to get bins list for shim cleanup
     let bins = [];
     let manifest = null;
-    if (kind !== 'prompt') {
+    if (kind !== 'prompt' && kind !== 'skill') {
       const manifestPath = path.join(installPath, 'manifest.json');
       if (fs.existsSync(manifestPath)) {
         try {
@@ -770,8 +770,8 @@ export async function uninstallPackage(id) {
       removeShims(bins);
     }
 
-    // Prompts are single files, not directories
-    if (kind === 'prompt') {
+    // Skills and prompts are single files, not directories
+    if (kind === 'prompt' || kind === 'skill') {
       fs.unlinkSync(installPath);
     } else {
       fs.rmSync(installPath, { recursive: true });
@@ -865,17 +865,18 @@ async function copyDirectory(src, dest) {
 
 /**
  * List all installed packages
- * @param {'stack' | 'prompt' | 'runtime' | 'binary' | 'agent'} [kind] - Filter by kind
+ * @param {'stack' | 'skill' | 'prompt' | 'runtime' | 'binary' | 'agent'} [kind] - Filter by kind
  * @returns {Promise<Array>}
  */
 export async function listInstalled(kind) {
-  const kinds = kind ? [kind] : ['stack', 'prompt', 'runtime', 'binary', 'agent'];
+  const kinds = kind ? [kind] : ['stack', 'skill', 'prompt', 'runtime', 'binary', 'agent'];
   const packages = [];
 
   for (const k of kinds) {
     const dir = {
       stack: PATHS.stacks,
-      prompt: PATHS.prompts,
+      skill: PATHS.skills,
+      prompt: PATHS.skills,  // Backward compat: prompts map to skills
       runtime: PATHS.runtimes,
       binary: PATHS.binaries,
       agent: PATHS.agents
@@ -885,15 +886,15 @@ export async function listInstalled(kind) {
 
     const entries = fs.readdirSync(dir, { withFileTypes: true });
 
-    // Prompts are .md files, not directories
-    if (k === 'prompt') {
+    // Skills and prompts are .md files, not directories
+    if (k === 'skill' || k === 'prompt') {
       for (const entry of entries) {
         if (!entry.isFile() || !entry.name.endsWith('.md') || entry.name.startsWith('.')) continue;
 
         const filePath = path.join(dir, entry.name);
         const name = entry.name.replace(/\.md$/, '');
 
-        // Read prompt file to extract frontmatter metadata
+        // Read skill/prompt file to extract frontmatter metadata
         try {
           const content = fs.readFileSync(filePath, 'utf-8');
           const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
@@ -922,27 +923,39 @@ export async function listInstalled(kind) {
                 .map(line => line.replace(/^\s+-\s+/, '').trim())
                 .filter(Boolean);
             }
+
+            // Parse requires.stacks (for skills)
+            const requiresStacksMatch = yaml.match(/^requires:\s*\n\s+stacks:\s*\n((?:\s+-\s+.+\n?)+)/m);
+            if (requiresStacksMatch) {
+              metadata.requires = {
+                stacks: requiresStacksMatch[1]
+                  .split('\n')
+                  .map(line => line.replace(/^\s+-\s+/, '').trim())
+                  .filter(Boolean)
+              };
+            }
           }
 
           packages.push({
-            id: `prompt:${name}`,
-            kind: 'prompt',
+            id: `${k}:${name}`,
+            kind: k,
             name: metadata.name || name,
             version: metadata.version || '1.0.0',
-            description: metadata.description || `${name} prompt`,
+            description: metadata.description || `${name} ${k}`,
             category: metadata.category || 'general',
             tags: metadata.tags || [],
             icon: metadata.icon || '',
+            requires: metadata.requires,
             path: filePath
           });
         } catch {
           // If we can't read the file, still list it
           packages.push({
-            id: `prompt:${name}`,
-            kind: 'prompt',
+            id: `${k}:${name}`,
+            kind: k,
             name: name,
             version: '1.0.0',
-            description: `${name} prompt`,
+            description: `${name} ${k}`,
             category: 'general',
             tags: [],
             path: filePath

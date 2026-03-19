@@ -32,6 +32,7 @@ import {
 } from '../group-spec.js';
 import {
   deriveRunGroupSessionStatus,
+  evaluateDependencyExecution,
   evaluatePhaseExecution,
   normalizeRunGroupStatus,
   parseRunGroupConfig,
@@ -40,8 +41,18 @@ import { buildSystemPrompt } from '../prompts.js';
 import { getRepoRoot, createSessionWorktree } from '../worktree.js';
 import { spawnAgentProcess } from '../spawn-process.js';
 import { countAlive } from '../helpers.js';
+import {
+  getDependencyArtifacts,
+  getTaskArtifactAvailabilityMap,
+  getTaskValidationResultMap,
+  validateTaskContract,
+} from '../contract-validator.js';
  
 const TERMINAL_GROUP_STATUSES = new Set(['completed', 'partial', 'failed', 'stopped']);
+const SPAWN_CHILD_ALLOWED_TOOLS = [
+  'mcp__rudi-spawn__spawn_child',
+  'mcp__rudi-spawn__list_children',
+];
 
 function detectGitContext(workingDir) {
   try {
@@ -81,6 +92,77 @@ function appendContextArgs(args, providerConfig, contextPaths) {
       args.push(...addDirArgs);
     }
   }
+}
+
+function appendAllowedToolsArgs(args, providerConfig, allowedTools) {
+  const normalized = [...new Set(
+    (Array.isArray(allowedTools) ? allowedTools : [])
+      .map((entry) => typeof entry === 'string' ? entry.trim() : '')
+      .filter(Boolean)
+  )];
+  if (normalized.length === 0) return;
+  args.push(...expandConditional(providerConfig, 'allowedTools', normalized));
+}
+
+function resolveInputPaths(inputSpecs, workingDir) {
+  const resolvedPaths = [];
+  const contextPaths = [];
+
+  for (const input of Array.isArray(inputSpecs) ? inputSpecs : []) {
+    const resolvedPath = path.isAbsolute(input.path)
+      ? input.path
+      : path.resolve(workingDir, input.path);
+    if (!fs.existsSync(resolvedPath)) {
+      if (input.optional) continue;
+      throw new Error(`input missing: ${input.path}`);
+    }
+    const stat = fs.statSync(resolvedPath);
+    if (input.type === 'directory' && !stat.isDirectory()) {
+      throw new Error(`input is not a directory: ${input.path}`);
+    }
+    if (input.type === 'file' && !stat.isFile()) {
+      throw new Error(`input is not a file: ${input.path}`);
+    }
+    resolvedPaths.push(resolvedPath);
+    if (input.type === 'directory') {
+      contextPaths.push(resolvedPath);
+    } else {
+      contextPaths.push(path.dirname(resolvedPath));
+    }
+  }
+
+  return { resolvedPaths, contextPaths };
+}
+
+function buildTaskPrompt(task, { inputPaths = [], dependencyArtifacts = [] } = {}) {
+  const contractLines = [];
+  if (task.scope) contractLines.push(`Scope: ${task.scope}`);
+  if (task.role) contractLines.push(`Role: ${task.role}`);
+  if (task.goal) contractLines.push(`Goal: ${task.goal}`);
+  if (task.deliverable) contractLines.push(`Deliverable: ${task.deliverable}`);
+  if (Array.isArray(task.filesTouched) && task.filesTouched.length > 0) {
+    contractLines.push(`Preferred files: ${task.filesTouched.join(', ')}`);
+  }
+  if (task.output?.path) {
+    contractLines.push(`Write your primary output to: ${task.output.path}`);
+  }
+
+  const artifactLines = [];
+  for (const artifact of dependencyArtifacts) {
+    artifactLines.push(`Dependency artifact: ${artifact.path}`);
+  }
+  for (const inputPath of inputPaths) {
+    artifactLines.push(`Input path: ${inputPath}`);
+  }
+
+  const sections = [task.prompt];
+  if (contractLines.length > 0) {
+    sections.push(`Task contract:\n- ${contractLines.join('\n- ')}`);
+  }
+  if (artifactLines.length > 0) {
+    sections.push(`Available context:\n- ${artifactLines.join('\n- ')}`);
+  }
+  return sections.join('\n\n');
 }
 
 function resolvePermissionModeKey(permissionMode, providerConfig) {
@@ -179,6 +261,45 @@ function markRunGroupTasksStopped(db, group, tasks, reason) {
   return blockedSessionIds;
 }
 
+function findTaskBySessionId(tasks, sessionId) {
+  return (Array.isArray(tasks) ? tasks : []).find((task) => task.sessionId === sessionId) || null;
+}
+
+function stopActiveRunGroupSessions(ctx, groupId, excludeSessionId = null) {
+  const db = getDb();
+  const rows = db.prepare('SELECT id FROM sessions WHERE run_group_id = ?').all(groupId);
+  let stopped = 0;
+
+  for (const row of rows) {
+    if (!row?.id || row.id === excludeSessionId) continue;
+    const entry = ctx.agentProcesses.get(row.id);
+    if (!entry?.proc || entry.proc.killed) continue;
+    entry._terminationReason = 'stopped';
+    entry.proc.kill('SIGTERM');
+    const killTimer = setTimeout(() => {
+      try { entry.proc.kill('SIGKILL'); } catch {}
+    }, 3000);
+    entry.proc.on('close', () => clearTimeout(killTimer));
+    stopped += 1;
+  }
+
+  return stopped;
+}
+
+function validateTaskDependencies(tasks) {
+  for (const [taskIndex, task] of tasks.entries()) {
+    for (const dependency of Array.isArray(task.dependencies) ? task.dependencies : []) {
+      if (!Number.isInteger(dependency.taskIndex) || dependency.taskIndex < 0 || dependency.taskIndex >= tasks.length) {
+        return `task ${taskIndex + 1}: dependency task index out of range (${dependency.taskIndex})`;
+      }
+      if (dependency.taskIndex === taskIndex) {
+        return `task ${taskIndex + 1}: task cannot depend on itself`;
+      }
+    }
+  }
+  return null;
+}
+
 function refreshRunGroupAggregates(db, groupId) {
   const stats = db.prepare(`
     SELECT
@@ -188,6 +309,7 @@ function refreshRunGroupAggregates(db, groupId) {
       SUM(CASE WHEN COALESCE(srs.status, '') IN ('error', 'crashed') THEN 1 ELSE 0 END) AS failed_count,
       SUM(CASE WHEN COALESCE(srs.status, '') = 'stopped' THEN 1 ELSE 0 END) AS stopped_count,
       SUM(CASE WHEN COALESCE(srs.status, '') IN ('completed', 'error', 'stopped', 'crashed') THEN 1 ELSE 0 END) AS done_count,
+      SUM(CASE WHEN tvr.session_id IS NOT NULL AND COALESCE(tvr.passed, 0) = 0 THEN 1 ELSE 0 END) AS validation_failed_count,
       COALESCE(SUM(COALESCE(srs.cost_total, s.total_cost, 0)), 0) AS total_cost,
       COALESCE(SUM(COALESCE(
         srs.tokens_total,
@@ -196,6 +318,7 @@ function refreshRunGroupAggregates(db, groupId) {
       )), 0) AS total_tokens
     FROM sessions s
     LEFT JOIN session_runtime_state srs ON srs.session_id = s.id
+    LEFT JOIN task_validation_results tvr ON tvr.session_id = s.id
     WHERE s.run_group_id = ?
   `).get(groupId) || {
     session_count: 0,
@@ -204,6 +327,7 @@ function refreshRunGroupAggregates(db, groupId) {
     failed_count: 0,
     stopped_count: 0,
     done_count: 0,
+    validation_failed_count: 0,
     total_cost: 0,
     total_tokens: 0,
   };
@@ -239,6 +363,7 @@ function refreshRunGroupAggregates(db, groupId) {
     completedCount: stats.completed_count,
     failedCount: stats.failed_count,
     stoppedCount: stats.stopped_count,
+    validationFailedCount: stats.validation_failed_count,
   });
   const isDone = Number(stats.done_count || 0) >= Number(stats.session_count || 0) && Number(stats.session_count || 0) > 0;
   const completedAt = isDone && TERMINAL_GROUP_STATUSES.has(nextStatus)
@@ -253,28 +378,12 @@ function refreshRunGroupAggregates(db, groupId) {
     WHERE id = ?
   `).run(nextStatus, completedAt, now, groupId);
 
-  return db.prepare('SELECT * FROM run_groups WHERE id = ?').get(groupId);
-}
-
-function stopActiveRunGroupSessions(ctx, groupId, excludeSessionId = null) {
-  const db = getDb();
-  const rows = db.prepare('SELECT id FROM sessions WHERE run_group_id = ?').all(groupId);
-  let stopped = 0;
-
-  for (const row of rows) {
-    if (!row?.id || row.id === excludeSessionId) continue;
-    const entry = ctx.agentProcesses.get(row.id);
-    if (!entry?.proc || entry.proc.killed) continue;
-    entry._terminationReason = 'stopped';
-    entry.proc.kill('SIGTERM');
-    const killTimer = setTimeout(() => {
-      try { entry.proc.kill('SIGKILL'); } catch {}
-    }, 3000);
-    entry.proc.on('close', () => clearTimeout(killTimer));
-    stopped += 1;
-  }
-
-  return stopped;
+  const updatedGroup = db.prepare('SELECT * FROM run_groups WHERE id = ?').get(groupId);
+  if (!updatedGroup) return null;
+  return {
+    ...updatedGroup,
+    validation_failed_count: Number(stats.validation_failed_count || 0),
+  };
 }
 
 function launchRunGroupTask(ctx, group, task, settledFn) {
@@ -291,6 +400,7 @@ function launchRunGroupTask(ctx, group, task, settledFn) {
   const baseBranch = group.base_branch || null;
   const sessionId = task.sessionId;
   const shortId = sessionId.slice(0, 8);
+  const allowValidationCommands = group.config.allowValidationCommands === true;
   const runtimeInsert = db.prepare(`
     INSERT OR IGNORE INTO session_runtime_state
       (session_id, status, provider, cwd, started_at, updated_at,
@@ -397,9 +507,28 @@ function launchRunGroupTask(ctx, group, task, settledFn) {
       sessionId,
     );
 
+    const { resolvedPaths: inputPaths, contextPaths: inputContextPaths } = resolveInputPaths(task.inputs, effectiveCwd);
+    const dependencyArtifacts = [];
+    const dependencyContextPaths = [];
+    for (const dependency of Array.isArray(task.dependencies) ? task.dependencies : []) {
+      const artifacts = getDependencyArtifacts(db, group.id, dependency);
+      for (const artifact of artifacts) {
+        dependencyArtifacts.push(artifact);
+        dependencyContextPaths.push(
+          artifact.kind === 'directory'
+            ? artifact.path
+            : path.dirname(artifact.path),
+        );
+      }
+    }
+
     const canSpawnChildren = getSidecarPort() > 0;
     const fullSystemPrompt = buildSystemPrompt(group.config.systemPrompt, { canSpawnChildren });
-    const argOptions = { prompt: task.prompt, model: task.model };
+    const taskPrompt = buildTaskPrompt(task, {
+      inputPaths,
+      dependencyArtifacts,
+    });
+    const argOptions = { prompt: taskPrompt, model: task.model };
 
     if (hasCapability(providerConfig, 'systemPrompt') && fullSystemPrompt) {
       argOptions.systemPrompt = fullSystemPrompt;
@@ -407,16 +536,22 @@ function launchRunGroupTask(ctx, group, task, settledFn) {
     argOptions.outputFormat = 'stream-json';
 
     const args = buildArgs(providerConfig, argOptions);
-    appendContextArgs(args, providerConfig, task.contextPaths);
+    appendContextArgs(args, providerConfig, [
+      ...task.contextPaths,
+      ...inputContextPaths,
+      ...dependencyContextPaths,
+    ]);
     const effectivePermissionMode = group.permission_mode || defaultPermissionModeForExecution(group.execution_mode, providerConfig);
     const permissionModeKey = resolvePermissionModeKey(effectivePermissionMode, providerConfig);
     if (permissionModeKey) {
       args.push(...getPermissionArgs(providerConfig, permissionModeKey));
     }
 
+    const allowedTools = [...task.tools];
     if (canSpawnChildren && hasCapability(providerConfig, 'subagents')) {
-      args.push('--allowed-tools', 'mcp__rudi-spawn__spawn_child,mcp__rudi-spawn__list_children');
+      allowedTools.push(...SPAWN_CHILD_ALLOWED_TOOLS);
     }
+    appendAllowedToolsArgs(args, providerConfig, allowedTools);
 
     if (canSpawnChildren && hasCapability(providerConfig, 'mcpConfig')) {
       const spawnShimPath = path.join(PATHS.home, 'bins', 'rudi-spawn');
@@ -460,7 +595,7 @@ function launchRunGroupTask(ctx, group, task, settledFn) {
 
     spawnAgentProcess(ctx, {
       sessionId,
-      prompt: task.prompt,
+      prompt: taskPrompt,
       provider: task.provider,
       model: task.model,
       permissionMode: effectivePermissionMode,
@@ -481,14 +616,27 @@ function launchRunGroupTask(ctx, group, task, settledFn) {
       stdinModeOverride: 'close',
       sessionRowMode: 'existingSession',
       existingSessionId: sessionId,
+      taskSpec: task,
       autoNameOnFirstTurn: false,
       queueEvent: 'run-group-result',
       queueCloseEvent: 'run-group-close',
-      onProcessClose: ({ finalStatus }) => {
-        settledFn(group.id, sessionId, finalStatus);
+      onProcessClose: async ({ finalStatus }) => {
+        let contractValidation = null;
+        if (finalStatus === 'completed') {
+          contractValidation = await validateTaskContract({
+            db,
+            sessionId,
+            runGroupId: group.id,
+            task,
+            cwd: effectiveCwd,
+            log,
+            allowValidationCommands,
+          });
+        }
+        await settledFn(group.id, sessionId, finalStatus, { contractValidation });
       },
       onProcessError: () => {
-        settledFn(group.id, sessionId, 'error');
+        return settledFn(group.id, sessionId, 'error', { contractValidation: null });
       },
     });
 
@@ -531,6 +679,12 @@ function maybeAdvanceRunGroup(ctx, groupId, { settledFn } = {}) {
     const group = loadRunGroup(groupId);
     if (!group) break;
     const runtimeStatusBySessionId = createTaskRuntimeStatusMap(db, groupId);
+    const validationBySessionId = group.coordination_mode === 'dependency'
+      ? getTaskValidationResultMap(db, groupId)
+      : new Map();
+    const artifactAvailabilityByTask = group.coordination_mode === 'dependency'
+      ? getTaskArtifactAvailabilityMap(db, groupId)
+      : new Map();
 
     if (group.status === 'stopped') {
       const pendingTasks = group.config.tasks.filter((task) => !runtimeStatusBySessionId.has(task.sessionId));
@@ -540,12 +694,19 @@ function maybeAdvanceRunGroup(ctx, groupId, { settledFn } = {}) {
       break;
     }
 
-    const evaluation = evaluatePhaseExecution({
-      coordinationMode: group.coordination_mode,
-      tasks: group.config.tasks,
-      phasePlan: group.config.phasePlan,
-      runtimeStatusBySessionId,
-    });
+    const evaluation = group.coordination_mode === 'dependency'
+      ? evaluateDependencyExecution({
+        tasks: group.config.tasks,
+        runtimeStatusBySessionId,
+        validationBySessionId,
+        artifactAvailabilityByTask,
+      })
+      : evaluatePhaseExecution({
+        coordinationMode: group.coordination_mode,
+        tasks: group.config.tasks,
+        phasePlan: group.config.phasePlan,
+        runtimeStatusBySessionId,
+      });
 
     if (evaluation.action === 'launch') {
       const launchedThisPass = [];
@@ -576,7 +737,9 @@ function maybeAdvanceRunGroup(ctx, groupId, { settledFn } = {}) {
     if (evaluation.action === 'block') {
       const reason = evaluation.reason === 'phase_stopped'
         ? `Blocked after phase ${evaluation.phaseIndex + 1} stopped`
-        : `Blocked after phase ${evaluation.phaseIndex + 1} failed`;
+        : evaluation.reason === 'dependency_failed'
+          ? 'Blocked after dependency failure'
+          : `Blocked after phase ${evaluation.phaseIndex + 1} failed`;
       const blocked = markRunGroupTasksStopped(db, group, evaluation.tasks, reason);
       blockedSessionIds.push(...blocked);
       refreshRunGroupAggregates(db, groupId);
@@ -584,6 +747,19 @@ function maybeAdvanceRunGroup(ctx, groupId, { settledFn } = {}) {
         log('agent', 'warn', 'blocked downstream run-group phase after upstream failure', {
           groupId,
           phaseIndex: evaluation.phaseIndex,
+          blockedCount: blocked.length,
+        });
+      }
+      continue;
+    }
+
+    if (evaluation.action === 'deadlock') {
+      const blocked = markRunGroupTasksStopped(db, group, evaluation.tasks, 'Blocked by dependency deadlock');
+      blockedSessionIds.push(...blocked);
+      refreshRunGroupAggregates(db, groupId);
+      if (blocked.length > 0) {
+        log('agent', 'warn', 'blocked run-group tasks due to dependency deadlock', {
+          groupId,
           blockedCount: blocked.length,
         });
       }
@@ -623,6 +799,7 @@ export async function createRunGroupFromRequest(ctx, body, opts = {}) {
   const requestedModel = typeof body.model === 'string' ? body.model : null;
   const requestedPermissionMode = typeof body.permissionMode === 'string' ? body.permissionMode : null;
   const requestedSystemPrompt = typeof body.systemPrompt === 'string' ? body.systemPrompt : null;
+  const requestedAllowValidationCommands = body.allowValidationCommands === true;
   const requestedName = typeof body.name === 'string' && body.name.trim().length > 0
     ? body.name.trim()
     : null;
@@ -680,6 +857,11 @@ export async function createRunGroupFromRequest(ctx, body, opts = {}) {
     return { error: 'read_only execution_mode cannot include tasks with requires_write=true', statusCode: 400 };
   }
 
+  const dependencyValidationError = validateTaskDependencies(tasks);
+  if (dependencyValidationError) {
+    return { error: dependencyValidationError, statusCode: 400 };
+  }
+
   const baseBranch = requestedBaseBranch || currentBranch || null;
 
   for (const [idx, task] of tasks.entries()) {
@@ -706,7 +888,40 @@ export async function createRunGroupFromRequest(ctx, body, opts = {}) {
     });
   }
 
-  function onGroupSessionSettled(gId, sId, status) {
+  async function onGroupSessionSettled(gId, sId, status, { contractValidation = null } = {}) {
+    const groupForPolicy = loadRunGroup(gId);
+    const settledTask = findTaskBySessionId(groupForPolicy?.config?.tasks, sId);
+    const failedValidation = contractValidation && contractValidation.passed === false;
+    const failedRuntime = status === 'error' || status === 'crashed' || status === 'stopped';
+    const failurePolicy = settledTask?.failurePolicy || 'stop-downstream';
+
+    if (groupForPolicy && settledTask && (failedValidation || failedRuntime)) {
+      if (failurePolicy === 'stop-all') {
+        db.prepare(`
+          UPDATE run_groups
+          SET status = 'stopped',
+              updated_at = ?
+          WHERE id = ?
+        `).run(new Date().toISOString(), gId);
+        const stoppedCount = stopActiveRunGroupSessions(ctx, gId, sId);
+        log('agent', 'warn', 'run-group stop-all failure policy triggered', {
+          groupId: gId,
+          sessionId: sId.slice(0, 8),
+          stoppedCount,
+          failedValidation,
+          status,
+        });
+      } else if (failurePolicy === 'escalate') {
+        log('agent', 'warn', 'run-group task escalated for review', {
+          groupId: gId,
+          sessionId: sId.slice(0, 8),
+          failedValidation,
+          status,
+          validationErrors: contractValidation?.errors || [],
+        });
+      }
+    }
+
     let updated = null;
     try {
       updated = maybeAdvanceRunGroup(ctx, gId, { settledFn }).group;
@@ -715,7 +930,12 @@ export async function createRunGroupFromRequest(ctx, body, opts = {}) {
       return;
     }
 
-    broadcast('run-group:session-done', { groupId: gId, sessionId: sId, status });
+    broadcast('run-group:session-done', {
+      groupId: gId,
+      sessionId: sId,
+      status,
+      contractValidation,
+    });
     if (updated?.completed_at && TERMINAL_GROUP_STATUSES.has(updated.status)) {
       broadcast('run-group:completed', {
         groupId: gId,
@@ -761,6 +981,15 @@ export async function createRunGroupFromRequest(ctx, body, opts = {}) {
         goal: task.goal,
         deliverable: task.deliverable,
         rationale: task.rationale,
+        scope: task.scope,
+        inputs: task.inputs,
+        tools: task.tools,
+        evidence: task.evidence,
+        output: task.output,
+        dependencies: task.dependencies,
+        failurePolicy: task.failurePolicy,
+        mergePolicy: task.mergePolicy,
+        validation: task.validation,
         filesTouched: task.filesTouched,
         dependsOn: task.dependsOn,
         requiresWrite: task.requiresWrite,
@@ -774,6 +1003,7 @@ export async function createRunGroupFromRequest(ctx, body, opts = {}) {
       requestedCoordinationMode,
       phasePlan,
       systemPrompt: requestedSystemPrompt,
+      allowValidationCommands: requestedAllowValidationCommands,
     }),
     nowIso,
     nowIso,
@@ -960,9 +1190,14 @@ export function buildRunGroupRoutes(ctx) {
           srs.worktree_path,
           srs.worktree_branch,
           srs.base_branch,
-          srs.completed_at
+          srs.completed_at,
+          tvr.passed AS validation_passed,
+          tvr.errors_json AS validation_errors_json,
+          tvr.warnings_json AS validation_warnings_json,
+          tvr.validated_at
         FROM sessions s
         LEFT JOIN session_runtime_state srs ON srs.session_id = s.id
+        LEFT JOIN task_validation_results tvr ON tvr.session_id = s.id
         WHERE s.run_group_id = ?
         ORDER BY s.created_at ASC
       `).all(groupId);
@@ -981,6 +1216,10 @@ export function buildRunGroupRoutes(ctx) {
           alive,
           turn_active: Boolean(live?.turnActive),
           pid: live?.proc?.pid || null,
+          validation_passed: row.validation_passed == null ? null : Number(row.validation_passed) === 1,
+          validation_errors: row.validation_errors_json ? JSON.parse(row.validation_errors_json) : [],
+          validation_warnings: row.validation_warnings_json ? JSON.parse(row.validation_warnings_json) : [],
+          validated_at: row.validated_at || null,
         };
       });
 
@@ -1008,9 +1247,11 @@ export function buildRunGroupRoutes(ctx) {
           srs.cost_total AS runtime_cost_total,
           srs.tokens_total AS runtime_tokens_total,
           srs.last_error AS runtime_last_error,
-          srs.worktree_branch
+          srs.worktree_branch,
+          tvr.passed AS validation_passed
         FROM sessions s
         LEFT JOIN session_runtime_state srs ON srs.session_id = s.id
+        LEFT JOIN task_validation_results tvr ON tvr.session_id = s.id
         WHERE s.run_group_id = ?
         ORDER BY s.created_at ASC
       `).all(groupId);
@@ -1056,6 +1297,7 @@ export function buildRunGroupRoutes(ctx) {
           lastError: row.runtime_last_error || null,
           lastSnippet,
           worktreeBranch: row.worktree_branch || null,
+          validationPassed: row.validation_passed == null ? null : Number(row.validation_passed) === 1,
         };
       });
 

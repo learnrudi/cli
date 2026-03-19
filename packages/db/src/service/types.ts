@@ -70,7 +70,7 @@ export interface DbSession {
 
 export type RunGroupStatus = 'pending' | 'running' | 'completed' | 'partial' | 'failed' | 'stopped'
 export type RunGroupExecutionMode = 'worktree' | 'shared_cwd' | 'read_only' | 'detached'
-export type RunGroupCoordinationMode = 'flat' | 'phased' | 'supervisor'
+export type RunGroupCoordinationMode = 'flat' | 'phased' | 'dependency' | 'supervisor'
 
 export interface DbRunGroup {
   id: string

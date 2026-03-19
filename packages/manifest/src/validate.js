@@ -90,7 +90,50 @@ export const stackSchema = {
 };
 
 /**
- * Prompt manifest JSON schema
+ * Skill manifest JSON schema
+ */
+export const skillSchema = {
+  type: 'object',
+  required: ['id', 'name'],
+  properties: {
+    id: { type: 'string', pattern: '^(skill:)?[a-z0-9-]+$' },
+    kind: { const: 'skill' },
+    name: { type: 'string', minLength: 1 },
+    version: { type: 'string' },
+    description: { type: 'string' },
+    author: { type: 'string' },
+    category: { enum: ['coding', 'writing', 'analysis', 'creative', 'productivity', 'business', 'automation', 'marketing', 'development', 'communication'] },
+    tags: { type: 'array', items: { type: 'string' } },
+    template: { type: 'string' },
+    variables: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['name'],
+        properties: {
+          name: { type: 'string' },
+          type: { enum: ['string', 'text', 'select', 'file'] },
+          description: { type: 'string' },
+          default: {},
+          required: { type: 'boolean' },
+          options: { type: 'array', items: { type: 'string' } }
+        }
+      }
+    },
+    requires: {
+      type: 'object',
+      properties: {
+        stacks: {
+          type: 'array',
+          items: { type: 'string' }
+        }
+      }
+    }
+  }
+};
+
+/**
+ * Prompt manifest JSON schema (backward compatibility)
  */
 export const promptSchema = {
   type: 'object',
@@ -154,6 +197,7 @@ export const runtimeSchema = {
 
 // Compile validators
 const validateStackInternal = ajv.compile(stackSchema);
+const validateSkillInternal = ajv.compile(skillSchema);
 const validatePromptInternal = ajv.compile(promptSchema);
 const validateRuntimeInternal = ajv.compile(runtimeSchema);
 
@@ -171,7 +215,20 @@ export function validateStack(manifest) {
 }
 
 /**
- * Validate a prompt manifest
+ * Validate a skill manifest
+ * @param {Object} manifest
+ * @returns {{ valid: boolean, errors: string[] }}
+ */
+export function validateSkill(manifest) {
+  const valid = validateSkillInternal(manifest);
+  return {
+    valid,
+    errors: valid ? [] : formatErrors(validateSkillInternal.errors)
+  };
+}
+
+/**
+ * Validate a prompt manifest (backward compatibility)
  * @param {Object} manifest
  * @returns {{ valid: boolean, errors: string[] }}
  */
@@ -221,13 +278,15 @@ export function validateManifest(manifest) {
   // Detect kind from id prefix or explicit kind field
   let kind = manifest.kind;
   if (!kind && manifest.id) {
-    const match = manifest.id.match(/^(stack|prompt|runtime|tool|agent):/);
+    const match = manifest.id.match(/^(stack|skill|prompt|runtime|tool|agent):/);
     kind = match ? match[1] : null;
   }
 
   switch (kind) {
     case 'stack':
       return { ...validateStack(manifest), kind: 'stack' };
+    case 'skill':
+      return { ...validateSkill(manifest), kind: 'skill' };
     case 'prompt':
       return { ...validatePrompt(manifest), kind: 'prompt' };
     case 'runtime':

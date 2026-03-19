@@ -17,6 +17,10 @@ import { getRepoRoot, createSessionWorktree, restoreSessionWorktree } from '../w
 import { spawnAgentProcess } from '../spawn-process.js';
 
 const MAX_AGENT_BODY_SIZE = 50 * 1024 * 1024; // allow image attachments
+const SPAWN_CHILD_ALLOWED_TOOLS = [
+  'mcp__rudi-spawn__spawn_child',
+  'mcp__rudi-spawn__list_children',
+];
 
 export function buildStartRoute(ctx) {
   const {
@@ -240,10 +244,7 @@ export function buildStartRoute(ctx) {
 
     // Pre-allow spawn tools for headless sessions (Claude-specific capability)
     if (canSpawnChildren && hasCapability(providerConfig, 'subagents')) {
-      args.push(
-        '--allowed-tools',
-        'mcp__rudi-spawn__spawn_child,mcp__rudi-spawn__list_children'
-      );
+      args.push(...expandConditional(providerConfig, 'allowedTools', SPAWN_CHILD_ALLOWED_TOOLS));
     }
 
     // MCP config injection (only for providers that support it)

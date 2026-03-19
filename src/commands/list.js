@@ -3,8 +3,8 @@
  *
  * Usage:
  *   rudi list [kind]              List all or filter by kind
- *   rudi list prompts             List prompts
- *   rudi list prompts --category=coding   Filter by category
+ *   rudi list skills              List skills
+ *   rudi list skills --category=coding   Filter by category
  *   rudi list stacks --detected   Show MCP servers from agent configs
  *   rudi list --json              Output as JSON
  */
@@ -14,11 +14,15 @@ import { detectAllMcpServers, getInstalledAgents, getMcpServerSummary, AGENT_CON
 
 function pluralizeKind(kind) {
   if (!kind) return 'packages';
-  return kind === 'binary' ? 'binaries' : `${kind}s`;
+  if (kind === 'binary') return 'binaries';
+  if (kind === 'skill') return 'skills';
+  return `${kind}s`;
 }
 
 function headingForKind(kind) {
-  return kind === 'binary' ? 'BINARIES' : `${kind.toUpperCase()}S`;
+  if (kind === 'binary') return 'BINARIES';
+  if (kind === 'skill') return 'SKILLS';
+  return `${kind.toUpperCase()}S`;
 }
 
 export async function cmdList(args, flags) {
@@ -28,15 +32,22 @@ export async function cmdList(args, flags) {
   if (kind) {
     // Handle plural forms
     if (kind === 'stacks') kind = 'stack';
+    if (kind === 'skills') kind = 'skill';
     if (kind === 'prompts') kind = 'prompt';
     if (kind === 'runtimes') kind = 'runtime';
     if (kind === 'binaries') kind = 'binary';
     if (kind === 'tools') kind = 'binary';
     if (kind === 'agents') kind = 'agent';
 
-    if (!['stack', 'prompt', 'runtime', 'binary', 'agent'].includes(kind)) {
+    // Handle deprecated 'prompt' → 'skill' rename
+    if (kind === 'prompt') {
+      console.error('Note: "prompt" has been renamed to "skill". Use "rudi list skills" instead.');
+      kind = 'skill';
+    }
+
+    if (!['stack', 'skill', 'runtime', 'binary', 'agent'].includes(kind)) {
       console.error(`Invalid kind: ${kind}`);
-      console.error(`Valid kinds: stack, prompt, runtime, binary, agent`);
+      console.error(`Valid kinds: stack, skill, runtime, binary, agent`);
       process.exit(1);
     }
   }
@@ -138,8 +149,8 @@ export async function cmdList(args, flags) {
       return;
     }
 
-    // For prompts, group by category if showing all prompts
-    if (kind === 'prompt' && !categoryFilter) {
+    // For skills, group by category if showing all skills
+    if (kind === 'skill' && !categoryFilter) {
       const byCategory = {};
       for (const pkg of packages) {
         const cat = pkg.category || 'general';
@@ -147,16 +158,19 @@ export async function cmdList(args, flags) {
         byCategory[cat].push(pkg);
       }
 
-      console.log(`\nPROMPTS (${packages.length}):`);
+      console.log(`\nSKILLS (${packages.length}):`);
       console.log('─'.repeat(50));
 
-      for (const [category, prompts] of Object.entries(byCategory).sort()) {
-        console.log(`\n  ${category.toUpperCase()} (${prompts.length}):`);
-        for (const pkg of prompts) {
+      for (const [category, skills] of Object.entries(byCategory).sort()) {
+        console.log(`\n  ${category.toUpperCase()} (${skills.length}):`);
+        for (const pkg of skills) {
           const icon = pkg.icon ? `${pkg.icon} ` : '';
-          console.log(`    ${icon}${pkg.id || `prompt:${pkg.name}`}`);
+          console.log(`    ${icon}${pkg.id || `skill:${pkg.name}`}`);
           if (pkg.description) {
             console.log(`      ${pkg.description}`);
+          }
+          if (pkg.requires && pkg.requires.stacks && pkg.requires.stacks.length > 0) {
+            console.log(`      Requires: ${pkg.requires.stacks.join(', ')}`);
           }
           if (pkg.tags && pkg.tags.length > 0) {
             console.log(`      Tags: ${pkg.tags.join(', ')}`);
@@ -164,15 +178,15 @@ export async function cmdList(args, flags) {
         }
       }
 
-      console.log(`\nTotal: ${packages.length} prompt(s)`);
-      console.log(`\nFilter by category: rudi list prompts --category=coding`);
+      console.log(`\nTotal: ${packages.length} skill(s)`);
+      console.log(`\nFilter by category: rudi list skills --category=coding`);
       return;
     }
 
     // Group by kind (standard display)
     const grouped = {
       stack: packages.filter(p => p.kind === 'stack'),
-      prompt: packages.filter(p => p.kind === 'prompt'),
+      skill: packages.filter(p => p.kind === 'skill'),
       runtime: packages.filter(p => p.kind === 'runtime'),
       binary: packages.filter(p => p.kind === 'binary'),
       agent: packages.filter(p => p.kind === 'agent')

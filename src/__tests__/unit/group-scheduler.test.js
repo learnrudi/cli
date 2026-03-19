@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   deriveRunGroupSessionStatus,
+  evaluateDependencyExecution,
   evaluatePhaseExecution,
   normalizeRunGroupStatus,
 } from '../../commands/agent/group-scheduler.js';
@@ -72,6 +73,108 @@ test('evaluatePhaseExecution blocks downstream phases after a failed phase compl
   assert.deepStrictEqual(result.tasks.map((task) => task.sessionId), ['s-3']);
 });
 
+test('evaluateDependencyExecution launches tasks whose dependencies passed validation', () => {
+  const tasks = [
+    { taskIndex: 0, sessionId: 's-1', dependencies: [], failurePolicy: 'stop-downstream' },
+    { taskIndex: 1, sessionId: 's-2', dependencies: [{ taskIndex: 0, artifact: 'context.md' }], failurePolicy: 'stop-downstream' },
+  ];
+
+  const result = evaluateDependencyExecution({
+    tasks,
+    runtimeStatusBySessionId: new Map([
+      ['s-1', 'completed'],
+    ]),
+    validationBySessionId: new Map([
+      ['s-1', { passed: true }],
+    ]),
+    artifactAvailabilityByTask: new Map([
+      [0, new Set(['context.md'])],
+    ]),
+  });
+
+  assert.strictEqual(result.action, 'launch');
+  assert.deepStrictEqual(result.tasks.map((task) => task.sessionId), ['s-2']);
+});
+
+test('evaluateDependencyExecution waits for validation results before release', () => {
+  const tasks = [
+    { taskIndex: 0, sessionId: 's-1', dependencies: [], failurePolicy: 'stop-downstream' },
+    { taskIndex: 1, sessionId: 's-2', dependencies: [{ taskIndex: 0, artifact: 'context.md' }], failurePolicy: 'stop-downstream' },
+  ];
+
+  const result = evaluateDependencyExecution({
+    tasks,
+    runtimeStatusBySessionId: new Map([
+      ['s-1', 'completed'],
+    ]),
+    validationBySessionId: new Map(),
+    artifactAvailabilityByTask: new Map(),
+  });
+
+  assert.strictEqual(result.action, 'wait');
+});
+
+test('evaluateDependencyExecution blocks downstream tasks after failed dependency validation', () => {
+  const tasks = [
+    { taskIndex: 0, sessionId: 's-1', dependencies: [], failurePolicy: 'stop-downstream' },
+    { taskIndex: 1, sessionId: 's-2', dependencies: [{ taskIndex: 0, artifact: 'context.md' }], failurePolicy: 'stop-downstream' },
+  ];
+
+  const result = evaluateDependencyExecution({
+    tasks,
+    runtimeStatusBySessionId: new Map([
+      ['s-1', 'completed'],
+    ]),
+    validationBySessionId: new Map([
+      ['s-1', { passed: false }],
+    ]),
+    artifactAvailabilityByTask: new Map([
+      [0, new Set(['context.md'])],
+    ]),
+  });
+
+  assert.strictEqual(result.action, 'block');
+  assert.strictEqual(result.reason, 'dependency_failed');
+  assert.deepStrictEqual(result.tasks.map((task) => task.sessionId), ['s-2']);
+});
+
+test('evaluateDependencyExecution keeps artifact dependencies blocked after upstream failure', () => {
+  const tasks = [
+    { taskIndex: 0, sessionId: 's-1', dependencies: [], failurePolicy: 'continue' },
+    { taskIndex: 1, sessionId: 's-2', dependencies: [{ taskIndex: 0, artifact: 'context.md' }], failurePolicy: 'stop-downstream' },
+  ];
+
+  const result = evaluateDependencyExecution({
+    tasks,
+    runtimeStatusBySessionId: new Map([
+      ['s-1', 'error'],
+    ]),
+    validationBySessionId: new Map(),
+    artifactAvailabilityByTask: new Map(),
+  });
+
+  assert.strictEqual(result.action, 'block');
+  assert.strictEqual(result.reason, 'dependency_failed');
+});
+
+test('evaluateDependencyExecution detects dependency cycles', () => {
+  const tasks = [
+    { taskIndex: 0, sessionId: 's-1', dependencies: [{ taskIndex: 1 }], failurePolicy: 'stop-downstream' },
+    { taskIndex: 1, sessionId: 's-2', dependencies: [{ taskIndex: 0 }], failurePolicy: 'stop-downstream' },
+  ];
+
+  const result = evaluateDependencyExecution({
+    tasks,
+    runtimeStatusBySessionId: new Map(),
+    validationBySessionId: new Map(),
+    artifactAvailabilityByTask: new Map(),
+  });
+
+  assert.strictEqual(result.action, 'deadlock');
+  assert.strictEqual(result.reason, 'dependency_cycle');
+  assert.deepStrictEqual(result.tasks.map((task) => task.sessionId), ['s-1', 's-2']);
+});
+
 test('normalizeRunGroupStatus keeps pending groups pending until something launches', () => {
   assert.strictEqual(normalizeRunGroupStatus({
     currentStatus: 'pending',
@@ -112,6 +215,17 @@ test('normalizeRunGroupStatus keeps pending groups pending until something launc
     failedCount: 0,
     stoppedCount: 1,
   }), 'stopped');
+
+  assert.strictEqual(normalizeRunGroupStatus({
+    currentStatus: 'running',
+    sessionCount: 2,
+    launchedCount: 2,
+    doneCount: 2,
+    completedCount: 2,
+    failedCount: 0,
+    stoppedCount: 0,
+    validationFailedCount: 1,
+  }), 'partial');
 });
 
 test('deriveRunGroupSessionStatus exposes pending and stopped sessions correctly', () => {

@@ -13,7 +13,9 @@ import { unregisterMcpAll } from '@learnrudi/mcp';
 
 function pluralizeKind(kind) {
   if (!kind) return 'packages';
-  return kind === 'binary' ? 'binaries' : `${kind}s`;
+  if (kind === 'binary') return 'binaries';
+  if (kind === 'skill') return 'skills';
+  return `${kind}s`;
 }
 
 export async function cmdRemove(args, flags) {
@@ -104,15 +106,22 @@ async function removeBulk(kind, flags) {
   // Normalize kind
   if (kind) {
     if (kind === 'stacks') kind = 'stack';
+    if (kind === 'skills') kind = 'skill';
     if (kind === 'prompts') kind = 'prompt';
     if (kind === 'runtimes') kind = 'runtime';
     if (kind === 'binaries') kind = 'binary';
     if (kind === 'tools') kind = 'binary';
     if (kind === 'agents') kind = 'agent';
 
-    if (!['stack', 'prompt', 'runtime', 'binary', 'agent'].includes(kind)) {
+    // Handle deprecated 'prompt' → 'skill' rename
+    if (kind === 'prompt') {
+      console.error('Note: "prompt" has been renamed to "skill". Use "rudi remove skills" instead.');
+      kind = 'skill';
+    }
+
+    if (!['stack', 'skill', 'runtime', 'binary', 'agent'].includes(kind)) {
       console.error(`Invalid kind: ${kind}`);
-      console.error(`Valid kinds: stack, prompt, runtime, binary, agent`);
+      console.error(`Valid kinds: stack, skill, runtime, binary, agent`);
       process.exit(1);
     }
   }

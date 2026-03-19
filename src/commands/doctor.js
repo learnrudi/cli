@@ -25,7 +25,7 @@ export async function cmdDoctor(args, flags) {
   const dirs = [
     { path: PATHS.home, name: 'Home' },
     { path: PATHS.stacks, name: 'Stacks' },
-    { path: PATHS.prompts, name: 'Prompts' },
+    { path: PATHS.prompts, name: 'Skills' },
     { path: PATHS.runtimes, name: 'Runtimes' },
     { path: PATHS.binaries, name: 'Binaries' },
     { path: PATHS.agents, name: 'Agents' },
@@ -58,11 +58,11 @@ export async function cmdDoctor(args, flags) {
   console.log('\n📦 Packages');
   try {
     const stacks = getInstalledPackages('stack');
-    const prompts = getInstalledPackages('prompt');
+    const skills = getInstalledPackages('skill');
     const runtimes = getInstalledPackages('runtime');
 
     console.log(`  ✓ Stacks: ${stacks.length}`);
-    console.log(`  ✓ Prompts: ${prompts.length}`);
+    console.log(`  ✓ Skills: ${skills.length}`);
     console.log(`  ✓ Runtimes: ${runtimes.length}`);
   } catch (error) {
     console.log(`  ✗ Error reading packages: ${error.message}`);

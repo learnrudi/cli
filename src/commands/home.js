@@ -62,7 +62,7 @@ export async function cmdHome(args, flags) {
     // Collect directory info
     const dirs = [
       { key: 'stacks', path: PATHS.stacks },
-      { key: 'prompts', path: PATHS.prompts },
+      { key: 'skills', path: PATHS.prompts },
       { key: 'runtimes', path: PATHS.runtimes },
       { key: 'binaries', path: PATHS.binaries },
       { key: 'agents', path: PATHS.agents },
@@ -79,7 +79,7 @@ export async function cmdHome(args, flags) {
     }
 
     // Collect package counts
-    for (const kind of ['stack', 'prompt', 'runtime', 'binary', 'agent']) {
+    for (const kind of ['stack', 'skill', 'runtime', 'binary', 'agent']) {
       data.packages[kind] = getInstalledPackages(kind).length;
     }
 
@@ -98,7 +98,7 @@ export async function cmdHome(args, flags) {
 
   const dirs = [
     { name: 'stacks', path: PATHS.stacks, icon: '📦', desc: 'MCP server stacks' },
-    { name: 'prompts', path: PATHS.prompts, icon: '📝', desc: 'Prompt templates' },
+    { name: 'skills', path: PATHS.prompts, icon: '📝', desc: 'Skill templates' },
     { name: 'runtimes', path: PATHS.runtimes, icon: '⚙️', desc: 'Node, Python, Deno, Bun' },
     { name: 'binaries', path: PATHS.binaries, icon: '🔧', desc: 'ffmpeg, ripgrep, etc.' },
     { name: 'agents', path: PATHS.agents, icon: '🤖', desc: 'Claude, Codex, Gemini CLIs' },
@@ -137,7 +137,7 @@ export async function cmdHome(args, flags) {
   console.log('Installed Packages');
   console.log('═'.repeat(60));
 
-  const kinds = ['stack', 'prompt', 'runtime', 'binary', 'agent'];
+  const kinds = ['stack', 'skill', 'runtime', 'binary', 'agent'];
   let total = 0;
 
   for (const kind of kinds) {

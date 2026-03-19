@@ -263,16 +263,16 @@ async function getFullStatus() {
   const runtimes = RUNTIMES.map(getRuntimeStatus);
   const binaries = BINARIES.map(getBinaryStatus);
 
-  // Get installed stacks and prompts
+  // Get installed stacks and skills
   let stacks = [];
-  let prompts = [];
+  let skills = [];
   try {
     stacks = getInstalledPackages('stack').map(s => ({
       id: s.id,
       name: s.name,
       version: s.version,
     }));
-    prompts = getInstalledPackages('prompt').map(p => ({
+    skills = getInstalledPackages('skill').map(p => ({
       id: p.id,
       name: p.name,
       category: p.category,
@@ -301,7 +301,7 @@ async function getFullStatus() {
     binariesInstalled: binaries.filter(b => b.installed).length,
     binariesTotal: binaries.length,
     stacksInstalled: stacks.length,
-    promptsInstalled: prompts.length,
+    skillsInstalled: skills.length,
   };
 
   return {
@@ -313,7 +313,7 @@ async function getFullStatus() {
     runtimes,
     binaries,
     stacks,
-    prompts,
+    skills,
     directories,
   };
 }
@@ -389,7 +389,7 @@ function printStatus(status, filter) {
   console.log(`  Runtimes: ${status.summary.runtimesInstalled}/${status.summary.runtimesTotal}`);
   console.log(`  Binaries: ${status.summary.binariesInstalled}/${status.summary.binariesTotal}`);
   console.log(`  Stacks: ${status.summary.stacksInstalled}`);
-  console.log(`  Prompts: ${status.summary.promptsInstalled}`);
+  console.log(`  Skills: ${status.summary.skillsInstalled}`);
 }
 
 export async function cmdStatus(args, flags) {

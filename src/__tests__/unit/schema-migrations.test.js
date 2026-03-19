@@ -25,6 +25,19 @@ test('migrations v19-v20 normalize raw JSON tool previews and recover file paths
         file_path TEXT,
         input_preview TEXT
       );
+
+      CREATE TABLE sessions (
+        id TEXT PRIMARY KEY,
+        provider TEXT,
+        provider_session_id TEXT,
+        title TEXT,
+        description TEXT,
+        snippet TEXT,
+        status TEXT DEFAULT 'active',
+        turn_count INTEGER DEFAULT 0,
+        created_at TEXT,
+        last_active_at TEXT
+      );
     `);
 
     db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
@@ -74,7 +87,7 @@ test('migrations v19-v20 normalize raw JSON tool previews and recover file paths
     );
 
     const result = initSchemaWithDb(db);
-    assert.strictEqual(result.version, 22);
+    assert.strictEqual(result.version, 26);
     assert.strictEqual(result.migrated, true);
     assert.strictEqual(result.from, 18);
 
@@ -138,6 +151,19 @@ test('migration v20 recovers truncated JSON preview blobs', async () => {
         file_path TEXT,
         input_preview TEXT
       );
+
+      CREATE TABLE sessions (
+        id TEXT PRIMARY KEY,
+        provider TEXT,
+        provider_session_id TEXT,
+        title TEXT,
+        description TEXT,
+        snippet TEXT,
+        status TEXT DEFAULT 'active',
+        turn_count INTEGER DEFAULT 0,
+        created_at TEXT,
+        last_active_at TEXT
+      );
     `);
 
     db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
@@ -171,7 +197,7 @@ test('migration v20 recovers truncated JSON preview blobs', async () => {
     );
 
     const result = initSchemaWithDb(db);
-    assert.strictEqual(result.version, 22);
+    assert.strictEqual(result.version, 26);
     assert.strictEqual(result.migrated, true);
     assert.strictEqual(result.from, 19);
 
@@ -204,7 +230,7 @@ test('migration v20 recovers truncated JSON preview blobs', async () => {
   }
 });
 
-test('migration v22 adds generic orchestration columns', async () => {
+test('migration v22-v25 adds orchestration columns, contract tables, and repairs broken temp foreign keys', async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'rudi-schema-migration-'));
   const dbPath = path.join(tmp, 'test.db');
   const db = new Database(dbPath);
@@ -263,13 +289,26 @@ test('migration v22 adds generic orchestration columns', async () => {
         base_branch TEXT,
         use_worktree INTEGER NOT NULL DEFAULT 1
       );
+
+      CREATE TABLE sessions (
+        id TEXT PRIMARY KEY,
+        provider TEXT,
+        provider_session_id TEXT,
+        title TEXT,
+        description TEXT,
+        snippet TEXT,
+        status TEXT DEFAULT 'active',
+        turn_count INTEGER DEFAULT 0,
+        created_at TEXT,
+        last_active_at TEXT
+      );
     `);
 
     db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
       .run(21, new Date('2026-03-07T00:00:00.000Z').toISOString());
 
     const result = initSchemaWithDb(db);
-    assert.strictEqual(result.version, 22);
+    assert.strictEqual(result.version, 26);
     assert.strictEqual(result.migrated, true);
     assert.strictEqual(result.from, 21);
 
@@ -283,6 +322,45 @@ test('migration v22 adds generic orchestration columns', async () => {
     assert.ok(runGroupNames.includes('requires_git'));
     assert.ok(runGroupNames.includes('workspace_root'));
     assert.ok(runtimeNames.includes('execution_mode'));
+    const coordinationMode = runGroupCols.find((col) => col.name === 'coordination_mode');
+    assert.ok(coordinationMode);
+
+    const artifactCols = db.prepare(`PRAGMA table_info(task_artifacts)`).all().map((col) => col.name);
+    const validationCols = db.prepare(`PRAGMA table_info(task_validation_results)`).all().map((col) => col.name);
+    assert.ok(artifactCols.includes('artifact_name'));
+    assert.ok(validationCols.includes('passed'));
+
+    const sessionForeignKeys = db.prepare(`PRAGMA foreign_key_list(sessions)`).all();
+    const planForeignKeys = db.prepare(`PRAGMA foreign_key_list(orchestration_plans)`).all();
+    assert.ok(
+      sessionForeignKeys.some((fk) => fk.table === 'run_groups' && fk.from === 'run_group_id'),
+      'sessions.run_group_id should reference run_groups after repair migration'
+    );
+    assert.ok(
+      !sessionForeignKeys.some((fk) => fk.table === '_run_groups_old'),
+      'sessions should not reference _run_groups_old after repair migration'
+    );
+    assert.ok(
+      planForeignKeys.some((fk) => fk.table === 'run_groups' && fk.from === 'run_group_id'),
+      'orchestration_plans.run_group_id should reference run_groups after repair migration'
+    );
+    assert.ok(
+      !planForeignKeys.some((fk) => fk.table === '_run_groups_old'),
+      'orchestration_plans should not reference _run_groups_old after repair migration'
+    );
+
+    const lingeringBrokenRefs = db.prepare(`
+      SELECT name
+      FROM sqlite_master
+      WHERE type = 'table'
+        AND sql IS NOT NULL
+        AND (sql LIKE '%_run_groups_old%' OR sql LIKE '%_fk_fix_old%')
+    `).all();
+    assert.deepStrictEqual(
+      lingeringBrokenRefs,
+      [],
+      'no table schema should reference temp migration tables after repair migrations'
+    );
   } finally {
     db.close();
     await fs.rm(tmp, { recursive: true, force: true });

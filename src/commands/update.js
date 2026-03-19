@@ -126,7 +126,7 @@ async function updatePackage(pkgId, flags) {
 async function updateAll(flags) {
   console.log('Checking for updates...');
 
-  const kinds = ['runtime', 'stack', 'prompt'];
+  const kinds = ['runtime', 'stack', 'skill'];
   let updated = 0;
   let failed = 0;
 

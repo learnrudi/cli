@@ -201,6 +201,26 @@ async function resolveDependencies(pkg) {
     }
   }
 
+  // Resolve required stacks (for skills)
+  const requiredStacks = pkg.requires?.stacks || [];
+  for (const stackName of requiredStacks) {
+    const stackId = stackName.startsWith('stack:') ? stackName : `stack:${stackName}`;
+    const stackPkg = await getPackage(stackId);
+    if (stackPkg) {
+      dependencies.push({
+        id: stackId,
+        kind: 'stack',
+        name: stackPkg.name,
+        version: stackPkg.version,
+        installed: isPackageInstalled(stackId),
+        dependencies: []
+      });
+      // Recursively resolve the stack's own dependencies
+      const stackDeps = await resolveDependencies(stackPkg);
+      dependencies.push(...stackDeps);
+    }
+  }
+
   return dependencies;
 }
 

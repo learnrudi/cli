@@ -29,7 +29,7 @@ REGISTRY
   update [pkg]          Update packages
 
 INSTALLED
-  list [kind]           List installed packages (stacks, prompts, runtimes, binaries, agents)
+  list [kind]           List installed packages (stacks, skills, runtimes, binaries, agents)
   home                  Show ~/.rudi structure and status
   doctor                Check system health and dependencies
   which <cmd>           Show path to a command
@@ -80,7 +80,7 @@ PACKAGE TYPES
   runtime:<name>       Node, Python, Deno, Bun
   binary:<name>        ffmpeg, ripgrep, etc.
   agent:<name>         Claude, Codex, Gemini CLIs
-  prompt:<name>        Prompt template
+  skill:<name>         Skill (prompt with optional stack requirements)
 `);
 }
 
@@ -94,7 +94,7 @@ USAGE
 
 OPTIONS
   --stacks         Filter to stacks only
-  --prompts        Filter to prompts only
+  --skills         Filter to skills only (alias: --prompts)
   --runtimes       Filter to runtimes only
   --binaries       Filter to binaries only
   --agents         Filter to agents only
@@ -146,6 +146,7 @@ rudi parallel - Launch grouped parallel agent sessions
 
 USAGE
   rudi parallel "<task1>" "<task2>" [more tasks] [options]
+  rudi parallel --template <name> [options]
 
 OPTIONS
   --name <name>               Group display name
@@ -155,12 +156,18 @@ OPTIONS
   --cwd <path>                Working directory (default: current dir)
   --permission-mode <mode>    Permission mode passed to provider
   --system-prompt <prompt>    Additional system prompt
+  --coordination-mode <mode>  flat, phased, or dependency
+  --template <name>           Load a tracked run-group template
+  --list-templates            Show available run-group templates
+  --allow-validation-commands Allow non-default validator commands
   --no-worktree               Run in shared cwd instead of isolated worktrees
 
 EXAMPLES
   rudi parallel "implement auth" "write tests" "update docs"
   rudi parallel "fix bug A" "fix bug B" --name "Bug batch"
   rudi parallel "task1" "task2" --provider claude --model sonnet
+  rudi parallel --list-templates
+  rudi parallel --template code-review-3task --coordination-mode dependency
 `,
     list: `
 rudi list - List installed packages
@@ -169,19 +176,19 @@ USAGE
   rudi list [kind]
 
 ARGUMENTS
-  kind             Filter: stacks, prompts, runtimes, binaries, agents
+  kind             Filter: stacks, skills, runtimes, binaries, agents
 
 OPTIONS
   --json           Output as JSON
   --detected       Show MCP servers from agent configs (stacks only)
-  --category=X     Filter prompts by category
+  --category=X     Filter skills by category
 
 EXAMPLES
   rudi list
   rudi list stacks
   rudi list stacks --detected     Show MCP servers in Claude/Gemini/Codex
   rudi list binaries
-  rudi list prompts --category=coding
+  rudi list skills --category=coding
 `,
     secrets: `
 rudi secrets - Manage secrets
