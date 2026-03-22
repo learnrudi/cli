@@ -19,6 +19,10 @@ function makeFsRoute() {
   return { ctx, ...route };
 }
 
+function assertErrorBody(res, expected) {
+  assert.deepStrictEqual(parseResBody(res), expected);
+}
+
 describe('buildFsRoutes', () => {
   // --- write ---
 
@@ -233,7 +237,11 @@ describe('buildFsRoutes', () => {
     const res = createMockRes();
     await handle(req, res, url);
     assert.strictEqual(res.state.statusCode, 400);
-    assert.deepStrictEqual(parseResBody(res), { error: 'path required' });
+    assertErrorBody(res, {
+      error: 'path required',
+      code: 'MISSING_REQUIRED_FIELD',
+      details: { field: 'path', location: 'query' },
+    });
   });
 
   test('GET /fs/read nonexistent file returns 404', async () => {
@@ -254,7 +262,11 @@ describe('buildFsRoutes', () => {
     const res = createMockRes();
     await handle(req, res, url);
     assert.strictEqual(res.state.statusCode, 400);
-    assert.deepStrictEqual(parseResBody(res), { error: 'path and content required' });
+    assertErrorBody(res, {
+      error: 'content required',
+      code: 'MISSING_REQUIRED_FIELD',
+      details: { fields: ['content'], location: 'body' },
+    });
   });
 
   // --- cleanup ---

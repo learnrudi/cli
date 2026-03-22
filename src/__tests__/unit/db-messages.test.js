@@ -76,6 +76,44 @@ function decodeCursor(token) {
   return obj.t;
 }
 
+function buildClaudeToolTurnEntries() {
+  return [
+    {
+      type: 'user',
+      uuid: 'tool-turn-1',
+      timestamp: isoFor(2),
+      message: { role: 'user', content: 'Read the file' },
+    },
+    {
+      type: 'assistant',
+      timestamp: isoFor(3),
+      message: {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Opening file' },
+          { type: 'tool_use', id: 'toolu_read_1', name: 'Read', input: { file_path: '/tmp/a.txt' } },
+          { type: 'text', text: 'Read complete' },
+        ],
+        model: 'claude-sonnet-4-5-20250929',
+        usage: {
+          input_tokens: 120,
+          output_tokens: 45,
+        },
+      },
+    },
+    {
+      type: 'user',
+      timestamp: isoFor(4),
+      message: {
+        role: 'user',
+        content: [
+          { type: 'tool_result', tool_use_id: 'toolu_read_1', content: 'hello world' },
+        ],
+      },
+    },
+  ];
+}
+
 /**
  * Map a DB turn row → messages, same as _turnToMessages in sessions.js.
  */
@@ -376,6 +414,67 @@ test('DB route mode returns paginated messages with string cursor', async () => 
         const b2 = parseResBody(r2);
         assert.strictEqual(Array.isArray(b2.messages), true);
         assert.strictEqual(b2.messages.length, 4);
+      } finally {
+        SESSION_FILE_HINTS.delete(sessionId);
+      }
+    });
+  });
+});
+
+test('DB route enriches assistant messages with contentBlocks when JSONL is available', async () => {
+  await withMessagesMode('1', async () => {
+    await withHarness(async ({ db, ingester, claudeRoot }) => {
+      const sessionId = `route-blocks-${Date.now()}`;
+      const filePath = path.join(claudeRoot, 'proj-route-blocks', `${sessionId}.jsonl`);
+      await writeJsonl(filePath, buildClaudeToolTurnEntries());
+      await ingester.ingestFile(filePath, { provider: 'claude', sessionId });
+      cacheSessionFileHint(sessionId, 'claude', filePath);
+
+      const { handleSessions } = createRouteModule(() => db);
+      try {
+        const p = createMockReq('GET', `/sessions/${sessionId}/messages`, { query: 'count=10' });
+        const r = createMockRes();
+        await handleSessions(p.req, r, p.url);
+        assert.strictEqual(r.state.statusCode, 200);
+
+        const body = parseResBody(r);
+        const assistant = body.messages.find((m) => m.role === 'assistant');
+        assert.ok(assistant, 'should have assistant message');
+        assert.deepStrictEqual(assistant.contentBlocks, [
+          { type: 'text', text: 'Opening file' },
+          { type: 'tool', toolIndex: 0 },
+          { type: 'text', text: 'Read complete' },
+        ]);
+        assert.strictEqual(assistant.toolCalls?.[0]?.result, 'hello world');
+      } finally {
+        SESSION_FILE_HINTS.delete(sessionId);
+      }
+    });
+  });
+});
+
+test('DB route falls back to DB-only messages when JSONL file is missing', async () => {
+  await withMessagesMode('1', async () => {
+    await withHarness(async ({ db, ingester, claudeRoot }) => {
+      const sessionId = `route-blocks-missing-${Date.now()}`;
+      const filePath = path.join(claudeRoot, 'proj-route-blocks-missing', `${sessionId}.jsonl`);
+      await writeJsonl(filePath, buildClaudeToolTurnEntries());
+      await ingester.ingestFile(filePath, { provider: 'claude', sessionId });
+      cacheSessionFileHint(sessionId, 'claude', filePath);
+      await fs.rm(filePath);
+
+      const { handleSessions } = createRouteModule(() => db);
+      try {
+        const p = createMockReq('GET', `/sessions/${sessionId}/messages`, { query: 'count=10' });
+        const r = createMockRes();
+        await handleSessions(p.req, r, p.url);
+        assert.strictEqual(r.state.statusCode, 200);
+
+        const body = parseResBody(r);
+        const assistant = body.messages.find((m) => m.role === 'assistant');
+        assert.ok(assistant, 'should have assistant message');
+        assert.strictEqual(assistant.contentBlocks, undefined);
+        assert.strictEqual(assistant.toolCalls?.[0]?.result, 'hello world');
       } finally {
         SESSION_FILE_HINTS.delete(sessionId);
       }

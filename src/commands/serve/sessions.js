@@ -468,6 +468,108 @@ function _parseJsonObjectOrUndefined(raw) {
   }
 }
 
+function _cloneContentBlocks(blocks) {
+  if (!Array.isArray(blocks)) return undefined;
+  const normalized = [];
+  for (const block of blocks) {
+    if (!block || typeof block !== 'object') continue;
+    if (block.type === 'text' && typeof block.text === 'string') {
+      normalized.push({ type: 'text', text: block.text });
+      continue;
+    }
+    if (block.type === 'tool' && Number.isInteger(block.toolIndex) && block.toolIndex >= 0) {
+      normalized.push({ type: 'tool', toolIndex: block.toolIndex });
+    }
+  }
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function _buildTurnContentBlocksIndex(messages) {
+  const byTurnNumber = new Map();
+  let hasPendingUser = false;
+  let turnNumber = 0;
+
+  for (const msg of messages) {
+    if (!msg || typeof msg !== 'object') continue;
+    if (msg.role === 'user') {
+      hasPendingUser = true;
+      continue;
+    }
+    if (msg.role !== 'assistant' || !hasPendingUser) continue;
+
+    turnNumber += 1;
+    hasPendingUser = false;
+
+    const contentBlocks = _cloneContentBlocks(msg.contentBlocks);
+    if (contentBlocks) {
+      byTurnNumber.set(turnNumber, contentBlocks);
+    }
+  }
+
+  return byTurnNumber;
+}
+
+async function enrichDbResultWithContentBlocks(sessionId, result, lookup = {}) {
+  const messages = Array.isArray(result?.messages) ? result.messages : [];
+  const needsEnrichment = messages.some(
+    (msg) =>
+      msg?.role === 'assistant'
+      && Number.isInteger(msg.turnNumber)
+      && !Array.isArray(msg.contentBlocks)
+  );
+  if (!needsEnrichment) return result;
+
+  const found = await findSessionFileEntry(sessionId, lookup);
+  if (!found?.filePath) return result;
+
+  let stat;
+  try {
+    stat = await fsp.stat(found.filePath);
+  } catch {
+    return result;
+  }
+
+  const cacheKey = `${found.provider}:${found.filePath}`;
+  const cache = lookup.contentBlocksCache;
+  const cached = cache?.get(cacheKey);
+  let byTurnNumber = cached
+    && cached.mtimeMs === stat.mtimeMs
+    && cached.size === stat.size
+    ? cached.byTurnNumber
+    : null;
+
+  if (!byTurnNumber) {
+    try {
+      const content = await fsp.readFile(found.filePath, 'utf-8');
+      const parsed = parseSessionMessagesFromJsonl(content, found.provider);
+      byTurnNumber = _buildTurnContentBlocksIndex(parsed);
+      cache?.set(cacheKey, {
+        byTurnNumber,
+        mtimeMs: stat.mtimeMs,
+        size: stat.size,
+      });
+    } catch {
+      cache?.delete(cacheKey);
+      return result;
+    }
+  }
+
+  if (!(byTurnNumber instanceof Map) || byTurnNumber.size === 0) return result;
+
+  let changed = false;
+  const enrichedMessages = messages.map((msg) => {
+    if (msg?.role !== 'assistant' || !Number.isInteger(msg.turnNumber) || Array.isArray(msg.contentBlocks)) {
+      return msg;
+    }
+    const contentBlocks = byTurnNumber.get(msg.turnNumber);
+    if (!contentBlocks) return msg;
+    changed = true;
+    return { ...msg, contentBlocks };
+  });
+
+  return changed ? { ...result, messages: enrichedMessages } : result;
+}
+
 function _turnToMessages(turn) {
   const msgs = [];
   const baseMeta = {
@@ -889,6 +991,7 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
 
   const _diffStatsCache = new Map();   // sessionId -> { diffStats, mtimeMs }
   const _gitStatusCache = new Map();   // projectPath -> { gitStatus, fetchedAt }
+  const _contentBlocksCache = new Map(); // provider:filePath -> { byTurnNumber, mtimeMs, size }
   const _diffStatsInFlight = new Set(); // sessionIds currently being computed
   const _gitStatusInFlight = new Set(); // projectPaths currently being computed
   const _sessionPathMap = new Map();    // sessionId -> fullPath (for background jobs)
@@ -1850,6 +1953,12 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
         } else {
           // Emergency fallback: full-load JSONL + slice pagination
           result = await readSessionMessagesPaginated(sessionId, paginationOpts, { resolveDb });
+        }
+        if (useDbMessages) {
+          result = await enrichDbResultWithContentBlocks(sessionId, result, {
+            resolveDb,
+            contentBlocksCache: _contentBlocksCache,
+          });
         }
         const { messages, byteOffset, filePath } = result;
         const provider = result.provider || 'claude';

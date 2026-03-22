@@ -371,7 +371,7 @@ async function defaultInstallAndRegisterPackage({ id, force, onProgress }, deps)
 }
 
 export function buildPackageRoutes(ctx, overrides = {}) {
-  const { json, error, readBody, log, broadcast } = ctx;
+  const { json, error, readBody, log, broadcast, requiredField, invalidField } = ctx;
 
   const deps = { ...defaultDeps, ...overrides };
   if (!overrides.installAndRegisterPackage) {
@@ -423,11 +423,17 @@ export function buildPackageRoutes(ctx, overrides = {}) {
   async function handle(req, res, url) {
     if (req.method === 'GET' && url.pathname === '/packages/search') {
       const query = (url.searchParams.get('q') || '').trim().slice(0, MAX_QUERY_LENGTH);
-      if (!query) return error(res, 'q required', 400);
+      if (!query) return requiredField(res, 'q', { location: 'query' });
 
       const rawKind = url.searchParams.get('kind');
       const kind = rawKind == null ? null : normalizeKind(rawKind);
-      if (rawKind != null && !kind) return error(res, 'invalid kind', 400);
+      if (rawKind != null && !kind) {
+        return invalidField(res, 'kind', 'invalid kind', {
+          location: 'query',
+          reason: 'unsupported_value',
+          details: { value: rawKind },
+        });
+      }
 
       try {
         const packages = await deps.searchPackages(query, kind ? { kind } : {});
@@ -441,7 +447,12 @@ export function buildPackageRoutes(ctx, overrides = {}) {
 
     if (req.method === 'GET' && url.pathname === '/packages/list') {
       const kind = normalizeKind(url.searchParams.get('kind'));
-      if (!kind) return error(res, 'valid kind required', 400);
+      if (!kind) {
+        return invalidField(res, 'kind', 'valid kind required', {
+          location: 'query',
+          reason: 'required_supported_value',
+        });
+      }
 
       try {
         const packages = await deps.listPackages(kind);
@@ -487,7 +498,7 @@ export function buildPackageRoutes(ctx, overrides = {}) {
       const body = await readBody(req);
       const id = typeof body.id === 'string' ? body.id.trim() : '';
       const force = body.force === true;
-      if (!id) return error(res, 'id required', 400);
+      if (!id) return requiredField(res, 'id');
 
       const existingJobId = activeInstallJobs.get(id);
       if (existingJobId) {
@@ -585,9 +596,11 @@ export function buildPackageRoutes(ctx, overrides = {}) {
       const name = typeof body.name === 'string' ? body.name.trim() : '';
       const value = typeof body.value === 'string' ? body.value : null;
       if (!SECRET_NAME_RE.test(name)) {
-        return error(res, 'secret name must be UPPER_SNAKE_CASE', 400);
+        return invalidField(res, 'name', 'secret name must be UPPER_SNAKE_CASE', {
+          reason: 'pattern_mismatch',
+        });
       }
-      if (value === null) return error(res, 'value required', 400);
+      if (value === null) return requiredField(res, 'value');
 
       try {
         await deps.setSecret(name, value);
@@ -608,7 +621,10 @@ export function buildPackageRoutes(ctx, overrides = {}) {
     if (req.method === 'DELETE' && secretDeleteMatch) {
       const name = decodeURIComponent(secretDeleteMatch[1]).trim();
       if (!SECRET_NAME_RE.test(name)) {
-        return error(res, 'secret name must be UPPER_SNAKE_CASE', 400);
+        return invalidField(res, 'name', 'secret name must be UPPER_SNAKE_CASE', {
+          location: 'path',
+          reason: 'pattern_mismatch',
+        });
       }
 
       try {

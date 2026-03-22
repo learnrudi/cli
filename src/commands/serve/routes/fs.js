@@ -12,7 +12,7 @@ const FS_READDIR_CACHE_TTL_MS = 1200;
 const MAX_FS_WRITE_BODY_SIZE = 50 * 1024 * 1024;
 
 export function buildFsRoutes(ctx) {
-  const { json, error, readBody, log, broadcast } = ctx;
+  const { json, error, readBody, log, broadcast, requiredField, requiredFields } = ctx;
 
   const fsWatchers = new Map(); // path -> { watcher, debounceTimer }
   const fsReaddirCache = new Map(); // key -> { entries, fetchedAt }
@@ -85,7 +85,7 @@ export function buildFsRoutes(ctx) {
     // GET /fs/read?path=
     if (req.method === 'GET' && pathname === '/fs/read') {
       const filePath = url.searchParams.get('path');
-      if (!filePath) return error(res, 'path required');
+      if (!filePath) return requiredField(res, 'path', { location: 'query' });
       try {
         const content = await fsp.readFile(filePath, 'utf-8');
         json(res, { content });
@@ -98,7 +98,12 @@ export function buildFsRoutes(ctx) {
     // POST /fs/write {path, content}
     if (req.method === 'POST' && pathname === '/fs/write') {
       const body = await readBody(req, { maxBodySize: MAX_FS_WRITE_BODY_SIZE });
-      if (!body.path || body.content === undefined) return error(res, 'path and content required');
+      if (!body.path || body.content === undefined) {
+        const missing = [];
+        if (!body.path) missing.push('path');
+        if (body.content === undefined) missing.push('content');
+        return requiredFields(res, missing);
+      }
       try {
         await fsp.mkdir(path.dirname(body.path), { recursive: true });
         await fsp.writeFile(body.path, body.content, 'utf-8');
@@ -113,7 +118,12 @@ export function buildFsRoutes(ctx) {
     // POST /fs/write-binary {path, base64}
     if (req.method === 'POST' && pathname === '/fs/write-binary') {
       const body = await readBody(req, { maxBodySize: MAX_FS_WRITE_BODY_SIZE });
-      if (!body.path || body.base64 === undefined) return error(res, 'path and base64 required');
+      if (!body.path || body.base64 === undefined) {
+        const missing = [];
+        if (!body.path) missing.push('path');
+        if (body.base64 === undefined) missing.push('base64');
+        return requiredFields(res, missing);
+      }
       try {
         await fsp.mkdir(path.dirname(body.path), { recursive: true });
         const buffer = Buffer.from(body.base64, 'base64');
@@ -129,7 +139,7 @@ export function buildFsRoutes(ctx) {
     // GET /fs/readdir?path=&showHidden=1
     if (req.method === 'GET' && pathname === '/fs/readdir') {
       const dirPath = url.searchParams.get('path');
-      if (!dirPath) return error(res, 'path required');
+      if (!dirPath) return requiredField(res, 'path', { location: 'query' });
       const showHidden = url.searchParams.get('showHidden') === '1';
       try {
         const entries = await readDirectoryEntries(dirPath, showHidden);
@@ -143,7 +153,7 @@ export function buildFsRoutes(ctx) {
     // GET /fs/stat?path=
     if (req.method === 'GET' && pathname === '/fs/stat') {
       const filePath = url.searchParams.get('path');
-      if (!filePath) return error(res, 'path required');
+      if (!filePath) return requiredField(res, 'path', { location: 'query' });
       try {
         const stat = await fsp.stat(filePath);
         json(res, {
@@ -163,7 +173,7 @@ export function buildFsRoutes(ctx) {
     // GET /fs/serve?path= (binary file serving)
     if (req.method === 'GET' && pathname === '/fs/serve') {
       const filePath = url.searchParams.get('path');
-      if (!filePath) return error(res, 'path required');
+      if (!filePath) return requiredField(res, 'path', { location: 'query' });
       try {
         const stat = await fsp.stat(filePath);
         const ext = path.extname(filePath).toLowerCase();
@@ -199,7 +209,7 @@ export function buildFsRoutes(ctx) {
     // POST /fs/mkdir {path}
     if (req.method === 'POST' && pathname === '/fs/mkdir') {
       const body = await readBody(req);
-      if (!body.path) return error(res, 'path required');
+      if (!body.path) return requiredField(res, 'path');
       try {
         await fsp.mkdir(body.path, { recursive: true });
         invalidateFsReaddirCache();
@@ -213,7 +223,7 @@ export function buildFsRoutes(ctx) {
     // POST /fs/remove {path}
     if (req.method === 'POST' && pathname === '/fs/remove') {
       const body = await readBody(req);
-      if (!body.path) return error(res, 'path required');
+      if (!body.path) return requiredField(res, 'path');
       try {
         await fsp.rm(body.path, { recursive: true });
         invalidateFsReaddirCache();
@@ -227,7 +237,12 @@ export function buildFsRoutes(ctx) {
     // POST /fs/rename {oldPath, newPath}
     if (req.method === 'POST' && pathname === '/fs/rename') {
       const body = await readBody(req);
-      if (!body.oldPath || !body.newPath) return error(res, 'oldPath and newPath required');
+      if (!body.oldPath || !body.newPath) {
+        const missing = [];
+        if (!body.oldPath) missing.push('oldPath');
+        if (!body.newPath) missing.push('newPath');
+        return requiredFields(res, missing);
+      }
       try {
         await fsp.rename(body.oldPath, body.newPath);
         invalidateFsReaddirCache();
@@ -241,7 +256,7 @@ export function buildFsRoutes(ctx) {
     // POST /fs/watch {path}
     if (req.method === 'POST' && pathname === '/fs/watch') {
       const body = await readBody(req);
-      if (!body.path) return error(res, 'path required');
+      if (!body.path) return requiredField(res, 'path');
       const watchPath = body.path;
 
       if (fsWatchers.has(watchPath)) {
@@ -276,7 +291,7 @@ export function buildFsRoutes(ctx) {
     // POST /fs/unwatch {path}
     if (req.method === 'POST' && pathname === '/fs/unwatch') {
       const body = await readBody(req);
-      if (!body.path) return error(res, 'path required');
+      if (!body.path) return requiredField(res, 'path');
       const entry = fsWatchers.get(body.path);
       if (entry) {
         clearTimeout(entry.debounceTimer);

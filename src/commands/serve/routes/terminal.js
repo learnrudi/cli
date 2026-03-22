@@ -5,7 +5,7 @@
  */
 
 export function buildTerminalRoutes(ctx) {
-  const { json, error, readBody, broadcast } = ctx;
+  const { json, error, readBody, broadcast, requiredField, requiredFields } = ctx;
 
   const terminalSessions = new Map(); // sessionKey -> { proc, cwd, shell, buffer }
   const pendingTerminalOpens = new Set(); // sessionKey lock to prevent double-spawn races
@@ -47,7 +47,7 @@ export function buildTerminalRoutes(ctx) {
       const sessionKey = String(body.sessionKey || 'global');
       const cwd = body.cwd;
       const shellPath = body.shell || '/bin/zsh';
-      if (!cwd || typeof cwd !== 'string') return error(res, 'cwd required');
+      if (!cwd || typeof cwd !== 'string') return requiredField(res, 'cwd');
 
       // Prevent double-spawn races
       if (pendingTerminalOpens.has(sessionKey)) {
@@ -128,7 +128,7 @@ export function buildTerminalRoutes(ctx) {
       const entry = terminalSessions.get(sessionKey);
       if (!entry) return error(res, 'terminal session not found', 404);
       if (!Number.isFinite(cols) || !Number.isFinite(rows) || cols <= 0 || rows <= 0) {
-        return error(res, 'cols and rows required', 400);
+        return requiredFields(res, ['cols', 'rows']);
       }
       try {
         entry.proc.resize(Math.floor(cols), Math.floor(rows));

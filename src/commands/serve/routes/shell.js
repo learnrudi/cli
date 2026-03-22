@@ -5,13 +5,13 @@
 import { spawn } from 'child_process';
 
 export function buildShellRoutes(ctx) {
-  const { json, error, readBody } = ctx;
+  const { json, error, readBody, requiredField, invalidField } = ctx;
 
   async function handle(req, res, url) {
     // POST /shell/reveal
     if (req.method === 'POST' && url.pathname === '/shell/reveal') {
       const body = await readBody(req);
-      if (!body.path) { error(res, 'path required'); return true; }
+      if (!body.path) { requiredField(res, 'path'); return true; }
       const child = spawn('open', ['-R', body.path], { detached: true, stdio: 'ignore' });
       child.unref();
       json(res, { ok: true });
@@ -21,8 +21,8 @@ export function buildShellRoutes(ctx) {
     // POST /shell/open
     if (req.method === 'POST' && url.pathname === '/shell/open') {
       const body = await readBody(req);
-      if (!body.path) { error(res, 'path required'); return true; }
-      if (!body.app) { error(res, 'app required'); return true; }
+      if (!body.path) { requiredField(res, 'path'); return true; }
+      if (!body.app) { requiredField(res, 'app'); return true; }
 
       const p = body.path;
       let cmd, args;
@@ -44,7 +44,12 @@ export function buildShellRoutes(ctx) {
           args = ['-e', script];
           break;
         }
-        default: error(res, `unknown app: ${body.app}`); return true;
+        default:
+          invalidField(res, 'app', `unknown app: ${body.app}`, {
+            reason: 'unsupported_value',
+            details: { value: body.app },
+          });
+          return true;
       }
 
       console.log(`[shell/open] ${cmd} ${args.join(' ')}`);

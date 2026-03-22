@@ -8,9 +8,11 @@
 
 import crypto from 'crypto';
 import { URL } from 'url';
+import { SIDECAR_ERROR_CODES, resolveSidecarErrorDefinition } from './error-codes.js';
 
 const LOG_MAX = 500;
 const SSE_CLIENT_CAP = 50;
+const REQUEST_ID_HEADER = 'x-rudi-request-id';
 
 export function createInfrastructure() {
   // Closure-private mutable state
@@ -74,15 +76,157 @@ export function createInfrastructure() {
 
   // --- HTTP helpers ---
 
-  function json(res, data, status = 200) {
-    res.writeHead(status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+  function generateRequestId() {
+    return typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : crypto.randomBytes(16).toString('hex');
+  }
+
+  function createRequestContext(req) {
+    let pathname = '/';
+    try {
+      pathname = new URL(req?.url || '/', 'http://localhost').pathname;
+    } catch {
+      pathname = '/';
+    }
+
+    return {
+      requestId: generateRequestId(),
+      method: req?.method || null,
+      path: pathname,
+      startedAt: Date.now(),
+      auth: {
+        required: true,
+        result: 'unknown',
+      },
+      response: null,
+    };
+  }
+
+  function getRequestContext(res) {
+    return res?._rudiRequestContext || null;
+  }
+
+  function attachRequestContext(res, requestContext) {
+    if (!res || !requestContext) return requestContext;
+    res._rudiRequestContext = requestContext;
+    if (typeof res.setHeader === 'function') {
+      res.setHeader(REQUEST_ID_HEADER, requestContext.requestId);
+    }
+    return requestContext;
+  }
+
+  function updateRequestAuth(res, authPatch) {
+    const requestContext = getRequestContext(res);
+    if (!requestContext) return null;
+    requestContext.auth = {
+      ...(requestContext.auth || {}),
+      ...(authPatch || {}),
+    };
+    return requestContext.auth;
+  }
+
+  function markResponse(res, patch) {
+    const requestContext = getRequestContext(res);
+    if (!requestContext) return null;
+    requestContext.response = {
+      ...(requestContext.response || {}),
+      ...(patch || {}),
+    };
+    return requestContext.response;
+  }
+
+  function buildJsonHeaders(res, headers = {}) {
+    const requestContext = getRequestContext(res);
+    return {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      ...(requestContext?.requestId ? { [REQUEST_ID_HEADER]: requestContext.requestId } : {}),
+      ...(headers || {}),
+    };
+  }
+
+  function json(res, data, status = 200, options = {}) {
+    markResponse(res, { status });
+    res.writeHead(status, buildJsonHeaders(res, options.headers));
     res.end(JSON.stringify(data));
     return true;
   }
 
-  function error(res, message, status = 400) {
-    json(res, { error: message }, status);
+  function error(res, message, status = 400, options = {}) {
+    const requestContext = getRequestContext(res);
+    const errorDefinition = resolveSidecarErrorDefinition(options.code, status);
+    const finalStatus = errorDefinition?.status ?? status;
+    const payload = {
+      error: message || errorDefinition?.defaultMessage || 'Error',
+      code: errorDefinition?.code || 'ERROR',
+    };
+    if (options.details !== undefined) {
+      payload.details = options.details;
+    }
+    if (requestContext?.requestId) {
+      payload.requestId = requestContext.requestId;
+    }
+
+    markResponse(res, {
+      status: finalStatus,
+      errorCode: payload.code,
+      errorDetails: payload.details,
+    });
+    json(res, payload, finalStatus, options);
     return true;
+  }
+
+  function errorCode(res, codeDefinition, options = {}) {
+    const errorDefinition = resolveSidecarErrorDefinition(codeDefinition, options.status || 500);
+    return error(
+      res,
+      options.message || errorDefinition?.defaultMessage || 'Error',
+      options.status ?? errorDefinition?.status ?? 500,
+      {
+        ...options,
+        code: errorDefinition,
+      },
+    );
+  }
+
+  function requiredField(res, field, options = {}) {
+    return error(res, options.message || `${field} required`, options.status || 400, {
+      ...options,
+      code: options.code || SIDECAR_ERROR_CODES.MISSING_REQUIRED_FIELD,
+      details: {
+        field,
+        location: options.location || 'body',
+        ...(options.details || {}),
+      },
+    });
+  }
+
+  function requiredFields(res, fields, options = {}) {
+    const normalizedFields = (Array.isArray(fields) ? fields : [fields]).filter(Boolean);
+    const fieldLabel = normalizedFields.join(' and ');
+    return error(res, options.message || `${fieldLabel} required`, options.status || 400, {
+      ...options,
+      code: options.code || SIDECAR_ERROR_CODES.MISSING_REQUIRED_FIELD,
+      details: {
+        fields: normalizedFields,
+        location: options.location || 'body',
+        ...(options.details || {}),
+      },
+    });
+  }
+
+  function invalidField(res, field, message, options = {}) {
+    return error(res, message, options.status || 400, {
+      ...options,
+      code: options.code || SIDECAR_ERROR_CODES.INVALID_FIELD,
+      details: {
+        field,
+        location: options.location || 'body',
+        ...(options.reason ? { reason: options.reason } : {}),
+        ...(options.details || {}),
+      },
+    });
   }
 
   const DEFAULT_MAX_BODY_SIZE = 10 * 1024 * 1024; // 10MB
@@ -181,9 +325,10 @@ export function createInfrastructure() {
     getLogs, getSseClients,
     // Functions
     log, broadcast,
-    json, error, readBody,
+    createRequestContext, attachRequestContext, getRequestContext, updateRequestAuth,
+    json, error, errorCode, requiredField, requiredFields, invalidField, readBody,
     generateToken, checkAuth,
     // Constants
-    SSE_CLIENT_CAP,
+    SSE_CLIENT_CAP, REQUEST_ID_HEADER,
   };
 }

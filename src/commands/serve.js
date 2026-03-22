@@ -120,7 +120,21 @@ const MIME_TYPES = {
 export async function cmdServe(args, flags) {
   // 1. Create shared infrastructure (log, broadcast, json, error, etc.)
   const ctx = createInfrastructure();
-  const { log, broadcast, json, error, readBody, checkAuth, generateToken, setWss, setToken } = ctx;
+  const {
+    log,
+    broadcast,
+    json,
+    error,
+    readBody,
+    checkAuth,
+    createRequestContext,
+    attachRequestContext,
+    updateRequestAuth,
+    generateToken,
+    setWss,
+    setToken,
+    REQUEST_ID_HEADER,
+  } = ctx;
 
   // Web mode: resolve --web-root to absolute path
   const webRoot = flags['web-root'] ? path.resolve(flags['web-root']) : null;
@@ -203,12 +217,17 @@ export async function cmdServe(args, flags) {
   setToken(token);
 
   const server = http.createServer(async (req, res) => {
+    const requestContext = createRequestContext(req);
+    attachRequestContext(res, requestContext);
+
     // CORS preflight
     if (req.method === 'OPTIONS') {
+      updateRequestAuth(res, { required: false, result: 'skipped' });
       res.writeHead(204, {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, X-Rudi-Token, X-Rudi-Caller-Session',
+        [REQUEST_ID_HEADER]: requestContext.requestId,
       });
       res.end();
       return;
@@ -217,28 +236,47 @@ export async function cmdServe(args, flags) {
     const url = new URL(req.url, `http://localhost`);
     const start = Date.now();
 
-    // Health check (no auth required)
-    if (url.pathname === '/health') {
-      json(res, { status: 'ok', version: '0.1.0' });
-      return;
-    }
-
-    // Environment info (needs auth)
-    if (url.pathname === '/env') {
-      if (!checkAuth(req)) { error(res, 'Unauthorized', 401); return; }
-      json(res, { home: os.homedir(), platform: os.platform() });
-      return;
-    }
-
-    // Auth check
-    if (!checkAuth(req)) {
-      log('http', 'warn', `401 ${req.method} ${url.pathname}`);
-      error(res, 'Unauthorized', 401);
-      return;
-    }
-
-    // Route to handlers — order preserved from original
     try {
+      // Health check (no auth required)
+      if (url.pathname === '/health') {
+        updateRequestAuth(res, { required: false, result: 'skipped' });
+        json(res, { status: 'ok', version: '0.1.0' });
+        return;
+      }
+
+      // Environment info (needs auth)
+      if (url.pathname === '/env') {
+        if (!checkAuth(req)) {
+          updateRequestAuth(res, { required: true, result: 'failed' });
+          log('http', 'warn', 'auth_failed', {
+            requestId: requestContext.requestId,
+            method: req.method,
+            path: url.pathname,
+            status: 401,
+          });
+          error(res, 'Unauthorized', 401);
+          return;
+        }
+        updateRequestAuth(res, { required: true, result: 'passed' });
+        json(res, { home: os.homedir(), platform: os.platform() });
+        return;
+      }
+
+      // Auth check
+      if (!checkAuth(req)) {
+        updateRequestAuth(res, { required: true, result: 'failed' });
+        log('http', 'warn', 'auth_failed', {
+          requestId: requestContext.requestId,
+          method: req.method,
+          path: url.pathname,
+          status: 401,
+        });
+        error(res, 'Unauthorized', 401);
+        return;
+      }
+      updateRequestAuth(res, { required: true, result: 'passed' });
+
+      // Route to handlers — order preserved from original
       if (url.pathname.startsWith('/logs')) {
         if (await logsRoutes.handle(req, res, url)) return;
       }
@@ -415,7 +453,17 @@ export async function cmdServe(args, flags) {
     } finally {
       const ms = Date.now() - start;
       if (!url.pathname.startsWith('/logs') && url.pathname !== '/health') {
-        log('http', 'info', `${req.method} ${url.pathname} ${ms}ms`);
+        const status = res.statusCode || requestContext.response?.status || 200;
+        const level = status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info';
+        log('http', level, 'request_complete', {
+          requestId: requestContext.requestId,
+          method: req.method,
+          path: url.pathname,
+          status,
+          latencyMs: ms,
+          auth: requestContext.auth?.result || 'unknown',
+          errorCode: requestContext.response?.errorCode || null,
+        });
       }
     }
   });

@@ -7,6 +7,8 @@
  * Buffered updates return [].
  */
 
+const UNKNOWN_EVENT_RAW_PAYLOAD_MAX_CHARS = 16_000;
+
 export class CodexNormalizer {
   constructor() {
     /** @type {Map<string, { type: string, name: string, contentBuffer: string, startEvent: object }>} */
@@ -70,11 +72,7 @@ export class CodexNormalizer {
       return [this._wrap(normalized, rawEvent)];
     }
 
-    return [this._wrap({
-      type: 'system',
-      subtype: 'unknown',
-      message: `Unrecognized Codex event: ${type}`,
-    }, rawEvent)];
+    return [this._wrap(this._normalizeUnknownEvent(rawEvent), rawEvent)];
   }
 
   /**
@@ -120,6 +118,45 @@ export class CodexNormalizer {
     } catch {
       return String(value);
     }
+  }
+
+  _serializeUnknownPayload(rawEvent) {
+    try {
+      const rawPayload = JSON.stringify(rawEvent);
+      if (typeof rawPayload !== 'string') {
+        return { rawPayloadUnavailable: true };
+      }
+      if (rawPayload.length > UNKNOWN_EVENT_RAW_PAYLOAD_MAX_CHARS) {
+        return {
+          rawPayload: rawPayload.slice(0, UNKNOWN_EVENT_RAW_PAYLOAD_MAX_CHARS),
+          rawPayloadTruncated: true,
+        };
+      }
+      return { rawPayload };
+    } catch (error) {
+      return {
+        rawPayloadUnavailable: true,
+        rawPayloadError: error instanceof Error ? error.message : 'serialization_failed',
+      };
+    }
+  }
+
+  _normalizeUnknownEvent(rawEvent) {
+    const providerEventType = this._toString(rawEvent?.type);
+    const providerItemType = this._toString(rawEvent?.item?.type || rawEvent?.payload?.type);
+    const unknownReason = providerEventType ? 'unknown_event_type' : 'malformed_event';
+    const normalized = {
+      type: 'system',
+      subtype: 'unknown',
+      message: providerEventType
+        ? `Unrecognized Codex event: ${providerEventType}`
+        : 'Malformed Codex event',
+      unknownReason,
+      ...this._serializeUnknownPayload(rawEvent),
+    };
+    if (providerEventType) normalized.providerEventType = providerEventType;
+    if (providerItemType) normalized.providerItemType = providerItemType;
+    return normalized;
   }
 
   _normalizeUsage(rawUsage = {}) {

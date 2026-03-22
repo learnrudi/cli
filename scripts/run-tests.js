@@ -1,0 +1,132 @@
+#!/usr/bin/env node
+
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+
+const require = createRequire(import.meta.url);
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
+
+const DEFAULT_TEST_ARGS = [
+  '--test',
+  'src/__tests__/unit/*.test.js',
+  'src/__tests__/e2e/*.test.js',
+];
+
+const BUNDLED_NODE_PATH = process.env.RUDI_CLI_TEST_NODE
+  || '/Users/hoff/.rudi/runtimes/node/bin/node';
+
+function globToRegExp(pattern) {
+  const escaped = pattern.replace(/[.+^${}()|\\]/g, '\\$&');
+  const regexBody = escaped.replace(/\*/g, '.*').replace(/\?/g, '.');
+  return new RegExp(`^${regexBody}$`);
+}
+
+function expandTestArg(arg) {
+  if (!/[*?]/.test(arg)) return [arg];
+
+  const dir = path.resolve(REPO_ROOT, path.dirname(arg));
+  const basePattern = path.basename(arg);
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [arg];
+  }
+
+  const matcher = globToRegExp(basePattern);
+  const matches = entries
+    .filter((entry) => entry.isFile() && matcher.test(entry.name))
+    .map((entry) => path.relative(REPO_ROOT, path.join(dir, entry.name)))
+    .sort();
+
+  return matches.length > 0 ? matches : [arg];
+}
+
+function resolveTestArgs(argv) {
+  const forwarded = argv[0] === '--' ? argv.slice(1) : argv;
+  const baseArgs = forwarded.length === 0 ? DEFAULT_TEST_ARGS : forwarded;
+  const includesTestFlag = forwarded.some(
+    (arg) => arg === '--test' || arg.startsWith('--test='),
+  );
+  const normalized = forwarded.length === 0
+    ? baseArgs
+    : (includesTestFlag ? baseArgs : ['--test', ...baseArgs]);
+  const expanded = [];
+  for (const arg of normalized) {
+    if (arg.startsWith('-')) {
+      expanded.push(arg);
+      continue;
+    }
+    expanded.push(...expandTestArg(arg));
+  }
+  return expanded;
+}
+
+function canLoadBetterSqlite3() {
+  try {
+    const Database = require('better-sqlite3');
+    const db = new Database(':memory:');
+    db.close();
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error };
+  }
+}
+
+function isAbiMismatch(error) {
+  const message = error instanceof Error ? error.message : String(error || '');
+  return message.includes('NODE_MODULE_VERSION') || message.includes('ERR_DLOPEN_FAILED');
+}
+
+function runNode(nodePath, args) {
+  const result = spawnSync(nodePath, args, {
+    cwd: REPO_ROOT,
+    stdio: 'inherit',
+    env: {
+      ...process.env,
+      RUDI_CLI_TEST_WRAPPER_ACTIVE: '1',
+    },
+  });
+
+  if (typeof result.status === 'number') {
+    process.exit(result.status);
+  }
+  if (result.error) {
+    console.error(`[cli:test] failed to launch ${nodePath}: ${result.error.message}`);
+  }
+  process.exit(1);
+}
+
+const testArgs = resolveTestArgs(process.argv.slice(2));
+const compatibility = canLoadBetterSqlite3();
+
+if (compatibility.ok) {
+  runNode(process.execPath, testArgs);
+}
+
+if (
+  process.env.RUDI_CLI_TEST_WRAPPER_ACTIVE === '1'
+  || !isAbiMismatch(compatibility.error)
+  || process.execPath === BUNDLED_NODE_PATH
+  || !fs.existsSync(BUNDLED_NODE_PATH)
+) {
+  console.error('[cli:test] unable to load better-sqlite3 with the current Node runtime.');
+  if (compatibility.error instanceof Error) {
+    console.error(compatibility.error.message);
+  }
+  if (!fs.existsSync(BUNDLED_NODE_PATH)) {
+    console.error(`[cli:test] bundled runtime not found at ${BUNDLED_NODE_PATH}`);
+  }
+  process.exit(1);
+}
+
+const currentMajor = Number(process.versions.node.split('.')[0] || 0);
+console.error(
+  `[cli:test] Node ${currentMajor} cannot load better-sqlite3 here; ` +
+  `re-running tests with bundled runtime at ${BUNDLED_NODE_PATH}`,
+);
+runNode(BUNDLED_NODE_PATH, testArgs);

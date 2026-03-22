@@ -47,17 +47,32 @@ describe('createInfrastructure', () => {
       const res = createMockRes();
       assert.strictEqual(ctx.json(res, {}), true);
     });
+
+    test('includes request ID header when request context is attached', () => {
+      const ctx = createInfrastructure();
+      const req = { method: 'GET', url: '/projects' };
+      const res = createMockRes();
+      const requestContext = ctx.createRequestContext(req);
+      ctx.attachRequestContext(res, requestContext);
+
+      ctx.json(res, { ok: true });
+
+      assert.strictEqual(res.state.headers['x-rudi-request-id'], requestContext.requestId);
+    });
   });
 
   // --- error ---
 
   describe('error', () => {
-    test('writes 400 + error JSON', () => {
+    test('writes 400 + structured error JSON', () => {
       const ctx = createInfrastructure();
       const res = createMockRes();
       ctx.error(res, 'bad request');
       assert.strictEqual(res.state.statusCode, 400);
-      assert.deepStrictEqual(JSON.parse(res.state.body), { error: 'bad request' });
+      assert.deepStrictEqual(JSON.parse(res.state.body), {
+        error: 'bad request',
+        code: 'BAD_REQUEST',
+      });
     });
 
     test('supports custom status code', () => {
@@ -71,6 +86,95 @@ describe('createInfrastructure', () => {
       const ctx = createInfrastructure();
       const res = createMockRes();
       assert.strictEqual(ctx.error(res, 'fail'), true);
+    });
+
+    test('includes request ID and details when request context is attached', () => {
+      const ctx = createInfrastructure();
+      const req = { method: 'POST', url: '/fs/write' };
+      const res = createMockRes();
+      const requestContext = ctx.createRequestContext(req);
+      ctx.attachRequestContext(res, requestContext);
+
+      ctx.error(res, 'path required', 400, {
+        code: 'MISSING_REQUIRED_FIELD',
+        details: { field: 'path', location: 'body' },
+      });
+
+      assert.deepStrictEqual(JSON.parse(res.state.body), {
+        error: 'path required',
+        code: 'MISSING_REQUIRED_FIELD',
+        details: { field: 'path', location: 'body' },
+        requestId: requestContext.requestId,
+      });
+      assert.strictEqual(res.state.headers['x-rudi-request-id'], requestContext.requestId);
+    });
+  });
+
+  describe('request context', () => {
+    test('createRequestContext captures request metadata', () => {
+      const ctx = createInfrastructure();
+      const requestContext = ctx.createRequestContext({
+        method: 'POST',
+        url: '/notes?draft=1',
+      });
+
+      assert.strictEqual(requestContext.method, 'POST');
+      assert.strictEqual(requestContext.path, '/notes');
+      assert.strictEqual(typeof requestContext.requestId, 'string');
+      assert.ok(requestContext.requestId.length > 0);
+      assert.strictEqual(requestContext.auth.result, 'unknown');
+    });
+
+    test('attachRequestContext sets the response header', () => {
+      const ctx = createInfrastructure();
+      const res = createMockRes();
+      const requestContext = ctx.createRequestContext({ method: 'GET', url: '/health' });
+
+      ctx.attachRequestContext(res, requestContext);
+
+      assert.strictEqual(ctx.getRequestContext(res), requestContext);
+      assert.strictEqual(res.state.headers['x-rudi-request-id'], requestContext.requestId);
+    });
+  });
+
+  describe('validation helpers', () => {
+    test('requiredField emits a stable code and field details', () => {
+      const ctx = createInfrastructure();
+      const res = createMockRes();
+
+      ctx.requiredField(res, 'path');
+
+      assert.deepStrictEqual(JSON.parse(res.state.body), {
+        error: 'path required',
+        code: 'MISSING_REQUIRED_FIELD',
+        details: { field: 'path', location: 'body' },
+      });
+    });
+
+    test('requiredFields emits the missing field list', () => {
+      const ctx = createInfrastructure();
+      const res = createMockRes();
+
+      ctx.requiredFields(res, ['path', 'content']);
+
+      assert.deepStrictEqual(JSON.parse(res.state.body), {
+        error: 'path and content required',
+        code: 'MISSING_REQUIRED_FIELD',
+        details: { fields: ['path', 'content'], location: 'body' },
+      });
+    });
+
+    test('invalidField emits a stable code and reason', () => {
+      const ctx = createInfrastructure();
+      const res = createMockRes();
+
+      ctx.invalidField(res, 'kind', 'invalid kind', { location: 'query', reason: 'unsupported_value' });
+
+      assert.deepStrictEqual(JSON.parse(res.state.body), {
+        error: 'invalid kind',
+        code: 'INVALID_FIELD',
+        details: { field: 'kind', location: 'query', reason: 'unsupported_value' },
+      });
     });
   });
 

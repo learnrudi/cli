@@ -17,10 +17,12 @@ const NORMALIZERS = {
  * Canonical RudiEvent schema (provider-agnostic wire format for Lite UI):
  *
  * RudiEvent =
- *   | { type: 'assistant', content: RudiContentBlock[], usage?: RudiUsage, model?: string }
+ *   | { type: 'assistant', content: RudiContentBlock[], usage?: RudiUsage, model?: string, finishReason?: string }
  *   | { type: 'result', providerSessionId?: string, costUsd?: number, durationMs?: number,
- *       numTurns?: number, result?: string, usage?: RudiUsage, model?: string }
+ *       numTurns?: number, result?: string, usage?: RudiUsage, model?: string, finishReason?: string }
  *   | { type: 'system', subtype: string, message: string,
+ *       providerEventType?: string, providerItemType?: string, unknownReason?: string,
+ *       rawPayload?: string, rawPayloadTruncated?: boolean, rawPayloadUnavailable?: boolean,
  *       compaction?: { trigger: string, preTokens: number, tokensSaved: number, compactedToolIds?: string[] },
  *       permission?: { requestId: string, batchId?: string, toolName?: string, toolInput?: Record<string, unknown> } }
  *   | { type: 'error', message: string, code?: string, details?: unknown };

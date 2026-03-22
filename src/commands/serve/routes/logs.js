@@ -36,7 +36,7 @@ export function buildLogsRoutes(ctx) {
 
       // Cap SSE clients
       if (sseClients.length >= SSE_CLIENT_CAP) {
-        return error(res, 'Too many SSE clients', 429);
+        return error(res, 'Too many SSE clients', 429, { code: 'SSE_CLIENT_CAP_REACHED' });
       }
 
       res.writeHead(200, {

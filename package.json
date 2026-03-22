@@ -17,7 +17,7 @@
     "prebuild": "node scripts/generate-manifest.js",
     "build": "esbuild src/index.js --bundle --platform=node --format=cjs --outfile=dist/index.cjs --define:__RUDI_CLI_VERSION__=$(node -p \"JSON.stringify(require('./package.json').version)\") --external:better-sqlite3 --external:@lydell/node-pty && cp src/router-mcp.js dist/router-mcp.js && cp src/spawn-mcp.js dist/spawn-mcp.js && cp src/packages-manifest.json dist/packages-manifest.json && mkdir -p dist/templates && cp -R templates/run-groups dist/templates/",
     "prepublishOnly": "npm run build",
-    "test": "node --test src/__tests__/unit/*.test.js src/__tests__/e2e/*.test.js"
+    "test": "node scripts/run-tests.js"
   },
   "dependencies": {
     "@learnrudi/core": "workspace:*",

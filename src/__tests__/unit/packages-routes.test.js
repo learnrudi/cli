@@ -9,6 +9,10 @@ import {
   parseResBody,
 } from '../helpers/serve-mocks.js';
 
+function assertErrorBody(res, expected) {
+  assert.deepEqual(parseResBody(res), expected);
+}
+
 describe('buildPackageRoutes', () => {
   test('GET /packages/search validates kind and returns projected package metadata', async () => {
     const ctx = createMockCtx();
@@ -32,7 +36,11 @@ describe('buildPackageRoutes', () => {
     const invalidRes = createMockRes();
     await handle(invalidReq.req, invalidRes, invalidReq.url);
     assert.equal(invalidRes.state.statusCode, 400);
-    assert.deepEqual(parseResBody(invalidRes), { error: 'invalid kind' });
+    assertErrorBody(invalidRes, {
+      error: 'invalid kind',
+      code: 'INVALID_FIELD',
+      details: { field: 'kind', location: 'query', reason: 'unsupported_value', value: 'nope' },
+    });
 
     const { req, url } = createMockReq('GET', '/packages/search', { query: 'q=audio&kind=stack' });
     const res = createMockRes();
@@ -71,7 +79,11 @@ describe('buildPackageRoutes', () => {
     const missingRes = createMockRes();
     await handle(missingReq.req, missingRes, missingReq.url);
     assert.equal(missingRes.state.statusCode, 400);
-    assert.deepEqual(parseResBody(missingRes), { error: 'valid kind required' });
+    assertErrorBody(missingRes, {
+      error: 'valid kind required',
+      code: 'INVALID_FIELD',
+      details: { field: 'kind', location: 'query', reason: 'required_supported_value' },
+    });
 
     const { req, url } = createMockReq('GET', '/packages/list', { query: 'kind=agent' });
     const res = createMockRes();

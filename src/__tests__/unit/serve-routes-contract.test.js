@@ -7,6 +7,10 @@ import { buildSuggestRoutes } from '../../commands/serve/routes/suggest.js';
 import { buildTerminalRoutes } from '../../commands/serve/routes/terminal.js';
 import { buildProviderRoutes } from '../../commands/serve/routes/providers.js';
 
+function assertErrorBody(res, expected) {
+  assert.deepStrictEqual(parseResBody(res), expected);
+}
+
 // ---------------------------------------------------------------------------
 // logs.js
 // ---------------------------------------------------------------------------
@@ -129,7 +133,11 @@ describe('buildShellRoutes', () => {
     const res = createMockRes();
     await handle(req, res, url);
     assert.strictEqual(res.state.statusCode, 400);
-    assert.deepStrictEqual(parseResBody(res), { error: 'path required' });
+    assertErrorBody(res, {
+      error: 'path required',
+      code: 'MISSING_REQUIRED_FIELD',
+      details: { field: 'path', location: 'body' },
+    });
   });
 
   test('POST /shell/open missing path returns error', async () => {
@@ -139,7 +147,11 @@ describe('buildShellRoutes', () => {
     const res = createMockRes();
     await handle(req, res, url);
     assert.strictEqual(res.state.statusCode, 400);
-    assert.deepStrictEqual(parseResBody(res), { error: 'path required' });
+    assertErrorBody(res, {
+      error: 'path required',
+      code: 'MISSING_REQUIRED_FIELD',
+      details: { field: 'path', location: 'body' },
+    });
   });
 
   test('POST /shell/open missing app returns error', async () => {
@@ -149,7 +161,11 @@ describe('buildShellRoutes', () => {
     const res = createMockRes();
     await handle(req, res, url);
     assert.strictEqual(res.state.statusCode, 400);
-    assert.deepStrictEqual(parseResBody(res), { error: 'app required' });
+    assertErrorBody(res, {
+      error: 'app required',
+      code: 'MISSING_REQUIRED_FIELD',
+      details: { field: 'app', location: 'body' },
+    });
   });
 
   test('POST /shell/open unknown app returns error', async () => {
@@ -161,7 +177,11 @@ describe('buildShellRoutes', () => {
     const res = createMockRes();
     await handle(req, res, url);
     assert.strictEqual(res.state.statusCode, 400);
-    assert.deepStrictEqual(parseResBody(res), { error: 'unknown app: notepad' });
+    assertErrorBody(res, {
+      error: 'unknown app: notepad',
+      code: 'INVALID_FIELD',
+      details: { field: 'app', location: 'body', reason: 'unsupported_value', value: 'notepad' },
+    });
   });
 });
 
@@ -222,7 +242,11 @@ describe('buildTerminalRoutes', () => {
     const res = createMockRes();
     await handle(req, res, url);
     assert.strictEqual(res.state.statusCode, 400);
-    assert.deepStrictEqual(parseResBody(res), { error: 'cwd required' });
+    assertErrorBody(res, {
+      error: 'cwd required',
+      code: 'MISSING_REQUIRED_FIELD',
+      details: { field: 'cwd', location: 'body' },
+    });
   });
 
   test('POST /terminal/write nonexistent session returns 404', async () => {
@@ -234,7 +258,10 @@ describe('buildTerminalRoutes', () => {
     const res = createMockRes();
     await handle(req, res, url);
     assert.strictEqual(res.state.statusCode, 404);
-    assert.deepStrictEqual(parseResBody(res), { error: 'terminal session not found' });
+    assertErrorBody(res, {
+      error: 'terminal session not found',
+      code: 'NOT_FOUND',
+    });
   });
 
   test('POST /terminal/resize nonexistent session returns 404', async () => {
@@ -246,7 +273,10 @@ describe('buildTerminalRoutes', () => {
     const res = createMockRes();
     await handle(req, res, url);
     assert.strictEqual(res.state.statusCode, 404);
-    assert.deepStrictEqual(parseResBody(res), { error: 'terminal session not found' });
+    assertErrorBody(res, {
+      error: 'terminal session not found',
+      code: 'NOT_FOUND',
+    });
   });
 
   test('POST /terminal/close nonexistent session returns ok (idempotent)', async () => {

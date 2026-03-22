@@ -50258,12 +50258,14 @@ function normalizeAssistantEvent(event) {
   const content = rawContent.map(normalizeContentBlock).filter(Boolean);
   const usage = toUsage(event.usage || message?.usage);
   const model = toString(event.model || message?.model, "");
+  const finishReason = toString(event.finishReason || event.stopReason || message?.stop_reason, "");
   const normalized = {
     type: "assistant",
     content
   };
   if (usage) normalized.usage = usage;
   if (model) normalized.model = model;
+  if (finishReason) normalized.finishReason = finishReason;
   if (event.error) normalized.error = event.error;
   return normalized;
 }
@@ -50271,6 +50273,7 @@ function normalizeResultEvent(event) {
   const message = event.message && typeof event.message === "object" ? event.message : null;
   const usage = toUsage(event.usage || message?.usage);
   const model = toString(event.model || message?.model, "");
+  const finishReason = toString(event.finishReason || event.stopReason || message?.stop_reason, "");
   const normalized = {
     type: "result"
   };
@@ -50288,6 +50291,7 @@ function normalizeResultEvent(event) {
   if (typeof result === "string") normalized.result = result;
   if (usage) normalized.usage = usage;
   if (model) normalized.model = model;
+  if (finishReason) normalized.finishReason = finishReason;
   if (event.is_error === true) normalized.isError = true;
   return normalized;
 }
@@ -50360,6 +50364,7 @@ function normalize(event) {
 }
 
 // src/commands/agent/normalizers/codex.js
+var UNKNOWN_EVENT_RAW_PAYLOAD_MAX_CHARS = 16e3;
 var CodexNormalizer = class {
   constructor() {
     this.pendingItems = /* @__PURE__ */ new Map();
@@ -50414,11 +50419,7 @@ var CodexNormalizer = class {
       if (details !== void 0) normalized.details = details;
       return [this._wrap(normalized, rawEvent)];
     }
-    return [this._wrap({
-      type: "system",
-      subtype: "unknown",
-      message: `Unrecognized Codex event: ${type}`
-    }, rawEvent)];
+    return [this._wrap(this._normalizeUnknownEvent(rawEvent), rawEvent)];
   }
   /**
    * Flush any remaining buffered items.
@@ -50457,6 +50458,41 @@ var CodexNormalizer = class {
     } catch {
       return String(value);
     }
+  }
+  _serializeUnknownPayload(rawEvent) {
+    try {
+      const rawPayload = JSON.stringify(rawEvent);
+      if (typeof rawPayload !== "string") {
+        return { rawPayloadUnavailable: true };
+      }
+      if (rawPayload.length > UNKNOWN_EVENT_RAW_PAYLOAD_MAX_CHARS) {
+        return {
+          rawPayload: rawPayload.slice(0, UNKNOWN_EVENT_RAW_PAYLOAD_MAX_CHARS),
+          rawPayloadTruncated: true
+        };
+      }
+      return { rawPayload };
+    } catch (error) {
+      return {
+        rawPayloadUnavailable: true,
+        rawPayloadError: error instanceof Error ? error.message : "serialization_failed"
+      };
+    }
+  }
+  _normalizeUnknownEvent(rawEvent) {
+    const providerEventType = this._toString(rawEvent?.type);
+    const providerItemType = this._toString(rawEvent?.item?.type || rawEvent?.payload?.type);
+    const unknownReason = providerEventType ? "unknown_event_type" : "malformed_event";
+    const normalized = {
+      type: "system",
+      subtype: "unknown",
+      message: providerEventType ? `Unrecognized Codex event: ${providerEventType}` : "Malformed Codex event",
+      unknownReason,
+      ...this._serializeUnknownPayload(rawEvent)
+    };
+    if (providerEventType) normalized.providerEventType = providerEventType;
+    if (providerItemType) normalized.providerItemType = providerItemType;
+    return normalized;
   }
   _normalizeUsage(rawUsage = {}) {
     const usage = {
@@ -50748,6 +50784,7 @@ function _isRuntimeMilestone(event) {
   if (!event || typeof event !== "object") return false;
   if (event.type === "result" || event.type === "error") return true;
   if (event.type === "system" && event.compaction && typeof event.compaction === "object") return true;
+  if (event.type === "system" && event.subtype === "unknown") return true;
   return false;
 }
 function _persistRuntimeMilestone(sessionId, entry, event, rawEvent) {
@@ -61097,6 +61134,87 @@ function _parseJsonObjectOrUndefined(raw) {
     return void 0;
   }
 }
+function _cloneContentBlocks(blocks) {
+  if (!Array.isArray(blocks)) return void 0;
+  const normalized = [];
+  for (const block of blocks) {
+    if (!block || typeof block !== "object") continue;
+    if (block.type === "text" && typeof block.text === "string") {
+      normalized.push({ type: "text", text: block.text });
+      continue;
+    }
+    if (block.type === "tool" && Number.isInteger(block.toolIndex) && block.toolIndex >= 0) {
+      normalized.push({ type: "tool", toolIndex: block.toolIndex });
+    }
+  }
+  return normalized.length > 0 ? normalized : void 0;
+}
+function _buildTurnContentBlocksIndex(messages) {
+  const byTurnNumber = /* @__PURE__ */ new Map();
+  let hasPendingUser = false;
+  let turnNumber = 0;
+  for (const msg of messages) {
+    if (!msg || typeof msg !== "object") continue;
+    if (msg.role === "user") {
+      hasPendingUser = true;
+      continue;
+    }
+    if (msg.role !== "assistant" || !hasPendingUser) continue;
+    turnNumber += 1;
+    hasPendingUser = false;
+    const contentBlocks = _cloneContentBlocks(msg.contentBlocks);
+    if (contentBlocks) {
+      byTurnNumber.set(turnNumber, contentBlocks);
+    }
+  }
+  return byTurnNumber;
+}
+async function enrichDbResultWithContentBlocks(sessionId, result, lookup = {}) {
+  const messages = Array.isArray(result?.messages) ? result.messages : [];
+  const needsEnrichment = messages.some(
+    (msg) => msg?.role === "assistant" && Number.isInteger(msg.turnNumber) && !Array.isArray(msg.contentBlocks)
+  );
+  if (!needsEnrichment) return result;
+  const found = await findSessionFileEntry(sessionId, lookup);
+  if (!found?.filePath) return result;
+  let stat;
+  try {
+    stat = await import_promises11.default.stat(found.filePath);
+  } catch {
+    return result;
+  }
+  const cacheKey = `${found.provider}:${found.filePath}`;
+  const cache = lookup.contentBlocksCache;
+  const cached = cache?.get(cacheKey);
+  let byTurnNumber = cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size ? cached.byTurnNumber : null;
+  if (!byTurnNumber) {
+    try {
+      const content = await import_promises11.default.readFile(found.filePath, "utf-8");
+      const parsed = parseSessionMessagesFromJsonl2(content, found.provider);
+      byTurnNumber = _buildTurnContentBlocksIndex(parsed);
+      cache?.set(cacheKey, {
+        byTurnNumber,
+        mtimeMs: stat.mtimeMs,
+        size: stat.size
+      });
+    } catch {
+      cache?.delete(cacheKey);
+      return result;
+    }
+  }
+  if (!(byTurnNumber instanceof Map) || byTurnNumber.size === 0) return result;
+  let changed = false;
+  const enrichedMessages = messages.map((msg) => {
+    if (msg?.role !== "assistant" || !Number.isInteger(msg.turnNumber) || Array.isArray(msg.contentBlocks)) {
+      return msg;
+    }
+    const contentBlocks = byTurnNumber.get(msg.turnNumber);
+    if (!contentBlocks) return msg;
+    changed = true;
+    return { ...msg, contentBlocks };
+  });
+  return changed ? { ...result, messages: enrichedMessages } : result;
+}
 function _turnToMessages(turn) {
   const msgs = [];
   const baseMeta = {
@@ -61429,6 +61547,7 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
   let sessionsWatcher = null;
   const _diffStatsCache = /* @__PURE__ */ new Map();
   const _gitStatusCache = /* @__PURE__ */ new Map();
+  const _contentBlocksCache = /* @__PURE__ */ new Map();
   const _diffStatsInFlight = /* @__PURE__ */ new Set();
   const _gitStatusInFlight = /* @__PURE__ */ new Set();
   const _sessionPathMap = /* @__PURE__ */ new Map();
@@ -62225,6 +62344,12 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
         } else {
           result = await readSessionMessagesPaginated(sessionId, paginationOpts, { resolveDb: resolveDb2 });
         }
+        if (useDbMessages) {
+          result = await enrichDbResultWithContentBlocks(sessionId, result, {
+            resolveDb: resolveDb2,
+            contentBlocksCache: _contentBlocksCache
+          });
+        }
         const { messages, byteOffset, filePath } = result;
         const provider = result.provider || "claude";
         const usage = result.usage;
@@ -62457,6 +62582,23 @@ var import_crypto12 = __toESM(require("crypto"), 1);
 var import_url = require("url");
 var LOG_MAX = 500;
 var SSE_CLIENT_CAP = 50;
+var REQUEST_ID_HEADER = "x-rudi-request-id";
+var DEFAULT_ERROR_CODES = Object.freeze({
+  400: "BAD_REQUEST",
+  401: "UNAUTHORIZED",
+  403: "FORBIDDEN",
+  404: "NOT_FOUND",
+  408: "REQUEST_TIMEOUT",
+  409: "CONFLICT",
+  410: "GONE",
+  413: "REQUEST_TOO_LARGE",
+  429: "RATE_LIMITED",
+  500: "INTERNAL_ERROR",
+  503: "SERVICE_UNAVAILABLE"
+});
+function defaultErrorCode(status) {
+  return DEFAULT_ERROR_CODES[status] || "ERROR";
+}
 function createInfrastructure() {
   let _wss = null;
   const _logs = [];
@@ -62520,14 +62662,127 @@ function createInfrastructure() {
       }
     });
   }
-  function json(res, data, status = 200) {
-    res.writeHead(status, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+  function generateRequestId() {
+    return typeof import_crypto12.default.randomUUID === "function" ? import_crypto12.default.randomUUID() : import_crypto12.default.randomBytes(16).toString("hex");
+  }
+  function createRequestContext(req) {
+    let pathname = "/";
+    try {
+      pathname = new import_url.URL(req?.url || "/", "http://localhost").pathname;
+    } catch {
+      pathname = "/";
+    }
+    return {
+      requestId: generateRequestId(),
+      method: req?.method || null,
+      path: pathname,
+      startedAt: Date.now(),
+      auth: {
+        required: true,
+        result: "unknown"
+      },
+      response: null
+    };
+  }
+  function getRequestContext(res) {
+    return res?._rudiRequestContext || null;
+  }
+  function attachRequestContext(res, requestContext) {
+    if (!res || !requestContext) return requestContext;
+    res._rudiRequestContext = requestContext;
+    if (typeof res.setHeader === "function") {
+      res.setHeader(REQUEST_ID_HEADER, requestContext.requestId);
+    }
+    return requestContext;
+  }
+  function updateRequestAuth(res, authPatch) {
+    const requestContext = getRequestContext(res);
+    if (!requestContext) return null;
+    requestContext.auth = {
+      ...requestContext.auth || {},
+      ...authPatch || {}
+    };
+    return requestContext.auth;
+  }
+  function markResponse(res, patch) {
+    const requestContext = getRequestContext(res);
+    if (!requestContext) return null;
+    requestContext.response = {
+      ...requestContext.response || {},
+      ...patch || {}
+    };
+    return requestContext.response;
+  }
+  function buildJsonHeaders(res, headers = {}) {
+    const requestContext = getRequestContext(res);
+    return {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+      ...requestContext?.requestId ? { [REQUEST_ID_HEADER]: requestContext.requestId } : {},
+      ...headers || {}
+    };
+  }
+  function json(res, data, status = 200, options = {}) {
+    markResponse(res, { status });
+    res.writeHead(status, buildJsonHeaders(res, options.headers));
     res.end(JSON.stringify(data));
     return true;
   }
-  function error(res, message, status = 400) {
-    json(res, { error: message }, status);
+  function error(res, message, status = 400, options = {}) {
+    const requestContext = getRequestContext(res);
+    const payload = {
+      error: message,
+      code: options.code || defaultErrorCode(status)
+    };
+    if (options.details !== void 0) {
+      payload.details = options.details;
+    }
+    if (requestContext?.requestId) {
+      payload.requestId = requestContext.requestId;
+    }
+    markResponse(res, {
+      status,
+      errorCode: payload.code,
+      errorDetails: payload.details
+    });
+    json(res, payload, status, options);
     return true;
+  }
+  function requiredField(res, field, options = {}) {
+    return error(res, options.message || `${field} required`, options.status || 400, {
+      ...options,
+      code: options.code || "MISSING_REQUIRED_FIELD",
+      details: {
+        field,
+        location: options.location || "body",
+        ...options.details || {}
+      }
+    });
+  }
+  function requiredFields(res, fields, options = {}) {
+    const normalizedFields = (Array.isArray(fields) ? fields : [fields]).filter(Boolean);
+    const fieldLabel = normalizedFields.join(" and ");
+    return error(res, options.message || `${fieldLabel} required`, options.status || 400, {
+      ...options,
+      code: options.code || "MISSING_REQUIRED_FIELD",
+      details: {
+        fields: normalizedFields,
+        location: options.location || "body",
+        ...options.details || {}
+      }
+    });
+  }
+  function invalidField(res, field, message, options = {}) {
+    return error(res, message, options.status || 400, {
+      ...options,
+      code: options.code || "INVALID_FIELD",
+      details: {
+        field,
+        location: options.location || "body",
+        ...options.reason ? { reason: options.reason } : {},
+        ...options.details || {}
+      }
+    });
   }
   const DEFAULT_MAX_BODY_SIZE = 10 * 1024 * 1024;
   const BODY_READ_TIMEOUT = 3e4;
@@ -62615,13 +62870,21 @@ function createInfrastructure() {
     // Functions
     log,
     broadcast,
+    createRequestContext,
+    attachRequestContext,
+    getRequestContext,
+    updateRequestAuth,
     json,
     error,
+    requiredField,
+    requiredFields,
+    invalidField,
     readBody,
     generateToken,
     checkAuth: checkAuth4,
     // Constants
-    SSE_CLIENT_CAP
+    SSE_CLIENT_CAP,
+    REQUEST_ID_HEADER
   };
 }
 
@@ -62858,7 +63121,7 @@ function buildLogsRoutes(ctx) {
       const logs = getLogs();
       const sseClients = getSseClients();
       if (sseClients.length >= SSE_CLIENT_CAP2) {
-        return error(res, "Too many SSE clients", 429);
+        return error(res, "Too many SSE clients", 429, { code: "SSE_CLIENT_CAP_REACHED" });
       }
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
@@ -62890,7 +63153,7 @@ var import_path56 = __toESM(require("path"), 1);
 var FS_READDIR_CACHE_TTL_MS = 1200;
 var MAX_FS_WRITE_BODY_SIZE = 50 * 1024 * 1024;
 function buildFsRoutes(ctx) {
-  const { json, error, readBody, log, broadcast } = ctx;
+  const { json, error, readBody, log, broadcast, requiredField, requiredFields } = ctx;
   const fsWatchers = /* @__PURE__ */ new Map();
   const fsReaddirCache = /* @__PURE__ */ new Map();
   const fsReaddirInFlight = /* @__PURE__ */ new Map();
@@ -62951,7 +63214,7 @@ function buildFsRoutes(ctx) {
     const pathname = url.pathname;
     if (req.method === "GET" && pathname === "/fs/read") {
       const filePath = url.searchParams.get("path");
-      if (!filePath) return error(res, "path required");
+      if (!filePath) return requiredField(res, "path", { location: "query" });
       try {
         const content = await import_promises12.default.readFile(filePath, "utf-8");
         json(res, { content });
@@ -62962,7 +63225,12 @@ function buildFsRoutes(ctx) {
     }
     if (req.method === "POST" && pathname === "/fs/write") {
       const body = await readBody(req, { maxBodySize: MAX_FS_WRITE_BODY_SIZE });
-      if (!body.path || body.content === void 0) return error(res, "path and content required");
+      if (!body.path || body.content === void 0) {
+        const missing = [];
+        if (!body.path) missing.push("path");
+        if (body.content === void 0) missing.push("content");
+        return requiredFields(res, missing);
+      }
       try {
         await import_promises12.default.mkdir(import_path56.default.dirname(body.path), { recursive: true });
         await import_promises12.default.writeFile(body.path, body.content, "utf-8");
@@ -62975,7 +63243,12 @@ function buildFsRoutes(ctx) {
     }
     if (req.method === "POST" && pathname === "/fs/write-binary") {
       const body = await readBody(req, { maxBodySize: MAX_FS_WRITE_BODY_SIZE });
-      if (!body.path || body.base64 === void 0) return error(res, "path and base64 required");
+      if (!body.path || body.base64 === void 0) {
+        const missing = [];
+        if (!body.path) missing.push("path");
+        if (body.base64 === void 0) missing.push("base64");
+        return requiredFields(res, missing);
+      }
       try {
         await import_promises12.default.mkdir(import_path56.default.dirname(body.path), { recursive: true });
         const buffer = Buffer.from(body.base64, "base64");
@@ -62989,7 +63262,7 @@ function buildFsRoutes(ctx) {
     }
     if (req.method === "GET" && pathname === "/fs/readdir") {
       const dirPath = url.searchParams.get("path");
-      if (!dirPath) return error(res, "path required");
+      if (!dirPath) return requiredField(res, "path", { location: "query" });
       const showHidden = url.searchParams.get("showHidden") === "1";
       try {
         const entries = await readDirectoryEntries(dirPath, showHidden);
@@ -63001,7 +63274,7 @@ function buildFsRoutes(ctx) {
     }
     if (req.method === "GET" && pathname === "/fs/stat") {
       const filePath = url.searchParams.get("path");
-      if (!filePath) return error(res, "path required");
+      if (!filePath) return requiredField(res, "path", { location: "query" });
       try {
         const stat = await import_promises12.default.stat(filePath);
         json(res, {
@@ -63019,7 +63292,7 @@ function buildFsRoutes(ctx) {
     }
     if (req.method === "GET" && pathname === "/fs/serve") {
       const filePath = url.searchParams.get("path");
-      if (!filePath) return error(res, "path required");
+      if (!filePath) return requiredField(res, "path", { location: "query" });
       try {
         const stat = await import_promises12.default.stat(filePath);
         const ext = import_path56.default.extname(filePath).toLowerCase();
@@ -63062,7 +63335,7 @@ function buildFsRoutes(ctx) {
     }
     if (req.method === "POST" && pathname === "/fs/mkdir") {
       const body = await readBody(req);
-      if (!body.path) return error(res, "path required");
+      if (!body.path) return requiredField(res, "path");
       try {
         await import_promises12.default.mkdir(body.path, { recursive: true });
         invalidateFsReaddirCache();
@@ -63074,7 +63347,7 @@ function buildFsRoutes(ctx) {
     }
     if (req.method === "POST" && pathname === "/fs/remove") {
       const body = await readBody(req);
-      if (!body.path) return error(res, "path required");
+      if (!body.path) return requiredField(res, "path");
       try {
         await import_promises12.default.rm(body.path, { recursive: true });
         invalidateFsReaddirCache();
@@ -63086,7 +63359,12 @@ function buildFsRoutes(ctx) {
     }
     if (req.method === "POST" && pathname === "/fs/rename") {
       const body = await readBody(req);
-      if (!body.oldPath || !body.newPath) return error(res, "oldPath and newPath required");
+      if (!body.oldPath || !body.newPath) {
+        const missing = [];
+        if (!body.oldPath) missing.push("oldPath");
+        if (!body.newPath) missing.push("newPath");
+        return requiredFields(res, missing);
+      }
       try {
         await import_promises12.default.rename(body.oldPath, body.newPath);
         invalidateFsReaddirCache();
@@ -63098,7 +63376,7 @@ function buildFsRoutes(ctx) {
     }
     if (req.method === "POST" && pathname === "/fs/watch") {
       const body = await readBody(req);
-      if (!body.path) return error(res, "path required");
+      if (!body.path) return requiredField(res, "path");
       const watchPath = body.path;
       if (fsWatchers.has(watchPath)) {
         json(res, { ok: true, already: true });
@@ -63127,7 +63405,7 @@ function buildFsRoutes(ctx) {
     }
     if (req.method === "POST" && pathname === "/fs/unwatch") {
       const body = await readBody(req);
-      if (!body.path) return error(res, "path required");
+      if (!body.path) return requiredField(res, "path");
       const entry = fsWatchers.get(body.path);
       if (entry) {
         clearTimeout(entry.debounceTimer);
@@ -63418,12 +63696,12 @@ function buildNotesRoutes(ctx) {
 // src/commands/serve/routes/shell.js
 var import_child_process29 = require("child_process");
 function buildShellRoutes(ctx) {
-  const { json, error, readBody } = ctx;
+  const { json, error, readBody, requiredField, invalidField } = ctx;
   async function handle(req, res, url) {
     if (req.method === "POST" && url.pathname === "/shell/reveal") {
       const body = await readBody(req);
       if (!body.path) {
-        error(res, "path required");
+        requiredField(res, "path");
         return true;
       }
       const child = (0, import_child_process29.spawn)("open", ["-R", body.path], { detached: true, stdio: "ignore" });
@@ -63434,11 +63712,11 @@ function buildShellRoutes(ctx) {
     if (req.method === "POST" && url.pathname === "/shell/open") {
       const body = await readBody(req);
       if (!body.path) {
-        error(res, "path required");
+        requiredField(res, "path");
         return true;
       }
       if (!body.app) {
-        error(res, "app required");
+        requiredField(res, "app");
         return true;
       }
       const p2 = body.path;
@@ -63480,7 +63758,10 @@ function buildShellRoutes(ctx) {
           break;
         }
         default:
-          error(res, `unknown app: ${body.app}`);
+          invalidField(res, "app", `unknown app: ${body.app}`, {
+            reason: "unsupported_value",
+            details: { value: body.app }
+          });
           return true;
       }
       console.log(`[shell/open] ${cmd} ${args.join(" ")}`);
@@ -63498,7 +63779,7 @@ function buildShellRoutes(ctx) {
 
 // src/commands/serve/routes/terminal.js
 function buildTerminalRoutes(ctx) {
-  const { json, error, readBody, broadcast } = ctx;
+  const { json, error, readBody, broadcast, requiredField, requiredFields } = ctx;
   const terminalSessions = /* @__PURE__ */ new Map();
   const pendingTerminalOpens = /* @__PURE__ */ new Set();
   let ptyModulePromise = null;
@@ -63533,7 +63814,7 @@ function buildTerminalRoutes(ctx) {
       const sessionKey = String(body.sessionKey || "global");
       const cwd = body.cwd;
       const shellPath = body.shell || "/bin/zsh";
-      if (!cwd || typeof cwd !== "string") return error(res, "cwd required");
+      if (!cwd || typeof cwd !== "string") return requiredField(res, "cwd");
       if (pendingTerminalOpens.has(sessionKey)) {
         return error(res, "Terminal open already in progress for this key", 409);
       }
@@ -63604,7 +63885,7 @@ function buildTerminalRoutes(ctx) {
       const entry = terminalSessions.get(sessionKey);
       if (!entry) return error(res, "terminal session not found", 404);
       if (!Number.isFinite(cols) || !Number.isFinite(rows) || cols <= 0 || rows <= 0) {
-        return error(res, "cols and rows required", 400);
+        return requiredFields(res, ["cols", "rows"]);
       }
       try {
         entry.proc.resize(Math.floor(cols), Math.floor(rows));
@@ -64649,7 +64930,7 @@ async function defaultInstallAndRegisterPackage({ id, force, onProgress }, deps)
   }
 }
 function buildPackageRoutes(ctx, overrides = {}) {
-  const { json, error, readBody, log, broadcast } = ctx;
+  const { json, error, readBody, log, broadcast, requiredField, invalidField } = ctx;
   const deps = { ...defaultDeps, ...overrides };
   if (!overrides.installAndRegisterPackage) {
     deps.installAndRegisterPackage = (options) => defaultInstallAndRegisterPackage(options, deps);
@@ -64693,10 +64974,16 @@ function buildPackageRoutes(ctx, overrides = {}) {
   async function handle(req, res, url) {
     if (req.method === "GET" && url.pathname === "/packages/search") {
       const query = (url.searchParams.get("q") || "").trim().slice(0, MAX_QUERY_LENGTH);
-      if (!query) return error(res, "q required", 400);
+      if (!query) return requiredField(res, "q", { location: "query" });
       const rawKind = url.searchParams.get("kind");
       const kind2 = rawKind == null ? null : normalizeKind(rawKind);
-      if (rawKind != null && !kind2) return error(res, "invalid kind", 400);
+      if (rawKind != null && !kind2) {
+        return invalidField(res, "kind", "invalid kind", {
+          location: "query",
+          reason: "unsupported_value",
+          details: { value: rawKind }
+        });
+      }
       try {
         const packages = await deps.searchPackages(query, kind2 ? { kind: kind2 } : {});
         json(res, { packages: packages.map((pkg) => projectPackage(pkg)) });
@@ -64708,7 +64995,12 @@ function buildPackageRoutes(ctx, overrides = {}) {
     }
     if (req.method === "GET" && url.pathname === "/packages/list") {
       const kind2 = normalizeKind(url.searchParams.get("kind"));
-      if (!kind2) return error(res, "valid kind required", 400);
+      if (!kind2) {
+        return invalidField(res, "kind", "valid kind required", {
+          location: "query",
+          reason: "required_supported_value"
+        });
+      }
       try {
         const packages = await deps.listPackages(kind2);
         json(res, { packages: packages.map((pkg) => projectPackage(pkg, kind2)) });
@@ -64750,7 +65042,7 @@ function buildPackageRoutes(ctx, overrides = {}) {
       const body = await readBody(req);
       const id = typeof body.id === "string" ? body.id.trim() : "";
       const force = body.force === true;
-      if (!id) return error(res, "id required", 400);
+      if (!id) return requiredField(res, "id");
       const existingJobId = activeInstallJobs.get(id);
       if (existingJobId) {
         const existingJob = jobs.get(existingJobId);
@@ -64840,9 +65132,11 @@ function buildPackageRoutes(ctx, overrides = {}) {
       const name = typeof body.name === "string" ? body.name.trim() : "";
       const value = typeof body.value === "string" ? body.value : null;
       if (!SECRET_NAME_RE.test(name)) {
-        return error(res, "secret name must be UPPER_SNAKE_CASE", 400);
+        return invalidField(res, "name", "secret name must be UPPER_SNAKE_CASE", {
+          reason: "pattern_mismatch"
+        });
       }
-      if (value === null) return error(res, "value required", 400);
+      if (value === null) return requiredField(res, "value");
       try {
         await deps.setSecret(name, value);
         try {
@@ -64860,7 +65154,10 @@ function buildPackageRoutes(ctx, overrides = {}) {
     if (req.method === "DELETE" && secretDeleteMatch) {
       const name = decodeURIComponent(secretDeleteMatch[1]).trim();
       if (!SECRET_NAME_RE.test(name)) {
-        return error(res, "secret name must be UPPER_SNAKE_CASE", 400);
+        return invalidField(res, "name", "secret name must be UPPER_SNAKE_CASE", {
+          location: "path",
+          reason: "pattern_mismatch"
+        });
       }
       try {
         await deps.removeSecret(name);
@@ -64949,7 +65246,21 @@ var MIME_TYPES = {
 };
 async function cmdServe(args, flags) {
   const ctx = createInfrastructure();
-  const { log, broadcast, json, error, readBody, checkAuth: checkAuth4, generateToken, setWss, setToken } = ctx;
+  const {
+    log,
+    broadcast,
+    json,
+    error,
+    readBody,
+    checkAuth: checkAuth4,
+    createRequestContext,
+    attachRequestContext,
+    updateRequestAuth,
+    generateToken,
+    setWss,
+    setToken,
+    REQUEST_ID_HEADER: REQUEST_ID_HEADER2
+  } = ctx;
   const webRoot = flags["web-root"] ? import_path61.default.resolve(flags["web-root"]) : null;
   if (webRoot) {
     if (!import_fs56.default.existsSync(import_path61.default.join(webRoot, "index.html"))) {
@@ -65037,35 +65348,55 @@ async function cmdServe(args, flags) {
   const token = generateToken();
   setToken(token);
   const server = import_http.default.createServer(async (req, res) => {
+    const requestContext = createRequestContext(req);
+    attachRequestContext(res, requestContext);
     if (req.method === "OPTIONS") {
+      updateRequestAuth(res, { required: false, result: "skipped" });
       res.writeHead(204, {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, X-Rudi-Token, X-Rudi-Caller-Session"
+        "Access-Control-Allow-Headers": "Content-Type, X-Rudi-Token, X-Rudi-Caller-Session",
+        [REQUEST_ID_HEADER2]: requestContext.requestId
       });
       res.end();
       return;
     }
     const url = new import_url2.URL(req.url, `http://localhost`);
     const start = Date.now();
-    if (url.pathname === "/health") {
-      json(res, { status: "ok", version: "0.1.0" });
-      return;
-    }
-    if (url.pathname === "/env") {
+    try {
+      if (url.pathname === "/health") {
+        updateRequestAuth(res, { required: false, result: "skipped" });
+        json(res, { status: "ok", version: "0.1.0" });
+        return;
+      }
+      if (url.pathname === "/env") {
+        if (!checkAuth4(req)) {
+          updateRequestAuth(res, { required: true, result: "failed" });
+          log("http", "warn", "auth_failed", {
+            requestId: requestContext.requestId,
+            method: req.method,
+            path: url.pathname,
+            status: 401
+          });
+          error(res, "Unauthorized", 401);
+          return;
+        }
+        updateRequestAuth(res, { required: true, result: "passed" });
+        json(res, { home: import_os26.default.homedir(), platform: import_os26.default.platform() });
+        return;
+      }
       if (!checkAuth4(req)) {
+        updateRequestAuth(res, { required: true, result: "failed" });
+        log("http", "warn", "auth_failed", {
+          requestId: requestContext.requestId,
+          method: req.method,
+          path: url.pathname,
+          status: 401
+        });
         error(res, "Unauthorized", 401);
         return;
       }
-      json(res, { home: import_os26.default.homedir(), platform: import_os26.default.platform() });
-      return;
-    }
-    if (!checkAuth4(req)) {
-      log("http", "warn", `401 ${req.method} ${url.pathname}`);
-      error(res, "Unauthorized", 401);
-      return;
-    }
-    try {
+      updateRequestAuth(res, { required: true, result: "passed" });
       if (url.pathname.startsWith("/logs")) {
         if (await logsRoutes.handle(req, res, url)) return;
       }
@@ -65234,7 +65565,17 @@ async function cmdServe(args, flags) {
     } finally {
       const ms = Date.now() - start;
       if (!url.pathname.startsWith("/logs") && url.pathname !== "/health") {
-        log("http", "info", `${req.method} ${url.pathname} ${ms}ms`);
+        const status = res.statusCode || requestContext.response?.status || 200;
+        const level = status >= 500 ? "error" : status >= 400 ? "warn" : "info";
+        log("http", level, "request_complete", {
+          requestId: requestContext.requestId,
+          method: req.method,
+          path: url.pathname,
+          status,
+          latencyMs: ms,
+          auth: requestContext.auth?.result || "unknown",
+          errorCode: requestContext.response?.errorCode || null
+        });
       }
     }
   });

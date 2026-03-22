@@ -87,6 +87,7 @@ function normalizeAssistantEvent(event) {
 
   const usage = toUsage(event.usage || message?.usage);
   const model = toString(event.model || message?.model, '');
+  const finishReason = toString(event.finishReason || event.stopReason || message?.stop_reason, '');
 
   const normalized = {
     type: 'assistant',
@@ -94,6 +95,7 @@ function normalizeAssistantEvent(event) {
   };
   if (usage) normalized.usage = usage;
   if (model) normalized.model = model;
+  if (finishReason) normalized.finishReason = finishReason;
   if (event.error) normalized.error = event.error;
   return normalized;
 }
@@ -102,6 +104,7 @@ function normalizeResultEvent(event) {
   const message = event.message && typeof event.message === 'object' ? event.message : null;
   const usage = toUsage(event.usage || message?.usage);
   const model = toString(event.model || message?.model, '');
+  const finishReason = toString(event.finishReason || event.stopReason || message?.stop_reason, '');
 
   const normalized = {
     type: 'result',
@@ -126,6 +129,7 @@ function normalizeResultEvent(event) {
 
   if (usage) normalized.usage = usage;
   if (model) normalized.model = model;
+  if (finishReason) normalized.finishReason = finishReason;
   if (event.is_error === true) normalized.isError = true;
 
   return normalized;

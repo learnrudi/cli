@@ -111,6 +111,7 @@ function _isRuntimeMilestone(event) {
   if (!event || typeof event !== 'object') return false;
   if (event.type === 'result' || event.type === 'error') return true;
   if (event.type === 'system' && event.compaction && typeof event.compaction === 'object') return true;
+  if (event.type === 'system' && event.subtype === 'unknown') return true;
   return false;
 }
 
