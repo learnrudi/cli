@@ -36,8 +36,8 @@ src/index.js → commands/*.js
 
 ## Registry
 
-- Index: `https://raw.githubusercontent.com/learn-rudi/registry/main/index.json`
-- Binaries: `https://github.com/learn-rudi/registry/releases/download/v1.0.0/`
+- Index: `https://raw.githubusercontent.com/learnrudi/registry/main/index.json`
+- Binaries: `https://github.com/learnrudi/registry/releases/download/v1.0.0/`
 - Local dev fallback: `/Users/hoff/dev/rudi/registry/index.json`
 
 ## Development

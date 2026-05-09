@@ -257,11 +257,11 @@ chmod 600 ~/.rudi/secrets.json
 
 ## Links
 
-- Documentation: https://learn-rudi.github.io/cli/
-- Repository: https://github.com/learn-rudi/cli
-- Registry: https://github.com/learn-rudi/registry
+- Documentation: https://learnrudi.github.io/cli/
+- Repository: https://github.com/learnrudi/cli
+- Registry: https://github.com/learnrudi/registry
 - npm: https://www.npmjs.com/package/@learnrudi/cli
-- Issues: https://github.com/learn-rudi/cli/issues
+- Issues: https://github.com/learnrudi/cli/issues
 
 ## License
 

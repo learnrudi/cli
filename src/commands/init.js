@@ -19,7 +19,7 @@ import { fetchIndex } from '@learnrudi/registry-client';
 import { initSchema } from '@learnrudi/db';
 
 // Download base URL for RUDI registry releases
-const RELEASES_BASE = 'https://github.com/learn-rudi/registry/releases/download/v1.0.0';
+const RELEASES_BASE = 'https://github.com/learnrudi/registry/releases/download/v1.0.0';
 
 // Essential packages to install on init
 const BUNDLED_RUNTIMES = ['node', 'python'];

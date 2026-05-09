@@ -17,12 +17,12 @@ import { PATHS, getPlatformArch } from '@learnrudi/env';
 /**
  * Default registry URL
  */
-export const DEFAULT_REGISTRY_URL = 'https://raw.githubusercontent.com/learn-rudi/registry/main/index.json';
+export const DEFAULT_REGISTRY_URL = 'https://raw.githubusercontent.com/learnrudi/registry/main/index.json';
 
 /**
  * Default downloads base URL (from registry repo releases)
  */
-export const RUNTIMES_DOWNLOAD_BASE = 'https://github.com/learn-rudi/registry/releases/download';
+export const RUNTIMES_DOWNLOAD_BASE = 'https://github.com/learnrudi/registry/releases/download';
 
 /**
  * Cache TTL in milliseconds (1 hour)
@@ -394,7 +394,7 @@ export function getPackageKinds() {
 /**
  * GitHub raw content base URL
  */
-const GITHUB_RAW_BASE = 'https://raw.githubusercontent.com/learn-rudi/registry/main';
+const GITHUB_RAW_BASE = 'https://raw.githubusercontent.com/learnrudi/registry/main';
 
 /**
  * Download a package from the registry (from GitHub raw for stacks)
@@ -457,7 +457,7 @@ async function downloadStackFromGitHub(registryPath, destPath, onProgress) {
   const baseUrl = `${GITHUB_RAW_BASE}/${registryPath}`;
 
   // First, list the directory contents using GitHub API to see what exists
-  const apiUrl = `https://api.github.com/repos/learn-rudi/registry/contents/${registryPath}`;
+  const apiUrl = `https://api.github.com/repos/learnrudi/registry/contents/${registryPath}`;
   const listResponse = await fetch(apiUrl, {
     headers: {
       'User-Agent': 'rudi-cli/2.0',
@@ -563,8 +563,8 @@ async function downloadStackFromGitHub(registryPath, destPath, onProgress) {
  */
 async function downloadDirectoryFromGitHub(dirUrl, destDir, onProgress) {
   // Convert raw URL to API URL
-  // From: https://raw.githubusercontent.com/learn-rudi/registry/main/catalog/stacks/slack/src
-  // To: https://api.github.com/repos/learn-rudi/registry/contents/catalog/stacks/slack/src
+  // From: https://raw.githubusercontent.com/learnrudi/registry/main/catalog/stacks/slack/src
+  // To: https://api.github.com/repos/learnrudi/registry/contents/catalog/stacks/slack/src
   const apiUrl = dirUrl
     .replace('https://raw.githubusercontent.com/', 'https://api.github.com/repos/')
     .replace('/main/', '/contents/');
@@ -1014,7 +1014,7 @@ async function loadRuntimeManifest(runtimeName) {
 
   // Try fetching from GitHub raw
   try {
-    const url = `https://raw.githubusercontent.com/learn-rudi/registry/main/catalog/runtimes/${runtimeName}.json`;
+    const url = `https://raw.githubusercontent.com/learnrudi/registry/main/catalog/runtimes/${runtimeName}.json`;
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'rudi-cli/2.0',
@@ -1054,7 +1054,7 @@ async function loadToolManifest(toolName) {
 
   // Try fetching from GitHub raw
   try {
-    const url = `https://raw.githubusercontent.com/learn-rudi/registry/main/catalog/binaries/${toolName}.json`;
+    const url = `https://raw.githubusercontent.com/learnrudi/registry/main/catalog/binaries/${toolName}.json`;
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'rudi-cli/2.0',

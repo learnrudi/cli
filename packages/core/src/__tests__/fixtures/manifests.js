@@ -54,7 +54,7 @@ export const nodejsRuntime = {
     source: 'download',
     platforms: {
       'darwin-arm64': {
-        url: 'https://github.com/learn-rudi/registry/releases/download/v1.0.0/node-22.12.0-darwin-arm64.tar.gz',
+        url: 'https://github.com/learnrudi/registry/releases/download/v1.0.0/node-22.12.0-darwin-arm64.tar.gz',
         checksum: {
           algo: 'sha256',
           value: 'deadbeef123456'
@@ -65,7 +65,7 @@ export const nodejsRuntime = {
         }
       },
       'linux-x64': {
-        url: 'https://github.com/learn-rudi/registry/releases/download/v1.0.0/node-22.12.0-linux-x64.tar.gz',
+        url: 'https://github.com/learnrudi/registry/releases/download/v1.0.0/node-22.12.0-linux-x64.tar.gz',
         checksum: {
           algo: 'sha256',
           value: 'cafebabe789'

@@ -61,7 +61,7 @@ test('resolveInstall: merges top-level and platform fields', () => {
   // Platform adds: url, checksum, extract
   assert.strictEqual(resolved.source, 'download');
   assert.strictEqual(resolved.delivery, 'remote');
-  assert.strictEqual(resolved.url, 'https://github.com/learn-rudi/registry/releases/download/v1.0.0/node-22.12.0-darwin-arm64.tar.gz');
+  assert.strictEqual(resolved.url, 'https://github.com/learnrudi/registry/releases/download/v1.0.0/node-22.12.0-darwin-arm64.tar.gz');
   assert.strictEqual(resolved.checksum.algo, 'sha256');
   assert.strictEqual(resolved.checksum.value, 'deadbeef123456');
   assert.ok(resolved.extract);
@@ -70,7 +70,7 @@ test('resolveInstall: merges top-level and platform fields', () => {
 test('resolveInstall: preserves platform-specific metadata', () => {
   const resolved = resolveInstall(nodejsRuntime, { platformKey: 'linux-x64' });
 
-  assert.strictEqual(resolved.url, 'https://github.com/learn-rudi/registry/releases/download/v1.0.0/node-22.12.0-linux-x64.tar.gz');
+  assert.strictEqual(resolved.url, 'https://github.com/learnrudi/registry/releases/download/v1.0.0/node-22.12.0-linux-x64.tar.gz');
   assert.strictEqual(resolved.checksum.value, 'cafebabe789');
   assert.strictEqual(resolved._platformKey, 'linux-x64');
   assert.strictEqual(resolved._matchedKey, 'linux-x64');

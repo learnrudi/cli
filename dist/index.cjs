@@ -578,7 +578,7 @@ async function downloadPackage(pkg, destPath, options = {}) {
 }
 async function downloadStackFromGitHub(registryPath, destPath, onProgress) {
   const baseUrl = `${GITHUB_RAW_BASE}/${registryPath}`;
-  const apiUrl = `https://api.github.com/repos/learn-rudi/registry/contents/${registryPath}`;
+  const apiUrl = `https://api.github.com/repos/learnrudi/registry/contents/${registryPath}`;
   const listResponse = await fetch(apiUrl, {
     headers: {
       "User-Agent": "rudi-cli/2.0",
@@ -966,7 +966,7 @@ async function loadRuntimeManifest(runtimeName) {
     }
   }
   try {
-    const url = `https://raw.githubusercontent.com/learn-rudi/registry/main/catalog/runtimes/${runtimeName}.json`;
+    const url = `https://raw.githubusercontent.com/learnrudi/registry/main/catalog/runtimes/${runtimeName}.json`;
     const response = await fetch(url, {
       headers: {
         "User-Agent": "rudi-cli/2.0",
@@ -993,7 +993,7 @@ async function loadToolManifest(toolName) {
     }
   }
   try {
-    const url = `https://raw.githubusercontent.com/learn-rudi/registry/main/catalog/binaries/${toolName}.json`;
+    const url = `https://raw.githubusercontent.com/learnrudi/registry/main/catalog/binaries/${toolName}.json`;
     const response = await fetch(url, {
       headers: {
         "User-Agent": "rudi-cli/2.0",
@@ -1041,14 +1041,14 @@ var init_src3 = __esm({
     import_path3 = __toESM(require("path"), 1);
     import_crypto = __toESM(require("crypto"), 1);
     init_src2();
-    DEFAULT_REGISTRY_URL = "https://raw.githubusercontent.com/learn-rudi/registry/main/index.json";
-    RUNTIMES_DOWNLOAD_BASE = "https://github.com/learn-rudi/registry/releases/download";
+    DEFAULT_REGISTRY_URL = "https://raw.githubusercontent.com/learnrudi/registry/main/index.json";
+    RUNTIMES_DOWNLOAD_BASE = "https://github.com/learnrudi/registry/releases/download";
     CACHE_TTL = 60 * 60 * 1e3;
     PACKAGE_KINDS2 = ["stack", "prompt", "runtime", "binary", "agent"];
     KIND_PLURALS = {
       binary: "binaries"
     };
-    GITHUB_RAW_BASE = "https://raw.githubusercontent.com/learn-rudi/registry/main";
+    GITHUB_RAW_BASE = "https://raw.githubusercontent.com/learnrudi/registry/main";
     RUNTIMES_RELEASE_VERSION = "v1.0.0";
   }
 });
@@ -45159,7 +45159,7 @@ var import_fs22 = require("fs");
 var import_child_process6 = require("child_process");
 init_src();
 init_src3();
-var RELEASES_BASE = "https://github.com/learn-rudi/registry/releases/download/v1.0.0";
+var RELEASES_BASE = "https://github.com/learnrudi/registry/releases/download/v1.0.0";
 var BUNDLED_RUNTIMES = ["node", "python"];
 var ESSENTIAL_BINARIES = ["sqlite", "ripgrep"];
 async function cmdInit(args, flags) {

@@ -80,7 +80,7 @@ cli/
 
 ## Registry
 
-- **Index URL:** `https://raw.githubusercontent.com/learn-rudi/registry/main/index.json`
+- **Index URL:** `https://raw.githubusercontent.com/learnrudi/registry/main/index.json`
 - **Binaries:** GitHub Releases from package repos
 - **Local dev fallback:** `file://` paths for local stack development
 
