@@ -87,7 +87,7 @@ test('migrations v19-v20 normalize raw JSON tool previews and recover file paths
     );
 
     const result = initSchemaWithDb(db);
-    assert.strictEqual(result.version, 26);
+    assert.strictEqual(result.version, 27);
     assert.strictEqual(result.migrated, true);
     assert.strictEqual(result.from, 18);
 
@@ -197,7 +197,7 @@ test('migration v20 recovers truncated JSON preview blobs', async () => {
     );
 
     const result = initSchemaWithDb(db);
-    assert.strictEqual(result.version, 26);
+    assert.strictEqual(result.version, 27);
     assert.strictEqual(result.migrated, true);
     assert.strictEqual(result.from, 19);
 
@@ -308,7 +308,7 @@ test('migration v22-v25 adds orchestration columns, contract tables, and repairs
       .run(21, new Date('2026-03-07T00:00:00.000Z').toISOString());
 
     const result = initSchemaWithDb(db);
-    assert.strictEqual(result.version, 26);
+    assert.strictEqual(result.version, 27);
     assert.strictEqual(result.migrated, true);
     assert.strictEqual(result.from, 21);
 

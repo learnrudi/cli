@@ -39,6 +39,7 @@ import { buildProviderRoutes } from './serve/routes/providers.js';
 import { buildAnalyticsRoutes } from './serve/routes/analytics.js';
 import { buildPlansRoutes } from './serve/routes/plans.js';
 import { buildPackageRoutes } from './serve/routes/packages.js';
+import { SIDECAR_API_VERSION } from './serve/metadata.js';
 
 // Re-exports for test compatibility
 export { parseWorktreeList } from './serve/git.js';
@@ -240,7 +241,7 @@ export async function cmdServe(args, flags) {
       // Health check (no auth required)
       if (url.pathname === '/health') {
         updateRequestAuth(res, { required: false, result: 'skipped' });
-        json(res, { status: 'ok', version: '0.1.0' });
+        json(res, { status: 'ok', version: SIDECAR_API_VERSION });
         return;
       }
 
@@ -287,7 +288,7 @@ export async function cmdServe(args, flags) {
         if (await authRoutes.handle(req, res, url)) return;
       }
       if (url.pathname.startsWith('/projects')) {
-        if (projectRoutes.handle(req, res, url)) return;
+        if (await projectRoutes.handle(req, res, url)) return;
       }
       if (url.pathname.startsWith('/notes')) {
         if (await notesRoutes.handle(req, res, url)) return;

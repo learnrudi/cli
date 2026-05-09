@@ -140,7 +140,7 @@ pnpm test:all          # Full suite
 ### Debugging
 ```bash
 VERBOSE=true pnpm test:unit
-node --test src/__tests__/unit/platform-resolver.test.js
+node ../../scripts/run-tests.js src/__tests__/unit/platform-resolver.test.js
 ```
 
 ---

@@ -200,13 +200,13 @@ Located in `src/__tests__/fixtures/manifests.js`:
 ### Run single test file
 
 ```bash
-node --test src/__tests__/unit/platform-resolver.test.js
+node ../../scripts/run-tests.js src/__tests__/unit/platform-resolver.test.js
 ```
 
 ### Run tests matching pattern
 
 ```bash
-node --test --test-name-pattern="platform resolution" src/__tests__/
+node ../../scripts/run-tests.js --test-name-pattern="platform resolution" src/__tests__/
 ```
 
 ### Verbose output

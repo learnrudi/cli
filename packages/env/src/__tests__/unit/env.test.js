@@ -275,10 +275,10 @@ test('getPackagePath: agent goes to agents directory', () => {
   assert.ok(pkgPath.endsWith('claude'));
 });
 
-test('getPackagePath: prompt is .md file', () => {
+test('getPackagePath: prompt maps to skills directory as a backward-compatible .md file', () => {
   const pkgPath = getPackagePath('prompt:code-review');
 
-  assert.ok(pkgPath.includes('prompts'));
+  assert.ok(pkgPath.startsWith(PATHS.skills));
   assert.ok(pkgPath.endsWith('code-review.md'));
 });
 
@@ -338,4 +338,3 @@ test('paths: are consistent with package layout', () => {
   assert.strictEqual(path.dirname(runtimePath), PATHS.runtimes);
   assert.strictEqual(path.dirname(binaryPath), PATHS.binaries);
 });
-

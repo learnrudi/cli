@@ -17,6 +17,7 @@ import {
   initSchema,
   getDbPath
 } from '@learnrudi/db';
+import { resolveSessionRowIdentity } from '@learnrudi/db/session-identity';
 
 // Provider configurations
 const PROVIDERS = {
@@ -60,6 +61,9 @@ COMMANDS
 OPTIONS
   --dry-run            Show what would be imported without making changes
   --backfill-turns     Backfill turns for existing sessions with turn_count=0
+  --audit-zero-turns   Classify zero-turn sessions without writing turns
+  --repair-identity    Audit legacy session-id drift and relink broken child rows
+  --apply              Apply repair changes (repair mode defaults to dry-run)
   --max-age=DAYS       Only import sessions newer than N days
   --verbose            Show detailed progress
 
@@ -68,6 +72,9 @@ EXAMPLES
   rudi import sessions claude       # Import only Claude sessions
   rudi import sessions --dry-run    # Preview without importing
   rudi import sessions --backfill-turns  # Backfill turns for existing sessions
+  rudi import sessions --backfill-turns --audit-zero-turns  # Classify zero-turn sessions
+  rudi import sessions --repair-identity          # Audit legacy identity drift
+  rudi import sessions --repair-identity --apply  # Apply identity relink
   rudi import status                # Check what's available to import
 `);
   }
@@ -81,6 +88,9 @@ async function importSessions(args, flags) {
   const providerArg = args[0] || 'all';
   const dryRun = flags['dry-run'] || flags.dryRun;
   const backfillTurns = flags['backfill-turns'] || flags.backfillTurns;
+  const auditZeroTurns = flags['audit-zero-turns'] || flags.auditZeroTurns;
+  const repairIdentity = flags['repair-identity'] || flags.repairIdentity;
+  const repairDryRun = repairIdentity ? !(flags.apply || flags.force) : dryRun;
   const verbose = flags.verbose;
   const maxAgeDays = flags['max-age'] ? parseInt(flags['max-age']) : null;
 
@@ -91,13 +101,6 @@ async function importSessions(args, flags) {
   }
 
   const db = getDb();
-  const pricing = loadPricingMap(db);
-
-  // Handle --backfill-turns mode
-  if (backfillTurns) {
-    await backfillSessionTurns(db, pricing, providerArg, dryRun, verbose);
-    return;
-  }
 
   const providers = providerArg === 'all'
     ? Object.keys(PROVIDERS)
@@ -110,6 +113,24 @@ async function importSessions(args, flags) {
       console.error(`Available: ${Object.keys(PROVIDERS).join(', ')}`);
       process.exit(1);
     }
+  }
+
+  if (repairIdentity) {
+    const summary = repairLegacySessionIdentity(db, {
+      providers,
+      dryRun: repairDryRun,
+      verbose,
+    });
+    printIdentityRepairSummary(summary);
+    return;
+  }
+
+  const pricing = loadPricingMap(db);
+
+  // Handle --backfill-turns mode
+  if (backfillTurns) {
+    await backfillSessionTurns(db, pricing, providerArg, dryRun, verbose, auditZeroTurns);
+    return;
   }
 
   console.log('═'.repeat(60));
@@ -265,7 +286,7 @@ async function importSessions(args, flags) {
 
       // Insert session + turns in a transaction
       try {
-        const dbSessionId = randomUUID();
+        const { rowId: dbSessionId } = resolveSessionRowIdentity(db, providerKey, sessionFileId);
         const nowIso = new Date().toISOString();
 
         db.transaction(() => {
@@ -380,11 +401,128 @@ async function importSessions(args, flags) {
 // Backfill turns for existing sessions
 // ─────────────────────────────────────────────────────────────
 
-async function backfillSessionTurns(db, pricing, providerArg, dryRun, verbose) {
+const ZERO_TURN_SAMPLE_LIMIT = 25;
+const ZERO_TURN_HARD_FAILURES = new Set([
+  'missing_file',
+  'empty_file',
+  'malformed_source',
+  'parse_error',
+  'parser_gap',
+]);
+
+function createZeroTurnAuditSummary() {
+  return {
+    sessionsExamined: 0,
+    hardFailures: 0,
+    counts: {},
+    providerCounts: {},
+    samples: [],
+  };
+}
+
+function recordZeroTurnAudit(summary, session, classification, verbose) {
+  summary.sessionsExamined++;
+  if (!summary.counts[classification.status]) {
+    summary.counts[classification.status] = { sessions: 0, turns: 0 };
+  }
+  summary.counts[classification.status].sessions++;
+  summary.counts[classification.status].turns += classification.turns?.length || 0;
+
+  if (!summary.providerCounts[session.provider]) {
+    summary.providerCounts[session.provider] = {};
+  }
+  summary.providerCounts[session.provider][classification.status] =
+    (summary.providerCounts[session.provider][classification.status] || 0) + 1;
+
+  if (ZERO_TURN_HARD_FAILURES.has(classification.status)) {
+    summary.hardFailures++;
+  }
+
+  if (summary.samples.length < ZERO_TURN_SAMPLE_LIMIT &&
+      (verbose || classification.status !== 'backfillable')) {
+    summary.samples.push({
+      provider: session.provider,
+      providerSessionId: session.provider_session_id,
+      status: classification.status,
+      detail: classification.detail || null,
+      filepath: session.origin_native_file,
+    });
+  }
+}
+
+function printZeroTurnAuditSummary(summary, { auditOnly = false } = {}) {
+  const heading = auditOnly ? 'Zero-turn Audit' : 'Zero-turn Classification';
+  console.log(`\n${heading}:`);
+
+  const statuses = Object.entries(summary.counts)
+    .sort(([, left], [, right]) => right.sessions - left.sessions);
+
+  for (const [status, data] of statuses) {
+    const turnsPart = data.turns > 0 ? `, ${data.turns} turns` : '';
+    console.log(`  ${status.padEnd(20)} ${data.sessions} sessions${turnsPart}`);
+  }
+
+  if (Object.keys(summary.providerCounts).length > 1) {
+    console.log('Provider breakdown:');
+    for (const provider of Object.keys(summary.providerCounts).sort()) {
+      const parts = Object.entries(summary.providerCounts[provider])
+        .sort(([, left], [, right]) => right - left)
+        .map(([status, count]) => `${status}=${count}`);
+      console.log(`  ${provider.padEnd(18)} ${parts.join(', ')}`);
+    }
+  }
+
+  if (summary.samples.length > 0) {
+    console.log('Samples:');
+    for (const sample of summary.samples) {
+      const detail = sample.detail ? ` (${sample.detail})` : '';
+      console.log(`  ${sample.provider}:${sample.providerSessionId} -> ${sample.status}${detail}`);
+    }
+  }
+}
+
+function summarizeZeroTurnDisposition(summary) {
+  let recoverable = 0;
+  let benign = 0;
+
+  for (const [status, data] of Object.entries(summary.counts)) {
+    if (status === 'backfillable') {
+      recoverable += data.sessions;
+      continue;
+    }
+    if (!ZERO_TURN_HARD_FAILURES.has(status)) {
+      benign += data.sessions;
+    }
+  }
+
+  return {
+    recoverable,
+    benign,
+    hardFailures: summary.hardFailures,
+  };
+}
+
+export function auditZeroTurnSessions(sessions, { verbose = false } = {}) {
+  const summary = createZeroTurnAuditSummary();
+  const results = [];
+
+  for (const session of sessions) {
+    const classification = classifyZeroTurnSource(
+      session.origin_native_file,
+      session.provider,
+    );
+    recordZeroTurnAudit(summary, session, classification, verbose);
+    results.push({ session, classification });
+  }
+
+  return { summary, results };
+}
+
+async function backfillSessionTurns(db, pricing, providerArg, dryRun, verbose, auditOnly = false) {
   const providerFilter = providerArg === 'all' ? null : providerArg;
 
   console.log('═'.repeat(60));
-  console.log('RUDI Turn Backfill');
+  console.log(auditOnly ? 'RUDI Zero-turn Audit' : 'RUDI Turn Backfill');
   console.log('═'.repeat(60));
 
   // Find sessions with 0 turns that have a native file on disk
@@ -402,10 +540,21 @@ async function backfillSessionTurns(db, pricing, providerArg, dryRun, verbose) {
   }
 
   const sessions = db.prepare(query).all(...params);
-  console.log(`Found ${sessions.length} sessions to backfill`);
+  console.log(`Found ${sessions.length} zero-turn sessions to inspect`);
+  console.log(`Audit only: ${auditOnly ? 'yes' : 'no'}`);
 
   if (sessions.length === 0) {
     console.log('Nothing to backfill.');
+    return;
+  }
+
+  const { summary: auditSummary, results } = auditZeroTurnSessions(sessions, { verbose });
+
+  if (auditOnly) {
+    printZeroTurnAuditSummary(auditSummary, { auditOnly: true });
+    console.log('\n' + '═'.repeat(60));
+    console.log(`Hard failures: ${auditSummary.hardFailures}`);
+    console.log('═'.repeat(60));
     return;
   }
 
@@ -436,24 +585,18 @@ async function backfillSessionTurns(db, pricing, providerArg, dryRun, verbose) {
   let totalTurns = 0;
   let errors = 0;
 
-  for (const session of sessions) {
-    const filepath = session.origin_native_file;
-    if (!existsSync(filepath)) {
-      if (verbose) console.log(`  ⚠ File missing: ${filepath}`);
-      errors++;
+  for (const { session, classification } of results) {
+    if (classification.status !== 'backfillable') {
+      if (ZERO_TURN_HARD_FAILURES.has(classification.status)) {
+        errors++;
+      }
+      if (verbose) {
+        const detail = classification.detail ? ` (${classification.detail})` : '';
+        console.log(`  ↷ ${session.provider_session_id}: ${classification.status}${detail}`);
+      }
       continue;
     }
-
-    let turns = [];
-    try {
-      turns = parseTurnsFromFile(filepath, session.provider);
-    } catch (e) {
-      if (verbose) console.log(`  ✗ Parse error ${session.provider_session_id}: ${e.message}`);
-      errors++;
-      continue;
-    }
-
-    if (turns.length === 0) continue;
+    const turns = classification.turns;
 
     if (dryRun) {
       console.log(`  [would backfill] ${session.provider_session_id}: ${turns.length} turns`);
@@ -521,9 +664,518 @@ async function backfillSessionTurns(db, pricing, providerArg, dryRun, verbose) {
   console.log('\n' + '═'.repeat(60));
   console.log(`Backfilled: ${backfilled} sessions, ${totalTurns} turns`);
   console.log(`Errors: ${errors}`);
+  printZeroTurnAuditSummary(auditSummary);
   console.log('═'.repeat(60));
 
   if (dryRun) console.log('\n(Dry run - no changes made)');
+}
+
+export function classifyZeroTurnSource(filepath, provider) {
+  if (!filepath || !existsSync(filepath)) {
+    return {
+      status: 'missing_file',
+      detail: 'native file is missing',
+      turns: [],
+    };
+  }
+
+  try {
+    switch (provider) {
+      case 'claude':
+        return classifyClaudeZeroTurnSource(filepath);
+      case 'codex':
+        return classifyCodexZeroTurnSource(filepath);
+      case 'gemini':
+        return classifyGeminiZeroTurnSource(filepath);
+      default:
+        return {
+          status: 'parse_error',
+          detail: `unsupported provider: ${provider}`,
+          turns: [],
+        };
+    }
+  } catch (error) {
+    return {
+      status: 'parse_error',
+      detail: error.message,
+      turns: [],
+    };
+  }
+}
+
+function classifyClaudeZeroTurnSource(filepath) {
+  const content = readFileSync(filepath, 'utf-8');
+  if (!content.trim()) {
+    return { status: 'empty_file', detail: 'file is empty', turns: [] };
+  }
+
+  const lines = content.split('\n');
+  let validEvents = 0;
+  let invalidLines = 0;
+  let queueOperations = 0;
+  let hasConversationEvents = false;
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    let data;
+    try {
+      data = JSON.parse(line);
+    } catch {
+      invalidLines++;
+      continue;
+    }
+
+    validEvents++;
+    if (data.type === 'queue-operation') {
+      queueOperations++;
+      continue;
+    }
+
+    if (data.type === 'user') {
+      const msg = data.message;
+      const isToolResult = Array.isArray(msg?.content) &&
+        msg.content.length > 0 &&
+        msg.content[0]?.type === 'tool_result';
+      if (!isToolResult) {
+        hasConversationEvents = true;
+      }
+      continue;
+    }
+
+    if (data.type === 'assistant') {
+      hasConversationEvents = true;
+    }
+  }
+
+  if (validEvents === 0) {
+    return {
+      status: invalidLines > 0 ? 'malformed_source' : 'empty_file',
+      detail: invalidLines > 0 ? 'no valid JSONL events found' : 'file is empty',
+      turns: [],
+    };
+  }
+
+  const turns = parseClaudeTurns(filepath);
+  if (turns.length > 0) {
+    return {
+      status: 'backfillable',
+      detail: `${turns.length} parsed turns`,
+      turns,
+    };
+  }
+
+  if (queueOperations === validEvents) {
+    return {
+      status: 'queue_only',
+      detail: 'queue-operation log with no conversation events',
+      turns: [],
+    };
+  }
+
+  if (!hasConversationEvents) {
+    return {
+      status: 'non_conversation_events',
+      detail: 'no user or assistant conversation events found',
+      turns: [],
+    };
+  }
+
+  return {
+    status: 'parser_gap',
+    detail: 'conversation events exist but produced zero turns',
+    turns: [],
+  };
+}
+
+function classifyCodexZeroTurnSource(filepath) {
+  const content = readFileSync(filepath, 'utf-8');
+  if (!content.trim()) {
+    return { status: 'empty_file', detail: 'file is empty', turns: [] };
+  }
+
+  const lines = content.split('\n');
+  let validEvents = 0;
+  let invalidLines = 0;
+  let userMessages = 0;
+  let eventMessages = 0;
+  let responseItems = 0;
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    let data;
+    try {
+      data = JSON.parse(line);
+    } catch {
+      invalidLines++;
+      continue;
+    }
+
+    validEvents++;
+    if (data.type === 'event_msg') {
+      eventMessages++;
+      if (data.payload?.type === 'user_message') {
+        userMessages++;
+      }
+    } else if (data.type === 'response_item') {
+      responseItems++;
+    }
+  }
+
+  if (validEvents === 0) {
+    return {
+      status: invalidLines > 0 ? 'malformed_source' : 'empty_file',
+      detail: invalidLines > 0 ? 'no valid JSONL events found' : 'file is empty',
+      turns: [],
+    };
+  }
+
+  const turns = parseCodexTurns(filepath);
+  if (turns.length > 0) {
+    return {
+      status: 'backfillable',
+      detail: `${turns.length} parsed turns`,
+      turns,
+    };
+  }
+
+  if (userMessages === 0 && eventMessages === 0 && responseItems === 0) {
+    return {
+      status: 'metadata_only',
+      detail: 'session metadata without conversational events',
+      turns: [],
+    };
+  }
+
+  if (userMessages === 0) {
+    return {
+      status: 'no_user_message',
+      detail: 'events exist but no user_message turn start was recorded',
+      turns: [],
+    };
+  }
+
+  return {
+    status: 'parser_gap',
+    detail: 'user_message events exist but produced zero turns',
+    turns: [],
+  };
+}
+
+function classifyGeminiZeroTurnSource(filepath) {
+  const content = readFileSync(filepath, 'utf-8');
+  if (!content.trim()) {
+    return { status: 'empty_file', detail: 'file is empty', turns: [] };
+  }
+
+  let data;
+  try {
+    data = JSON.parse(content);
+  } catch {
+    return {
+      status: 'malformed_source',
+      detail: 'file is not valid JSON',
+      turns: [],
+    };
+  }
+
+  if (!Array.isArray(data.messages) || data.messages.length === 0) {
+    return {
+      status: 'empty_file',
+      detail: 'messages array is empty',
+      turns: [],
+    };
+  }
+
+  const userMessages = data.messages.filter((message) => message?.type === 'user').length;
+  const infoMessages = data.messages.filter((message) => message?.type === 'info').length;
+  const turns = parseGeminiTurns(filepath);
+
+  if (turns.length > 0) {
+    return {
+      status: 'backfillable',
+      detail: `${turns.length} parsed turns`,
+      turns,
+    };
+  }
+
+  if (userMessages === 0 && infoMessages === data.messages.length) {
+    return {
+      status: 'info_only',
+      detail: 'contains only Gemini info/auth messages',
+      turns: [],
+    };
+  }
+
+  if (userMessages === 0) {
+    return {
+      status: 'non_conversation_messages',
+      detail: 'messages exist but none are user turns',
+      turns: [],
+    };
+  }
+
+  return {
+    status: 'parser_gap',
+    detail: 'user messages exist but produced zero turns',
+    turns: [],
+  };
+}
+
+function quoteSqlIdentifier(value) {
+  return `"${String(value).replace(/"/g, '""')}"`;
+}
+
+function listSessionForeignKeyReferences(db) {
+  const tables = db.prepare(`
+    SELECT name
+    FROM sqlite_master
+    WHERE type = 'table'
+      AND name NOT LIKE 'sqlite_%'
+  `).all();
+
+  const refs = [];
+  for (const { name } of tables) {
+    let foreignKeys = [];
+    try {
+      foreignKeys = db.prepare(`PRAGMA foreign_key_list(${quoteSqlIdentifier(name)})`).all();
+    } catch {
+      continue;
+    }
+    for (const fk of foreignKeys) {
+      if (fk.table === 'sessions' && fk.to === 'id' && fk.from) {
+        refs.push({ table: name, column: fk.from });
+      }
+    }
+  }
+  return refs;
+}
+
+function recomputeSessionTurnAggregates(db, sessionId) {
+  const agg = db.prepare(`
+    SELECT
+      COUNT(*) as turn_count,
+      COALESCE(SUM(cost), 0) as total_cost,
+      COALESCE(SUM(duration_ms), 0) as total_duration_ms,
+      COALESCE(SUM(input_tokens), 0) as total_input_tokens,
+      COALESCE(SUM(output_tokens), 0) as total_output_tokens,
+      MAX(ts) as last_active_at,
+      MIN(ts) as started_at
+    FROM turns
+    WHERE session_id = ?
+  `).get(sessionId);
+
+  db.prepare(`
+    UPDATE sessions SET
+      turn_count = ?,
+      total_cost = ?,
+      total_duration_ms = ?,
+      total_input_tokens = ?,
+      total_output_tokens = ?,
+      last_active_at = COALESCE(?, last_active_at),
+      started_at = COALESCE(started_at, ?),
+      model = COALESCE(model, (SELECT model FROM turns WHERE session_id = ? AND model IS NOT NULL ORDER BY turn_number DESC LIMIT 1))
+    WHERE id = ?
+  `).run(
+    agg?.turn_count || 0,
+    agg?.total_cost || 0,
+    agg?.total_duration_ms || 0,
+    agg?.total_input_tokens || 0,
+    agg?.total_output_tokens || 0,
+    agg?.last_active_at || null,
+    agg?.started_at || null,
+    sessionId,
+    sessionId,
+  );
+}
+
+export function repairLegacySessionIdentity(db, {
+  providers = Object.keys(PROVIDERS),
+  dryRun = true,
+  verbose = false,
+} = {}) {
+  const providerPlaceholders = providers.map(() => '?').join(', ');
+  const referenceColumns = listSessionForeignKeyReferences(db);
+  const sessions = db.prepare(`
+    SELECT id, provider, provider_session_id, origin_native_file, turn_count
+    FROM sessions
+    WHERE status != 'deleted'
+      AND provider_session_id IS NOT NULL
+      AND id != provider_session_id
+      AND provider IN (${providerPlaceholders})
+    ORDER BY provider ASC, datetime(last_active_at) DESC
+  `).all(...providers);
+
+  const summary = {
+    providers,
+    dryRun,
+    sessionsExamined: sessions.length,
+    foreignKeyReferences: referenceColumns.length,
+    alreadyCanonical: 0,
+    needsRelink: 0,
+    relinked: 0,
+    conflictSessions: 0,
+    touchedRows: 0,
+    zeroTurnSessions: 0,
+    missingNativeFileSessions: 0,
+    foreignKeyViolations: 0,
+    tableTouches: {},
+    samples: [],
+  };
+
+  for (const session of sessions) {
+    if (session.turn_count === 0) {
+      summary.zeroTurnSessions++;
+    }
+    if (!session.origin_native_file) {
+      summary.missingNativeFileSessions++;
+    }
+
+    const aliasReferences = [];
+    for (const ref of referenceColumns) {
+      const tableSql = quoteSqlIdentifier(ref.table);
+      const columnSql = quoteSqlIdentifier(ref.column);
+      const rowCount = db.prepare(`
+        SELECT COUNT(*) as c
+        FROM ${tableSql}
+        WHERE ${columnSql} = ?
+      `).get(session.provider_session_id).c;
+      if (rowCount > 0) {
+        aliasReferences.push({ ...ref, rowCount });
+      }
+    }
+
+    if (aliasReferences.length === 0) {
+      summary.alreadyCanonical++;
+      if (verbose && summary.samples.length < 25) {
+        summary.samples.push({
+          provider: session.provider,
+          providerSessionId: session.provider_session_id,
+          rowId: session.id,
+          state: 'already_canonical',
+        });
+      }
+      continue;
+    }
+
+    summary.needsRelink++;
+    if (dryRun) {
+      if (summary.samples.length < 25) {
+        summary.samples.push({
+          provider: session.provider,
+          providerSessionId: session.provider_session_id,
+          rowId: session.id,
+          state: 'needs_relink',
+          aliasReferences,
+        });
+      }
+      continue;
+    }
+
+    try {
+      let updatedRows = 0;
+      const applyRepair = db.transaction(() => {
+        let touchedTurns = false;
+        for (const ref of aliasReferences) {
+          const tableSql = quoteSqlIdentifier(ref.table);
+          const columnSql = quoteSqlIdentifier(ref.column);
+          const result = db.prepare(`
+            UPDATE ${tableSql}
+            SET ${columnSql} = ?
+            WHERE ${columnSql} = ?
+          `).run(session.id, session.provider_session_id);
+          updatedRows += result.changes;
+          summary.tableTouches[`${ref.table}.${ref.column}`] = (summary.tableTouches[`${ref.table}.${ref.column}`] || 0) + result.changes;
+          if (ref.table === 'turns' && ref.column === 'session_id' && result.changes > 0) {
+            touchedTurns = true;
+          }
+        }
+        if (touchedTurns) {
+          recomputeSessionTurnAggregates(db, session.id);
+        }
+      });
+      applyRepair();
+      summary.relinked++;
+      summary.touchedRows += updatedRows;
+      if (verbose && summary.samples.length < 25) {
+        summary.samples.push({
+          provider: session.provider,
+          providerSessionId: session.provider_session_id,
+          rowId: session.id,
+          state: 'relinked',
+          aliasReferences,
+        });
+      }
+    } catch (error) {
+      summary.conflictSessions++;
+      if (summary.samples.length < 25) {
+        summary.samples.push({
+          provider: session.provider,
+          providerSessionId: session.provider_session_id,
+          rowId: session.id,
+          state: 'conflict',
+          error: error.message,
+          aliasReferences,
+        });
+      }
+    }
+  }
+
+  try {
+    summary.foreignKeyViolations = db.prepare('PRAGMA foreign_key_check').all().length;
+  } catch {
+    summary.foreignKeyViolations = -1;
+  }
+
+  return summary;
+}
+
+function printIdentityRepairSummary(summary) {
+  console.log('═'.repeat(60));
+  console.log('RUDI Session Identity Repair');
+  console.log('═'.repeat(60));
+  console.log(`Providers:               ${summary.providers.join(', ')}`);
+  console.log(`Dry run:                 ${summary.dryRun ? 'yes' : 'no'}`);
+  console.log(`Legacy rows examined:    ${summary.sessionsExamined}`);
+  console.log(`FK reference paths:      ${summary.foreignKeyReferences}`);
+  console.log(`Already canonical:       ${summary.alreadyCanonical}`);
+  console.log(`Needs relink:            ${summary.needsRelink}`);
+  console.log(`Relinked:                ${summary.relinked}`);
+  console.log(`Conflict sessions:       ${summary.conflictSessions}`);
+  console.log(`Rows touched:            ${summary.touchedRows}`);
+  console.log(`Zero-turn legacy rows:   ${summary.zeroTurnSessions}`);
+  console.log(`Missing native file:     ${summary.missingNativeFileSessions}`);
+  console.log(`FK violations:           ${summary.foreignKeyViolations < 0 ? 'unknown' : summary.foreignKeyViolations}`);
+
+  const touchedTables = Object.entries(summary.tableTouches)
+    .filter(([, count]) => count > 0)
+    .sort((a, b) => b[1] - a[1]);
+  if (touchedTables.length > 0) {
+    console.log('\nTouched references:');
+    for (const [key, count] of touchedTables) {
+      console.log(`  ${key}: ${count}`);
+    }
+  }
+
+  if (summary.samples.length > 0) {
+    console.log('\nSample rows:');
+    for (const sample of summary.samples) {
+      console.log(`  ${sample.provider}:${sample.providerSessionId} -> ${sample.rowId} [${sample.state}]`);
+      if (sample.error) {
+        console.log(`    error: ${sample.error}`);
+      }
+      if (sample.aliasReferences?.length) {
+        const refs = sample.aliasReferences
+          .map((ref) => `${ref.table}.${ref.column}=${ref.rowCount}`)
+          .join(', ');
+        console.log(`    refs: ${refs}`);
+      }
+    }
+  }
+
+  if (summary.dryRun) {
+    console.log('\nDry run only. Re-run with `--repair-identity --apply` to commit changes.');
+  }
+  console.log('═'.repeat(60));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -568,12 +1220,25 @@ function showImportStatus(flags) {
     }
 
     // Show sessions needing backfill
-    const backfillCount = db.prepare(`
-      SELECT COUNT(*) as count FROM sessions
+    const zeroTurnSessions = db.prepare(`
+      SELECT id, provider, provider_session_id, origin_native_file
+      FROM sessions
       WHERE turn_count = 0 AND origin_native_file IS NOT NULL AND status = 'active'
-    `).get();
-    if (backfillCount.count > 0) {
-      console.log(`\n  ${backfillCount.count} sessions need turn backfill (--backfill-turns)`);
+    `).all();
+    if (zeroTurnSessions.length > 0) {
+      const { summary } = auditZeroTurnSessions(zeroTurnSessions);
+      const disposition = summarizeZeroTurnDisposition(summary);
+
+      console.log('\nZero-turn sessions:');
+      console.log(`  recoverable: ${disposition.recoverable}`);
+      console.log(`  benign non-conversation: ${disposition.benign}`);
+      console.log(`  hard failures: ${disposition.hardFailures}`);
+      if (disposition.recoverable > 0) {
+        console.log('  Run: rudi import sessions --backfill-turns');
+      }
+      if (disposition.benign > 0 || disposition.hardFailures > 0) {
+        console.log('  Audit: rudi import sessions --backfill-turns --audit-zero-turns');
+      }
     }
   }
 
@@ -1206,7 +1871,13 @@ function calculateCost(pricingRows, provider, model, tokens) {
     return inputCost + outputCost;
   }
 
-  const inputCost = (tokens.input_tokens || 0) * match.input_cost_per_mtok / 1_000_000;
+  const baseInput = provider === 'claude'
+    ? Math.max(
+        (tokens.input_tokens || 0) - (tokens.cache_read_tokens || 0) - (tokens.cache_creation_tokens || 0),
+        0,
+      )
+    : (tokens.input_tokens || 0);
+  const inputCost = baseInput * match.input_cost_per_mtok / 1_000_000;
   const outputCost = (tokens.output_tokens || 0) * match.output_cost_per_mtok / 1_000_000;
   const cacheReadCost = (tokens.cache_read_tokens || 0) * (match.cache_read_cost_per_mtok || 0) / 1_000_000;
   const cacheWriteCost = (tokens.cache_creation_tokens || 0) * (match.cache_write_cost_per_mtok || 0) / 1_000_000;

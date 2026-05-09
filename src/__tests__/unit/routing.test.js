@@ -66,6 +66,22 @@ test('routing: import sessions with provider', () => {
   assert.deepStrictEqual(result.args, ['sessions', 'claude']);
 });
 
+test('routing: run-group with subcommand', () => {
+  const result = parseArgs(['run-group', 'list', '--status', 'running']);
+
+  assert.strictEqual(result.command, 'run-group');
+  assert.deepStrictEqual(result.args, ['list']);
+  assert.strictEqual(result.flags.status, 'running');
+});
+
+test('routing: lanes with subcommand', () => {
+  const result = parseArgs(['lanes', 'init', '--cwd', '/tmp/repo']);
+
+  assert.strictEqual(result.command, 'lanes');
+  assert.deepStrictEqual(result.args, ['init']);
+  assert.strictEqual(result.flags.cwd, '/tmp/repo');
+});
+
 // =============================================================================
 // FLAGS PARSING
 // =============================================================================
@@ -190,4 +206,3 @@ test('edge: flags between args', () => {
   assert.ok(result.args.includes('search'));
   assert.ok(result.args.includes('query'));
 });
-

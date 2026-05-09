@@ -1,0 +1,66 @@
+{
+  "ignore": [
+    "docs",
+    "_archive",
+    "tmp",
+    "templates",
+    ".rudi"
+  ],
+  "publicAPI": [
+    "packages/*/src/**/*.js",
+    "packages/*/src/**/*.mjs",
+    "packages/*/src/**/*.cjs",
+    "packages/*/src/**/*.ts",
+    "packages/*/src/**/*.d.ts"
+  ],
+  "allowlists": {
+    "orphans": {
+      "paths": [
+        "packages/*/src/**/*.js",
+        "packages/*/src/**/*.mjs",
+        "packages/*/src/**/*.cjs",
+        "packages/*/src/**/*.ts",
+        "packages/*/src/**/*.d.ts",
+        "packages/*/src/*.js",
+        "packages/*/src/*.mjs",
+        "packages/*/src/*.cjs",
+        "packages/*/src/*.ts",
+        "packages/*/src/*.d.ts",
+        "packages/*/src/service/*.ts",
+        "packages/db/src/import.js",
+        "packages/db/src/schema.js",
+        "packages/db/src/service/turns.ts",
+        "src/commands/agent/routes/*.js",
+        "src/commands/agent/spawn-process.js"
+      ]
+    },
+    "boundaries": {
+      "paths": [
+        "src/__tests__/unit/*-contract.test.js"
+      ]
+    }
+  },
+  "profiles": {
+    "pr-review": {
+      "graphRoot": ".",
+      "scope": ".",
+      "include": [
+        "^(src|scripts|packages)/"
+      ],
+      "entrypoints": [
+        "src/index.js",
+        "src/router-mcp.js",
+        "src/spawn-mcp.js",
+        "scripts/*.js",
+        "scripts/*.mjs"
+      ],
+      "checks": [
+        "orphans",
+        "shims",
+        "boundaries",
+        "deprecated-imports",
+        "canonical-imports"
+      ]
+    }
+  }
+}

@@ -18,6 +18,7 @@ import {
   readCodexSessionMeta,
   deriveCodexSessionIdFromFilename,
 } from './providers/codex/discovery.js';
+import { findSessionIdentityRow, resolveSessionRowIdentity } from '@learnrudi/db/session-identity';
 
 const WATCHER_DB_DEBOUNCE_MS = 10_000;
 const RECONCILE_INTERVAL_MS = 60_000;
@@ -122,6 +123,69 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
     return { cwdFixed, claudeFixed, remaining };
   }
 
+  async function pruneMissingProviderSessions(db, provider, fsIds, {
+    requireDiscovery = true,
+  } = {}) {
+    if (requireDiscovery && (!fsIds || fsIds.size === 0)) {
+      return 0;
+    }
+
+    const deleteStmt = db.prepare(
+      `UPDATE sessions SET status = 'deleted', deleted_at = ? WHERE id = ?`
+    );
+    const deleteToolCallsStmt = db.prepare(`
+      DELETE FROM tool_calls
+      WHERE session_id = ?
+         OR turn_id IN (SELECT id FROM turns WHERE session_id = ?)
+    `);
+    const deleteTurnsStmt = db.prepare(`DELETE FROM turns WHERE session_id = ?`);
+    const deleteFilePosStmt = db.prepare(`DELETE FROM file_positions WHERE file_path = ?`);
+    const pruneSessionTxn = db.transaction((sessionId, originNativeFile, deletedAt) => {
+      deleteToolCallsStmt.run(sessionId, sessionId);
+      deleteTurnsStmt.run(sessionId);
+      deleteFilePosStmt.run(originNativeFile);
+      deleteStmt.run(deletedAt, sessionId);
+    });
+    const pruneNow = new Date().toISOString();
+    let pruned = 0;
+    let failed = 0;
+
+    try {
+      const dbRows = db.prepare(
+        `SELECT id, origin_native_file FROM sessions WHERE provider = ? AND status != 'deleted'`
+      ).all(provider);
+      const unconfirmed = dbRows.filter((row) => !fsIds.has(row.id));
+      for (const row of unconfirmed) {
+        if (!row.origin_native_file) continue;
+        try {
+          await fsp.access(row.origin_native_file);
+          // File still exists — discovery missed it, so keep the row active.
+        } catch (err) {
+          if (err.code === 'ENOENT') {
+            try {
+              pruneSessionTxn(row.id, row.origin_native_file, pruneNow);
+              pruned++;
+            } catch (pruneErr) {
+              failed++;
+              log('sessions', 'warn', `[reconcile.${provider}] failed to prune missing session ${row.id}: ${pruneErr.message}`);
+            }
+          }
+          // Other errors (EPERM, EIO, etc.) leave the row untouched.
+        }
+      }
+    } catch (err) {
+      log('sessions', 'warn', `[reconcile.${provider}] prune scan failed: ${err.message}`);
+    }
+
+    if (pruned > 0) {
+      log('sessions', 'info', `[reconcile.${provider}] pruned ${pruned} missing sessions`);
+    }
+    if (failed > 0) {
+      log('sessions', 'warn', `[reconcile.${provider}] failed to prune ${failed} missing sessions`);
+    }
+    return pruned;
+  }
+
   /**
    * Full reconciliation: walk ~/.claude/projects/, collect all sessions,
    * upsert into DB with project_path. Runs at boot.
@@ -141,8 +205,15 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
     // Batch-fetch existing snippets from DB to avoid redundant disk reads on subsequent boots
     const existingSnippets = new Map();
     try {
-      const rows = db.prepare('SELECT id, snippet, git_branch FROM sessions WHERE snippet IS NOT NULL').all();
-      for (const row of rows) existingSnippets.set(row.id, row);
+      const rows = db.prepare(
+        'SELECT id, provider_session_id, snippet, git_branch FROM sessions WHERE snippet IS NOT NULL'
+      ).all();
+      for (const row of rows) {
+        existingSnippets.set(row.id, row);
+        if (row.provider_session_id) {
+          existingSnippets.set(row.provider_session_id, row);
+        }
+      }
     } catch {
       // non-fatal — fall back to disk reads
     }
@@ -199,8 +270,6 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
         for (const file of files) {
           if (!file.endsWith('.jsonl')) continue;
           const sessionId = file.slice(0, -6);
-          fsSessionIds.add(sessionId);
-          claudeFsIds.add(sessionId);
           fsCount++;
 
           const fullPath = path.join(projPath, file);
@@ -238,7 +307,13 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
             }
           }
 
-          const existed = db.prepare('SELECT 1 FROM sessions WHERE id = ?').get(sessionId);
+          const { rowId, existed } = resolveSessionRowIdentity(db, 'claude', sessionId);
+          fsSessionIds.add(sessionId);
+          claudeFsIds.add(sessionId);
+          if (rowId !== sessionId) {
+            fsSessionIds.add(rowId);
+            claudeFsIds.add(rowId);
+          }
 
           try {
             db.prepare(`
@@ -260,7 +335,7 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
                 status = 'active',
                 deleted_at = NULL
             `).run(
-              sessionId, sessionId, fullPath,
+              rowId, sessionId, fullPath,
               title, snippet, projectPath, projectPath, snippetBranch, snippetModel,
               created, lastActive, messageCount,
             );
@@ -281,8 +356,6 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
           let fstat;
           try { fstat = await fsp.stat(extPath); } catch { continue; }
 
-          fsSessionIds.add(sessionId);
-          claudeFsIds.add(sessionId);
           fsCount++;
 
           const title = entry.summary || null;
@@ -315,7 +388,13 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
             }
           }
 
-          const existed = db.prepare('SELECT 1 FROM sessions WHERE id = ?').get(sessionId);
+          const { rowId, existed } = resolveSessionRowIdentity(db, 'claude', sessionId);
+          fsSessionIds.add(sessionId);
+          claudeFsIds.add(sessionId);
+          if (rowId !== sessionId) {
+            fsSessionIds.add(rowId);
+            claudeFsIds.add(rowId);
+          }
 
           try {
             db.prepare(`
@@ -337,7 +416,7 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
                 status = 'active',
                 deleted_at = NULL
             `).run(
-              sessionId, sessionId, extPath,
+              rowId, sessionId, extPath,
               title, snippet, projectPath, projectPath, snippetBranch, snippetModel,
               created, lastActive, messageCount,
             );
@@ -411,9 +490,15 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
               // ignore
             }
 
+            fsCount++;
+
+            const { rowId, existed } = resolveSessionRowIdentity(db, 'claude', agentSessionId);
             fsSessionIds.add(agentSessionId);
             claudeFsIds.add(agentSessionId);
-            fsCount++;
+            if (rowId !== agentSessionId) {
+              fsSessionIds.add(rowId);
+              claudeFsIds.add(rowId);
+            }
 
             try {
               db.prepare(`
@@ -441,7 +526,7 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
                   status = 'active',
                   deleted_at = NULL
               `).run(
-                agentSessionId, agentSessionId, fullPath,
+                rowId, agentSessionId, fullPath,
                 snippet, snippetCwd || null, projectPath, snippetBranch || null, snippetModel || null,
                 entry, // parent session UUID = the directory name
                 subFile.slice(6, -6), // agent ID = strip "agent-" prefix and ".jsonl" suffix
@@ -452,7 +537,7 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
               continue;
             }
 
-            if (existing) updated++;
+            if (existed) updated++;
             else { added++; }
           }
         }
@@ -468,8 +553,6 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
         const meta = await readCodexSessionMeta(filePath, 60);
         const sessionId = meta.sessionId || deriveCodexSessionIdFromFilename(filePath);
         if (!sessionId) continue;
-        fsSessionIds.add(sessionId);
-        codexFsIds.add(sessionId);
         fsCount++;
 
         let fstat;
@@ -494,9 +577,13 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
 
         cacheSessionFileHint(sessionId, 'codex', filePath);
 
-        const existed = db.prepare(
-          'SELECT 1 FROM sessions WHERE provider = ? AND (id = ? OR provider_session_id = ?)'
-        ).get('codex', sessionId, sessionId);
+        const { rowId, existed } = resolveSessionRowIdentity(db, 'codex', sessionId);
+        fsSessionIds.add(sessionId);
+        codexFsIds.add(sessionId);
+        if (rowId !== sessionId) {
+          fsSessionIds.add(rowId);
+          codexFsIds.add(rowId);
+        }
 
         try {
           db.prepare(`
@@ -515,7 +602,7 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
               status = 'active',
               deleted_at = NULL
           `).run(
-            sessionId, sessionId, filePath,
+            rowId, sessionId, filePath,
             snippet, normalizeProjectPath(cwd) || projectPath, projectPath,
             fstat.birthtime.toISOString(), fstat.mtime.toISOString(),
           );
@@ -534,51 +621,25 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
     // Prune: for DB rows not confirmed by the walk, stat the file before deleting.
     // The walk can be partial (readdir failures are silently caught), so set-difference
     // alone would over-delete. Only mark deleted when the file is truly gone (ENOENT).
-    const deleteStmt = db.prepare(
-      `UPDATE sessions SET status = 'deleted', deleted_at = ? WHERE id = ?`
-    );
-    const deleteTurnsStmt = db.prepare(`DELETE FROM turns WHERE session_id = ?`);
-    const deleteFilePosStmt = db.prepare(`DELETE FROM file_positions WHERE file_path = ?`);
-    const pruneNow = new Date().toISOString();
-    const providerPrunes = [
-      { provider: 'claude', fsIds: claudeFsIds },
-      { provider: 'codex', fsIds: codexFsIds },
-    ];
-    for (const { provider: prov, fsIds } of providerPrunes) {
-      if (fsIds.size === 0) continue;
-      try {
-        const dbRows = db.prepare(
-          `SELECT id, origin_native_file FROM sessions WHERE provider = ? AND status != 'deleted'`
-        ).all(prov);
-        const unconfirmed = dbRows.filter(r => !fsIds.has(r.id));
-        for (const row of unconfirmed) {
-          if (!row.origin_native_file) continue; // no file path — can't verify, leave alone
-          try {
-            await fsp.access(row.origin_native_file);
-            // File still exists — walk missed it (partial readdir), don't prune
-          } catch (err) {
-            if (err.code === 'ENOENT') {
-              deleteStmt.run(pruneNow, row.id);
-              deleteTurnsStmt.run(row.id);
-              if (row.origin_native_file) {
-                deleteFilePosStmt.run(row.origin_native_file);
-              }
-              pruned++;
-            }
-            // Other errors (EPERM, EIO, etc.) — leave the row alone
-          }
-        }
-      } catch {
-        // non-fatal
-      }
-    }
+    pruned += await pruneMissingProviderSessions(db, 'claude', claudeFsIds, { requireDiscovery: true });
+    pruned += await pruneMissingProviderSessions(db, 'codex', codexFsIds, { requireDiscovery: true });
 
     // One-time catch-up cleanup for previously deleted sessions that still have
     // residual turn rows from older versions.
+    const purgedDeletedToolCalls = db.prepare(`
+      DELETE FROM tool_calls
+      WHERE turn_id IN (
+        SELECT id FROM turns
+        WHERE session_id IN (SELECT id FROM sessions WHERE status = 'deleted')
+      )
+    `).run().changes;
     const purgedDeletedTurns = db.prepare(`
       DELETE FROM turns
       WHERE session_id IN (SELECT id FROM sessions WHERE status = 'deleted')
     `).run().changes;
+    if (purgedDeletedToolCalls > 0) {
+      log('sessions', 'info', `[reconcile] purged ${purgedDeletedToolCalls} tool calls from deleted sessions`);
+    }
     if (purgedDeletedTurns > 0) {
       log('sessions', 'info', `[reconcile] purged ${purgedDeletedTurns} turns from deleted sessions`);
     }
@@ -606,6 +667,8 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
     if (!db) return;
 
     const claudeDir = path.join(os.homedir(), '.claude', 'projects');
+    const claudeFsIds = new Set();
+    const codexFsIds = new Set();
 
     try {
       const projectDirs = await fsp.readdir(claudeDir);
@@ -666,6 +729,7 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
         for (const file of files) {
           if (!file.endsWith('.jsonl')) continue;
           const sessionId = file.slice(0, -6);
+          claudeFsIds.add(sessionId);
           if (dbIds.has(sessionId)) continue;
 
           const fullPath = path.join(projPath, file);
@@ -700,7 +764,9 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
         if (indexEntries) {
           for (const entry of indexEntries) {
             const sessionId = entry.sessionId;
-            if (!sessionId || dbIds.has(sessionId)) continue;
+            if (!sessionId) continue;
+            claudeFsIds.add(sessionId);
+            if (dbIds.has(sessionId)) continue;
             const extPath = entry.fullPath;
             if (!extPath) continue;
             let fstat;
@@ -755,6 +821,7 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
         const meta = await readCodexSessionMeta(filePath, 60);
         const sessionId = meta.sessionId || deriveCodexSessionIdFromFilename(filePath);
         if (!sessionId) continue;
+        codexFsIds.add(sessionId);
         if (codexDbIds.has(sessionId)) continue;
 
         let fstat;
@@ -790,6 +857,9 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
     } catch {
       // ~/.codex/sessions/ may not exist
     }
+
+    await pruneMissingProviderSessions(db, 'claude', claudeFsIds, { requireDiscovery: false });
+    await pruneMissingProviderSessions(db, 'codex', codexFsIds, { requireDiscovery: false });
   }
 
   /**
@@ -981,9 +1051,10 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
     _watcherDbDebounce.set(debounceKey, now);
 
     try {
-      const existing = db.prepare(
-        'SELECT id FROM sessions WHERE provider = ? AND (id = ? OR provider_session_id = ?)'
-      ).get(provider, resolvedSessionId, resolvedSessionId);
+      const existing = findSessionIdentityRow(db, {
+        provider,
+        sessionId: resolvedSessionId,
+      });
 
       if (!existing) {
         let fstat;
@@ -1083,6 +1154,7 @@ export function createSessionsDbModule({ log, resolveDb, caches, onProjectsReady
 
   return {
     reconcileSessionsToDb,
+    periodicReconcile,
     backfillProjectPaths,
     getProjectsFromDb,
     watcherDbUpsert,

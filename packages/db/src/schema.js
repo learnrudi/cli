@@ -4,7 +4,7 @@
 
 import { getDb } from './index.js';
 
-export const SCHEMA_VERSION = 26;
+export const SCHEMA_VERSION = 27;
 
 export const SCHEMA_SQL = `
 -- Schema version tracking
@@ -1268,12 +1268,7 @@ export function applySchemaUpdates(db) {
     if (count && count.count === 0) {
       seedModelPricing(db);
     } else {
-      // Ensure new models get added to existing DBs
-      db.prepare(`
-        INSERT OR IGNORE INTO model_pricing
-        (provider, model_pattern, display_name, input_cost_per_mtok, output_cost_per_mtok, cache_read_cost_per_mtok, cache_write_cost_per_mtok, effective_from, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run('claude', 'claude-opus-4-6%', 'Claude Opus 4.6', 5.0, 25.0, 0.50, 6.25, '2025-01-01', 'Most capable');
+      ensureLatestModelPricingRows(db);
     }
   }
 }
@@ -2337,6 +2332,49 @@ function runMigrations(db, from, to) {
         ALTER TABLE packages_new RENAME TO packages;
       `);
     },
+
+    // Version 27: Add current Codex pricing rows and backfill missing-cost turns
+    27: (db) => {
+      ensureLatestModelPricingRows(db);
+      if (!tableExists(db, 'turns') || !tableExists(db, 'sessions')) return;
+
+      const pricingRows = db.prepare(
+        'SELECT model_pattern, provider, input_cost_per_mtok, output_cost_per_mtok, cache_read_cost_per_mtok, cache_write_cost_per_mtok FROM model_pricing ORDER BY LENGTH(model_pattern) DESC'
+      ).all();
+      const updateCost = db.prepare('UPDATE turns SET cost = ? WHERE id = ?');
+      const turnsMissingCost = db.prepare(
+        'SELECT id, provider, model, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens FROM turns WHERE cost IS NULL AND model IS NOT NULL AND (COALESCE(input_tokens, 0) > 0 OR COALESCE(output_tokens, 0) > 0 OR COALESCE(cache_read_tokens, 0) > 0 OR COALESCE(cache_creation_tokens, 0) > 0)'
+      ).all();
+
+      for (const turn of turnsMissingCost) {
+        const entry = pricingRows.find(p => {
+          if (p.provider !== null && p.provider !== turn.provider) return false;
+          const re = new RegExp('^' + p.model_pattern.replace(/%/g, '.*').replace(/_/g, '.') + '$');
+          return re.test(turn.model);
+        });
+        if (!entry) continue;
+
+        const baseInput = getBillableBaseInputTokens(
+          turn.provider,
+          turn.input_tokens,
+          turn.cache_read_tokens,
+          turn.cache_creation_tokens,
+        );
+        const cost =
+          baseInput * entry.input_cost_per_mtok / 1_000_000 +
+          (turn.output_tokens || 0) * entry.output_cost_per_mtok / 1_000_000 +
+          (turn.cache_read_tokens || 0) * entry.cache_read_cost_per_mtok / 1_000_000 +
+          (turn.cache_creation_tokens || 0) * entry.cache_write_cost_per_mtok / 1_000_000;
+        updateCost.run(cost, turn.id);
+      }
+
+      db.exec(`
+        UPDATE sessions SET
+          total_cost = COALESCE((SELECT SUM(cost) FROM turns WHERE turns.session_id = sessions.id), 0),
+          total_input_tokens = COALESCE((SELECT SUM(input_tokens) FROM turns WHERE turns.session_id = sessions.id), 0),
+          total_output_tokens = COALESCE((SELECT SUM(output_tokens) FROM turns WHERE turns.session_id = sessions.id), 0)
+      `);
+    },
   };
 
   for (let v = from + 1; v <= to; v++) {
@@ -2649,6 +2687,8 @@ export function seedModelPricing(db) {
     ['claude', 'claude-3-5-sonnet-%', 'Claude 3.5 Sonnet', 3.0, 15.0, 0.3, 3.75, '2024-06-01', 'Legacy'],
 
     // Codex/OpenAI models
+    ['codex', 'gpt-5.4', 'GPT-5.4', 2.5, 15.0, 0.25, 0, '2026-03-05', 'Latest flagship'],
+    ['codex', 'gpt-5.4-mini', 'GPT-5.4 mini', 0.75, 4.5, 0.075, 0, '2026-03-17', 'High-volume mini'],
     ['codex', 'gpt-5.1-codex-max', 'Codex Max', 10.0, 30.0, 0, 0, '2025-01-01', 'Most capable'],
     ['codex', 'gpt-5.1-codex-mini', 'Codex Mini', 1.5, 6.0, 0, 0, '2025-01-01', 'Fastest'],
     ['codex', 'gpt-5.1-codex', 'Codex Standard', 5.0, 15.0, 0, 0, '2025-01-01', 'Default'],
@@ -2702,6 +2742,32 @@ export function getModelPricing(provider, model) {
   return pricing || null;
 }
 
+function getBillableBaseInputTokens(provider, inputTokens, cacheReadTokens, cacheCreationTokens) {
+  const resolvedProvider = provider || 'claude';
+  if (resolvedProvider === 'claude') {
+    return Math.max((inputTokens || 0) - (cacheReadTokens || 0) - (cacheCreationTokens || 0), 0);
+  }
+  return inputTokens || 0;
+}
+
+function ensureLatestModelPricingRows(db) {
+  const upsert = db.prepare(`
+    INSERT OR REPLACE INTO model_pricing
+    (provider, model_pattern, display_name, input_cost_per_mtok, output_cost_per_mtok, cache_read_cost_per_mtok, cache_write_cost_per_mtok, effective_from, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const latestRows = [
+    ['claude', 'claude-opus-4-6%', 'Claude Opus 4.6', 5.0, 25.0, 0.50, 6.25, '2025-01-01', 'Most capable'],
+    ['codex', 'gpt-5.4', 'GPT-5.4', 2.5, 15.0, 0.25, 0, '2026-03-05', 'Latest flagship'],
+    ['codex', 'gpt-5.4-mini', 'GPT-5.4 mini', 0.75, 4.5, 0.075, 0, '2026-03-17', 'High-volume mini'],
+  ];
+
+  for (const row of latestRows) {
+    upsert.run(...row);
+  }
+}
+
 /**
  * Calculate cost from tokens using pricing table
  * @param {string} provider
@@ -2721,9 +2787,15 @@ export function calculateCostFromPricing(provider, model, usage) {
     return inputCost + outputCost + cacheReadCost;
   }
 
-  const inputCost = (usage.input_tokens || 0) * pricing.input_cost_per_mtok / 1_000_000;
+  const inputCost = getBillableBaseInputTokens(
+    provider,
+    usage.input_tokens,
+    usage.cache_read_tokens,
+    usage.cache_creation_tokens,
+  ) * pricing.input_cost_per_mtok / 1_000_000;
   const outputCost = (usage.output_tokens || 0) * pricing.output_cost_per_mtok / 1_000_000;
   const cacheReadCost = (usage.cache_read_tokens || 0) * (pricing.cache_read_cost_per_mtok || 0) / 1_000_000;
+  const cacheWriteCost = (usage.cache_creation_tokens || 0) * (pricing.cache_write_cost_per_mtok || 0) / 1_000_000;
 
-  return inputCost + outputCost + cacheReadCost;
+  return inputCost + outputCost + cacheReadCost + cacheWriteCost;
 }

@@ -8,6 +8,7 @@
     ".": "./src/index.js",
     "./import": "./src/import.js",
     "./logs": "./src/logs.js",
+    "./session-identity": "./src/session-identity.js",
     "./schema": "./src/schema.js",
     "./search": "./src/search.js",
     "./stats": "./src/stats.js",
@@ -16,10 +17,10 @@
     "./service/file-versions": "./src/service/file-versions.ts"
   },
   "scripts": {
-    "test": "node --test src/__tests__/unit/*.test.js",
-    "test:unit": "node --test src/__tests__/unit/*.test.js",
-    "test:integration": "node --test src/__tests__/integration/*.test.js",
-    "test:all": "node --test src/__tests__/unit/*.test.js src/__tests__/integration/*.test.js"
+    "test": "node ../../scripts/run-tests.js src/__tests__/unit/*.test.js",
+    "test:unit": "node ../../scripts/run-tests.js src/__tests__/unit/*.test.js",
+    "test:integration": "node ../../scripts/run-tests.js src/__tests__/integration/*.test.js",
+    "test:all": "node ../../scripts/run-tests.js src/__tests__/unit/*.test.js src/__tests__/integration/*.test.js"
   },
   "dependencies": {
     "@learnrudi/env": "^1.0.0",

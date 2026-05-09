@@ -10,6 +10,7 @@
 
 import fsp from 'fs/promises';
 import path from 'path';
+import { resolveSessionRowIdentity } from '@learnrudi/db/session-identity';
 import { CLAUDE_PROJECTS_DIR } from './constants.js';
 import { decodeProjectDirFromFilesystem } from './discovery.js';
 
@@ -22,7 +23,7 @@ const HEADER_SCAN_BYTES = 8192;
 
 function _findSessionsNeedingMetadata(db) {
   return db.prepare(`
-    SELECT id, origin_native_file
+    SELECT id, provider_session_id, origin_native_file
     FROM sessions
     WHERE status != 'deleted'
       AND (id LIKE 'agent-%' OR session_type = 'task')
@@ -224,9 +225,16 @@ export function createMetadataBackfillModule({ log, resolveDb, broadcast }) {
     const needsMeta = _findSessionsNeedingMetadata(db);
 
     // Also find agent files not yet in DB
-    const dbIds = new Set(
-      db.prepare(`SELECT id FROM sessions WHERE id LIKE 'agent-%'`).all().map(r => r.id)
-    );
+    const dbIds = new Set();
+    const dbRows = db.prepare(`
+      SELECT id, provider_session_id
+      FROM sessions
+      WHERE provider = 'claude'
+    `).all();
+    for (const row of dbRows) {
+      if (row.id) dbIds.add(row.id);
+      if (row.provider_session_id) dbIds.add(row.provider_session_id);
+    }
     const orphans = agentFiles.filter(af => !dbIds.has(af.sessionId));
 
     state.total = needsMeta.length + orphans.length;
@@ -236,7 +244,7 @@ export function createMetadataBackfillModule({ log, resolveDb, broadcast }) {
     // Step 4: Enrich existing sessions
     for (const sess of needsMeta) {
       try {
-        const af = fileMap.get(sess.id);
+        const af = fileMap.get(sess.provider_session_id || sess.id);
         const filePath = af?.filePath || sess.origin_native_file;
         if (!filePath) { state.errors++; continue; }
 
@@ -270,6 +278,7 @@ export function createMetadataBackfillModule({ log, resolveDb, broadcast }) {
         const projectPath = await _deriveProjectPath(af.projDir);
         let fstat;
         try { fstat = await fsp.stat(af.filePath); } catch { continue; }
+        const { rowId } = resolveSessionRowIdentity(db, 'claude', af.sessionId, { includeDeleted: true });
 
         db.prepare(`
           INSERT INTO sessions
@@ -293,7 +302,7 @@ export function createMetadataBackfillModule({ log, resolveDb, broadcast }) {
             status = 'active',
             deleted_at = NULL
         `).run(
-          af.sessionId, af.sessionId, af.filePath,
+          rowId, af.sessionId, af.filePath,
           enriched?.cwd || null, projectPath, enriched?.gitBranch || null, enriched?.model || null,
           af.parentSessionId, af.agentId,
           fstat.birthtime.toISOString(), fstat.mtime.toISOString(),

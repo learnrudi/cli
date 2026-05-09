@@ -44,6 +44,8 @@ AGENT INTEGRATION
 RUN
   run <stack>           Run a stack directly
   parallel <tasks...>   Run multiple agent tasks in parallel (grouped)
+  run-group <cmd>       Inspect, merge, and cleanup run groups
+  lanes <cmd>           Manage the local main/dev lane worktree layout
 
 SECRETS
   secrets set <name>    Set a secret
@@ -168,6 +170,57 @@ EXAMPLES
   rudi parallel "task1" "task2" --provider claude --model sonnet
   rudi parallel --list-templates
   rudi parallel --template code-review-3task --coordination-mode dependency
+`,
+    'run-group': `
+rudi run-group - Inspect and manage parallel agent run groups
+
+USAGE
+  rudi run-group <command> [args] [options]
+
+COMMANDS
+  list                          List run groups
+  show <group-id>               Show run-group details and sessions
+  stop <group-id>               Stop active sessions in a run group
+  merge <group-id>              Merge successful run-group branches
+  cleanup <group-id>            Remove worktrees for a run group
+
+OPTIONS
+  --json                        Output raw JSON
+  --status <status>             Filter list results
+  --project-path <path>         Filter list by project path
+  --limit <n>                   Limit list results
+  --offset <n>                  Offset list results
+  --to <branch>                 Merge target branch
+  --session-ids <a,b,c>         Explicit session IDs to merge
+  --delete-branches             Delete branches during cleanup
+
+EXAMPLES
+  rudi run-group list --status running
+  rudi run-group show group-123
+  rudi run-group merge group-123 --to dev
+  rudi run-group cleanup group-123 --delete-branches
+`,
+    lanes: `
+rudi lanes - Manage the local main/dev lane layout for solo-dev parallel work
+
+USAGE
+  rudi lanes <command> [options]
+
+COMMANDS
+  init                          Create or discover the dev worktree
+  sync                          Fast-forward main and dev from upstreams
+
+OPTIONS
+  --cwd <path>                  Repository path
+  --main <branch>               Main lane branch (default: main)
+  --dev <branch>                Dev lane branch (default: dev)
+  --dev-path <path>             Override sibling dev worktree path
+  --json                        Output raw JSON
+
+EXAMPLES
+  rudi lanes init
+  rudi lanes init --cwd /path/to/repo
+  rudi lanes sync
 `,
     list: `
 rudi list - List installed packages

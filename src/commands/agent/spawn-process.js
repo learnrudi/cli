@@ -13,6 +13,7 @@ import { buildUserContent, broadcastProcessCount, dropResumeMappingsForSession }
 import { attachStdoutHandler, attachStderrHandler, flushStdoutBuffer } from './process-io.js';
 import { classifyError, isRetryable } from './error-classifier.js';
 import { createRetryState, canRetry, getNextDelay, incrementRetry } from './retry-logic.js';
+import { createRunGroupSessionActivityEvent } from './run-group-domain.js';
 
 function unlinkQuiet(filePath) {
   if (!filePath) return;
@@ -604,13 +605,13 @@ export function spawnAgentProcess(ctx, options) {
 
       // Broadcast live activity for run-group sessions
       if (runGroupId) {
-        broadcast('run-group:session-activity', {
+        broadcast('run-group:session-activity', createRunGroupSessionActivityEvent({
           groupId: runGroupId,
           sessionId,
           turnCount: entry._turnNumber,
           costTotal: costUsd,
           lastSnippet: null, // Snippet extracted by live endpoint
-        });
+        }));
       }
 
       if (queueSessionsUpdated) {

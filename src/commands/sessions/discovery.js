@@ -5,6 +5,7 @@
 
 import fsp from 'fs/promises';
 import path from 'path';
+import { findSessionIdentityRow } from '@learnrudi/db/session-identity';
 import {
   SESSION_CWD_SCAN_BYTES,
   SESSION_CWD_SCAN_LINES,
@@ -329,16 +330,10 @@ export async function findSessionFileFromDb(sessionId, lookup = {}) {
 
   let row;
   try {
-    row = db.prepare(`
-      SELECT id, provider, provider_session_id, origin_native_file
-      FROM sessions
-      WHERE status != 'deleted'
-        AND origin_native_file IS NOT NULL
-        AND (id = ? OR provider_session_id = ?)
-      ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END,
-               datetime(last_active_at) DESC
-      LIMIT 1
-    `).get(sessionId, sessionId, sessionId);
+    row = findSessionIdentityRow(db, {
+      sessionId,
+      requireNativeFile: true,
+    });
   } catch {
     return null;
   }

@@ -614,7 +614,7 @@ export function buildOrchestrateRoutes(ctx) {
 
       const result = await createRunGroupFromRequest(ctx, runGroupBody);
 
-      if (result.error) {
+      if (!result.ok) {
         const failNow = new Date().toISOString();
         db.prepare(`
           UPDATE orchestration_plans SET status = 'failed', updated_at = ? WHERE id = ?

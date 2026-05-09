@@ -94,6 +94,16 @@ test('commands: status exports cmdStatus function', async () => {
   assert.strictEqual(typeof cmdStatus, 'function');
 });
 
+test('commands: run-group exports cmdRunGroup function', async () => {
+  const { cmdRunGroup } = await import('../../commands/run-group.js');
+  assert.strictEqual(typeof cmdRunGroup, 'function');
+});
+
+test('commands: lanes exports cmdLanes function', async () => {
+  const { cmdLanes } = await import('../../commands/lanes.js');
+  assert.strictEqual(typeof cmdLanes, 'function');
+});
+
 // =============================================================================
 // UTILS EXPORTS
 // =============================================================================
@@ -136,6 +146,7 @@ test('aliases: command aliases are documented', () => {
     'show': 'which',
     'authenticate': 'auth',
     'login': 'auth',
+    'run-groups': 'run-group',
     'bins': 'binaries',
     'tools': 'binaries'
   };
@@ -161,4 +172,3 @@ test('shortcuts: package type shortcuts exist', () => {
     assert.ok(typeof shortcut === 'string');
   }
 });
-

@@ -10,6 +10,7 @@ import fsp from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import { execSync, execFile } from 'child_process';
+import { findSessionIdentityRow, resolveSessionRowIdentity } from '@learnrudi/db/session-identity';
 
 import {
   extractContent,
@@ -56,6 +57,13 @@ const SESSIONS_UPDATE_DEBOUNCE_MS = 350;
 const SESSIONS_WATCH_RETRY_MS = 10000;
 const SESSIONS_PROJECTS_CACHE_TTL_MS = 8000;
 const MAX_SESSION_SEARCH_LIMIT = 50;
+
+function getBillableBaseInputTokens(provider, inputTokens, cacheReadTokens, cacheCreationTokens = 0) {
+  if ((provider || 'claude') === 'claude') {
+    return Math.max((inputTokens || 0) - (cacheReadTokens || 0) - (cacheCreationTokens || 0), 0);
+  }
+  return inputTokens || 0;
+}
 
 function prepareSessionSearchFtsQuery(query) {
   const cleaned = String(query || '')
@@ -692,6 +700,7 @@ async function readSessionMessagesFromDb(sessionId, { count, cursor } = {}, look
     totalInputTokens: aggRow.total_input_tokens || 0,
     totalOutputTokens: aggRow.total_output_tokens || 0,
     totalCacheReadTokens: 0,
+    totalCacheCreationTokens: 0,
     turnCount: aggRow.turn_count || 0,
     totalCostUsd: aggRow.total_cost || undefined,
   } : null;
@@ -725,6 +734,7 @@ function extractUsageFromJsonl(content, provider = 'claude') {
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   let totalCacheReadTokens = 0;
+  let totalCacheCreationTokens = 0;
   let totalCostUsd = 0;
   let turnCount = 0;
   let lastRole = null;
@@ -774,6 +784,7 @@ function extractUsageFromJsonl(content, provider = 'claude') {
         + (usage.cache_read_input_tokens || 0)
         + (usage.cache_creation_input_tokens || 0);
       totalCacheReadTokens += usage.cache_read_input_tokens || 0;
+      totalCacheCreationTokens += usage.cache_creation_input_tokens || 0;
     }
 
     // Extract cost from result events
@@ -789,7 +800,7 @@ function extractUsageFromJsonl(content, provider = 'claude') {
 
   if (totalInputTokens === 0 && totalOutputTokens === 0 && !cwd && !model) return null;
   return {
-    totalInputTokens, totalOutputTokens, totalCacheReadTokens, turnCount,
+    totalInputTokens, totalOutputTokens, totalCacheReadTokens, totalCacheCreationTokens, turnCount,
     totalCostUsd: totalCostUsd || undefined,
     model, createdAt, lastActiveAt, cwd,
   };
@@ -1970,7 +1981,7 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
             const db = resolveDb ? resolveDb() : null;
             if (db) {
               const pricing = db.prepare(`
-                SELECT input_cost_per_mtok, output_cost_per_mtok, cache_read_cost_per_mtok
+                SELECT input_cost_per_mtok, output_cost_per_mtok, cache_read_cost_per_mtok, cache_write_cost_per_mtok
                 FROM model_pricing
                 WHERE provider = ?
                   AND (model_pattern = ? OR ? LIKE model_pattern)
@@ -1979,10 +1990,17 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
                   LENGTH(model_pattern) DESC LIMIT 1
               `).get(provider, usage.model, usage.model, usage.model);
               if (pricing) {
+                const baseInput = getBillableBaseInputTokens(
+                  provider,
+                  usage.totalInputTokens,
+                  usage.totalCacheReadTokens,
+                  usage.totalCacheCreationTokens,
+                );
                 const cost =
-                  (usage.totalInputTokens * pricing.input_cost_per_mtok +
+                  (baseInput * pricing.input_cost_per_mtok +
                    usage.totalOutputTokens * pricing.output_cost_per_mtok +
-                   usage.totalCacheReadTokens * (pricing.cache_read_cost_per_mtok || 0)) / 1_000_000;
+                   usage.totalCacheReadTokens * (pricing.cache_read_cost_per_mtok || 0) +
+                   (usage.totalCacheCreationTokens || 0) * (pricing.cache_write_cost_per_mtok || 0)) / 1_000_000;
                 if (cost > 0) usage.totalCostUsd = cost;
               }
             }
@@ -2008,9 +2026,10 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
           try {
             const db = resolveDb ? resolveDb() : null;
             if (db) {
-              const existing = db.prepare(
-                'SELECT id FROM sessions WHERE provider = ? AND (provider_session_id = ? OR id = ?)'
-              ).get(provider, sessionId, sessionId);
+              const existing = findSessionIdentityRow(db, {
+                provider,
+                sessionId,
+              });
               if (!existing) {
                 const now = new Date().toISOString();
                 db.prepare(`
@@ -2124,14 +2143,7 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
         const now = new Date().toISOString();
         const found = await findSessionFileEntry(sessionId, { resolveDb });
         const provider = found?.provider || 'claude';
-        const existing = db.prepare(
-          `SELECT id FROM sessions
-           WHERE provider = ?
-             AND status != 'deleted'
-             AND (id = ? OR provider_session_id = ?)
-           LIMIT 1`
-        ).get(provider, sessionId, sessionId);
-        const targetSessionId = existing?.id || sessionId;
+        const { rowId: targetSessionId } = resolveSessionRowIdentity(db, provider, sessionId);
         // Ensure session row exists (may be a terminal-originated session with no DB row)
         db.prepare(`
           INSERT OR IGNORE INTO sessions

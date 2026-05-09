@@ -25,10 +25,28 @@ export const SIDECAR_ERROR_CODES = Object.freeze({
   PROJECT_ALREADY_EXISTS: defineError('PROJECT_ALREADY_EXISTS', 409, 'Project already exists'),
 
   NOTE_NOT_FOUND: defineError('NOTE_NOT_FOUND', 404, 'Note not found'),
+
+  RUN_GROUP_NOT_FOUND: defineError('RUN_GROUP_NOT_FOUND', 404, 'Run group not found'),
+});
+
+const DEFAULT_ERROR_CODE_BY_STATUS = Object.freeze({
+  400: SIDECAR_ERROR_CODES.BAD_REQUEST,
+  401: SIDECAR_ERROR_CODES.UNAUTHORIZED,
+  403: SIDECAR_ERROR_CODES.FORBIDDEN,
+  404: SIDECAR_ERROR_CODES.NOT_FOUND,
+  408: SIDECAR_ERROR_CODES.REQUEST_TIMEOUT,
+  409: SIDECAR_ERROR_CODES.CONFLICT,
+  410: SIDECAR_ERROR_CODES.GONE,
+  413: SIDECAR_ERROR_CODES.REQUEST_TOO_LARGE,
+  429: SIDECAR_ERROR_CODES.RATE_LIMITED,
+  500: SIDECAR_ERROR_CODES.INTERNAL_ERROR,
+  503: SIDECAR_ERROR_CODES.SERVICE_UNAVAILABLE,
 });
 
 export function resolveSidecarErrorDefinition(input, fallbackStatus = 500) {
-  if (!input) return null;
+  if (!input) {
+    return DEFAULT_ERROR_CODE_BY_STATUS[fallbackStatus] || null;
+  }
 
   if (typeof input === 'string') {
     return SIDECAR_ERROR_CODES[input]

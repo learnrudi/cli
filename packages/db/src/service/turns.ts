@@ -120,7 +120,11 @@ export function calculateCostFromPricing(
     return 0
   }
 
-  const input = (inputTokens || 0) * entry.inputCostPerMtok / 1_000_000
+  const resolvedProvider = provider || 'claude'
+  const baseInput = resolvedProvider === 'claude'
+    ? Math.max((inputTokens || 0) - (cacheReadTokens || 0) - (cacheCreationTokens || 0), 0)
+    : (inputTokens || 0)
+  const input = baseInput * entry.inputCostPerMtok / 1_000_000
   const output = (outputTokens || 0) * entry.outputCostPerMtok / 1_000_000
   const cacheRead = (cacheReadTokens || 0) * entry.cacheReadCostPerMtok / 1_000_000
   const cacheWrite = (cacheCreationTokens || 0) * entry.cacheWriteCostPerMtok / 1_000_000
@@ -216,7 +220,11 @@ export function calculateTurnCost(
     return 0
   }
 
-  const input = (inputTokens || 0) * pricing.input_cost_per_mtok / 1_000_000
+  const resolvedProvider = provider || 'claude'
+  const baseInput = resolvedProvider === 'claude'
+    ? Math.max((inputTokens || 0) - (cacheReadTokens || 0) - (cacheCreationTokens || 0), 0)
+    : (inputTokens || 0)
+  const input = baseInput * pricing.input_cost_per_mtok / 1_000_000
   const output = (outputTokens || 0) * pricing.output_cost_per_mtok / 1_000_000
   const cacheRead = (cacheReadTokens || 0) * pricing.cache_read_cost_per_mtok / 1_000_000
   const cacheWrite = (cacheCreationTokens || 0) * pricing.cache_write_cost_per_mtok / 1_000_000

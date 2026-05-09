@@ -10,7 +10,7 @@
     "./help": "./src/help.js"
   },
   "scripts": {
-    "test": "node --test src/__tests__/"
+    "test": "node ../../scripts/run-tests.js src/__tests__/"
   },
   "dependencies": {},
   "engines": {

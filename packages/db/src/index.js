@@ -103,3 +103,4 @@ export * from './search.js';
 export * from './stats.js';
 export * from './logs.js';
 export * from './import.js';
+export * from './session-identity.js';

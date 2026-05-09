@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -8,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
+const WORKDIR = process.cwd();
 
 const DEFAULT_TEST_ARGS = [
   '--test',
@@ -17,7 +18,7 @@ const DEFAULT_TEST_ARGS = [
 ];
 
 const BUNDLED_NODE_PATH = process.env.RUDI_CLI_TEST_NODE
-  || '/Users/hoff/.rudi/runtimes/node/bin/node';
+  || path.join(os.homedir(), '.rudi', 'runtimes', 'node', 'bin', 'node');
 
 function globToRegExp(pattern) {
   const escaped = pattern.replace(/[.+^${}()|\\]/g, '\\$&');
@@ -28,7 +29,7 @@ function globToRegExp(pattern) {
 function expandTestArg(arg) {
   if (!/[*?]/.test(arg)) return [arg];
 
-  const dir = path.resolve(REPO_ROOT, path.dirname(arg));
+  const dir = path.resolve(WORKDIR, path.dirname(arg));
   const basePattern = path.basename(arg);
   let entries;
   try {
@@ -40,7 +41,7 @@ function expandTestArg(arg) {
   const matcher = globToRegExp(basePattern);
   const matches = entries
     .filter((entry) => entry.isFile() && matcher.test(entry.name))
-    .map((entry) => path.relative(REPO_ROOT, path.join(dir, entry.name)))
+    .map((entry) => path.relative(WORKDIR, path.join(dir, entry.name)))
     .sort();
 
   return matches.length > 0 ? matches : [arg];
@@ -84,7 +85,7 @@ function isAbiMismatch(error) {
 
 function runNode(nodePath, args) {
   const result = spawnSync(nodePath, args, {
-    cwd: REPO_ROOT,
+    cwd: WORKDIR,
     stdio: 'inherit',
     env: {
       ...process.env,
@@ -127,6 +128,7 @@ if (
 const currentMajor = Number(process.versions.node.split('.')[0] || 0);
 console.error(
   `[cli:test] Node ${currentMajor} cannot load better-sqlite3 here; ` +
-  `re-running tests with bundled runtime at ${BUNDLED_NODE_PATH}`,
+  `re-running tests with bundled runtime at ${BUNDLED_NODE_PATH}. ` +
+  `Use this wrapper or npm test for native-module test runs.`,
 );
 runNode(BUNDLED_NODE_PATH, testArgs);

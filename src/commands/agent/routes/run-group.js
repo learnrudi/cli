@@ -34,7 +34,6 @@ import {
   deriveRunGroupSessionStatus,
   evaluateDependencyExecution,
   evaluatePhaseExecution,
-  normalizeRunGroupStatus,
   parseRunGroupConfig,
 } from '../group-scheduler.js';
 import { buildSystemPrompt } from '../prompts.js';
@@ -48,6 +47,20 @@ import {
   validateTaskContract,
 } from '../contract-validator.js';
 import { extractEventSnippet } from '../process-io.js';
+import {
+  createRunGroupCompletedEvent,
+  createRunGroupFailureResult,
+  createRunGroupSessionDoneEvent,
+  createRunGroupStartedEvent,
+  createRunGroupStoppedEvent,
+  createRunGroupSuccessResult,
+  loadRunGroup,
+  refreshRunGroupAggregates,
+  runGroupNotFound,
+  stopActiveRunGroupSessions,
+  withImmediateTransaction,
+} from '../run-group-domain.js';
+import { SIDECAR_ERROR_CODES } from '../../serve/error-codes.js';
  
 const TERMINAL_GROUP_STATUSES = new Set(['completed', 'partial', 'failed', 'stopped']);
 const SPAWN_CHILD_ALLOWED_TOOLS = [
@@ -197,16 +210,6 @@ function defaultPermissionModeForExecution(executionMode, providerConfig) {
   return null;
 }
 
-function loadRunGroup(groupId) {
-  const db = getDb();
-  const group = db.prepare('SELECT * FROM run_groups WHERE id = ?').get(groupId);
-  if (!group) return null;
-  return {
-    ...group,
-    config: parseRunGroupConfig(group.config_json),
-  };
-}
-
 function createTaskRuntimeStatusMap(db, groupId) {
   const rows = db.prepare(`
     SELECT s.id AS session_id, srs.status AS runtime_status
@@ -340,27 +343,6 @@ function findTaskBySessionId(tasks, sessionId) {
   return (Array.isArray(tasks) ? tasks : []).find((task) => task.sessionId === sessionId) || null;
 }
 
-function stopActiveRunGroupSessions(ctx, groupId, excludeSessionId = null) {
-  const db = getDb();
-  const rows = db.prepare('SELECT id FROM sessions WHERE run_group_id = ?').all(groupId);
-  let stopped = 0;
-
-  for (const row of rows) {
-    if (!row?.id || row.id === excludeSessionId) continue;
-    const entry = ctx.agentProcesses.get(row.id);
-    if (!entry?.proc || entry.proc.killed) continue;
-    entry._terminationReason = 'stopped';
-    entry.proc.kill('SIGTERM');
-    const killTimer = setTimeout(() => {
-      try { entry.proc.kill('SIGKILL'); } catch {}
-    }, 3000);
-    entry.proc.on('close', () => clearTimeout(killTimer));
-    stopped += 1;
-  }
-
-  return stopped;
-}
-
 function validateTaskDependencies(tasks) {
   for (const [taskIndex, task] of tasks.entries()) {
     for (const dependency of Array.isArray(task.dependencies) ? task.dependencies : []) {
@@ -373,92 +355,6 @@ function validateTaskDependencies(tasks) {
     }
   }
   return null;
-}
-
-function refreshRunGroupAggregates(db, groupId) {
-  const stats = db.prepare(`
-    SELECT
-      COUNT(*) AS session_count,
-      SUM(CASE WHEN srs.session_id IS NOT NULL THEN 1 ELSE 0 END) AS launched_count,
-      SUM(CASE WHEN COALESCE(srs.status, '') = 'completed' THEN 1 ELSE 0 END) AS completed_count,
-      SUM(CASE WHEN COALESCE(srs.status, '') IN ('error', 'crashed') THEN 1 ELSE 0 END) AS failed_count,
-      SUM(CASE WHEN COALESCE(srs.status, '') = 'stopped' THEN 1 ELSE 0 END) AS stopped_count,
-      SUM(CASE WHEN COALESCE(srs.status, '') IN ('completed', 'error', 'stopped', 'crashed') THEN 1 ELSE 0 END) AS done_count,
-      SUM(CASE WHEN tvr.session_id IS NOT NULL AND COALESCE(tvr.passed, 0) = 0 THEN 1 ELSE 0 END) AS validation_failed_count,
-      COALESCE(SUM(COALESCE(srs.cost_total, s.total_cost, 0)), 0) AS total_cost,
-      COALESCE(SUM(COALESCE(
-        srs.tokens_total,
-        (COALESCE(s.total_input_tokens, 0) + COALESCE(s.total_output_tokens, 0)),
-        0
-      )), 0) AS total_tokens
-    FROM sessions s
-    LEFT JOIN session_runtime_state srs ON srs.session_id = s.id
-    LEFT JOIN task_validation_results tvr ON tvr.session_id = s.id
-    WHERE s.run_group_id = ?
-  `).get(groupId) || {
-    session_count: 0,
-    launched_count: 0,
-    completed_count: 0,
-    failed_count: 0,
-    stopped_count: 0,
-    done_count: 0,
-    validation_failed_count: 0,
-    total_cost: 0,
-    total_tokens: 0,
-  };
-
-  const now = new Date().toISOString();
-  db.prepare(`
-    UPDATE run_groups
-    SET session_count = ?,
-        completed_count = ?,
-        failed_count = ?,
-        total_cost = ?,
-        total_tokens = ?,
-        updated_at = ?
-    WHERE id = ?
-  `).run(
-    Number(stats.session_count || 0),
-    Number(stats.completed_count || 0),
-    Number(stats.failed_count || 0),
-    Number(stats.total_cost || 0),
-    Number(stats.total_tokens || 0),
-    now,
-    groupId,
-  );
-
-  const group = db.prepare('SELECT * FROM run_groups WHERE id = ?').get(groupId);
-  if (!group) return null;
-
-  const nextStatus = normalizeRunGroupStatus({
-    currentStatus: group.status,
-    sessionCount: stats.session_count,
-    launchedCount: stats.launched_count,
-    doneCount: stats.done_count,
-    completedCount: stats.completed_count,
-    failedCount: stats.failed_count,
-    stoppedCount: stats.stopped_count,
-    validationFailedCount: stats.validation_failed_count,
-  });
-  const isDone = Number(stats.done_count || 0) >= Number(stats.session_count || 0) && Number(stats.session_count || 0) > 0;
-  const completedAt = isDone && TERMINAL_GROUP_STATUSES.has(nextStatus)
-    ? (group.completed_at || now)
-    : null;
-
-  db.prepare(`
-    UPDATE run_groups
-    SET status = ?,
-        completed_at = ?,
-        updated_at = ?
-    WHERE id = ?
-  `).run(nextStatus, completedAt, now, groupId);
-
-  const updatedGroup = db.prepare('SELECT * FROM run_groups WHERE id = ?').get(groupId);
-  if (!updatedGroup) return null;
-  return {
-    ...updatedGroup,
-    validation_failed_count: Number(stats.validation_failed_count || 0),
-  };
 }
 
 function launchRunGroupTask(ctx, group, task, settledFn) {
@@ -737,7 +633,11 @@ function launchRunGroupTask(ctx, group, task, settledFn) {
     if (mcpConfigPath) {
       try { fs.unlinkSync(mcpConfigPath); } catch {}
     }
-    broadcast('run-group:session-done', { groupId: group.id, sessionId, status: 'error' });
+    broadcast('run-group:session-done', createRunGroupSessionDoneEvent({
+      groupId: group.id,
+      sessionId,
+      status: 'error',
+    }));
     return { started: false, sessionId, error: spawnErr.message };
   }
 }
@@ -751,7 +651,7 @@ function maybeAdvanceRunGroup(ctx, groupId, { settledFn } = {}) {
   let startedPhaseIndex = null;
 
   for (let iteration = 0; iteration < 8; iteration += 1) {
-    const group = loadRunGroup(groupId);
+    const group = loadRunGroup(db, groupId);
     if (!group) break;
     const runtimeStatusBySessionId = createTaskRuntimeStatusMap(db, groupId);
     const validationBySessionId = group.coordination_mode === 'dependency'
@@ -798,6 +698,8 @@ function maybeAdvanceRunGroup(ctx, groupId, { settledFn } = {}) {
       if (launchedThisPass.length > 0) {
         startedPhaseIndex = evaluation.phaseIndex;
         if (group.coordination_mode === 'phased') {
+          // Internal event only. Lite does not consume this today and the payload
+          // is intentionally outside the public WS contract until it is covered.
           ctx.broadcast('run-group:phase-started', {
             groupId,
             phaseIndex: evaluation.phaseIndex,
@@ -862,7 +764,7 @@ function maybeAdvanceRunGroup(ctx, groupId, { settledFn } = {}) {
  * @param {object} body - Request body (tasks, name, provider, model, cwd, etc.)
  * @param {object} [opts] - Optional overrides
  * @param {function} [opts.onGroupSessionSettled] - Override settled callback
- * @returns {{ groupId, status, sessionIds, errors } | { error, statusCode }}
+ * @returns {{ ok: true, groupId: string, status: string, sessionIds: string[], startedSessionIds: string[], errors: object[] } | { ok: false, error: string, statusCode: number, code?: string | null, message?: string | null }}
  */
 export async function createRunGroupFromRequest(ctx, body, opts = {}) {
   const {
@@ -901,15 +803,18 @@ export async function createRunGroupFromRequest(ctx, body, opts = {}) {
     : (tasks.length > 0 ? [Array.from({ length: tasks.length }, (_, idx) => idx)] : []);
 
   if (tasks.length < 2 || tasks.length > 10) {
-    return { error: 'run-group requires between 2 and 10 tasks', statusCode: 400 };
+    return createRunGroupFailureResult({
+      error: 'run-group requires between 2 and 10 tasks',
+      statusCode: 400,
+    });
   }
 
   if (countAlive(agentProcesses) + tasks.length > maxConcurrent) {
-    return {
+    return createRunGroupFailureResult({
       error: 'MAX_CONCURRENT_REACHED',
       message: `Too many active agent processes for requested group (${countAlive(agentProcesses)} + ${tasks.length} > ${maxConcurrent})`,
       statusCode: 429,
-    };
+    });
   }
 
   const workingDir = body.cwd || process.env.PWD || process.cwd();
@@ -921,20 +826,32 @@ export async function createRunGroupFromRequest(ctx, body, opts = {}) {
     : null;
 
   if (useWorktree && !gitContext.isGitRepo) {
-    return { error: 'worktree execution_mode requires a git repository cwd', statusCode: 400 };
+    return createRunGroupFailureResult({
+      error: 'worktree execution_mode requires a git repository cwd',
+      statusCode: 400,
+    });
   }
 
   if (requestedBaseBranch && !gitContext.isGitRepo) {
-    return { error: 'baseBranch requires a git repository cwd', statusCode: 400 };
+    return createRunGroupFailureResult({
+      error: 'baseBranch requires a git repository cwd',
+      statusCode: 400,
+    });
   }
 
   if (executionMode === 'read_only' && tasks.some((task) => task.requiresWrite === true)) {
-    return { error: 'read_only execution_mode cannot include tasks with requires_write=true', statusCode: 400 };
+    return createRunGroupFailureResult({
+      error: 'read_only execution_mode cannot include tasks with requires_write=true',
+      statusCode: 400,
+    });
   }
 
   const dependencyValidationError = validateTaskDependencies(tasks);
   if (dependencyValidationError) {
-    return { error: dependencyValidationError, statusCode: 400 };
+    return createRunGroupFailureResult({
+      error: dependencyValidationError,
+      statusCode: 400,
+    });
   }
 
   const baseBranch = requestedBaseBranch || currentBranch || null;
@@ -944,12 +861,18 @@ export async function createRunGroupFromRequest(ctx, body, opts = {}) {
     try {
       providerConfig = loadProviderConfig(task.provider);
     } catch (configErr) {
-      return { error: `task ${idx + 1}: ${configErr.message}`, statusCode: 400 };
+      return createRunGroupFailureResult({
+        error: `task ${idx + 1}: ${configErr.message}`,
+        statusCode: 400,
+      });
     }
 
     const binaryPath = resolveProviderBinary(providerConfig);
     if (!binaryPath) {
-      return { error: `task ${idx + 1}: ${providerConfig.name} CLI not found. Run: rudi install agent:${task.provider}`, statusCode: 500 };
+      return createRunGroupFailureResult({
+        error: `task ${idx + 1}: ${providerConfig.name} CLI not found. Run: rudi install agent:${task.provider}`,
+        statusCode: 500,
+      });
     }
   }
 
@@ -964,60 +887,70 @@ export async function createRunGroupFromRequest(ctx, body, opts = {}) {
   }
 
   async function onGroupSessionSettled(gId, sId, status, { contractValidation = null } = {}) {
-    const groupForPolicy = loadRunGroup(gId);
-    const settledTask = findTaskBySessionId(groupForPolicy?.config?.tasks, sId);
-    const failedValidation = contractValidation && contractValidation.passed === false;
-    const failedRuntime = status === 'error' || status === 'crashed' || status === 'stopped';
-    const failurePolicy = settledTask?.failurePolicy || 'stop-downstream';
-
-    if (groupForPolicy && settledTask && (failedValidation || failedRuntime)) {
-      if (failurePolicy === 'stop-all') {
-        db.prepare(`
-          UPDATE run_groups
-          SET status = 'stopped',
-              updated_at = ?
-          WHERE id = ?
-        `).run(new Date().toISOString(), gId);
-        const stoppedCount = stopActiveRunGroupSessions(ctx, gId, sId);
-        log('agent', 'warn', 'run-group stop-all failure policy triggered', {
-          groupId: gId,
-          sessionId: sId.slice(0, 8),
-          stoppedCount,
-          failedValidation,
-          status,
-        });
-      } else if (failurePolicy === 'escalate') {
-        log('agent', 'warn', 'run-group task escalated for review', {
-          groupId: gId,
-          sessionId: sId.slice(0, 8),
-          failedValidation,
-          status,
-          validationErrors: contractValidation?.errors || [],
-        });
-      }
-    }
-
     let updated = null;
+    let stopAllLog = null;
+    let escalateLog = null;
     try {
-      updated = maybeAdvanceRunGroup(ctx, gId, { settledFn }).group;
+      updated = withImmediateTransaction(db, () => {
+        const groupForPolicy = loadRunGroup(db, gId);
+        const settledTask = findTaskBySessionId(groupForPolicy?.config?.tasks, sId);
+        const failedValidation = contractValidation && contractValidation.passed === false;
+        const failedRuntime = status === 'error' || status === 'crashed' || status === 'stopped';
+        const failurePolicy = settledTask?.failurePolicy || 'stop-downstream';
+
+        if (groupForPolicy && settledTask && (failedValidation || failedRuntime)) {
+          if (failurePolicy === 'stop-all') {
+            db.prepare(`
+              UPDATE run_groups
+              SET status = 'stopped',
+                  updated_at = ?
+              WHERE id = ?
+            `).run(new Date().toISOString(), gId);
+            const stoppedCount = stopActiveRunGroupSessions(db, ctx.agentProcesses, gId, sId);
+            stopAllLog = {
+              groupId: gId,
+              sessionId: sId.slice(0, 8),
+              stoppedCount,
+              failedValidation,
+              status,
+            };
+          } else if (failurePolicy === 'escalate') {
+            escalateLog = {
+              groupId: gId,
+              sessionId: sId.slice(0, 8),
+              failedValidation,
+              status,
+              validationErrors: contractValidation?.errors || [],
+            };
+          }
+        }
+
+        return maybeAdvanceRunGroup(ctx, gId, { settledFn }).group;
+      });
     } catch (err) {
       log('agent', 'warn', `run-group aggregate refresh failed: ${err.message}`, { groupId: gId });
       return;
     }
 
-    broadcast('run-group:session-done', {
+    if (stopAllLog) {
+      log('agent', 'warn', 'run-group stop-all failure policy triggered', stopAllLog);
+    } else if (escalateLog) {
+      log('agent', 'warn', 'run-group task escalated for review', escalateLog);
+    }
+
+    broadcast('run-group:session-done', createRunGroupSessionDoneEvent({
       groupId: gId,
       sessionId: sId,
       status,
       contractValidation,
-    });
+    }));
     if (updated?.completed_at && TERMINAL_GROUP_STATUSES.has(updated.status)) {
-      broadcast('run-group:completed', {
+      broadcast('run-group:completed', createRunGroupCompletedEvent({
         groupId: gId,
         status: updated.status,
-        completedCount: Number(updated.completed_count || 0),
-        failedCount: Number(updated.failed_count || 0),
-      });
+        completedCount: updated.completed_count,
+        failedCount: updated.failed_count,
+      }));
     }
   }
 
@@ -1130,45 +1063,51 @@ export async function createRunGroupFromRequest(ctx, body, opts = {}) {
   const launchResult = maybeAdvanceRunGroup(ctx, groupId, { settledFn });
   const refreshed = launchResult.group || refreshRunGroupAggregates(db, groupId);
   if (launchResult.startedSessionIds.length > 0) {
-    broadcast('run-group:started', {
+    broadcast('run-group:started', createRunGroupStartedEvent({
       groupId,
       sessionIds: plannedSessionIds,
       activeSessionIds: launchResult.startedSessionIds,
-    });
+    }));
   } else if (refreshed?.completed_at && TERMINAL_GROUP_STATUSES.has(refreshed.status)) {
-    broadcast('run-group:completed', {
+    broadcast('run-group:completed', createRunGroupCompletedEvent({
       groupId,
       status: refreshed.status,
-      completedCount: Number(refreshed.completed_count || 0),
-      failedCount: Number(refreshed.failed_count || 0),
-    });
+      completedCount: refreshed.completed_count,
+      failedCount: refreshed.failed_count,
+    }));
   }
 
-  return {
+  return createRunGroupSuccessResult({
     groupId,
     status: refreshed?.status || 'pending',
     sessionIds: plannedSessionIds,
     startedSessionIds: launchResult.startedSessionIds,
     errors: launchResult.errors,
-  };
+  });
 }
 
 export function buildRunGroupRoutes(ctx) {
-  const { json, error, readBody, agentProcesses, broadcast, log } = ctx;
+  const { json, error, errorCode, readBody, agentProcesses, broadcast, log } = ctx;
 
   return async (req, res, url) => {
     if (req.method === 'POST' && url.pathname === '/agent/run-group') {
       const body = await readBody(req);
       const result = await createRunGroupFromRequest(ctx, body);
 
-      if (result.error) {
+      if (!result.ok) {
         if (result.statusCode === 429) {
           return json(res, { error: result.error, message: result.message }, 429);
         }
         return error(res, result.error, result.statusCode || 400);
       }
 
-      json(res, result, result.sessionIds.length > 0 ? 200 : 500);
+      json(res, {
+        groupId: result.groupId,
+        status: result.status,
+        sessionIds: result.sessionIds,
+        startedSessionIds: result.startedSessionIds,
+        errors: result.errors,
+      }, result.sessionIds.length > 0 ? 200 : 500);
       return true;
     }
 
@@ -1209,19 +1148,26 @@ export function buildRunGroupRoutes(ctx) {
     if (req.method === 'POST' && stopMatch) {
       const groupId = decodeURIComponent(stopMatch[1]);
       const db = getDb();
-      const stopped = stopActiveRunGroupSessions(ctx, groupId);
+      const group = db.prepare('SELECT id FROM run_groups WHERE id = ?').get(groupId);
+      if (!group) {
+        const result = runGroupNotFound();
+        return errorCode(res, SIDECAR_ERROR_CODES[result.code], { message: result.message, status: result.statusCode });
+      }
+      const { stopped, refreshed } = withImmediateTransaction(db, () => {
+        const stopped = stopActiveRunGroupSessions(db, ctx.agentProcesses, groupId);
+        db.prepare(`
+          UPDATE run_groups
+          SET status = 'stopped',
+              updated_at = ?
+          WHERE id = ?
+        `).run(new Date().toISOString(), groupId);
+        const refreshed = maybeAdvanceRunGroup(ctx, groupId, {
+          settledFn: () => {},
+        }).group || refreshRunGroupAggregates(db, groupId);
+        return { stopped, refreshed };
+      });
 
-      db.prepare(`
-        UPDATE run_groups
-        SET status = 'stopped',
-            updated_at = ?
-        WHERE id = ?
-      `).run(new Date().toISOString(), groupId);
-      const refreshed = maybeAdvanceRunGroup(ctx, groupId, {
-        settledFn: () => {},
-      }).group || refreshRunGroupAggregates(db, groupId);
-
-      broadcast('run-group:stopped', { groupId });
+      broadcast('run-group:stopped', createRunGroupStoppedEvent({ groupId }));
       json(res, {
         ok: true,
         groupId,
@@ -1236,7 +1182,10 @@ export function buildRunGroupRoutes(ctx) {
       const groupId = decodeURIComponent(detailMatch[1]);
       const db = getDb();
       const refreshed = refreshRunGroupAggregates(db, groupId);
-      if (!refreshed) return error(res, 'Run group not found', 404);
+      if (!refreshed) {
+        const result = runGroupNotFound();
+        return errorCode(res, SIDECAR_ERROR_CODES[result.code], { message: result.message, status: result.statusCode });
+      }
 
       const sessions = db.prepare(`
         SELECT
@@ -1317,7 +1266,10 @@ export function buildRunGroupRoutes(ctx) {
       const db = getDb();
 
       const group = refreshRunGroupAggregates(db, groupId);
-      if (!group) return error(res, 'Run group not found', 404);
+      if (!group) {
+        const result = runGroupNotFound();
+        return errorCode(res, SIDECAR_ERROR_CODES[result.code], { message: result.message, status: result.statusCode });
+      }
 
       const sessions = db.prepare(`
         SELECT
@@ -1386,7 +1338,10 @@ export function buildRunGroupRoutes(ctx) {
       const groupId = decodeURIComponent(diffsMatch[1]);
       const db = getDb();
       const group = db.prepare('SELECT * FROM run_groups WHERE id = ?').get(groupId);
-      if (!group) return error(res, 'Run group not found', 404);
+      if (!group) {
+        const result = runGroupNotFound();
+        return errorCode(res, SIDECAR_ERROR_CODES[result.code], { message: result.message, status: result.statusCode });
+      }
       if (group.execution_mode !== 'worktree') {
         return error(res, 'Diffs are only available for worktree execution_mode', 400);
       }
@@ -1469,7 +1424,10 @@ export function buildRunGroupRoutes(ctx) {
 
       const db = getDb();
       const group = db.prepare('SELECT * FROM run_groups WHERE id = ?').get(groupId);
-      if (!group) return error(res, 'Run group not found', 404);
+      if (!group) {
+        const result = runGroupNotFound();
+        return errorCode(res, SIDECAR_ERROR_CODES[result.code], { message: result.message, status: result.statusCode });
+      }
       if (group.execution_mode !== 'worktree') {
         return error(res, 'Merge is only available for worktree execution_mode', 400);
       }
@@ -1549,7 +1507,10 @@ export function buildRunGroupRoutes(ctx) {
 
       const db = getDb();
       const group = db.prepare('SELECT * FROM run_groups WHERE id = ?').get(groupId);
-      if (!group) return error(res, 'Run group not found', 404);
+      if (!group) {
+        const result = runGroupNotFound();
+        return errorCode(res, SIDECAR_ERROR_CODES[result.code], { message: result.message, status: result.statusCode });
+      }
       if (group.execution_mode !== 'worktree') {
         return error(res, 'Cleanup is only available for worktree execution_mode', 400);
       }

@@ -23,12 +23,12 @@ __tests__/
 pnpm test --filter @learnrudi/core
 
 # Run specific test layer
-node --test src/__tests__/unit/
-node --test src/__tests__/integration/
-node --test src/__tests__/e2e/
+pnpm test:unit
+pnpm test:integration
+pnpm test:e2e
 
 # Run single test file
-node --test src/__tests__/unit/platform-resolver.test.js
+node ../../scripts/run-tests.js src/__tests__/unit/platform-resolver.test.js
 ```
 
 ## Test Layers
@@ -46,7 +46,7 @@ Tests schema validation and resolution logic without I/O:
 **Run time:** <100ms
 
 ```bash
-node --test src/__tests__/unit/platform-resolver.test.js
+node ../../scripts/run-tests.js src/__tests__/unit/platform-resolver.test.js
 ```
 
 ### 2. Integration Tests (Moderate)
@@ -71,10 +71,10 @@ Tests install and detect flows with real filesystem operations in isolated temp 
 
 ```bash
 # Run all integration tests
-node --test src/__tests__/integration/
+pnpm test:integration:full
 
 # Skip slow npm tests
-SKIP_NPM_TESTS=true node --test src/__tests__/integration/
+pnpm test:integration
 ```
 
 ### 3. E2E Tests (Slow)
@@ -92,10 +92,10 @@ Tests full user journey: setup → install → detect → embeddings → search
 
 ```bash
 # Run E2E tests (requires Ollama)
-node --test src/__tests__/e2e/
+pnpm test:e2e
 
 # Skip E2E tests
-SKIP_E2E=true node --test src/__tests__/
+SKIP_E2E=true pnpm test:all
 ```
 
 **E2E Flow:**
@@ -119,10 +119,10 @@ SKIP_E2E=true node --test src/__tests__/
 
 ```yaml
 - name: Unit tests
-  run: node --test packages/core/src/__tests__/unit/
+  run: pnpm test:unit --filter @learnrudi/core
 
 - name: Integration tests (no npm)
-  run: SKIP_NPM_TESTS=true node --test packages/core/src/__tests__/integration/
+  run: pnpm test:integration --filter @learnrudi/core
   env:
     SKIP_E2E: true
 ```
@@ -231,19 +231,19 @@ Test fixtures are in `fixtures/manifests.js`:
 ### Run single test with verbose output
 
 ```bash
-node --test --test-reporter=spec src/__tests__/unit/platform-resolver.test.js
+VERBOSE=true pnpm test:unit
 ```
 
 ### Run tests matching pattern
 
 ```bash
-node --test --test-name-pattern="platform resolution" src/__tests__/
+node ../../scripts/run-tests.js --test-name-pattern="platform resolution" src/__tests__/
 ```
 
 ### Debug with Node inspector
 
 ```bash
-node --inspect-brk --test src/__tests__/unit/platform-resolver.test.js
+node --inspect-brk ../../scripts/run-tests.js src/__tests__/unit/platform-resolver.test.js
 ```
 
 ## Related Documentation

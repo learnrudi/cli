@@ -28,3 +28,4 @@ _archive/
 test-*.js
 
 .rudi/
+.agent-scans/

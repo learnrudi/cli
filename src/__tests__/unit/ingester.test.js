@@ -137,6 +137,36 @@ test('idempotent replay does not create duplicate turns', async () => {
   });
 });
 
+test('ingester reuses an existing session row id when provider_session_id was imported under a legacy id', async () => {
+  await withHarness(async ({ db, ingester, claudeRoot }) => {
+    const sessionId = 'session-legacy-row';
+    const rowId = 'legacy-row-id';
+    const filePath = path.join(claudeRoot, 'proj-legacy', `${sessionId}.jsonl`);
+    const now = new Date().toISOString();
+
+    db.prepare(`
+      INSERT INTO sessions (id, provider, provider_session_id, origin, status, created_at, last_active_at)
+      VALUES (?, 'claude', ?, 'provider-import', 'active', ?, ?)
+    `).run(rowId, sessionId, now, now);
+
+    await writeJsonl(filePath, buildClaudeTurnLines(1, 2));
+    const result = await ingester.ingestFile(filePath, { provider: 'claude', sessionId });
+
+    assert.strictEqual(result.turnsAdded, 2);
+    assert.strictEqual(
+      db.prepare('SELECT COUNT(*) as c FROM turns WHERE session_id = ?').get(rowId).c,
+      2,
+    );
+    assert.strictEqual(
+      db.prepare('SELECT COUNT(*) as c FROM turns WHERE session_id = ?').get(sessionId).c,
+      0,
+    );
+
+    const session = db.prepare('SELECT turn_count FROM sessions WHERE id = ?').get(rowId);
+    assert.strictEqual(session.turn_count, 2);
+  });
+});
+
 test('truncation recovery resets turn set and re-ingests from offset 0', async () => {
   await withHarness(async ({ db, ingester, claudeRoot }) => {
     const sessionId = 'session-truncate';

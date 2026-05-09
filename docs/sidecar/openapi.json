@@ -1,0 +1,4401 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "RUDI Sidecar API",
+    "version": "0.1.0",
+    "description": "Machine-readable contract for the hardened RUDI sidecar surfaces: health, projects, notes, stable session endpoints, shell, terminal, filesystem, run-groups, and the public run-group WebSocket events.",
+    "x-rudi-cli-version": "1.10.12"
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:{port}",
+      "description": "Local sidecar server",
+      "variables": {
+        "port": {
+          "default": "8100",
+          "description": "Dynamic sidecar port written to ~/.rudi/.rudi-lite-port"
+        }
+      }
+    }
+  ],
+  "security": [
+    {
+      "RudiTokenAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Health"
+    },
+    {
+      "name": "Projects"
+    },
+    {
+      "name": "Notes"
+    },
+    {
+      "name": "Sessions"
+    },
+    {
+      "name": "Shell"
+    },
+    {
+      "name": "Terminal"
+    },
+    {
+      "name": "Filesystem"
+    },
+    {
+      "name": "Run Groups"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Health check",
+        "description": "Unauthenticated sidecar health check.",
+        "security": [],
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "description": "Sidecar health status",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                },
+                "example": {
+                  "status": "ok",
+                  "version": "0.1.0"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects": {
+      "get": {
+        "tags": [
+          "Projects"
+        ],
+        "summary": "List projects",
+        "operationId": "listProjects",
+        "responses": {
+          "200": {
+            "description": "Projects list",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectListResponse"
+                },
+                "example": {
+                  "projects": [
+                    {
+                      "id": "proj-alpha-project",
+                      "name": "Alpha Project",
+                      "provider": "claude",
+                      "color": "#7c3aed",
+                      "path": "",
+                      "sessionCount": 1,
+                      "createdAt": "2026-03-22T12:00:00.000Z"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "503": {
+            "$ref": "#/components/responses/DatabaseNotInitialized"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Projects"
+        ],
+        "summary": "Create project",
+        "operationId": "createProject",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProjectRequest"
+              },
+              "example": {
+                "name": "Alpha Project",
+                "path": "/Users/hoff/dev/RUDI"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created project",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedProjectResponse"
+                },
+                "example": {
+                  "id": "proj-alpha-project",
+                  "name": "Alpha Project",
+                  "path": "/Users/hoff/dev/RUDI",
+                  "createdAt": "2026-03-22T12:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/MissingRequiredFieldError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ProjectAlreadyExistsError"
+          },
+          "503": {
+            "$ref": "#/components/responses/DatabaseNotInitialized"
+          }
+        }
+      }
+    },
+    "/projects/{projectId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectId"
+        }
+      ],
+      "post": {
+        "tags": [
+          "Projects"
+        ],
+        "summary": "Update project",
+        "description": "Updates project fields. Uses POST rather than PATCH in the current sidecar contract.",
+        "operationId": "updateProject",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProjectRequest"
+              },
+              "example": {
+                "name": "Renamed Project",
+                "color": "#123456"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated project",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdatedProjectResponse"
+                },
+                "example": {
+                  "id": "proj-alpha-project",
+                  "name": "Renamed Project",
+                  "color": "#123456"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidFieldError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ProjectNotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/DatabaseNotInitialized"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Projects"
+        ],
+        "summary": "Delete project",
+        "operationId": "deleteProject",
+        "responses": {
+          "200": {
+            "description": "Deleted project",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                },
+                "example": {
+                  "ok": true
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ProjectNotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/DatabaseNotInitialized"
+          }
+        }
+      }
+    },
+    "/notes": {
+      "get": {
+        "tags": [
+          "Notes"
+        ],
+        "summary": "List notes",
+        "operationId": "listNotes",
+        "responses": {
+          "200": {
+            "description": "Notes list",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotesListResponse"
+                },
+                "example": {
+                  "notes": [
+                    {
+                      "id": "note_123",
+                      "title": "Draft Plan",
+                      "content": "First version",
+                      "createdAt": "2026-03-22T12:00:00.000Z",
+                      "updatedAt": "2026-03-22T12:00:00.000Z"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Notes"
+        ],
+        "summary": "Create note",
+        "operationId": "createNote",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNoteRequest"
+              },
+              "example": {
+                "title": "Draft Plan",
+                "content": "First version"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created note",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Note"
+                },
+                "example": {
+                  "id": "note_123",
+                  "title": "Draft Plan",
+                  "content": "First version",
+                  "createdAt": "2026-03-22T12:00:00.000Z",
+                  "updatedAt": "2026-03-22T12:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/MissingRequiredFieldError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          }
+        }
+      }
+    },
+    "/notes/{noteId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/NoteId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Notes"
+        ],
+        "summary": "Get note",
+        "operationId": "getNote",
+        "responses": {
+          "200": {
+            "description": "Note",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Note"
+                },
+                "example": {
+                  "id": "note_123",
+                  "title": "Draft Plan",
+                  "content": "First version",
+                  "createdAt": "2026-03-22T12:00:00.000Z",
+                  "updatedAt": "2026-03-22T12:00:00.000Z"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NoteNotFoundError"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Notes"
+        ],
+        "summary": "Update note",
+        "description": "Updates note fields. Uses POST rather than PATCH in the current sidecar contract.",
+        "operationId": "updateNote",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNoteRequest"
+              },
+              "example": {
+                "title": "Revised Plan",
+                "content": "Updated version"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated note",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Note"
+                },
+                "example": {
+                  "id": "note_123",
+                  "title": "Revised Plan",
+                  "content": "Updated version",
+                  "createdAt": "2026-03-22T12:00:00.000Z",
+                  "updatedAt": "2026-03-22T12:30:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidFieldError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NoteNotFoundError"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Notes"
+        ],
+        "summary": "Delete note",
+        "operationId": "deleteNote",
+        "responses": {
+          "200": {
+            "description": "Deleted note",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                },
+                "example": {
+                  "ok": true
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NoteNotFoundError"
+          }
+        }
+      }
+    },
+    "/sessions/projects": {
+      "get": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "List session projects for the sidebar",
+        "description": "Primary sidebar session grouping surface. Returns cached project/session summaries and supports ETag-based 304 responses. `source=db` uses the DB spine only when it is enabled; otherwise the server falls back to filesystem-backed enumeration.",
+        "operationId": "listSessionProjects",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "db"
+              ]
+            },
+            "description": "Optional source override. `db` is advisory and only applies when the DB spine is enabled."
+          },
+          {
+            "name": "If-None-Match",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "ETag from a previous `/sessions/projects` response."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session projects",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionProjectsResponse"
+                },
+                "example": {
+                  "projects": [
+                    {
+                      "path": "Users-hoff-dev-RUDI",
+                      "name": "RUDI",
+                      "originalPath": "/Users/hoff/dev/RUDI",
+                      "gitStatus": null,
+                      "sessions": [
+                        {
+                          "sessionId": "sess_123",
+                          "provider": "claude",
+                          "summary": "Review the sidecar API",
+                          "firstPrompt": "Review the sidecar API",
+                          "messageCount": 0,
+                          "modified": "2026-03-22T12:00:00.000Z",
+                          "created": "2026-03-22T11:45:00.000Z",
+                          "gitBranch": "main",
+                          "originNativeFile": "/Users/hoff/.claude/projects/users-hoff-dev-RUDI/sess_123.jsonl",
+                          "diffStats": null
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified. Returned when the caller sends a matching `If-None-Match` header."
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          }
+        }
+      }
+    },
+    "/sessions/{sessionId}/messages": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SessionId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Get paginated session messages",
+        "description": "Returns chat-style messages plus usage and cursor pagination metadata. In DB mode, `count` is measured in turns rather than chat messages.",
+        "operationId": "getSessionMessages",
+        "parameters": [
+          {
+            "name": "count",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Requested page size. In DB mode this is the number of turns; in JSONL fallback it is the number of chat messages."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque pagination cursor from a previous response."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session messages",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionMessagesResponse"
+                },
+                "example": {
+                  "messages": [
+                    {
+                      "role": "user",
+                      "content": "Review the API boundary",
+                      "timestamp": "2026-03-22T12:00:00.000Z",
+                      "turnNumber": 1,
+                      "uuid": "turn-uuid-1"
+                    },
+                    {
+                      "role": "assistant",
+                      "content": "I reviewed the boundary and found two issues.",
+                      "timestamp": "2026-03-22T12:00:05.000Z",
+                      "turnNumber": 1,
+                      "uuid": "turn-uuid-1",
+                      "model": "claude-sonnet-4-5-20250929",
+                      "inputTokens": 650,
+                      "outputTokens": 200,
+                      "contextTokens": 650,
+                      "costUsd": 0.0042
+                    }
+                  ],
+                  "byteOffset": 4096,
+                  "usage": {
+                    "totalInputTokens": 650,
+                    "totalOutputTokens": 200,
+                    "totalCacheReadTokens": 0,
+                    "turnCount": 1,
+                    "totalCostUsd": 0.0042
+                  },
+                  "hasMore": false,
+                  "nextCursor": null,
+                  "totalTurns": 1
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailableError"
+          }
+        }
+      }
+    },
+    "/sessions/{sessionId}/subagents": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SessionId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "List subagent sessions",
+        "description": "Returns child sessions spawned from a parent session plus aggregate token and cost totals.",
+        "operationId": "getSessionSubagents",
+        "responses": {
+          "200": {
+            "description": "Session subagents",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionSubagentsResponse"
+                },
+                "example": {
+                  "subagents": [
+                    {
+                      "sessionId": "child_123",
+                      "agentId": "agent_a",
+                      "sessionType": "task",
+                      "model": "claude-sonnet-4-5-20250929",
+                      "status": "completed",
+                      "totalCost": 1.25,
+                      "totalInputTokens": 1200,
+                      "totalOutputTokens": 400,
+                      "turnCount": 3,
+                      "snippet": "Implemented the error registry",
+                      "createdAt": "2026-03-22T12:00:00.000Z",
+                      "lastActiveAt": "2026-03-22T12:10:00.000Z"
+                    }
+                  ],
+                  "aggregated": {
+                    "totalCost": 1.25,
+                    "totalInputTokens": 1200,
+                    "totalOutputTokens": 400,
+                    "count": 1
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailableError"
+          }
+        }
+      }
+    },
+    "/sessions/{sessionId}/title": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SessionId"
+        }
+      ],
+      "post": {
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Set a session title override",
+        "description": "Stores a user-chosen session title. If the DB is unavailable, the sidecar still returns `{ ok: true, title }` so the local consumer is not blocked.",
+        "operationId": "updateSessionTitle",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionTitleUpdateRequest"
+              },
+              "example": {
+                "title": "Sidecar hardening pass"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated session title",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionTitleUpdateResponse"
+                },
+                "example": {
+                  "ok": true,
+                  "title": "Sidecar hardening pass"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          }
+        }
+      }
+    },
+    "/fs/read": {
+      "get": {
+        "tags": [
+          "Filesystem"
+        ],
+        "summary": "Read a UTF-8 text file",
+        "operationId": "readFileText",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "File contents",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FsReadResponse"
+                },
+                "example": {
+                  "content": "hello world"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/MissingRequiredFieldError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          }
+        }
+      }
+    },
+    "/fs/write": {
+      "post": {
+        "tags": [
+          "Filesystem"
+        ],
+        "summary": "Write a UTF-8 text file",
+        "description": "Creates parent directories automatically. The request body is capped at 50 MB.",
+        "operationId": "writeFileText",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FsWriteRequest"
+              },
+              "example": {
+                "path": "/Users/hoff/dev/RUDI/tmp/example.txt",
+                "content": "hello world"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Write complete",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                },
+                "example": {
+                  "ok": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/MissingRequiredFieldError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/fs/write-binary": {
+      "post": {
+        "tags": [
+          "Filesystem"
+        ],
+        "summary": "Write a binary file from base64 data",
+        "description": "Creates parent directories automatically. The request body is capped at 50 MB.",
+        "operationId": "writeFileBinary",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FsWriteBinaryRequest"
+              },
+              "example": {
+                "path": "/Users/hoff/dev/RUDI/tmp/image.bin",
+                "base64": "AAEC/w=="
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Binary write complete",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                },
+                "example": {
+                  "ok": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/MissingRequiredFieldError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLargeError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/fs/readdir": {
+      "get": {
+        "tags": [
+          "Filesystem"
+        ],
+        "summary": "List directory entries",
+        "description": "Dotfiles are hidden by default. Results are cached briefly inside the sidecar.",
+        "operationId": "readDirectory",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "showHidden",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            },
+            "description": "Set to `1` to include dotfiles."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Directory entries",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FsReaddirResponse"
+                },
+                "example": {
+                  "entries": [
+                    {
+                      "name": "example.txt",
+                      "path": "/Users/hoff/dev/RUDI/tmp/example.txt",
+                      "isDirectory": false,
+                      "isFile": true,
+                      "size": 11,
+                      "mtime": "2026-03-22T12:00:00.000Z"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/MissingRequiredFieldError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          }
+        }
+      }
+    },
+    "/fs/stat": {
+      "get": {
+        "tags": [
+          "Filesystem"
+        ],
+        "summary": "Read file or directory metadata",
+        "operationId": "statFile",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Filesystem stat",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FsEntry"
+                },
+                "example": {
+                  "name": "example.txt",
+                  "path": "/Users/hoff/dev/RUDI/tmp/example.txt",
+                  "isDirectory": false,
+                  "isFile": true,
+                  "size": 11,
+                  "mtime": "2026-03-22T12:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/MissingRequiredFieldError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          }
+        }
+      }
+    },
+    "/fs/mkdir": {
+      "post": {
+        "tags": [
+          "Filesystem"
+        ],
+        "summary": "Create a directory recursively",
+        "operationId": "makeDirectory",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FsPathRequest"
+              },
+              "example": {
+                "path": "/Users/hoff/dev/RUDI/tmp/nested"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Directory created",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                },
+                "example": {
+                  "ok": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/MissingRequiredFieldError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/fs/remove": {
+      "post": {
+        "tags": [
+          "Filesystem"
+        ],
+        "summary": "Remove a file or directory",
+        "operationId": "removePath",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FsPathRequest"
+              },
+              "example": {
+                "path": "/Users/hoff/dev/RUDI/tmp/example.txt"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Path removed",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                },
+                "example": {
+                  "ok": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/MissingRequiredFieldError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/fs/rename": {
+      "post": {
+        "tags": [
+          "Filesystem"
+        ],
+        "summary": "Rename or move a file or directory",
+        "operationId": "renamePath",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FsRenameRequest"
+              },
+              "example": {
+                "oldPath": "/Users/hoff/dev/RUDI/tmp/example.txt",
+                "newPath": "/Users/hoff/dev/RUDI/tmp/example-renamed.txt"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Path renamed",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                },
+                "example": {
+                  "ok": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/MissingRequiredFieldError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/shell/reveal": {
+      "post": {
+        "tags": [
+          "Shell"
+        ],
+        "summary": "Reveal a path in the host shell UI",
+        "description": "macOS-specific helper that spawns a detached `open -R` process. A `200` response means the spawn attempt was made, not that the target UI definitely opened.",
+        "operationId": "shellReveal",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShellRevealRequest"
+              },
+              "example": {
+                "path": "/Users/hoff/dev/RUDI"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reveal requested",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                },
+                "example": {
+                  "ok": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/MissingRequiredFieldError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          }
+        }
+      }
+    },
+    "/shell/open": {
+      "post": {
+        "tags": [
+          "Shell"
+        ],
+        "summary": "Open a path in a host application",
+        "description": "macOS-specific helper that spawns a detached application launch process. A `200` response confirms dispatch, not downstream app success.",
+        "operationId": "shellOpen",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShellOpenRequest"
+              },
+              "example": {
+                "path": "/Users/hoff/dev/RUDI",
+                "app": "vscode"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Open requested",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                },
+                "example": {
+                  "ok": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidFieldError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          }
+        }
+      }
+    },
+    "/terminal/open": {
+      "post": {
+        "tags": [
+          "Terminal"
+        ],
+        "summary": "Open or reuse an embedded terminal session",
+        "description": "Opens a PTY-backed terminal. Requires the optional `@lydell/node-pty` dependency; otherwise the sidecar returns `503`.",
+        "operationId": "openTerminal",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TerminalOpenRequest"
+              },
+              "example": {
+                "sessionKey": "global",
+                "cwd": "/Users/hoff/dev/RUDI",
+                "shell": "/bin/zsh",
+                "cols": 80,
+                "rows": 24
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Terminal opened or reused",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TerminalOpenResponse"
+                },
+                "example": {
+                  "ok": true,
+                  "sessionKey": "global",
+                  "reused": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/MissingRequiredFieldError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ConflictError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailableError"
+          }
+        }
+      }
+    },
+    "/terminal/write": {
+      "post": {
+        "tags": [
+          "Terminal"
+        ],
+        "summary": "Write input to an embedded terminal session",
+        "operationId": "writeTerminal",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TerminalWriteRequest"
+              },
+              "example": {
+                "sessionKey": "global",
+                "data": "ls\\n"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Terminal write complete",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                },
+                "example": {
+                  "ok": true
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          }
+        }
+      }
+    },
+    "/terminal/resize": {
+      "post": {
+        "tags": [
+          "Terminal"
+        ],
+        "summary": "Resize an embedded terminal session",
+        "operationId": "resizeTerminal",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TerminalResizeRequest"
+              },
+              "example": {
+                "sessionKey": "global",
+                "cols": 120,
+                "rows": 30
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Terminal resized",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                },
+                "example": {
+                  "ok": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/MissingRequiredFieldError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          }
+        }
+      }
+    },
+    "/terminal/close": {
+      "post": {
+        "tags": [
+          "Terminal"
+        ],
+        "summary": "Close an embedded terminal session",
+        "description": "Idempotent. Closing a nonexistent session still returns `{ ok: true }`.",
+        "operationId": "closeTerminal",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TerminalSessionKeyRequest"
+              },
+              "example": {
+                "sessionKey": "global"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Terminal closed",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                },
+                "example": {
+                  "ok": true
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          }
+        }
+      }
+    },
+    "/agent/run-group": {
+      "post": {
+        "tags": [
+          "Run Groups"
+        ],
+        "summary": "Create and launch run group",
+        "operationId": "createRunGroup",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunGroupCreateRequest"
+              },
+              "example": {
+                "name": "Batch Review",
+                "cwd": "/Users/hoff/dev/RUDI",
+                "coordinationMode": "flat",
+                "executionMode": "worktree",
+                "tasks": [
+                  {
+                    "prompt": "Review the API boundary",
+                    "role": "reviewer",
+                    "filesTouched": [
+                      "src/commands/serve.js"
+                    ]
+                  },
+                  {
+                    "prompt": "Implement the error registry",
+                    "role": "implementer",
+                    "requiresWrite": true
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Run-group created",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunGroupCreateResponse"
+                },
+                "example": {
+                  "groupId": "group_demo",
+                  "status": "running",
+                  "sessionIds": [
+                    "sess_a",
+                    "sess_b"
+                  ],
+                  "startedSessionIds": [
+                    "sess_a",
+                    "sess_b"
+                  ],
+                  "errors": []
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequestError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitedError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/agent/run-groups": {
+      "get": {
+        "tags": [
+          "Run Groups"
+        ],
+        "summary": "List run groups",
+        "operationId": "listRunGroups",
+        "parameters": [
+          {
+            "name": "projectPath",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/RunGroupStatus"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Run-group list",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunGroupListResponse"
+                },
+                "example": {
+                  "groups": [
+                    {
+                      "id": "group_demo",
+                      "name": "Batch Review",
+                      "status": "running",
+                      "project_path": "/Users/hoff/dev/RUDI",
+                      "base_branch": "main",
+                      "execution_mode": "worktree",
+                      "coordination_mode": "flat",
+                      "requires_git": 1,
+                      "workspace_root": "/Users/hoff/dev/RUDI",
+                      "provider": "claude",
+                      "model": null,
+                      "permission_mode": null,
+                      "session_count": 2,
+                      "completed_count": 0,
+                      "failed_count": 0,
+                      "total_cost": 0,
+                      "total_tokens": 0,
+                      "config_json": "{\"tasks\":[]}",
+                      "created_at": "2026-03-22T12:00:00.000Z",
+                      "started_at": "2026-03-22T12:00:00.000Z",
+                      "completed_at": null,
+                      "updated_at": "2026-03-22T12:00:00.000Z"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          }
+        }
+      }
+    },
+    "/agent/run-group/{groupId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/RunGroupId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Run Groups"
+        ],
+        "summary": "Get run-group detail",
+        "operationId": "getRunGroup",
+        "responses": {
+          "200": {
+            "description": "Run-group detail",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunGroupDetailResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "404": {
+            "$ref": "#/components/responses/RunGroupNotFoundError"
+          }
+        }
+      }
+    },
+    "/agent/run-group/{groupId}/live": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/RunGroupId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Run Groups"
+        ],
+        "summary": "Get live run-group activity",
+        "operationId": "getRunGroupLive",
+        "responses": {
+          "200": {
+            "description": "Run-group live activity",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunGroupLiveResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "404": {
+            "$ref": "#/components/responses/RunGroupNotFoundError"
+          }
+        }
+      }
+    },
+    "/agent/run-group/{groupId}/stop": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/RunGroupId"
+        }
+      ],
+      "post": {
+        "tags": [
+          "Run Groups"
+        ],
+        "summary": "Stop run group",
+        "description": "Stops active sessions in a run group. After this call returns, a subsequent detail read sees the stopped aggregate state.",
+        "operationId": "stopRunGroup",
+        "responses": {
+          "200": {
+            "description": "Stopped run group",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunGroupStopResponse"
+                },
+                "example": {
+                  "ok": true,
+                  "groupId": "group_demo",
+                  "stopped": 2,
+                  "status": "stopped"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "404": {
+            "$ref": "#/components/responses/RunGroupNotFoundError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "RudiTokenAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-rudi-token",
+        "description": "Sidecar auth token read from ~/.rudi/.rudi-lite-token."
+      }
+    },
+    "headers": {
+      "RequestIdHeader": {
+        "description": "Per-request correlation ID returned on sidecar responses.",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "parameters": {
+      "ProjectId": {
+        "name": "projectId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "NoteId": {
+        "name": "noteId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "SessionId": {
+        "name": "sessionId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "RunGroupId": {
+        "name": "groupId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "responses": {
+      "UnauthorizedError": {
+        "description": "Unauthorized",
+        "headers": {
+          "x-rudi-request-id": {
+            "$ref": "#/components/headers/RequestIdHeader"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/SidecarError"
+            },
+            "example": {
+              "error": "Unauthorized",
+              "code": "UNAUTHORIZED",
+              "requestId": "req_example_123"
+            }
+          }
+        }
+      },
+      "BadRequestError": {
+        "description": "Bad request",
+        "headers": {
+          "x-rudi-request-id": {
+            "$ref": "#/components/headers/RequestIdHeader"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/SidecarError"
+            },
+            "example": {
+              "error": "Bad request",
+              "code": "BAD_REQUEST",
+              "requestId": "req_example_123"
+            }
+          }
+        }
+      },
+      "ConflictError": {
+        "description": "Conflict",
+        "headers": {
+          "x-rudi-request-id": {
+            "$ref": "#/components/headers/RequestIdHeader"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/SidecarError"
+            },
+            "example": {
+              "error": "Conflict",
+              "code": "CONFLICT",
+              "requestId": "req_example_123"
+            }
+          }
+        }
+      },
+      "NotFoundError": {
+        "description": "Not found",
+        "headers": {
+          "x-rudi-request-id": {
+            "$ref": "#/components/headers/RequestIdHeader"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/SidecarError"
+            },
+            "example": {
+              "error": "Not found",
+              "code": "NOT_FOUND",
+              "requestId": "req_example_123"
+            }
+          }
+        }
+      },
+      "RequestTooLargeError": {
+        "description": "Request body too large",
+        "headers": {
+          "x-rudi-request-id": {
+            "$ref": "#/components/headers/RequestIdHeader"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/SidecarError"
+            },
+            "example": {
+              "error": "Request body too large",
+              "code": "REQUEST_TOO_LARGE",
+              "requestId": "req_example_123"
+            }
+          }
+        }
+      },
+      "ServiceUnavailableError": {
+        "description": "Service unavailable",
+        "headers": {
+          "x-rudi-request-id": {
+            "$ref": "#/components/headers/RequestIdHeader"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/SidecarError"
+            },
+            "example": {
+              "error": "Service unavailable",
+              "code": "SERVICE_UNAVAILABLE",
+              "requestId": "req_example_123"
+            }
+          }
+        }
+      },
+      "MissingRequiredFieldError": {
+        "description": "Required field missing",
+        "headers": {
+          "x-rudi-request-id": {
+            "$ref": "#/components/headers/RequestIdHeader"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/SidecarError"
+            },
+            "example": {
+              "error": "name required",
+              "code": "MISSING_REQUIRED_FIELD",
+              "details": {
+                "field": "name",
+                "location": "body"
+              },
+              "requestId": "req_example_123"
+            }
+          }
+        }
+      },
+      "InvalidFieldError": {
+        "description": "Invalid field value",
+        "headers": {
+          "x-rudi-request-id": {
+            "$ref": "#/components/headers/RequestIdHeader"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/SidecarError"
+            },
+            "example": {
+              "error": "title must be a string",
+              "code": "INVALID_FIELD",
+              "details": {
+                "field": "title",
+                "location": "body",
+                "reason": "invalid_type",
+                "expectedType": "string"
+              },
+              "requestId": "req_example_123"
+            }
+          }
+        }
+      },
+      "ProjectAlreadyExistsError": {
+        "description": "Project already exists",
+        "headers": {
+          "x-rudi-request-id": {
+            "$ref": "#/components/headers/RequestIdHeader"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/SidecarError"
+            },
+            "example": {
+              "error": "Project already exists",
+              "code": "PROJECT_ALREADY_EXISTS",
+              "requestId": "req_example_123"
+            }
+          }
+        }
+      },
+      "ProjectNotFoundError": {
+        "description": "Project not found",
+        "headers": {
+          "x-rudi-request-id": {
+            "$ref": "#/components/headers/RequestIdHeader"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/SidecarError"
+            },
+            "example": {
+              "error": "Project not found",
+              "code": "PROJECT_NOT_FOUND",
+              "requestId": "req_example_123"
+            }
+          }
+        }
+      },
+      "NoteNotFoundError": {
+        "description": "Note not found",
+        "headers": {
+          "x-rudi-request-id": {
+            "$ref": "#/components/headers/RequestIdHeader"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/SidecarError"
+            },
+            "example": {
+              "error": "Note not found",
+              "code": "NOTE_NOT_FOUND",
+              "requestId": "req_example_123"
+            }
+          }
+        }
+      },
+      "RunGroupNotFoundError": {
+        "description": "Run group not found",
+        "headers": {
+          "x-rudi-request-id": {
+            "$ref": "#/components/headers/RequestIdHeader"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/SidecarError"
+            },
+            "example": {
+              "error": "Run group not found",
+              "code": "RUN_GROUP_NOT_FOUND",
+              "requestId": "req_example_123"
+            }
+          }
+        }
+      },
+      "DatabaseNotInitialized": {
+        "description": "Database not initialized",
+        "headers": {
+          "x-rudi-request-id": {
+            "$ref": "#/components/headers/RequestIdHeader"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/SidecarError"
+            },
+            "example": {
+              "error": "Database not initialized",
+              "code": "DATABASE_NOT_INITIALIZED",
+              "requestId": "req_example_123"
+            }
+          }
+        }
+      },
+      "RateLimitedError": {
+        "description": "Rate limited",
+        "headers": {
+          "x-rudi-request-id": {
+            "$ref": "#/components/headers/RequestIdHeader"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/SidecarError"
+            },
+            "example": {
+              "error": "MAX_CONCURRENT_REACHED",
+              "code": "RATE_LIMITED",
+              "message": "Too many active agent processes for requested group (9 + 2 > 10)",
+              "requestId": "req_example_123"
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "Internal server error",
+        "headers": {
+          "x-rudi-request-id": {
+            "$ref": "#/components/headers/RequestIdHeader"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/SidecarError"
+            },
+            "example": {
+              "error": "Internal server error",
+              "code": "INTERNAL_ERROR",
+              "requestId": "req_example_123"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "version"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "SidecarError": {
+        "type": "object",
+        "required": [
+          "error",
+          "code"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "details": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          },
+          "requestId": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OkResponse": {
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true
+          }
+        }
+      },
+      "ProjectListItem": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "provider",
+          "color",
+          "path",
+          "sessionCount",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "sessionCount": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ProjectListResponse": {
+        "type": "object",
+        "required": [
+          "projects"
+        ],
+        "properties": {
+          "projects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectListItem"
+            }
+          }
+        }
+      },
+      "CreateProjectRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateProjectRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreatedProjectResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "path",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "UpdatedProjectResponse": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "Note": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "content",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "NotesListResponse": {
+        "type": "object",
+        "required": [
+          "notes"
+        ],
+        "properties": {
+          "notes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Note"
+            }
+          }
+        }
+      },
+      "CreateNoteRequest": {
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateNoteRequest": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SessionProjectSession": {
+        "type": "object",
+        "required": [
+          "sessionId",
+          "provider",
+          "summary",
+          "firstPrompt",
+          "messageCount",
+          "modified",
+          "created",
+          "gitBranch"
+        ],
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "firstPrompt": {
+            "type": "string"
+          },
+          "messageCount": {
+            "type": "integer"
+          },
+          "modified": {
+            "type": "string"
+          },
+          "created": {
+            "type": "string"
+          },
+          "gitBranch": {
+            "type": "string"
+          },
+          "originNativeFile": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "diffStats": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          },
+          "dbTitle": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "totalCost": {
+            "type": "number"
+          },
+          "totalInputTokens": {
+            "type": "integer"
+          },
+          "totalOutputTokens": {
+            "type": "integer"
+          },
+          "turnCount": {
+            "type": "integer"
+          },
+          "parentSessionId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "isSidechain": {
+            "type": "boolean"
+          },
+          "sessionType": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "SessionProject": {
+        "type": "object",
+        "required": [
+          "path",
+          "name",
+          "originalPath",
+          "sessions",
+          "gitStatus"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "originalPath": {
+            "type": "string"
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SessionProjectSession"
+            }
+          },
+          "gitStatus": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SessionProjectsResponse": {
+        "type": "object",
+        "required": [
+          "projects"
+        ],
+        "properties": {
+          "projects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SessionProject"
+            }
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "SessionMessage": {
+        "type": "object",
+        "required": [
+          "role",
+          "content"
+        ],
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant"
+            ]
+          },
+          "content": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "turnNumber": {
+            "type": "integer"
+          },
+          "providerTurnId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "uuid": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "permissionMode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "inputTokens": {
+            "type": "integer"
+          },
+          "outputTokens": {
+            "type": "integer"
+          },
+          "cacheReadTokens": {
+            "type": "integer"
+          },
+          "cacheCreationTokens": {
+            "type": "integer"
+          },
+          "contextTokens": {
+            "type": "integer"
+          },
+          "costUsd": {
+            "type": "number"
+          },
+          "durationMs": {
+            "type": "integer"
+          },
+          "finishReason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "compactMetadata": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          },
+          "thinking": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "toolCalls": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "contentBlocks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "SessionUsageSummary": {
+        "type": "object",
+        "required": [
+          "totalInputTokens",
+          "totalOutputTokens",
+          "totalCacheReadTokens",
+          "turnCount"
+        ],
+        "properties": {
+          "totalInputTokens": {
+            "type": "integer"
+          },
+          "totalOutputTokens": {
+            "type": "integer"
+          },
+          "totalCacheReadTokens": {
+            "type": "integer"
+          },
+          "turnCount": {
+            "type": "integer"
+          },
+          "totalCostUsd": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "SessionMessagesResponse": {
+        "type": "object",
+        "required": [
+          "messages",
+          "byteOffset",
+          "hasMore"
+        ],
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SessionMessage"
+            }
+          },
+          "byteOffset": {
+            "type": "integer"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SessionUsageSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "totalTurns": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SessionSubagent": {
+        "type": "object",
+        "required": [
+          "sessionId",
+          "agentId",
+          "sessionType",
+          "model",
+          "status",
+          "totalCost",
+          "totalInputTokens",
+          "totalOutputTokens",
+          "turnCount",
+          "snippet",
+          "createdAt",
+          "lastActiveAt"
+        ],
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          },
+          "agentId": {
+            "type": "string"
+          },
+          "sessionType": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "totalCost": {
+            "type": "number"
+          },
+          "totalInputTokens": {
+            "type": "integer"
+          },
+          "totalOutputTokens": {
+            "type": "integer"
+          },
+          "turnCount": {
+            "type": "integer"
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "lastActiveAt": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SessionSubagentsAggregated": {
+        "type": "object",
+        "required": [
+          "totalCost",
+          "totalInputTokens",
+          "totalOutputTokens",
+          "count"
+        ],
+        "properties": {
+          "totalCost": {
+            "type": "number"
+          },
+          "totalInputTokens": {
+            "type": "integer"
+          },
+          "totalOutputTokens": {
+            "type": "integer"
+          },
+          "count": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SessionSubagentsResponse": {
+        "type": "object",
+        "required": [
+          "subagents",
+          "aggregated"
+        ],
+        "properties": {
+          "subagents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SessionSubagent"
+            }
+          },
+          "aggregated": {
+            "$ref": "#/components/schemas/SessionSubagentsAggregated"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SessionTitleUpdateRequest": {
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SessionTitleUpdateResponse": {
+        "type": "object",
+        "required": [
+          "ok",
+          "title"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "FsEntry": {
+        "type": "object",
+        "required": [
+          "name",
+          "path",
+          "isDirectory",
+          "isFile",
+          "size",
+          "mtime"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "isDirectory": {
+            "type": "boolean"
+          },
+          "isFile": {
+            "type": "boolean"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "mtime": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "FsReadResponse": {
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "FsReaddirResponse": {
+        "type": "object",
+        "required": [
+          "entries"
+        ],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FsEntry"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "FsPathRequest": {
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "FsWriteRequest": {
+        "type": "object",
+        "required": [
+          "path",
+          "content"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "FsWriteBinaryRequest": {
+        "type": "object",
+        "required": [
+          "path",
+          "base64"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "base64": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "FsRenameRequest": {
+        "type": "object",
+        "required": [
+          "oldPath",
+          "newPath"
+        ],
+        "properties": {
+          "oldPath": {
+            "type": "string"
+          },
+          "newPath": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ShellApp": {
+        "type": "string",
+        "enum": [
+          "vscode",
+          "cursor",
+          "finder",
+          "xcode",
+          "antigravity",
+          "warp",
+          "terminal"
+        ]
+      },
+      "ShellRevealRequest": {
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ShellOpenRequest": {
+        "type": "object",
+        "required": [
+          "path",
+          "app"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "app": {
+            "$ref": "#/components/schemas/ShellApp"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TerminalSessionKeyRequest": {
+        "type": "object",
+        "properties": {
+          "sessionKey": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TerminalOpenRequest": {
+        "type": "object",
+        "required": [
+          "cwd"
+        ],
+        "properties": {
+          "sessionKey": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "shell": {
+            "type": "string"
+          },
+          "cols": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "rows": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "TerminalOpenResponse": {
+        "type": "object",
+        "required": [
+          "ok",
+          "sessionKey",
+          "reused"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true
+          },
+          "sessionKey": {
+            "type": "string"
+          },
+          "reused": {
+            "type": "boolean"
+          },
+          "buffer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "TerminalWriteRequest": {
+        "type": "object",
+        "properties": {
+          "sessionKey": {
+            "type": "string"
+          },
+          "data": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TerminalResizeRequest": {
+        "type": "object",
+        "required": [
+          "cols",
+          "rows"
+        ],
+        "properties": {
+          "sessionKey": {
+            "type": "string"
+          },
+          "cols": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "rows": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "RunGroupStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "running",
+          "completed",
+          "partial",
+          "failed",
+          "stopped"
+        ]
+      },
+      "RunGroupExecutionMode": {
+        "type": "string",
+        "enum": [
+          "worktree",
+          "shared_cwd",
+          "read_only",
+          "detached"
+        ]
+      },
+      "RunGroupCoordinationMode": {
+        "type": "string",
+        "enum": [
+          "flat",
+          "phased",
+          "dependency",
+          "supervisor"
+        ]
+      },
+      "RunGroupFailurePolicy": {
+        "type": "string",
+        "enum": [
+          "stop-all",
+          "stop-downstream",
+          "continue",
+          "escalate"
+        ]
+      },
+      "RunGroupMergePolicy": {
+        "type": "string",
+        "enum": [
+          "git",
+          "manual",
+          "synthesize",
+          "concatenate"
+        ]
+      },
+      "RunGroupIoSpec": {
+        "type": "object",
+        "required": [
+          "type",
+          "path"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "file",
+              "directory"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "optional": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RunGroupOutputSpec": {
+        "type": "object",
+        "required": [
+          "type",
+          "path"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "file",
+              "directory"
+            ]
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RunGroupEvidenceSpec": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "artifact_exists",
+              "json_file",
+              "command"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "command": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "RunGroupDependencySpec": {
+        "type": "object",
+        "required": [
+          "taskIndex"
+        ],
+        "properties": {
+          "taskIndex": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "artifact": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "RunGroupValidationSpec": {
+        "type": "object",
+        "required": [
+          "command"
+        ],
+        "properties": {
+          "command": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "RunGroupTaskRequest": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "goal": {
+            "type": "string"
+          },
+          "deliverable": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "inputs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunGroupIoSpec"
+            }
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/RunGroupEvidenceSpec"
+          },
+          "output": {
+            "$ref": "#/components/schemas/RunGroupOutputSpec"
+          },
+          "dependencies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunGroupDependencySpec"
+            }
+          },
+          "failurePolicy": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RunGroupFailurePolicy"
+              }
+            ],
+            "x-rudi-aliases": [
+              "failure_policy"
+            ]
+          },
+          "mergePolicy": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RunGroupMergePolicy"
+              }
+            ],
+            "x-rudi-aliases": [
+              "merge_policy"
+            ]
+          },
+          "validation": {
+            "$ref": "#/components/schemas/RunGroupValidationSpec"
+          },
+          "validationCommand": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "x-rudi-aliases": [
+              "validation_command"
+            ]
+          },
+          "filesTouched": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "x-rudi-aliases": [
+              "files_touched"
+            ]
+          },
+          "dependsOn": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "x-rudi-aliases": [
+              "depends_on"
+            ]
+          },
+          "requiresWrite": {
+            "type": "boolean",
+            "x-rudi-aliases": [
+              "requires_write"
+            ]
+          },
+          "contextPaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "x-rudi-aliases": [
+              "context_paths"
+            ]
+          },
+          "artifactsIn": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "x-rudi-aliases": [
+              "artifacts_in"
+            ]
+          },
+          "artifactsOut": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "x-rudi-aliases": [
+              "artifacts_out"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "RunGroupCreateRequest": {
+        "type": "object",
+        "required": [
+          "tasks"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "coordinationMode": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RunGroupCoordinationMode"
+              }
+            ],
+            "x-rudi-aliases": [
+              "coordination_mode"
+            ]
+          },
+          "executionMode": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RunGroupExecutionMode"
+              }
+            ],
+            "x-rudi-aliases": [
+              "execution_mode"
+            ]
+          },
+          "useWorktree": {
+            "type": "boolean"
+          },
+          "baseBranch": {
+            "type": "string"
+          },
+          "permissionMode": {
+            "type": "string"
+          },
+          "systemPrompt": {
+            "type": "string"
+          },
+          "allowValidationCommands": {
+            "type": "boolean"
+          },
+          "sequentialPhases": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "x-rudi-aliases": [
+              "sequential_phases"
+            ]
+          },
+          "tasks": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 10,
+            "items": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/components/schemas/RunGroupTaskRequest"
+                }
+              ]
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "RunGroupLaunchError": {
+        "type": "object",
+        "required": [
+          "sessionId",
+          "message"
+        ],
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RunGroupCreateResponse": {
+        "type": "object",
+        "required": [
+          "groupId",
+          "status",
+          "sessionIds",
+          "startedSessionIds",
+          "errors"
+        ],
+        "properties": {
+          "groupId": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunGroupStatus"
+          },
+          "sessionIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "startedSessionIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunGroupLaunchError"
+            }
+          }
+        }
+      },
+      "RunGroupSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "status",
+          "project_path",
+          "base_branch",
+          "execution_mode",
+          "coordination_mode",
+          "requires_git",
+          "workspace_root",
+          "provider",
+          "model",
+          "permission_mode",
+          "session_count",
+          "completed_count",
+          "failed_count",
+          "total_cost",
+          "total_tokens",
+          "config_json",
+          "created_at",
+          "started_at",
+          "completed_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunGroupStatus"
+          },
+          "project_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "base_branch": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "execution_mode": {
+            "$ref": "#/components/schemas/RunGroupExecutionMode"
+          },
+          "coordination_mode": {
+            "$ref": "#/components/schemas/RunGroupCoordinationMode"
+          },
+          "requires_git": {
+            "type": "integer"
+          },
+          "workspace_root": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "provider": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "permission_mode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "session_count": {
+            "type": "integer"
+          },
+          "completed_count": {
+            "type": "integer"
+          },
+          "failed_count": {
+            "type": "integer"
+          },
+          "total_cost": {
+            "type": "number"
+          },
+          "total_tokens": {
+            "type": "integer"
+          },
+          "config_json": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "started_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RunGroupDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/RunGroupSummary"
+          },
+          {
+            "type": "object",
+            "required": [
+              "validation_failed_count"
+            ],
+            "properties": {
+              "validation_failed_count": {
+                "type": "integer"
+              }
+            }
+          }
+        ]
+      },
+      "RunGroupListResponse": {
+        "type": "object",
+        "required": [
+          "groups"
+        ],
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunGroupSummary"
+            }
+          }
+        }
+      },
+      "RunGroupSessionDetail": {
+        "type": "object",
+        "required": [
+          "id",
+          "provider",
+          "provider_session_id",
+          "title",
+          "title_override",
+          "model",
+          "cwd",
+          "session_status",
+          "started_at",
+          "ended_at",
+          "exit_code",
+          "error_code",
+          "error_message",
+          "created_at",
+          "last_active_at",
+          "turn_count",
+          "total_cost",
+          "runtime_status",
+          "runtime_turn_count",
+          "runtime_cost_total",
+          "runtime_tokens_total",
+          "runtime_last_error",
+          "worktree_path",
+          "worktree_branch",
+          "base_branch",
+          "completed_at",
+          "validation_passed",
+          "validation_errors_json",
+          "validation_warnings_json",
+          "validated_at",
+          "status",
+          "alive",
+          "turn_active",
+          "pid",
+          "last_progress_snippet",
+          "last_progress_type",
+          "last_progress_at",
+          "last_progress_source",
+          "validation_errors",
+          "validation_warnings"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "provider_session_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title_override": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cwd": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "session_status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "started_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "ended_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "exit_code": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "error_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error_message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_active_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "turn_count": {
+            "type": "integer"
+          },
+          "total_cost": {
+            "type": "number"
+          },
+          "runtime_status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "runtime_turn_count": {
+            "type": "integer"
+          },
+          "runtime_cost_total": {
+            "type": "number"
+          },
+          "runtime_tokens_total": {
+            "type": "integer"
+          },
+          "runtime_last_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "worktree_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "worktree_branch": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "base_branch": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "validation_passed": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "validation_errors_json": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validation_warnings_json": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string"
+          },
+          "alive": {
+            "type": "boolean"
+          },
+          "turn_active": {
+            "type": "boolean"
+          },
+          "pid": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "last_progress_snippet": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_progress_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_progress_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "last_progress_source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validation_errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "validation_warnings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "RunGroupDetailResponse": {
+        "type": "object",
+        "required": [
+          "group",
+          "sessions"
+        ],
+        "properties": {
+          "group": {
+            "$ref": "#/components/schemas/RunGroupDetail"
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunGroupSessionDetail"
+            }
+          }
+        }
+      },
+      "RunGroupLiveSession": {
+        "type": "object",
+        "required": [
+          "sessionId",
+          "name",
+          "status",
+          "alive",
+          "turnActive",
+          "turnCount",
+          "costTotal",
+          "tokensTotal",
+          "lastError",
+          "lastSnippet",
+          "lastProgressType",
+          "lastProgressAt",
+          "lastProgressSource",
+          "worktreeBranch",
+          "validationPassed"
+        ],
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "alive": {
+            "type": "boolean"
+          },
+          "turnActive": {
+            "type": "boolean"
+          },
+          "turnCount": {
+            "type": "integer"
+          },
+          "costTotal": {
+            "type": "number"
+          },
+          "tokensTotal": {
+            "type": "integer"
+          },
+          "lastError": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastSnippet": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastProgressType": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastProgressAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "lastProgressSource": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "worktreeBranch": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validationPassed": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        }
+      },
+      "RunGroupLiveResponse": {
+        "type": "object",
+        "required": [
+          "groupId",
+          "status",
+          "sessions"
+        ],
+        "properties": {
+          "groupId": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunGroupStatus"
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunGroupLiveSession"
+            }
+          }
+        }
+      },
+      "RunGroupStopResponse": {
+        "type": "object",
+        "required": [
+          "ok",
+          "groupId",
+          "stopped",
+          "status"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true
+          },
+          "groupId": {
+            "type": "string"
+          },
+          "stopped": {
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunGroupStatus"
+          }
+        }
+      },
+      "RunGroupStartedEvent": {
+        "type": "object",
+        "required": [
+          "groupId",
+          "sessionIds",
+          "activeSessionIds"
+        ],
+        "properties": {
+          "groupId": {
+            "type": "string"
+          },
+          "sessionIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "activeSessionIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "RunGroupSessionDoneEvent": {
+        "type": "object",
+        "required": [
+          "groupId",
+          "sessionId",
+          "status",
+          "contractValidation"
+        ],
+        "properties": {
+          "groupId": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "contractValidation": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          }
+        }
+      },
+      "RunGroupCompletedEvent": {
+        "type": "object",
+        "required": [
+          "groupId",
+          "status",
+          "completedCount",
+          "failedCount"
+        ],
+        "properties": {
+          "groupId": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunGroupStatus"
+          },
+          "completedCount": {
+            "type": "integer"
+          },
+          "failedCount": {
+            "type": "integer"
+          }
+        }
+      },
+      "RunGroupStoppedEvent": {
+        "type": "object",
+        "required": [
+          "groupId"
+        ],
+        "properties": {
+          "groupId": {
+            "type": "string"
+          }
+        }
+      },
+      "RunGroupSessionActivityEvent": {
+        "type": "object",
+        "required": [
+          "groupId",
+          "sessionId",
+          "turnCount",
+          "costTotal",
+          "lastSnippet"
+        ],
+        "properties": {
+          "groupId": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "turnCount": {
+            "type": "integer"
+          },
+          "costTotal": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "lastSnippet": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "x-rudi-websocket-events": {
+    "transport": {
+      "protocol": "ws",
+      "envelope": {
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object"
+          }
+        }
+      },
+      "authentication": {
+        "header": "x-rudi-token",
+        "websocketProtocolPrefix": "rudi-token."
+      }
+    },
+    "events": {
+      "run-group:started": {
+        "stability": "stable",
+        "description": "Emitted after a run-group launch pass starts one or more sessions.",
+        "payloadSchema": {
+          "$ref": "#/components/schemas/RunGroupStartedEvent"
+        },
+        "example": {
+          "groupId": "group_demo",
+          "sessionIds": [
+            "sess_a",
+            "sess_b"
+          ],
+          "activeSessionIds": [
+            "sess_a",
+            "sess_b"
+          ]
+        }
+      },
+      "run-group:session-done": {
+        "stability": "stable",
+        "description": "Emitted when one run-group session reaches a terminal runtime state.",
+        "payloadSchema": {
+          "$ref": "#/components/schemas/RunGroupSessionDoneEvent"
+        },
+        "example": {
+          "groupId": "group_demo",
+          "sessionId": "sess_a",
+          "status": "completed",
+          "contractValidation": null
+        }
+      },
+      "run-group:completed": {
+        "stability": "stable",
+        "description": "Emitted when the aggregate run-group status becomes terminal.",
+        "payloadSchema": {
+          "$ref": "#/components/schemas/RunGroupCompletedEvent"
+        },
+        "example": {
+          "groupId": "group_demo",
+          "status": "partial",
+          "completedCount": 1,
+          "failedCount": 1
+        }
+      },
+      "run-group:stopped": {
+        "stability": "stable",
+        "description": "Emitted after a stop request has committed the stopped aggregate state.",
+        "payloadSchema": {
+          "$ref": "#/components/schemas/RunGroupStoppedEvent"
+        },
+        "example": {
+          "groupId": "group_demo"
+        }
+      },
+      "run-group:session-activity": {
+        "stability": "stable",
+        "description": "Emitted after a turn result updates live run-group session activity counters.",
+        "payloadSchema": {
+          "$ref": "#/components/schemas/RunGroupSessionActivityEvent"
+        },
+        "example": {
+          "groupId": "group_demo",
+          "sessionId": "sess_a",
+          "turnCount": 3,
+          "costTotal": 1.25,
+          "lastSnippet": null
+        }
+      }
+    },
+    "unstableEvents": {
+      "run-group:phase-started": {
+        "stability": "unstable",
+        "description": "Internal phased-execution signal. Not part of the public consumer contract."
+      }
+    }
+  }
+}

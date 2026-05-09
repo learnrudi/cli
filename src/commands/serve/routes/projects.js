@@ -23,7 +23,7 @@ export function buildProjectRoutes(ctx, deps = {}) {
   const getDbImpl = deps.getDb || getDb;
   const isDatabaseInitializedImpl = deps.isDatabaseInitialized || isDatabaseInitialized;
 
-  function handle(req, res, url) {
+  async function handle(req, res, url) {
     if (!isDatabaseInitializedImpl()) {
       return errorCode(res, SIDECAR_ERROR_CODES.DATABASE_NOT_INITIALIZED), true;
     }
@@ -55,52 +55,51 @@ export function buildProjectRoutes(ctx, deps = {}) {
 
     // POST /projects {name, path?}
     if (req.method === 'POST' && url.pathname === '/projects') {
-      return (async () => {
-        const body = await readBody(req);
-        if (body.name == null) return requiredField(res, 'name');
-        const normalizedName = normalizeProjectName(body.name);
-        if (normalizedName === null) {
-          return invalidField(res, 'name', 'name must be a string', {
-            reason: 'invalid_type',
-            details: { expectedType: 'string' },
-          });
-        }
-        if (normalizedName === '') {
-          return requiredField(res, 'name');
-        }
-        if (body.path !== undefined && body.path !== null && typeof body.path !== 'string') {
-          return invalidField(res, 'path', 'path must be a string', {
-            reason: 'invalid_type',
-            details: { expectedType: 'string' },
-          });
-        }
+      const body = await readBody(req);
+      if (body.name == null) return requiredField(res, 'name');
+      const normalizedName = normalizeProjectName(body.name);
+      if (normalizedName === null) {
+        return invalidField(res, 'name', 'name must be a string', {
+          reason: 'invalid_type',
+          details: { expectedType: 'string' },
+        });
+      }
+      if (normalizedName === '') {
+        return requiredField(res, 'name');
+      }
+      if (body.path !== undefined && body.path !== null && typeof body.path !== 'string') {
+        return invalidField(res, 'path', 'path must be a string', {
+          reason: 'invalid_type',
+          details: { expectedType: 'string' },
+        });
+      }
 
-        const slug = projectSlugFromName(normalizedName);
-        if (!slug) {
-          return invalidField(res, 'name', 'name must include letters or numbers', {
-            reason: 'invalid_format',
-          });
-        }
+      const slug = projectSlugFromName(normalizedName);
+      if (!slug) {
+        return invalidField(res, 'name', 'name must include letters or numbers', {
+          reason: 'invalid_format',
+        });
+      }
 
-        const id = `proj-${slug}`;
-        try {
-          db.prepare(`
-            INSERT INTO projects (id, provider, name, created_at)
-            VALUES (?, 'claude', ?, datetime('now'))
-          `).run(id, normalizedName);
-          json(res, {
-            id,
-            name: normalizedName,
-            path: typeof body.path === 'string' ? body.path : '',
-            createdAt: new Date().toISOString(),
-          }, 201);
-        } catch (err) {
-          if (/constraint|unique/i.test(err?.message || '')) {
-            return errorCode(res, SIDECAR_ERROR_CODES.PROJECT_ALREADY_EXISTS);
-          }
-          return error(res, err.message || 'Failed to create project', 500);
+      const id = `proj-${slug}`;
+      try {
+        db.prepare(`
+          INSERT INTO projects (id, provider, name, created_at)
+          VALUES (?, 'claude', ?, datetime('now'))
+        `).run(id, normalizedName);
+        json(res, {
+          id,
+          name: normalizedName,
+          path: typeof body.path === 'string' ? body.path : '',
+          createdAt: new Date().toISOString(),
+        }, 201);
+      } catch (err) {
+        if (/constraint|unique/i.test(err?.message || '')) {
+          return errorCode(res, SIDECAR_ERROR_CODES.PROJECT_ALREADY_EXISTS);
         }
-      })(), true;
+        return error(res, err.message || 'Failed to create project', 500);
+      }
+      return true;
     }
 
     // Match /projects/:id
@@ -110,47 +109,46 @@ export function buildProjectRoutes(ctx, deps = {}) {
 
       // POST /projects/:id (update)
       if (req.method === 'POST') {
-        return (async () => {
-          const existing = db.prepare('SELECT id FROM projects WHERE id = ?').get(id);
-          if (!existing) return errorCode(res, SIDECAR_ERROR_CODES.PROJECT_NOT_FOUND);
+        const existing = db.prepare('SELECT id FROM projects WHERE id = ?').get(id);
+        if (!existing) return errorCode(res, SIDECAR_ERROR_CODES.PROJECT_NOT_FOUND);
 
-          const body = await readBody(req);
-          const sets = [];
-          const params = [];
+        const body = await readBody(req);
+        const sets = [];
+        const params = [];
 
-          if (body.name !== undefined) {
-            const normalizedName = normalizeProjectName(body.name);
-            if (normalizedName === null) {
-              return invalidField(res, 'name', 'name must be a string', {
-                reason: 'invalid_type',
-                details: { expectedType: 'string' },
-              });
-            }
-            if (normalizedName === '') {
-              return invalidField(res, 'name', 'name must be a non-empty string', {
-                reason: 'empty_string',
-              });
-            }
-            sets.push('name = ?');
-            params.push(normalizedName);
+        if (body.name !== undefined) {
+          const normalizedName = normalizeProjectName(body.name);
+          if (normalizedName === null) {
+            return invalidField(res, 'name', 'name must be a string', {
+              reason: 'invalid_type',
+              details: { expectedType: 'string' },
+            });
           }
-
-          if (body.color !== undefined) {
-            if (body.color !== null && typeof body.color !== 'string') {
-              return invalidField(res, 'color', 'color must be a string', {
-                reason: 'invalid_type',
-                details: { expectedType: 'string' },
-              });
-            }
-            sets.push('color = ?');
-            params.push(body.color);
+          if (normalizedName === '') {
+            return invalidField(res, 'name', 'name must be a non-empty string', {
+              reason: 'empty_string',
+            });
           }
+          sets.push('name = ?');
+          params.push(normalizedName);
+        }
 
-          if (sets.length === 0) return json(res, { id, ...body });
-          params.push(id);
-          db.prepare(`UPDATE projects SET ${sets.join(', ')} WHERE id = ?`).run(...params);
-          json(res, { id, ...body });
-        })(), true;
+        if (body.color !== undefined) {
+          if (body.color !== null && typeof body.color !== 'string') {
+            return invalidField(res, 'color', 'color must be a string', {
+              reason: 'invalid_type',
+              details: { expectedType: 'string' },
+            });
+          }
+          sets.push('color = ?');
+          params.push(body.color);
+        }
+
+        if (sets.length === 0) return json(res, { id, ...body });
+        params.push(id);
+        db.prepare(`UPDATE projects SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+        json(res, { id, ...body });
+        return true;
       }
 
       // DELETE /projects/:id

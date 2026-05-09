@@ -95,7 +95,7 @@ Run:
 
 ```bash
 cd cli
-node --test src/__tests__/unit/session-schema-v1.test.js
+node scripts/run-tests.js src/__tests__/unit/session-schema-v1.test.js
 ```
 
 ## Design Notes

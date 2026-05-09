@@ -21,6 +21,7 @@ import {
 } from './providers/common.js';
 import { extractCodexTextBlocks } from './providers/codex/parser.js';
 import { parseSessionMessagesFromJsonl } from './providers/registry.js';
+import { resolveSessionRowIdentity } from '@learnrudi/db/session-identity';
 
 const REWIND_BYTES = 256 * 1024;
 const DEFAULT_RECONCILE_INTERVAL_MS = 60_000;
@@ -33,6 +34,13 @@ const MAX_ERROR_HISTORY = 100;
 let _pricingCache = null;
 let _pricingCacheAge = 0;
 const PRICING_CACHE_TTL_MS = 5 * 60_000; // refresh every 5 min
+
+function _getBillableBaseInputTokens(provider, inputTokens, cacheReadTokens, cacheCreationTokens) {
+  if ((provider || 'claude') === 'claude') {
+    return Math.max((inputTokens || 0) - (cacheReadTokens || 0) - (cacheCreationTokens || 0), 0);
+  }
+  return inputTokens || 0;
+}
 
 function _getPricingMap(db) {
   const now = Date.now();
@@ -64,9 +72,12 @@ function _computeCost(pricing, provider, model, inputTokens, outputTokens, cache
     return re.test(model);
   });
   if (!entry) return null;
-  // inputTokens already includes cacheReadTokens + cacheCreationTokens (accumulated in _extractRawMetadata)
-  // Subtract cache tokens to get base input, then price each component at its own rate
-  const baseInput = Math.max((inputTokens || 0) - (cacheReadTokens || 0) - (cacheCreationTokens || 0), 0);
+  const baseInput = _getBillableBaseInputTokens(
+    provider,
+    inputTokens,
+    cacheReadTokens,
+    cacheCreationTokens,
+  );
   return (
     baseInput * entry.input_cost / 1_000_000 +
     (outputTokens || 0) * entry.output_cost / 1_000_000 +
@@ -607,10 +618,7 @@ function _ensureSessionRow(db, { sessionId, provider, filePath, agentMeta }) {
   // Idempotent upsert: if a row already exists for this (provider, provider_session_id)
   // with a different id (e.g. from a prior ingestion scheme), reuse its id to avoid
   // UNIQUE constraint violation on the partial index.
-  const existing = db.prepare(
-    `SELECT id FROM sessions WHERE provider = ? AND provider_session_id = ? AND status != 'deleted' LIMIT 1`
-  ).get(provider, sessionId);
-  const rowId = existing ? existing.id : sessionId;
+  const { rowId } = resolveSessionRowIdentity(db, provider, sessionId);
 
   if (agentMeta) {
     db.prepare(`
@@ -646,6 +654,8 @@ function _ensureSessionRow(db, { sessionId, provider, filePath, agentMeta }) {
       VALUES (?, ?, ?, 'provider-import', ?, 'active', ?, ?)
     `).run(rowId, provider, sessionId, filePath, now, now);
   }
+
+  return rowId;
 }
 
 function _recomputeSessionAggregates(db, sessionId) {
@@ -789,10 +799,10 @@ export function createSessionsIngesterModule({
 
     if (stat.size === 0) {
       const tx = db.transaction(() => {
-        _ensureSessionRow(db, { sessionId, provider, filePath });
+        const rowId = _ensureSessionRow(db, { sessionId, provider, filePath });
         if (reset) {
-          db.prepare('DELETE FROM turns WHERE session_id = ?').run(sessionId);
-          _recomputeSessionAggregates(db, sessionId);
+          db.prepare('DELETE FROM turns WHERE session_id = ?').run(rowId);
+          _recomputeSessionAggregates(db, rowId);
         }
         _upsertFilePosition(db, {
           filePath,
@@ -885,10 +895,10 @@ export function createSessionsIngesterModule({
     let turnsUpdated = 0;
 
     const tx = db.transaction(() => {
-      _ensureSessionRow(db, { sessionId, provider, filePath, agentMeta });
+      const rowId = _ensureSessionRow(db, { sessionId, provider, filePath, agentMeta });
       if (reset) {
-        db.prepare('DELETE FROM tool_calls WHERE session_id = ?').run(sessionId);
-        db.prepare('DELETE FROM turns WHERE session_id = ?').run(sessionId);
+        db.prepare('DELETE FROM tool_calls WHERE session_id = ?').run(rowId);
+        db.prepare('DELETE FROM turns WHERE session_id = ?').run(rowId);
       }
 
       const selectExisting = db.prepare(`
@@ -940,9 +950,9 @@ export function createSessionsIngesterModule({
       `);
       const deleteToolCallsForTurn = db.prepare('DELETE FROM tool_calls WHERE turn_id = ?');
 
-      let nextTurnNumber = Number(getMaxTurn.get(sessionId)?.max_turn || 0) + 1;
+      let nextTurnNumber = Number(getMaxTurn.get(rowId)?.max_turn || 0) + 1;
       for (const turn of turns) {
-        const existing = selectExisting.get(sessionId, turn.providerTurnId);
+        const existing = selectExisting.get(rowId, turn.providerTurnId);
         let turnId;
         if (existing?.id) {
           turnId = existing.id;
@@ -975,7 +985,7 @@ export function createSessionsIngesterModule({
           turnId = crypto.randomUUID();
           insertTurn.run(
             turnId,
-            sessionId,
+            rowId,
             provider,
             sessionId,
             turn.providerTurnId,
@@ -1006,7 +1016,7 @@ export function createSessionsIngesterModule({
         // Fan out tool_calls rows
         for (const tc of turn.toolCallRows) {
           insertToolCall.run(
-            tc.id, sessionId, turnId, provider,
+            tc.id, rowId, turnId, provider,
             tc.toolName, tc.canonicalName, tc.filePath, tc.success,
             tc.errorMessage, tc.inputPreview, tc.outputPreview,
             turn.tsMs || 0,
@@ -1023,7 +1033,7 @@ export function createSessionsIngesterModule({
         provider,
       });
       if (options.recomputeAggregates !== false) {
-        _recomputeSessionAggregates(db, sessionId);
+        _recomputeSessionAggregates(db, rowId);
       }
     });
 

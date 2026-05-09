@@ -16,6 +16,7 @@ NC='\033[0m' # No Color
 # Get script directory
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 TEST_DIR="$SCRIPT_DIR/../src/__tests__"
+TEST_RUNNER="$SCRIPT_DIR/../../../scripts/run-tests.js"
 
 # Parse arguments
 MODE="${1:-all}"
@@ -41,9 +42,9 @@ run_tests() {
   echo -e "${YELLOW}▶ Running $layer tests...${NC}"
 
   if [ -z "$skip_flags" ]; then
-    node --test --test-reporter="$REPORTER" "$dir"
+    node "$TEST_RUNNER" --test-reporter="$REPORTER" "$dir"
   else
-    env $skip_flags node --test --test-reporter="$REPORTER" "$dir"
+    env $skip_flags node "$TEST_RUNNER" --test-reporter="$REPORTER" "$dir"
   fi
 
   if [ $? -eq 0 ]; then

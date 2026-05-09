@@ -12,6 +12,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { PATHS } from '@learnrudi/env';
 import { getDb } from './index.js';
 import { calculateCostFromPricing } from './schema.js';
+import { findSessionIdentityRow, resolveSessionRowIdentity } from './session-identity.js';
 
 const RUDI_HOME = PATHS.home;
 
@@ -194,7 +195,10 @@ function importClaudeSessions(results, errors, options) {
 
         // Check if already exists
         if (options.skipExisting) {
-          const existing = db.prepare('SELECT id FROM sessions WHERE provider_session_id = ?').get(sessionId);
+          const existing = findSessionIdentityRow(db, {
+            provider: 'claude',
+            sessionId,
+          });
           if (existing) {
             results.skipped++;
             continue;
@@ -214,7 +218,7 @@ function importClaudeSessions(results, errors, options) {
         const cwd = projectDir.replace(/-/g, '/');
 
         // Insert session
-        const psId = uuidv4();
+        const { rowId: psId } = resolveSessionRowIdentity(db, 'claude', sessionId);
         db.prepare(`
           INSERT OR REPLACE INTO sessions (
             id, provider, provider_session_id,
@@ -452,7 +456,10 @@ function importCodexSessions(results, errors, options) {
 
             // Check if already exists
             if (options.skipExisting) {
-              const existing = db.prepare('SELECT id FROM sessions WHERE provider_session_id = ? AND provider = ?').get(sessionId, 'codex');
+              const existing = findSessionIdentityRow(db, {
+                provider: 'codex',
+                sessionId,
+              });
               if (existing) {
                 results.skipped++;
                 continue;
@@ -469,7 +476,7 @@ function importCodexSessions(results, errors, options) {
             }
 
             // Insert session
-            const psId = uuidv4();
+            const { rowId: psId } = resolveSessionRowIdentity(db, 'codex', sessionId);
             db.prepare(`
               INSERT OR REPLACE INTO sessions (
                 id, provider, provider_session_id,
@@ -721,7 +728,10 @@ function importGeminiSessions(results, errors, options) {
 
       // Check if already exists
       if (options.skipExisting) {
-        const existing = db.prepare('SELECT id FROM sessions WHERE provider_session_id = ? AND provider = ?').get(sessionDir, 'gemini');
+        const existing = findSessionIdentityRow(db, {
+          provider: 'gemini',
+          sessionId: sessionDir,
+        });
         if (existing) {
           results.skipped++;
           continue;
@@ -745,7 +755,7 @@ function importGeminiSessions(results, errors, options) {
       }
 
       // Insert session
-      const psId = uuidv4();
+      const { rowId: psId } = resolveSessionRowIdentity(db, 'gemini', sessionDir);
       db.prepare(`
         INSERT OR REPLACE INTO sessions (
           id, provider, provider_session_id,
