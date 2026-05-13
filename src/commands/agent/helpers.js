@@ -87,3 +87,19 @@ export function buildUserContent(text, images, cwd, log) {
   const imageRefs = paths.map((p) => `[Pasted image: ${p}]`).join('\n');
   return text ? `${imageRefs}\n\n${text}` : imageRefs;
 }
+
+/** Build a Claude stream-json user event. */
+export function buildUserInputEvent(text, images, cwd, log) {
+  return {
+    type: 'user',
+    message: {
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text: buildUserContent(text, images, cwd, log) || '',
+        },
+      ],
+    },
+  };
+}

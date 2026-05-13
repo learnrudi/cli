@@ -3,7 +3,7 @@
  */
 
 import { dbWrite, transitionSessionStatus } from '../db.js';
-import { broadcastProcessCount, buildUserContent, dropResumeMappingsForSession } from '../helpers.js';
+import { broadcastProcessCount, buildUserInputEvent, dropResumeMappingsForSession } from '../helpers.js';
 
 const MAX_AGENT_BODY_SIZE = 50 * 1024 * 1024; // allow image attachments
 
@@ -106,7 +106,7 @@ export function buildLifecycleRoutes(ctx) {
         entry._turnCacheReadTokens = 0;
         entry._turnCacheCreationTokens = 0;
         entry._turnToolsUsed = [];
-        const inputMsg = JSON.stringify({ type: 'user', message: { role: 'user', content: buildUserContent(body.message, body.images, entry.cwd, log) } }) + '\n';
+        const inputMsg = JSON.stringify(buildUserInputEvent(body.message, body.images, entry.cwd, log)) + '\n';
         if (!entry.proc.stdin.writable) {
           return error(res, 'Process stdin is no longer writable — the agent may have exited', 410);
         }

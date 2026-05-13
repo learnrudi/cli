@@ -12,7 +12,7 @@ import { PATHS } from '@learnrudi/env';
 import { loadProviderConfig, resolveProviderBinary, buildArgs, getPermissionArgs, buildEnv, hasCapability, expandConditional } from '../providers/index.js';
 import { buildSystemPrompt } from '../prompts.js';
 import { dbWrite, resolveDb, transitionSessionStatus } from '../db.js';
-import { resolveReusableEntry, countAlive, buildUserContent, dropResumeMappingsForSession } from '../helpers.js';
+import { resolveReusableEntry, countAlive, buildUserInputEvent, dropResumeMappingsForSession } from '../helpers.js';
 import { getRepoRoot, createSessionWorktree, restoreSessionWorktree } from '../worktree.js';
 import { spawnAgentProcess } from '../spawn-process.js';
 
@@ -91,7 +91,7 @@ export function buildStartRoute(ctx) {
             UPDATE session_runtime_state SET updated_at = ? WHERE session_id = ?
           `).run(new Date().toISOString(), existingId);
         });
-        const inputMsg = JSON.stringify({ type: 'user', message: { role: 'user', content: buildUserContent(prompt, images, entry.cwd, log) } }) + '\n';
+        const inputMsg = JSON.stringify(buildUserInputEvent(prompt, images, entry.cwd, log)) + '\n';
         if (!entry.proc.stdin.writable) {
           log('agent', 'warn', 'reused process stdin not writable, cannot resume', { sessionId: existingId.slice(0, 8) });
           // Fall through to spawn a new process instead of returning early
@@ -220,6 +220,7 @@ export function buildStartRoute(ctx) {
       argOptions.resumeSessionId = resolvedResumeSid;
     }
     if (stdinMode === 'pipe' && hasCapability(providerConfig, 'inputStreaming')) {
+      argOptions.print = true;
       argOptions.inputFormat = 'stream-json';
       // Prompt delivered via stdin, not -p arg
       delete argOptions.prompt;

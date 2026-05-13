@@ -49241,6 +49241,7 @@ var claude_default = {
         "--verbose"
       ],
       conditionals: [
+        { if: "print", args: ["--print"] },
         { if: "prompt", args: ["-p", "{{prompt}}"] },
         { if: "model", args: ["--model", "{{model}}"] },
         { if: "fallbackModel", args: ["--fallback-model", "{{fallbackModel}}"] },
@@ -50805,6 +50806,20 @@ function buildUserContent(text, images, cwd, log) {
   return text ? `${imageRefs}
 
 ${text}` : imageRefs;
+}
+function buildUserInputEvent(text, images, cwd, log) {
+  return {
+    type: "user",
+    message: {
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: buildUserContent(text, images, cwd, log) || ""
+        }
+      ]
+    }
+  };
 }
 
 // src/commands/agent/worktree.js
@@ -52585,13 +52600,7 @@ function respawnFromRetryContext(ctx, sessionId, entry) {
       }
     });
     if (rc.prompt) {
-      const inputMsg = JSON.stringify({
-        type: "user",
-        message: {
-          role: "user",
-          content: buildUserContent(rc.prompt, rc.images, entry.cwd, log)
-        }
-      }) + "\n";
+      const inputMsg = JSON.stringify(buildUserInputEvent(rc.prompt, rc.images, entry.cwd, log)) + "\n";
       proc.stdin.write(inputMsg);
     }
     if (rc.stdinModeOverride === "close") {
@@ -52749,10 +52758,7 @@ function spawnAgentProcess(ctx, options) {
   log("agent", "info", `process spawned pid=${proc.pid}`, { sessionId: shortId, provider });
   const stdinMode = stdinModeOverride || providerConfig?.headless?.stdin;
   if (stdinMode === "pipe" && !stdinModeOverride && hasCapability(providerConfig, "inputStreaming")) {
-    const inputMsg = JSON.stringify({
-      type: "user",
-      message: { role: "user", content: buildUserContent(prompt, images, effectiveCwd, log) }
-    }) + "\n";
+    const inputMsg = JSON.stringify(buildUserInputEvent(prompt, images, effectiveCwd, log)) + "\n";
     if (proc.stdin.writable) {
       proc.stdin.write(inputMsg);
       log("agent", "debug", "wrote first prompt to stdin (stream-json)", { sessionId: shortId });
@@ -53156,7 +53162,7 @@ function buildStartRoute(ctx) {
             UPDATE session_runtime_state SET updated_at = ? WHERE session_id = ?
           `).run((/* @__PURE__ */ new Date()).toISOString(), existingId);
         });
-        const inputMsg = JSON.stringify({ type: "user", message: { role: "user", content: buildUserContent(prompt, images, entry.cwd, log) } }) + "\n";
+        const inputMsg = JSON.stringify(buildUserInputEvent(prompt, images, entry.cwd, log)) + "\n";
         if (!entry.proc.stdin.writable) {
           log("agent", "warn", "reused process stdin not writable, cannot resume", { sessionId: existingId.slice(0, 8) });
         } else {
@@ -53267,6 +53273,7 @@ function buildStartRoute(ctx) {
       argOptions.resumeSessionId = resolvedResumeSid;
     }
     if (stdinMode === "pipe" && hasCapability(providerConfig, "inputStreaming")) {
+      argOptions.print = true;
       argOptions.inputFormat = "stream-json";
       delete argOptions.prompt;
     }
@@ -53577,7 +53584,7 @@ function buildLifecycleRoutes(ctx) {
         entry._turnCacheReadTokens = 0;
         entry._turnCacheCreationTokens = 0;
         entry._turnToolsUsed = [];
-        const inputMsg = JSON.stringify({ type: "user", message: { role: "user", content: buildUserContent(body.message, body.images, entry.cwd, log) } }) + "\n";
+        const inputMsg = JSON.stringify(buildUserInputEvent(body.message, body.images, entry.cwd, log)) + "\n";
         if (!entry.proc.stdin.writable) {
           return error(res, "Process stdin is no longer writable \u2014 the agent may have exited", 410);
         }

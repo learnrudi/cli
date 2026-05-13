@@ -30,6 +30,7 @@
         "packages/db/src/import.js",
         "packages/db/src/schema.js",
         "packages/db/src/service/turns.ts",
+        "src/commands/agent/helpers.js",
         "src/commands/agent/routes/*.js",
         "src/commands/agent/spawn-process.js"
       ]

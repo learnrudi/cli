@@ -29,6 +29,7 @@
         "--verbose"
       ],
       "conditionals": [
+        { "if": "print", "args": ["--print"] },
         { "if": "prompt", "args": ["-p", "{{prompt}}"] },
         { "if": "model", "args": ["--model", "{{model}}"] },
         { "if": "fallbackModel", "args": ["--fallback-model", "{{fallbackModel}}"] },

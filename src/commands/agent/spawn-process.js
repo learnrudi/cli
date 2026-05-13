@@ -9,7 +9,7 @@ import fs from 'fs';
 import { spawn } from 'child_process';
 import { hasCapability } from './providers/index.js';
 import { dbWrite, flushDbWrites, autoNameSession, transitionSessionStatus } from './db.js';
-import { buildUserContent, broadcastProcessCount, dropResumeMappingsForSession } from './helpers.js';
+import { buildUserInputEvent, broadcastProcessCount, dropResumeMappingsForSession } from './helpers.js';
 import { attachStdoutHandler, attachStderrHandler, flushStdoutBuffer } from './process-io.js';
 import { classifyError, isRetryable } from './error-classifier.js';
 import { createRetryState, canRetry, getNextDelay, incrementRetry } from './retry-logic.js';
@@ -304,13 +304,7 @@ function respawnFromRetryContext(ctx, sessionId, entry) {
 
     // Handle stdin: write the prompt
     if (rc.prompt) {
-      const inputMsg = JSON.stringify({
-        type: 'user',
-        message: {
-          role: 'user',
-          content: buildUserContent(rc.prompt, rc.images, entry.cwd, log),
-        },
-      }) + '\n';
+      const inputMsg = JSON.stringify(buildUserInputEvent(rc.prompt, rc.images, entry.cwd, log)) + '\n';
       proc.stdin.write(inputMsg);
     }
 
@@ -480,10 +474,7 @@ export function spawnAgentProcess(ctx, options) {
 
   const stdinMode = stdinModeOverride || providerConfig?.headless?.stdin;
   if (stdinMode === 'pipe' && !stdinModeOverride && hasCapability(providerConfig, 'inputStreaming')) {
-    const inputMsg = JSON.stringify({
-      type: 'user',
-      message: { role: 'user', content: buildUserContent(prompt, images, effectiveCwd, log) },
-    }) + '\n';
+    const inputMsg = JSON.stringify(buildUserInputEvent(prompt, images, effectiveCwd, log)) + '\n';
     if (proc.stdin.writable) {
       proc.stdin.write(inputMsg);
       log('agent', 'debug', 'wrote first prompt to stdin (stream-json)', { sessionId: shortId });
