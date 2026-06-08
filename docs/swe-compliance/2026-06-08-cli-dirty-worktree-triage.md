@@ -74,3 +74,11 @@
 - Commands run and results:
   - `node scripts/run-tests.js src/__tests__/unit/leverage-command.test.js` passed with 4 tests.
   - `node src/index.js leverage frontend --json` passed and returned the expected `5.33` leverage payload.
+
+## Follow-Up Slice: Codex Integration TOML
+
+- Scope: teach `rudi integrate codex` to patch Codex `config.toml`, replace direct RUDI stack MCP entries with `mcp_servers.rudi`, and make dry-run output show concrete target actions.
+- Non-goals: daemon lifecycle, local LLM, runtime commands, and generated `dist/` output.
+- Commands run and results:
+  - `node scripts/run-tests.js src/__tests__/unit/integrate-codex.test.js` passed with 4 tests.
+  - `node scripts/run-tests.js src/__tests__/unit/commands.test.js` passed in the current worktree.

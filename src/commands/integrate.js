@@ -72,6 +72,108 @@ function writeJsonConfig(configPath, config) {
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 }
 
+function getAgentTargetPath(agentConfig) {
+  const configPath = findAgentConfig(agentConfig);
+  return configPath || path.join(HOME, agentConfig.paths[process.platform]?.[0] || agentConfig.paths.darwin[0]);
+}
+
+function tomlString(value) {
+  return `"${String(value).replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
+}
+
+function splitTomlBlocks(content) {
+  const blocks = [];
+  let current = { table: null, lines: [] };
+
+  for (const line of content.split('\n')) {
+    const match = line.match(/^\s*\[([^\]]+)]\s*(?:#.*)?$/);
+    if (match) {
+      if (current.lines.length > 0) {
+        blocks.push(current);
+      }
+      current = { table: match[1].trim(), lines: [line] };
+    } else {
+      current.lines.push(line);
+    }
+  }
+
+  if (current.lines.length > 0) {
+    blocks.push(current);
+  }
+  return blocks;
+}
+
+function getCodexMcpServerName(table) {
+  if (!table?.startsWith('mcp_servers.')) return null;
+  const rest = table.slice('mcp_servers.'.length);
+  const name = rest.split('.')[0];
+  return name.replace(/^"(.*)"$/, '$1');
+}
+
+function buildCodexRouterTomlBlock(routerPath) {
+  return [
+    '[mcp_servers.rudi]',
+    `command = ${tomlString(routerPath)}`,
+    'args = []',
+    '',
+  ].join('\n');
+}
+
+export function patchCodexTomlRouter(content, routerPath, options = {}) {
+  const rudiMcpShimPath = options.rudiMcpShimPath || path.join(PATHS.bins, 'rudi-mcp');
+  const legacyMcpShimPath = options.legacyMcpShimPath || path.join(PATHS.home, 'shims', 'rudi-mcp');
+  const rudiStacksPath = options.rudiStacksPath || path.join(PATHS.home, 'stacks');
+  const blocks = splitTomlBlocks(content || '');
+  const removedEntries = [];
+  const removedServers = new Set();
+
+  for (const block of blocks) {
+    const serverName = getCodexMcpServerName(block.table);
+    if (!serverName || serverName === 'rudi') continue;
+
+    const blockText = block.lines.join('\n');
+    if (
+      blockText.includes(rudiStacksPath)
+      || blockText.includes(rudiMcpShimPath)
+      || blockText.includes(legacyMcpShimPath)
+    ) {
+      removedServers.add(serverName);
+    }
+  }
+
+  const keptBlocks = [];
+  let existingRouter = false;
+
+  for (const block of blocks) {
+    const serverName = getCodexMcpServerName(block.table);
+    if (serverName === 'rudi') {
+      existingRouter = true;
+      continue;
+    }
+    if (serverName && removedServers.has(serverName)) {
+      continue;
+    }
+    keptBlocks.push(block);
+  }
+
+  removedEntries.push(...Array.from(removedServers).sort());
+
+  let nextContent = keptBlocks.map((block) => block.lines.join('\n')).join('\n');
+  nextContent = nextContent.replace(/\s*$/, '');
+  if (nextContent) {
+    nextContent += '\n\n';
+  }
+  nextContent += buildCodexRouterTomlBlock(routerPath);
+
+  const changed = nextContent !== content;
+  return {
+    action: existingRouter ? (changed ? 'updated' : 'none') : 'added',
+    content: nextContent,
+    existingRouter,
+    removed: removedEntries,
+  };
+}
+
 /**
  * Build MCP server entry for the router
  * Format varies slightly by agent
@@ -90,6 +192,79 @@ function buildRouterEntry(agentId, routerPath) {
   return base;
 }
 
+async function integrateCodexAgent(agentConfig, targetPath, flags) {
+  console.log(`\n${agentConfig.name}:`);
+  console.log(`  Config: ${targetPath}`);
+
+  const routerPath = checkRouterShim();
+  const existing = fs.existsSync(targetPath)
+    ? fs.readFileSync(targetPath, 'utf-8')
+    : '';
+  const result = patchCodexTomlRouter(existing, routerPath);
+
+  if (result.removed.length > 0) {
+    console.log(`  Removed old entries: ${result.removed.join(', ')}`);
+  }
+
+  if (result.action !== 'none' || result.removed.length > 0) {
+    const dir = path.dirname(targetPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    if (fs.existsSync(targetPath)) {
+      const backup = backupConfig(targetPath);
+      if (backup && flags.verbose) {
+        console.log(`  Backup: ${backup}`);
+      }
+    }
+    fs.writeFileSync(targetPath, result.content);
+    if (result.action !== 'none') {
+      console.log(`  ${result.action === 'added' ? '✓ Added' : '✓ Updated'} rudi router`);
+    }
+  } else {
+    console.log(`  ✓ Already configured`);
+  }
+
+  return { success: true, action: result.action, removed: result.removed };
+}
+
+async function dryRunIntegrateAgent(agentId) {
+  const agentConfig = AGENT_CONFIGS.find(a => a.id === agentId);
+  if (!agentConfig) {
+    console.log(`\n${agentId}:`);
+    console.log('  Unknown agent');
+    return { success: false, error: 'Unknown agent' };
+  }
+
+  const targetPath = getAgentTargetPath(agentConfig);
+  console.log(`\n${agentConfig.name}:`);
+  console.log(`  Config: ${targetPath}`);
+
+  if (agentId === 'codex') {
+    const routerPath = checkRouterShim();
+    const existing = fs.existsSync(targetPath)
+      ? fs.readFileSync(targetPath, 'utf-8')
+      : '';
+    const result = patchCodexTomlRouter(existing, routerPath);
+
+    if (result.removed.length > 0) {
+      console.log(`  Would remove old entries: ${result.removed.join(', ')}`);
+    }
+    if (result.action === 'added') {
+      console.log('  Would add rudi router');
+    } else if (result.action === 'updated') {
+      console.log('  Would update rudi router');
+    } else {
+      console.log('  ✓ Already configured');
+    }
+
+    return { success: true, action: result.action, removed: result.removed };
+  }
+
+  console.log('  Would add or update rudi router');
+  return { success: true, action: 'unknown' };
+}
+
 /**
  * Integrate RUDI router into a specific agent
  * Also cleans up old individual stack entries that should go through the router
@@ -101,21 +276,14 @@ async function integrateAgent(agentId, flags) {
     return { success: false, error: 'Unknown agent' };
   }
 
-  const configPath = findAgentConfig(agentConfig);
+  const targetPath = getAgentTargetPath(agentConfig);
 
-  // If config doesn't exist, create it
-  const targetPath = configPath || path.join(HOME, agentConfig.paths[process.platform]?.[0] || agentConfig.paths.darwin[0]);
+  if (agentId === 'codex') {
+    return integrateCodexAgent(agentConfig, targetPath, flags);
+  }
 
   console.log(`\n${agentConfig.name}:`);
   console.log(`  Config: ${targetPath}`);
-
-  // Backup existing config
-  if (fs.existsSync(targetPath)) {
-    const backup = backupConfig(targetPath);
-    if (backup && flags.verbose) {
-      console.log(`  Backup: ${backup}`);
-    }
-  }
 
   // Read existing config
   const config = readJsonConfig(targetPath);
@@ -185,6 +353,12 @@ async function integrateAgent(agentId, flags) {
 
   // Write config if anything changed
   if (action !== 'none' || removedEntries.length > 0) {
+    if (fs.existsSync(targetPath)) {
+      const backup = backupConfig(targetPath);
+      if (backup && flags.verbose) {
+        console.log(`  Backup: ${backup}`);
+      }
+    }
     writeJsonConfig(targetPath, config);
     if (action !== 'none') {
       console.log(`  ${action === 'added' ? '✓ Added' : '✓ Updated'} rudi router`);
@@ -292,10 +466,9 @@ EXAMPLES
 
   // Dry run
   if (flags['dry-run']) {
-    console.log('\nDry run - would add RUDI router to:');
+    console.log('\nDry run:');
     for (const agentId of targetAgents) {
-      const agent = AGENT_CONFIGS.find(a => a.id === agentId);
-      console.log(`  ${agent?.name || agentId}`);
+      await dryRunIntegrateAgent(agentId);
     }
     return;
   }
