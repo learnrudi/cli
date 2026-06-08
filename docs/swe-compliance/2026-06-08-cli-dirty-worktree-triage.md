@@ -140,3 +140,10 @@
 - Non-goals: daemon lifecycle command, home storage map, daemon HTTP route implementation, package metadata, and generated `dist/` output.
 - Commands run and results:
   - `node scripts/run-tests.js src/__tests__/unit/daemon-cli-integration.test.js` passed with 3 tests.
+
+## Follow-Up Slice: Home Storage Map
+
+- Scope: expand `rudi home` JSON/human output into an explicit storage map with lifecycle, sensitivity, cleanup guidance, workflow counts, symlink-safe sizing, and no secret values.
+- Non-goals: daemon lifecycle command, daemon HTTP route implementation, package metadata, and generated `dist/` output.
+- Commands run and results:
+  - `node scripts/run-tests.js src/__tests__/unit/home-command.test.js` passed with 1 test.
