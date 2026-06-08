@@ -135,7 +135,9 @@ CREATE TABLE IF NOT EXISTS sessions (
   -- Display
   title TEXT,
   title_override TEXT,
+  description TEXT,
   snippet TEXT,
+  enriched_at TEXT,
 
   -- State
   status TEXT DEFAULT 'active' CHECK (status IN ('active', 'archived', 'deleted')),
@@ -329,6 +331,7 @@ CREATE INDEX IF NOT EXISTS idx_tool_calls_file ON tool_calls(file_path) WHERE fi
 CREATE VIRTUAL TABLE IF NOT EXISTS sessions_fts USING fts5(
   session_id UNINDEXED,
   title,
+  description,
   snippet
 );
 
@@ -883,6 +886,9 @@ export function applySchemaUpdates(db) {
     // v11: title provenance tracking
     ensureColumn(db, 'sessions', 'title_source', 'ALTER TABLE sessions ADD COLUMN title_source TEXT');
     ensureColumn(db, 'sessions', 'title_generated_at', 'ALTER TABLE sessions ADD COLUMN title_generated_at TEXT');
+    // v21: LLM enrichment columns must exist before sessions_fts refresh reads them.
+    ensureColumn(db, 'sessions', 'description', 'ALTER TABLE sessions ADD COLUMN description TEXT');
+    ensureColumn(db, 'sessions', 'enriched_at', 'ALTER TABLE sessions ADD COLUMN enriched_at TEXT');
     ensureSessionsFtsHealthy(db);
 
     if (columnExists(db, 'sessions', 'session_type')) {

@@ -195,3 +195,12 @@
   - `node scripts/run-tests.js src/__tests__/unit/daemon-command.test.js src/__tests__/unit/launch-agent.test.js src/__tests__/unit/commands.test.js src/__tests__/unit/routing.test.js` passed with 82 tests.
   - `git diff --cached --check` passed.
   - `node scripts/agent-debt-runner.mjs --edited packages/utils/src/help.js,src/__tests__/unit/commands.test.js,src/__tests__/unit/daemon-command.test.js,src/__tests__/unit/launch-agent.test.js,src/commands/daemon.js,src/daemon/runtime/launch-agent.js,src/index.js` passed with no findings.
+
+## Follow-Up Slice: Session Enrichment Schema
+
+- Scope: ensure fresh and migrated databases have session `description` and `enriched_at` columns before refreshing `sessions_fts`, and verify the FTS columns include `description`.
+- Non-goals: daemon route docs/OpenAPI, package metadata, and generated `dist` output.
+- Commands run and results:
+  - `node scripts/run-tests.js src/__tests__/unit/schema-migrations.test.js` passed with 4 tests.
+  - `git diff --cached --check` passed.
+  - `node scripts/agent-debt-runner.mjs --edited packages/db/src/schema.js,src/__tests__/unit/schema-migrations.test.js` passed with no findings.

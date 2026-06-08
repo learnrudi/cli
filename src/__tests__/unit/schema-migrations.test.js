@@ -6,6 +6,43 @@ import path from 'path';
 import Database from 'better-sqlite3';
 import { initSchemaWithDb } from '@learnrudi/db/schema';
 
+function columnNames(db, table) {
+  return db.prepare(`PRAGMA table_info(${table})`).all().map((col) => col.name);
+}
+
+test('fresh schema init creates session enrichment columns and healthy sessions FTS', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'rudi-schema-fresh-'));
+  const dbPath = path.join(tmp, 'test.db');
+  const db = new Database(dbPath);
+  const warnings = [];
+  const originalWarn = console.warn;
+
+  try {
+    console.warn = (...args) => {
+      warnings.push(args.join(' '));
+    };
+
+    const result = initSchemaWithDb(db);
+    assert.strictEqual(result.version, 27);
+    assert.strictEqual(result.migrated, false);
+
+    const sessionColumns = columnNames(db, 'sessions');
+    assert.ok(sessionColumns.includes('description'));
+    assert.ok(sessionColumns.includes('enriched_at'));
+
+    const ftsColumns = columnNames(db, 'sessions_fts');
+    assert.deepStrictEqual(ftsColumns, ['session_id', 'title', 'description', 'snippet']);
+    assert.deepStrictEqual(
+      warnings.filter((warning) => warning.includes('sessions_fts setup failed')),
+      [],
+    );
+  } finally {
+    console.warn = originalWarn;
+    db.close();
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test('migrations v19-v20 normalize raw JSON tool previews and recover file paths', async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'rudi-schema-migration-'));
   const dbPath = path.join(tmp, 'test.db');
