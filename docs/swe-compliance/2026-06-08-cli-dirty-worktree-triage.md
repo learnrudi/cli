@@ -126,3 +126,10 @@
 - Non-goals: daemon lifecycle management, daemon HTTP route registration, full sidecar OpenAPI updates, package metadata, and generated `dist/` output.
 - Commands run and results:
   - `node scripts/run-tests.js src/__tests__/unit/local-llm.test.js` passed with 13 tests.
+
+## Follow-Up Slice: Sidecar Daemon Probe
+
+- Scope: add a reusable sidecar daemon status probe that reads connection files, calls readiness/status endpoints, and classifies offline, ready, not-ready, and unreachable states.
+- Non-goals: daemon lifecycle command, status/doctor/home rendering, daemon HTTP route implementation, package metadata, and generated `dist/` output.
+- Commands run and results:
+  - `node scripts/run-tests.js src/__tests__/unit/sidecar-client.test.js` passed with 6 subtests.

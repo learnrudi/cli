@@ -85,3 +85,75 @@ export async function sidecarRequest({
 
   return parsed || {};
 }
+
+function buildDaemonProbeResult(patch = {}) {
+  return {
+    running: false,
+    reachable: false,
+    healthy: false,
+    ready: false,
+    reason: 'unknown',
+    error: null,
+    port: null,
+    version: null,
+    readiness: null,
+    status: null,
+    toolIndexStatus: null,
+    dbStatus: null,
+    activeSessionCount: 0,
+    activeJobCount: 0,
+    ...patch,
+  };
+}
+
+export async function getSidecarDaemonStatus(options = {}) {
+  const readInfo = options.readSidecarInfo || readSidecarInfo;
+  const request = options.sidecarRequest || sidecarRequest;
+  const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs > 0
+    ? options.timeoutMs
+    : 1500;
+
+  let sidecar;
+  try {
+    sidecar = readInfo(options);
+  } catch (error) {
+    return buildDaemonProbeResult({
+      reason: error.code === 'SIDECAR_NOT_RUNNING' ? 'not_running' : 'invalid_connection_files',
+      error: error.message,
+    });
+  }
+
+  try {
+    const [readiness, status] = await Promise.all([
+      request({ ...sidecar, pathname: '/ready', timeoutMs }),
+      request({ ...sidecar, pathname: '/daemon/status', timeoutMs }),
+    ]);
+    const ready = readiness?.ready === true;
+
+    return buildDaemonProbeResult({
+      running: true,
+      reachable: true,
+      healthy: ready,
+      ready,
+      reason: ready ? 'ok' : 'not_ready',
+      port: sidecar.port,
+      version: status?.version || null,
+      readiness,
+      status,
+      toolIndexStatus: status?.toolIndexStatus || readiness?.checks?.toolIndex || null,
+      dbStatus: status?.dbStatus || readiness?.checks?.db || null,
+      activeSessionCount: Number.isInteger(status?.activeSessionCount) ? status.activeSessionCount : 0,
+      activeJobCount: Number.isInteger(status?.activeJobCount) ? status.activeJobCount : 0,
+    });
+  } catch (error) {
+    return buildDaemonProbeResult({
+      running: false,
+      reachable: false,
+      healthy: false,
+      ready: false,
+      reason: 'unreachable',
+      error: error.name === 'AbortError' ? `Timed out after ${timeoutMs}ms` : error.message,
+      port: sidecar.port,
+    });
+  }
+}
