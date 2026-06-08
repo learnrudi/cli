@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import os from 'os';
 import path from 'path';
-import { AGENT_CONFIGS, getAgentConfigPaths } from '../../agents.js';
+import { AGENT_CONFIGS, getAgentConfigPaths, readCodexTomlMcpServers } from '../../agents.js';
 
 // =============================================================================
 // AGENT CONFIGURATION
@@ -130,6 +130,28 @@ test('config: Cline uses cline_mcp_settings.json', () => {
   const cline = AGENT_CONFIGS.find(a => a.id === 'cline');
 
   assert.ok(cline.paths.darwin.some(p => p.endsWith('cline_mcp_settings.json')));
+});
+
+test('config: Codex prefers config.toml', () => {
+  const codex = AGENT_CONFIGS.find(a => a.id === 'codex');
+
+  assert.strictEqual(codex.key, 'mcp_servers');
+  assert.ok(codex.paths.darwin[0].endsWith('config.toml'));
+});
+
+test('config: parses Codex TOML MCP servers', () => {
+  const servers = readCodexTomlMcpServers(`
+[mcp_servers.rudi]
+command = "/Users/test/.rudi/bins/rudi-router"
+args = []
+
+[mcp_servers.docs]
+url = "https://developers.openai.com/mcp"
+`, '/Users/test/.codex/config.toml');
+
+  assert.deepStrictEqual(servers.map((server) => server.name), ['rudi', 'docs']);
+  assert.strictEqual(servers[0].command, '/Users/test/.rudi/bins/rudi-router');
+  assert.strictEqual(servers[1].command, 'https://developers.openai.com/mcp');
 });
 
 // =============================================================================

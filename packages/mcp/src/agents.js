@@ -112,11 +112,11 @@ export const AGENT_CONFIGS = [
   {
     id: 'codex',
     name: 'Codex',
-    key: 'mcpServers',
+    key: 'mcp_servers',
     paths: {
-      darwin: ['.codex/config.json', '.codex/settings.json'],
-      win32: ['.codex/config.json', '.codex/settings.json'],
-      linux: ['.codex/config.json', '.codex/settings.json'],
+      darwin: ['.codex/config.toml', '.codex/config.json', '.codex/settings.json'],
+      win32: ['.codex/config.toml', '.codex/config.json', '.codex/settings.json'],
+      linux: ['.codex/config.toml', '.codex/config.json', '.codex/settings.json'],
     }
   },
 ];
@@ -144,6 +144,64 @@ export function findAgentConfig(agentConfig) {
   return null;
 }
 
+function parseTomlScalar(value) {
+  const trimmed = value.trim();
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+      (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+    return trimmed.slice(1, -1);
+  }
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    return trimmed
+      .slice(1, -1)
+      .split(',')
+      .map((item) => parseTomlScalar(item))
+      .filter((item) => item !== '');
+  }
+  return trimmed;
+}
+
+export function readCodexTomlMcpServers(content, configPath) {
+  const servers = [];
+  let current = null;
+
+  for (const line of content.split('\n')) {
+    const tableMatch = line.match(/^\s*\[mcp_servers\.([^\].]+)]\s*(?:#.*)?$/);
+    if (tableMatch) {
+      current = {
+        name: tableMatch[1].replace(/^"(.*)"$/, '$1'),
+        command: null,
+        args: undefined,
+        cwd: undefined,
+        url: undefined,
+      };
+      servers.push(current);
+      continue;
+    }
+
+    if (!current) continue;
+    const kvMatch = line.match(/^\s*([A-Za-z0-9_-]+)\s*=\s*(.+?)\s*(?:#.*)?$/);
+    if (!kvMatch) continue;
+
+    const [, key, value] = kvMatch;
+    if (key === 'command' || key === 'cwd' || key === 'url') {
+      current[key] = parseTomlScalar(value);
+    } else if (key === 'args') {
+      current.args = parseTomlScalar(value);
+    }
+  }
+
+  return servers.map((server) => ({
+    name: server.name,
+    agent: 'codex',
+    agentName: 'Codex',
+    command: server.command || server.url || 'unknown',
+    args: server.args,
+    cwd: server.cwd,
+    env: [],
+    configFile: configPath,
+  }));
+}
+
 /**
  * Read MCP servers from an agent's config file
  */
@@ -152,6 +210,10 @@ export function readAgentMcpServers(agentConfig) {
   if (!configPath) return [];
 
   try {
+    if (agentConfig.id === 'codex' && configPath.endsWith('.toml')) {
+      return readCodexTomlMcpServers(fs.readFileSync(configPath, 'utf-8'), configPath);
+    }
+
     const content = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
     const mcpServers = content[agentConfig.key] || {};
 

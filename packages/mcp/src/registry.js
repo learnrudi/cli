@@ -40,6 +40,12 @@ const RUDI_ROUTER_SHIM = path.join(HOME, '.rudi', 'bins', 'rudi-router');
 function isRouterConfigured(configPath, key = 'mcpServers') {
   try {
     const content = fsSync.readFileSync(configPath, 'utf-8');
+    if (configPath.endsWith('.toml')) {
+      const rudiSection = content.match(/^\s*\[mcp_servers\.rudi]\s*$([\s\S]*?)(?=^\s*\[|\s*$)/m);
+      if (!rudiSection) return false;
+      return rudiSection[1].includes(RUDI_ROUTER_SHIM) || rudiSection[1].includes('/rudi-router');
+    }
+
     const settings = JSON.parse(content);
     const entry = settings[key]?.['rudi'];
     if (!entry) return false;

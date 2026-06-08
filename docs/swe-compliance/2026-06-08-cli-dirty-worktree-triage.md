@@ -215,3 +215,12 @@
   - `node scripts/run-tests.js src/__tests__/unit/sidecar-openapi-contract.test.js src/__tests__/unit/daemon-schemas-contract.test.js src/__tests__/unit/daemon-routes-contract.test.js src/__tests__/unit/local-llm.test.js` passed with 38 tests.
   - `git diff --cached --check` passed.
   - `node scripts/agent-debt-runner.mjs --edited src/contracts/sidecar-openapi.js,src/__tests__/unit/sidecar-openapi-contract.test.js` passed with no findings.
+
+## Follow-Up Slice: Codex TOML MCP Discovery
+
+- Scope: prefer Codex `config.toml`, parse `[mcp_servers.*]` entries for MCP discovery, and recognize an existing TOML RUDI router entry before direct stack registration.
+- Non-goals: package resolution, generated package manifest, generated `dist` output, and public-readiness docs.
+- Commands run and results:
+  - `node scripts/run-tests.js packages/mcp/src/__tests__/unit/agents.test.js src/__tests__/unit/integrate-codex.test.js` passed with 25 tests.
+  - `git diff --cached --check` passed.
+  - `node scripts/agent-debt-runner.mjs --edited packages/mcp/src/agents.js,packages/mcp/src/registry.js,packages/mcp/src/__tests__/unit/agents.test.js` passed with no findings.
