@@ -37,6 +37,7 @@ INSTALLED
   shims [cmd]           Manage shims in ~/.rudi/bins (list, check, fix, rebuild)
   local-llm <cmd>       Check local OpenAI-compatible LLM runtimes and export env
   runtime <cmd>         Inspect runtime registry entries and status
+  daemon <cmd>          Start, stop, restart, or inspect the local daemon
 
 AGENT INTEGRATION
   integrate <agent>     Wire up RUDI router (claude, cursor, gemini, codex, all)
@@ -292,6 +293,31 @@ EXAMPLES
   rudi runtime list
   rudi runtime status ollama
 `,
+    daemon: `
+rudi daemon - Manage the local RUDI daemon
+
+USAGE
+  rudi daemon status [--json]
+  rudi daemon start [--port <port>] [--json]
+  rudi daemon stop [--json]
+  rudi daemon restart [--port <port>] [--json]
+  rudi daemon install [--port <port>] [--dry-run] [--json]
+  rudi daemon uninstall [--dry-run] [--json]
+
+NOTES
+  Without a LaunchAgent, start/stop/restart control a detached local
+  \`rudi serve\` process. After install, lifecycle uses the per-user macOS
+  LaunchAgent at ~/Library/LaunchAgents/com.learnrudi.daemon.plist.
+
+EXAMPLES
+  rudi daemon status
+  rudi daemon start
+  rudi daemon install --dry-run
+  rudi daemon install
+  rudi daemon restart --port 8100
+  rudi daemon uninstall
+  rudi daemon stop
+`,
     list: `
 rudi list - List installed packages
 
@@ -308,10 +334,10 @@ OPTIONS
 
 EXAMPLES
   rudi list
-  rudi list workflows
   rudi list stacks
   rudi list stacks --detected     Show MCP servers in Claude/Gemini/Codex
   rudi list binaries
+  rudi list workflows
   rudi list skills --category=coding
 `,
     secrets: `

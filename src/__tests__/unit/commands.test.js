@@ -119,6 +119,11 @@ test('commands: runtime exports cmdRuntime function', async () => {
   assert.strictEqual(typeof cmdRuntime, 'function');
 });
 
+test('commands: daemon exports cmdDaemon function', async () => {
+  const { cmdDaemon } = await import('../../commands/daemon.js');
+  assert.strictEqual(typeof cmdDaemon, 'function');
+});
+
 test('commands: leverage exports cmdLeverage function', async () => {
   const { cmdLeverage } = await import('../../commands/leverage.js');
   assert.strictEqual(typeof cmdLeverage, 'function');

@@ -48,7 +48,6 @@ import { cmdWhich } from './commands/which.js';
 import { cmdAuth } from './commands/auth.js';
 import { cmdMcp } from './commands/mcp.js';
 import { cmdIntegrate } from './commands/integrate.js';
-import { cmdInstructions } from './commands/instructions.js';
 import { cmdIndex } from './commands/index-tools.js';
 import { cmdStatus } from './commands/status.js';
 import { cmdCheck } from './commands/check.js';
@@ -63,6 +62,8 @@ import { cmdRunGroup } from './commands/run-group.js';
 import { cmdLanes } from './commands/lanes.js';
 import { cmdLocalLlm } from './commands/local-llm.js';
 import { cmdRuntime } from './commands/runtime.js';
+import { cmdDaemon } from './commands/daemon.js';
+import { cmdInstructions } from './commands/instructions.js';
 import { cmdLeverage } from './commands/leverage.js';
 
 const VERSION = typeof __RUDI_CLI_VERSION__ === 'string'
@@ -236,6 +237,10 @@ async function main() {
 
       case 'runtime':
         await cmdRuntime(args, flags);
+        break;
+
+      case 'daemon':
+        await cmdDaemon(args, flags);
         break;
 
       case 'leverage':

@@ -184,3 +184,14 @@
   - `node scripts/run-tests.js src/__tests__/unit/daemon-routes-contract.test.js src/__tests__/unit/daemon-runtime-contract.test.js src/__tests__/unit/serve-ctx-contract.test.js src/__tests__/unit/serve-health-contract.test.js src/__tests__/unit/local-llm.test.js src/__tests__/unit/packages-routes.test.js` passed with 71 tests.
   - `git diff --cached --check` passed.
   - `node scripts/agent-debt-runner.mjs --edited src/commands/serve.js,src/commands/serve/ctx.js,src/__tests__/unit/serve-ctx-contract.test.js,src/__tests__/unit/serve-health-contract.test.js,src/__tests__/unit/daemon-routes-contract.test.js,src/__tests__/unit/daemon-runtime-contract.test.js,src/daemon/routes/admin.js,src/daemon/routes/env.js,src/daemon/routes/health.js,src/daemon/routes/index.js,src/daemon/routes/local-llm.js,src/daemon/runtime/auth.js,src/daemon/runtime/bootstrap.js,src/daemon/runtime/process-manager.js,src/daemon/runtime/shutdown.js,src/daemon/runtime/websocket.js` passed with no findings.
+
+## Follow-Up Slice: Daemon Lifecycle CLI
+
+- Scope: add `rudi daemon` lifecycle command, detached `serve` process management, per-user macOS LaunchAgent helpers, command routing, help text, and focused tests.
+- Non-goals: DB schema/OpenAPI/package metadata, generated `dist/` output, and public-readiness docs.
+- Commands run and results:
+  - `node --check src/commands/daemon.js` passed.
+  - `node --check src/daemon/runtime/launch-agent.js` passed.
+  - `node scripts/run-tests.js src/__tests__/unit/daemon-command.test.js src/__tests__/unit/launch-agent.test.js src/__tests__/unit/commands.test.js src/__tests__/unit/routing.test.js` passed with 82 tests.
+  - `git diff --cached --check` passed.
+  - `node scripts/agent-debt-runner.mjs --edited packages/utils/src/help.js,src/__tests__/unit/commands.test.js,src/__tests__/unit/daemon-command.test.js,src/__tests__/unit/launch-agent.test.js,src/commands/daemon.js,src/daemon/runtime/launch-agent.js,src/index.js` passed with no findings.
