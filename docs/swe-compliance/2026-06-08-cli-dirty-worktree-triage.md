@@ -133,3 +133,10 @@
 - Non-goals: daemon lifecycle command, status/doctor/home rendering, daemon HTTP route implementation, package metadata, and generated `dist/` output.
 - Commands run and results:
   - `node scripts/run-tests.js src/__tests__/unit/sidecar-client.test.js` passed with 6 subtests.
+
+## Follow-Up Slice: Daemon Status Reporting
+
+- Scope: surface daemon readiness in `rudi status` and `rudi doctor`, including JSON daemon summaries and informational vs actionable doctor states.
+- Non-goals: daemon lifecycle command, home storage map, daemon HTTP route implementation, package metadata, and generated `dist/` output.
+- Commands run and results:
+  - `node scripts/run-tests.js src/__tests__/unit/daemon-cli-integration.test.js` passed with 3 tests.

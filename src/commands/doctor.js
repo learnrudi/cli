@@ -12,6 +12,18 @@ import {
 import { isDatabaseInitialized, initSchema } from '@learnrudi/db';
 import { listSecretNames } from '@learnrudi/runner';
 import fs from 'fs';
+import { getSidecarDaemonStatus } from './sidecar-client.js';
+
+export function formatDaemonDoctorState(daemon) {
+  if (daemon.ready) return 'ready';
+  if (daemon.reachable) return 'not ready';
+  if (daemon.reason === 'not_running') return 'not running';
+  return 'unreachable';
+}
+
+export function shouldReportDaemonIssue(daemon) {
+  return daemon.reason !== 'not_running' && (!daemon.reachable || !daemon.ready);
+}
 
 export async function cmdDoctor(args, flags) {
   console.log('RUDI Health Check');
@@ -25,7 +37,8 @@ export async function cmdDoctor(args, flags) {
   const dirs = [
     { path: PATHS.home, name: 'Home' },
     { path: PATHS.stacks, name: 'Stacks' },
-    { path: PATHS.prompts, name: 'Skills' },
+    { path: PATHS.skills, name: 'Skills' },
+    { path: PATHS.workflows, name: 'Workflows' },
     { path: PATHS.runtimes, name: 'Runtimes' },
     { path: PATHS.binaries, name: 'Binaries' },
     { path: PATHS.agents, name: 'Agents' },
@@ -54,15 +67,49 @@ export async function cmdDoctor(args, flags) {
     fixes.push(() => initSchema());
   }
 
+  // Check local daemon reachability
+  console.log('\n🟢 Daemon');
+  const daemon = await getSidecarDaemonStatus();
+  const daemonState = formatDaemonDoctorState(daemon);
+  const daemonIcon = daemon.ready ? '✓' : (daemon.reason === 'not_running' ? '○' : '✗');
+  console.log(`  ${daemonIcon} State: ${daemonState}`);
+  if (daemon.port) {
+    console.log(`  ${daemon.reachable ? '✓' : '✗'} Port: ${daemon.port}`);
+  }
+  if (daemon.version) {
+    console.log(`  ✓ Version: ${daemon.version}`);
+  }
+  if (daemon.dbStatus) {
+    const dbReady = daemon.dbStatus.ready === true || daemon.dbStatus.status === 'ready';
+    console.log(`  ${dbReady ? '✓' : '✗'} Daemon DB: ${daemon.dbStatus.status || 'unknown'}`);
+  }
+  if (daemon.toolIndexStatus) {
+    const toolIndexReady = daemon.toolIndexStatus.ready !== false;
+    const toolCount = Number.isInteger(daemon.toolIndexStatus.toolCount)
+      ? ` (${daemon.toolIndexStatus.toolCount} tools)`
+      : '';
+    console.log(`  ${toolIndexReady ? '✓' : '✗'} Tool index: ${daemon.toolIndexStatus.status || 'unknown'}${toolCount}`);
+  }
+  if (daemon.error) {
+    console.log(`  Detail: ${daemon.error}`);
+  }
+  if (daemon.reason === 'not_running') {
+    console.log('  Start with: rudi serve');
+  } else if (shouldReportDaemonIssue(daemon)) {
+    issues.push(`Daemon is ${daemonState}`);
+  }
+
   // Check installed packages
   console.log('\n📦 Packages');
   try {
     const stacks = getInstalledPackages('stack');
     const skills = getInstalledPackages('skill');
+    const workflows = getInstalledPackages('workflow');
     const runtimes = getInstalledPackages('runtime');
 
     console.log(`  ✓ Stacks: ${stacks.length}`);
     console.log(`  ✓ Skills: ${skills.length}`);
+    console.log(`  ✓ Workflows: ${workflows.length}`);
     console.log(`  ✓ Runtimes: ${runtimes.length}`);
   } catch (error) {
     console.log(`  ✗ Error reading packages: ${error.message}`);

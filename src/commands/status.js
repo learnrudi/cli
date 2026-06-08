@@ -9,6 +9,7 @@
  *   rudi status --json    JSON for Studio consumption
  *   rudi status agents    Status of agents only
  *   rudi status runtimes  Status of runtimes only
+ *   rudi status daemon    Status of the local daemon only
  */
 
 import { PATHS, getInstalledPackages, isPackageInstalled, resolveNodeRuntimeBin } from '@learnrudi/core';
@@ -16,6 +17,7 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { getSidecarDaemonStatus } from './sidecar-client.js';
 
 // Agent definitions with credential check info
 const AGENTS = [
@@ -258,10 +260,12 @@ function getBinaryStatus(binary) {
 /**
  * Get full system status
  */
-async function getFullStatus() {
+export async function getFullStatus(options = {}) {
   const agents = AGENTS.map(getAgentStatus);
   const runtimes = RUNTIMES.map(getRuntimeStatus);
   const binaries = BINARIES.map(getBinaryStatus);
+  const daemonStatusProvider = options.daemonStatusProvider || getSidecarDaemonStatus;
+  const daemon = await daemonStatusProvider();
 
   // Get installed stacks and skills
   let stacks = [];
@@ -302,6 +306,8 @@ async function getFullStatus() {
     binariesTotal: binaries.length,
     stacksInstalled: stacks.length,
     skillsInstalled: skills.length,
+    daemonRunning: daemon.running,
+    daemonReady: daemon.ready,
   };
 
   return {
@@ -312,10 +318,41 @@ async function getFullStatus() {
     agents,
     runtimes,
     binaries,
+    daemon,
     stacks,
     skills,
     directories,
   };
+}
+
+export async function getDaemonOnlyStatus(options = {}) {
+  const daemonStatusProvider = options.daemonStatusProvider || getSidecarDaemonStatus;
+  const daemon = await daemonStatusProvider();
+  return {
+    timestamp: new Date().toISOString(),
+    platform: `${process.platform}-${process.arch}`,
+    rudiHome: PATHS.home,
+    summary: {
+      daemonRunning: daemon.running,
+      daemonReady: daemon.ready,
+    },
+    daemon,
+  };
+}
+
+function formatDaemonState(daemon) {
+  if (daemon.ready) return 'ready';
+  if (daemon.reachable) return 'not ready';
+  if (daemon.reason === 'not_running') return 'not running';
+  return 'unreachable';
+}
+
+function formatSubStatus(status) {
+  if (!status) return 'unknown';
+  if (status.status) return status.ready === false ? `${status.status} (not ready)` : status.status;
+  if (status.ready === true) return 'ready';
+  if (status.ready === false) return 'not ready';
+  return 'unknown';
 }
 
 /**
@@ -327,6 +364,32 @@ function printStatus(status, filter) {
   console.log(`Platform: ${status.platform}`);
   console.log(`RUDI Home: ${status.rudiHome}`);
   console.log('');
+
+  // Daemon
+  if (!filter || filter === 'daemon') {
+    const daemon = status.daemon;
+    const icon = daemon.ready ? '\x1b[32m✓\x1b[0m' : (daemon.reachable ? '\x1b[33m!\x1b[0m' : '\x1b[90m○\x1b[0m');
+    console.log('DAEMON');
+    console.log('-'.repeat(50));
+    console.log(`  ${icon} State: ${formatDaemonState(daemon)}`);
+    if (daemon.port) console.log(`    Port: ${daemon.port}`);
+    if (daemon.version) console.log(`    Version: ${daemon.version}`);
+    if (daemon.dbStatus) console.log(`    Database: ${formatSubStatus(daemon.dbStatus)}`);
+    if (daemon.toolIndexStatus) {
+      const toolIndex = daemon.toolIndexStatus;
+      const counts = [
+        Number.isInteger(toolIndex.stackCount) ? `${toolIndex.stackCount} stacks` : null,
+        Number.isInteger(toolIndex.toolCount) ? `${toolIndex.toolCount} tools` : null,
+        Number.isInteger(toolIndex.failureCount) ? `${toolIndex.failureCount} failures` : null,
+      ].filter(Boolean).join(', ');
+      console.log(`    Tool index: ${formatSubStatus(toolIndex)}${counts ? ` (${counts})` : ''}`);
+    }
+    console.log(`    Active sessions: ${daemon.activeSessionCount || 0}`);
+    console.log(`    Active jobs: ${daemon.activeJobCount || 0}`);
+    if (daemon.error) console.log(`    Detail: ${daemon.error}`);
+    console.log('');
+    if (filter === 'daemon') return;
+  }
 
   // Agents
   if (!filter || filter === 'agents') {
@@ -390,12 +453,15 @@ function printStatus(status, filter) {
   console.log(`  Binaries: ${status.summary.binariesInstalled}/${status.summary.binariesTotal}`);
   console.log(`  Stacks: ${status.summary.stacksInstalled}`);
   console.log(`  Skills: ${status.summary.skillsInstalled}`);
+  console.log(`  Daemon: ${formatDaemonState(status.daemon)}`);
 }
 
 export async function cmdStatus(args, flags) {
-  const filter = args[0]; // Optional filter: agents, runtimes, binaries, stacks
+  const filter = args[0]; // Optional filter: agents, runtimes, binaries, stacks, daemon
 
-  const status = await getFullStatus();
+  const status = filter === 'daemon'
+    ? await getDaemonOnlyStatus()
+    : await getFullStatus();
 
   if (flags.json) {
     // Filter output if requested
