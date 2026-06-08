@@ -12,6 +12,7 @@ import * as path from 'path';
 import { execSync } from 'child_process';
 import { listInstalled } from '@learnrudi/core';
 import { PATHS } from '@learnrudi/env';
+import { formatRelatedSkillsLine, getRelatedSkillIds } from './related-skills.js';
 
 export async function cmdWhich(args, flags) {
   const stackId = args[0];
@@ -68,6 +69,10 @@ export async function cmdWhich(args, flags) {
     if (stack.description) {
       console.log(`About:      ${stack.description}`);
     }
+    const relatedSkillsLine = formatRelatedSkillsLine(stack);
+    if (relatedSkillsLine) {
+      console.log(relatedSkillsLine);
+    }
     console.log('');
 
     console.log(`Runtime:    ${runtimeInfo.runtime || 'unknown'}`);
@@ -100,6 +105,10 @@ export async function cmdWhich(args, flags) {
     console.log('Commands:');
     console.log(`  rudi run ${stack.id}          Test the stack`);
     console.log(`  rudi secrets ${stack.id}      Configure secrets`);
+    if (getRelatedSkillIds(stack).length > 0) {
+      console.log(`  rudi install ${stack.id} --with-related-skills`);
+      console.log(`                         Install editable related skills`);
+    }
     if (runtimeInfo.entry) {
       console.log('');
       console.log('Run MCP server directly:');

@@ -11,6 +11,7 @@
 
 import { listInstalled } from '@learnrudi/core';
 import { detectAllMcpServers, getInstalledAgents, getMcpServerSummary, AGENT_CONFIGS } from '@learnrudi/mcp';
+import { formatRelatedSkillsLine } from './related-skills.js';
 
 function pluralizeKind(kind) {
   if (!kind) return 'packages';
@@ -213,6 +214,10 @@ export async function cmdList(args, flags) {
         }
         if (pkg.tags && pkg.tags.length > 0) {
           console.log(`    Tags: ${pkg.tags.join(', ')}`);
+        }
+        const relatedSkillsLine = formatRelatedSkillsLine(pkg);
+        if (relatedSkillsLine) {
+          console.log(`    ${relatedSkillsLine}`);
         }
         if (pkg.installedAt) {
           console.log(`    Installed: ${new Date(pkg.installedAt).toLocaleDateString()}`);
