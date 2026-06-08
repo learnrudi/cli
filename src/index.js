@@ -47,6 +47,7 @@ import { cmdWhich } from './commands/which.js';
 import { cmdAuth } from './commands/auth.js';
 import { cmdMcp } from './commands/mcp.js';
 import { cmdIntegrate } from './commands/integrate.js';
+import { cmdInstructions } from './commands/instructions.js';
 import { cmdIndex } from './commands/index-tools.js';
 import { cmdStatus } from './commands/status.js';
 import { cmdCheck } from './commands/check.js';
@@ -171,6 +172,10 @@ async function main() {
 
       case 'integrate':
         await cmdIntegrate(args, flags);
+        break;
+
+      case 'instructions':
+        await cmdInstructions(args, flags);
         break;
 
 

@@ -39,6 +39,7 @@ INSTALLED
 AGENT INTEGRATION
   integrate <agent>     Wire up RUDI router (claude, cursor, gemini, codex, all)
   integrate --list      Show detected agents
+  instructions [agent]  Print or install RUDI agent instruction blocks
   index                 Rebuild tool cache for router
 
 RUN
@@ -75,6 +76,7 @@ EXAMPLES
   rudi install slack             Install Slack stack
   rudi secrets set SLACK_TOKEN   Configure secret
   rudi integrate claude          Wire up Claude Desktop/Code
+  rudi instructions codex        Print Codex instruction block
   rudi list                      Show installed packages
 
 PACKAGE TYPES
@@ -416,6 +418,34 @@ EXAMPLES
   rudi integrate claude
   rudi integrate all
   rudi integrate --list
+`,
+    instructions: `
+rudi instructions - Print or install RUDI agent instructions
+
+USAGE
+  rudi instructions [agent]
+  rudi instructions <agent> --install [--global|--project|--path <file>]
+  rudi instructions <agent> --remove [--global|--project|--path <file>]
+
+AGENTS
+  claude       CLAUDE.md instructions
+  codex        AGENTS.md instructions
+  generic      Print a pasteable generic block
+
+OPTIONS
+  --install    Write or update a managed RUDI block
+  --remove     Remove the managed RUDI block
+  --project    Target ./CLAUDE.md or ./AGENTS.md in the current directory
+  --global     Target the agent global instruction file (default)
+  --path       Target an explicit instruction file
+  --dry-run    Preview changes without writing
+  --json       Output JSON
+
+EXAMPLES
+  rudi instructions claude
+  rudi instructions codex --install
+  rudi instructions claude --project --install
+  rudi instructions codex --remove
 `,
     logs: `
 rudi logs - Query agent visibility logs

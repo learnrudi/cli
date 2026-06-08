@@ -89,6 +89,11 @@ test('commands: integrate exports cmdIntegrate function', async () => {
   assert.strictEqual(typeof cmdIntegrate, 'function');
 });
 
+test('commands: instructions exports cmdInstructions function', async () => {
+  const { cmdInstructions } = await import('../../commands/instructions.js');
+  assert.strictEqual(typeof cmdInstructions, 'function');
+});
+
 test('commands: status exports cmdStatus function', async () => {
   const { cmdStatus } = await import('../../commands/status.js');
   assert.strictEqual(typeof cmdStatus, 'function');
