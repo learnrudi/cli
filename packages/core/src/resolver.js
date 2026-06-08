@@ -41,6 +41,7 @@ export async function resolvePackage(id) {
 
   // Resolve dependencies
   const dependencies = await resolveDependencies(mergedPkg);
+  const relatedSkills = await resolveRelatedSkills(mergedPkg);
 
   return {
     id: fullId,
@@ -54,6 +55,8 @@ export async function resolvePackage(id) {
     installed,
     dependencies,
     requires: mergedPkg.requires,
+    related: mergedPkg.related,
+    relatedSkills,
     // Install-related properties (from canonical manifest)
     npmPackage: mergedPkg.npmPackage,
     pipPackage: mergedPkg.pipPackage,
@@ -67,6 +70,42 @@ export async function resolvePackage(id) {
     nativeInstaller: mergedPkg.nativeInstaller,
     nativeBinPath: mergedPkg.nativeBinPath
   };
+}
+
+function normalizeSkillPackageId(id) {
+  if (typeof id !== 'string') return null;
+  const trimmed = id.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('skill:')) return trimmed;
+  if (trimmed.startsWith('prompt:')) return trimmed.replace(/^prompt:/, 'skill:');
+  if (trimmed.includes(':')) return null;
+  return `skill:${trimmed}`;
+}
+
+async function resolveRelatedSkills(pkg) {
+  const relatedSkillIds = pkg.related?.skills || [];
+  const relatedSkills = [];
+  const seen = new Set();
+
+  for (const id of relatedSkillIds) {
+    const skillId = normalizeSkillPackageId(id);
+    if (!skillId || seen.has(skillId)) continue;
+    seen.add(skillId);
+
+    const skillPkg = await getPackage(skillId);
+    if (!skillPkg) continue;
+
+    relatedSkills.push({
+      id: skillId,
+      kind: 'skill',
+      name: skillPkg.name,
+      version: skillPkg.version,
+      installed: isPackageInstalled(skillId),
+      dependencies: []
+    });
+  }
+
+  return relatedSkills;
 }
 
 /**

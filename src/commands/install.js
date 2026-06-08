@@ -207,6 +207,97 @@ function getSecretLabel(secret) {
   return secret.label || secret.name || secret.key || null;
 }
 
+export function getRelatedSkillInstallMode(flags = {}) {
+  if (flags['with-related-skills'] || flags.withRelatedSkills) return 'include';
+  if (flags['no-related-skills'] || flags.noRelatedSkills) return 'skip';
+  return 'offer';
+}
+
+export function buildRelatedSkillInstallPlan(resolved, flags = {}) {
+  const mode = getRelatedSkillInstallMode(flags);
+  const relatedSkills = Array.isArray(resolved?.relatedSkills)
+    ? resolved.relatedSkills
+    : [];
+  const missing = relatedSkills.filter((skill) => !skill.installed);
+
+  return {
+    mode,
+    relatedSkills,
+    missing,
+    toInstall: mode === 'include' ? missing : [],
+  };
+}
+
+function printRelatedSkillSummary(plan) {
+  if (!plan || plan.relatedSkills.length === 0) return;
+
+  console.log(`\nRelated skills:`);
+  for (const skill of plan.relatedSkills) {
+    const status = skill.installed ? '(installed)' : '(available)';
+    console.log(`  - ${skill.id} ${status}`);
+  }
+
+  if (plan.missing.length === 0) {
+    console.log(`  All related skills are already installed.`);
+  } else if (plan.mode === 'include') {
+    console.log(`  Missing related skills will be installed after the stack.`);
+  } else if (plan.mode === 'skip') {
+    console.log(`  Skipping related skills because --no-related-skills was set.`);
+  } else {
+    console.log(`  Related skills are editable workflow playbooks installed into ~/.rudi/skills.`);
+  }
+}
+
+async function promptForRelatedSkills(plan) {
+  if (!plan || plan.missing.length === 0) return [];
+  if (plan.mode === 'include') return plan.toInstall;
+  if (plan.mode === 'skip') return [];
+  if (!process.stdin.isTTY || !process.stdout.isTTY) return [];
+
+  const { createInterface } = await import('node:readline/promises');
+  const readline = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  try {
+    const label = plan.missing.length === 1 ? plan.missing[0].id : `${plan.missing.length} related skills`;
+    const answer = await readline.question(`\nInstall ${label} now? [y/N] `);
+    return /^(y|yes)$/i.test(answer.trim()) ? plan.missing : [];
+  } finally {
+    readline.close();
+  }
+}
+
+async function installRelatedSkills(skills, options = {}) {
+  const { allowScripts = false, withShims = false } = options;
+  const results = [];
+
+  for (const skill of skills) {
+    console.log(`  Installing related skill ${skill.id}...`);
+    const result = await installPackage(skill.id, {
+      force: false,
+      allowScripts,
+      withShims,
+      onProgress: (progress) => {
+        if (progress.phase === 'installing') {
+          console.log(`    Installing ${progress.package}...`);
+        }
+      }
+    });
+
+    results.push({
+      id: skill.id,
+      success: result.success,
+      path: result.path,
+      alreadyInstalled: result.alreadyInstalled,
+      error: result.error,
+    });
+  }
+
+  return results;
+}
+
 /**
  * Find a stack entry point from its command
  * @returns {{ entryArg: string|null, entryPath: string|null, error?: string }}
@@ -436,6 +527,7 @@ export async function cmdInstall(args, flags) {
 
     // First resolve to show what will be installed
     const resolved = await resolvePackage(pkgId);
+    const relatedSkillPlan = buildRelatedSkillInstallPlan(resolved, flags);
 
     console.log(`\nPackage: ${resolved.name} (${resolved.id})`);
     console.log(`Version: ${resolved.version}`);
@@ -455,6 +547,10 @@ export async function cmdInstall(args, flags) {
         const status = dep.installed ? '(installed)' : '(will install)';
         console.log(`  - ${dep.id} ${status}`);
       }
+    }
+
+    if (resolved.kind === 'stack') {
+      printRelatedSkillSummary(relatedSkillPlan);
     }
 
     // Check ALL dependencies: runtimes, binaries, and secrets
@@ -596,6 +692,22 @@ export async function cmdInstall(args, flags) {
       }
     }
 
+    const selectedRelatedSkills = await promptForRelatedSkills(relatedSkillPlan);
+    const relatedSkillResults = selectedRelatedSkills.length > 0
+      ? await installRelatedSkills(selectedRelatedSkills, { allowScripts, withShims })
+      : [];
+
+    if (relatedSkillResults.length > 0) {
+      console.log(`\n  Related skills:`);
+      for (const relatedResult of relatedSkillResults) {
+        if (relatedResult.success) {
+          console.log(`    - ${relatedResult.id} installed`);
+        } else {
+          console.log(`    - ${relatedResult.id} failed: ${relatedResult.error}`);
+        }
+      }
+    }
+
     // Check secrets status
     const { found, missing } = await checkSecrets(manifest);
 
@@ -672,6 +784,21 @@ export async function cmdInstall(args, flags) {
 
     // 3. Done
     console.log(`\n  3. Restart your agent to use the stack`);
+
+    const installedRelatedSkillIds = new Set(
+      relatedSkillResults.filter((relatedResult) => relatedResult.success).map((relatedResult) => relatedResult.id)
+    );
+    const remainingRelatedSkills = relatedSkillPlan.missing.filter(
+      (skill) => !installedRelatedSkillIds.has(skill.id)
+    );
+    if (remainingRelatedSkills.length > 0) {
+      console.log(`\n  Related skills available:`);
+      for (const skill of remainingRelatedSkills) {
+        console.log(`     - ${skill.id}`);
+      }
+      console.log(`     Install/edit them with: rudi install ${resolved.id} --with-related-skills`);
+      console.log(`     Editable after install: ~/.rudi/skills`);
+    }
     return;
 
   } catch (error) {
