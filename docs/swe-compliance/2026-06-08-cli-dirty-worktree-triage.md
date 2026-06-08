@@ -246,3 +246,14 @@
   - `node scripts/run-tests.js packages/core/src/__tests__/unit/tool-index.test.js src/__tests__/unit/daemon-tool-index-operation.test.js` passed as part of a focused 48-test run.
   - `git diff --cached --check` passed.
   - `node scripts/agent-debt-runner.mjs --edited src/commands/index-tools.js,src/router-mcp.js` passed with no findings.
+
+## Follow-Up Slice: Package Metadata And Generated Artifacts
+
+- Scope: narrow npm published files, classify native runtime modules as production dependencies, allow `RUDI_REGISTRY_CATALOG` for manifest generation, regenerate the package manifest, and rebuild `dist` artifacts.
+- Non-goals: docs/instruction updates, debt-scan policy, and public-readiness planning docs.
+- Commands run and results:
+  - `npm run build` passed and regenerated `src/packages-manifest.json`, `dist/index.cjs`, `dist/router-mcp.js`, and `dist/packages-manifest.json`.
+  - `node dist/index.cjs --version` returned `rudi v1.10.12`.
+  - `npm pack --dry-run` passed with 11 files in the tarball.
+  - `git diff --cached --check` passed.
+  - `node scripts/agent-debt-runner.mjs --edited scripts/generate-manifest.js` passed with no findings.

@@ -15,11 +15,10 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Registry catalog paths - relative to CLI or absolute
 const REGISTRY_PATHS = [
-  path.resolve(__dirname, '../../registry/catalog'),  // Monorepo structure
-  path.resolve(__dirname, '../../../registry/catalog'), // Alternative layout
-];
+  process.env.RUDI_REGISTRY_CATALOG,
+  path.resolve(__dirname, '../../registry/catalog'),
+].filter(Boolean).map((registryPath) => path.resolve(registryPath));
 
 function findRegistryPath() {
   for (const p of REGISTRY_PATHS) {

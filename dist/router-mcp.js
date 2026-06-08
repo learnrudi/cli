@@ -263,7 +263,8 @@ function getStackSecrets(stackId) {
 
   const result = {};
   for (const secretDef of stackConfig.secrets) {
-    const name = typeof secretDef === 'string' ? secretDef : secretDef.name;
+    const name = typeof secretDef === 'string' ? secretDef : (secretDef.name || secretDef.key);
+    if (!name) continue;
     if (allSecrets[name]) {
       result[name] = allSecrets[name];
     }

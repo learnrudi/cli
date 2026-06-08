@@ -1,15 +1,18 @@
 {
   "name": "@learnrudi/cli",
   "version": "1.10.12",
-  "description": "RUDI CLI - Install and manage MCP stacks, runtimes, and AI agents",
+  "description": "RUDI CLI - Install and manage local MCP stacks, runtimes, daemon lifecycle, and agent router integrations",
   "type": "module",
   "main": "dist/index.cjs",
   "bin": {
     "rudi": "dist/index.cjs"
   },
   "files": [
-    "dist",
-    "scripts",
+    "dist/index.cjs",
+    "dist/packages-manifest.json",
+    "dist/router-mcp.js",
+    "dist/spawn-mcp.js",
+    "dist/templates",
     "README.md"
   ],
   "scripts": {
@@ -21,6 +24,11 @@
     "test": "node scripts/run-tests.js"
   },
   "dependencies": {
+    "@lydell/node-pty": "^1.1.0",
+    "better-sqlite3": "^12.5.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
     "@learnrudi/core": "workspace:*",
     "@learnrudi/db": "workspace:*",
     "@learnrudi/embeddings": "workspace:*",
@@ -28,14 +36,9 @@
     "@learnrudi/manifest": "workspace:*",
     "@learnrudi/mcp": "workspace:*",
     "@learnrudi/registry-client": "workspace:*",
-    "@learnrudi/runner": "workspace:*",
     "@learnrudi/secrets": "workspace:*",
+    "@learnrudi/runner": "workspace:*",
     "@learnrudi/utils": "workspace:*",
-    "@lydell/node-pty": "^1.1.0",
-    "better-sqlite3": "^12.5.0",
-    "ws": "^8.18.0"
-  },
-  "devDependencies": {
     "esbuild": "^0.27.2"
   },
   "engines": {
