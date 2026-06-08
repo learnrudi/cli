@@ -147,3 +147,10 @@
 - Non-goals: daemon lifecycle command, daemon HTTP route implementation, package metadata, and generated `dist/` output.
 - Commands run and results:
   - `node scripts/run-tests.js src/__tests__/unit/home-command.test.js` passed with 1 test.
+
+## Follow-Up Slice: Daemon Schema Contracts
+
+- Scope: add daemon schema modules and contract validation helpers for success/error envelopes, request context, events, packages, secrets, tool index, run groups, sessions, jobs, artifacts, and daemon status.
+- Non-goals: daemon lifecycle command, daemon HTTP route implementation, package metadata, and generated `dist/` output.
+- Commands run and results:
+  - `node scripts/run-tests.js src/__tests__/unit/daemon-schemas-contract.test.js` passed with 11 tests.
