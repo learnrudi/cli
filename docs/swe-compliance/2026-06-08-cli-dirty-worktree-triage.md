@@ -154,3 +154,14 @@
 - Non-goals: daemon lifecycle command, daemon HTTP route implementation, package metadata, and generated `dist/` output.
 - Commands run and results:
   - `node scripts/run-tests.js src/__tests__/unit/daemon-schemas-contract.test.js` passed with 11 tests.
+
+## Follow-Up Slice: Daemon Operation Layer
+
+- Scope: add schema-backed daemon operation modules for health/readiness/status, package summaries, sessions, secrets, tool index cache, run group projections, artifact projection helpers, and the package-route projection wiring that exercises the package and secret helpers.
+- Non-goals: daemon lifecycle command, broader HTTP route wiring, package metadata, and generated `dist/` output.
+- Commands run and results:
+  - `node scripts/run-tests.js src/__tests__/unit/daemon-health-operation.test.js src/__tests__/unit/daemon-packages-operation.test.js src/__tests__/unit/daemon-sessions-operation.test.js src/__tests__/unit/daemon-secrets-operation.test.js src/__tests__/unit/daemon-tool-index-operation.test.js src/__tests__/unit/daemon-run-groups-operation.test.js src/__tests__/unit/daemon-artifacts-operation.test.js` passed with 32 tests.
+  - `node scripts/run-tests.js src/__tests__/unit/packages-routes.test.js src/__tests__/unit/daemon-packages-operation.test.js src/__tests__/unit/daemon-secrets-operation.test.js` passed with 14 tests.
+  - `node scripts/run-tests.js src/__tests__/unit/daemon-health-operation.test.js src/__tests__/unit/daemon-packages-operation.test.js src/__tests__/unit/daemon-sessions-operation.test.js src/__tests__/unit/daemon-secrets-operation.test.js src/__tests__/unit/daemon-tool-index-operation.test.js src/__tests__/unit/daemon-run-groups-operation.test.js src/__tests__/unit/daemon-artifacts-operation.test.js src/__tests__/unit/packages-routes.test.js` passed with 37 tests.
+  - `git diff --cached --check` passed.
+  - `node scripts/agent-debt-runner.mjs --edited src/daemon/operations/artifacts.js,src/daemon/operations/health.js,src/daemon/operations/packages.js,src/daemon/operations/run-groups.js,src/daemon/operations/secrets.js,src/daemon/operations/sessions.js,src/daemon/operations/tool-index.js,src/commands/serve/routes/packages.js,src/__tests__/unit/daemon-health-operation.test.js,src/__tests__/unit/daemon-packages-operation.test.js,src/__tests__/unit/daemon-sessions-operation.test.js,src/__tests__/unit/daemon-secrets-operation.test.js,src/__tests__/unit/daemon-tool-index-operation.test.js,src/__tests__/unit/daemon-run-groups-operation.test.js,src/__tests__/unit/daemon-artifacts-operation.test.js` passed with non-blocking orphan warnings for `src/daemon/operations/packages.js` and `src/daemon/operations/secrets.js`; both are exercised by `src/__tests__/unit/packages-routes.test.js`, but the current debt scanner graph still reports the route helpers as orphaned pending the broader daemon route/runtime slice.

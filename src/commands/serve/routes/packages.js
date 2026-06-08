@@ -24,8 +24,15 @@ import {
   removeSecret,
   setSecret,
 } from '@learnrudi/secrets';
+import {
+  listInstalledStackSummaries,
+  normalizePackageKind,
+  projectPackageDescriptor,
+} from '../../../daemon/operations/packages.js';
+import {
+  listMaskedSecrets,
+} from '../../../daemon/operations/secrets.js';
 
-const VALID_KINDS = new Set(['stack', 'prompt', 'runtime', 'binary', 'agent']);
 const SECRET_NAME_RE = /^[A-Z][A-Z0-9_]*$/;
 const JOB_TTL_MS = 10 * 60 * 1000;
 const MAX_QUERY_LENGTH = 200;
@@ -45,38 +52,6 @@ const defaultDeps = {
   setSecret,
   updateSecretStatus,
 };
-
-function normalizeKind(rawKind) {
-  const kind = typeof rawKind === 'string' ? rawKind.trim() : '';
-  if (!kind) return null;
-  return VALID_KINDS.has(kind) ? kind : null;
-}
-
-function projectPackage(pkg, fallbackKind = null) {
-  const kind = pkg.kind || fallbackKind || null;
-  return {
-    id: pkg.id || (kind && pkg.name ? `${kind}:${pkg.name}` : null),
-    kind,
-    name: pkg.name || null,
-    description: pkg.description || '',
-    version: pkg.version || null,
-    category: pkg.category || null,
-    tags: Array.isArray(pkg.tags) ? pkg.tags : [],
-    requires: pkg.requires || null,
-  };
-}
-
-function projectInstalledStacks(config) {
-  const stacks = {};
-  for (const [stackId, stackConfig] of Object.entries(config?.stacks || {})) {
-    stacks[stackId] = {
-      version: stackConfig.version || null,
-      installedAt: stackConfig.installedAt || null,
-      secrets: Array.isArray(stackConfig.secrets) ? stackConfig.secrets : [],
-    };
-  }
-  return stacks;
-}
 
 async function loadManifest(installPath) {
   const manifestPath = path.join(installPath, 'manifest.json');
@@ -426,7 +401,7 @@ export function buildPackageRoutes(ctx, overrides = {}) {
       if (!query) return requiredField(res, 'q', { location: 'query' });
 
       const rawKind = url.searchParams.get('kind');
-      const kind = rawKind == null ? null : normalizeKind(rawKind);
+      const kind = rawKind == null ? null : normalizePackageKind(rawKind);
       if (rawKind != null && !kind) {
         return invalidField(res, 'kind', 'invalid kind', {
           location: 'query',
@@ -437,7 +412,7 @@ export function buildPackageRoutes(ctx, overrides = {}) {
 
       try {
         const packages = await deps.searchPackages(query, kind ? { kind } : {});
-        json(res, { packages: packages.map((pkg) => projectPackage(pkg)) });
+        json(res, { packages: packages.map((pkg) => projectPackageDescriptor(pkg)) });
       } catch (err) {
         log('packages', 'error', `package search failed: ${err.message}`);
         error(res, `Package search failed: ${err.message}`, 500);
@@ -446,7 +421,7 @@ export function buildPackageRoutes(ctx, overrides = {}) {
     }
 
     if (req.method === 'GET' && url.pathname === '/packages/list') {
-      const kind = normalizeKind(url.searchParams.get('kind'));
+      const kind = normalizePackageKind(url.searchParams.get('kind'));
       if (!kind) {
         return invalidField(res, 'kind', 'valid kind required', {
           location: 'query',
@@ -456,7 +431,7 @@ export function buildPackageRoutes(ctx, overrides = {}) {
 
       try {
         const packages = await deps.listPackages(kind);
-        json(res, { packages: packages.map((pkg) => projectPackage(pkg, kind)) });
+        json(res, { packages: packages.map((pkg) => projectPackageDescriptor(pkg, kind)) });
       } catch (err) {
         log('packages', 'error', `package list failed: ${err.message}`);
         error(res, `Package list failed: ${err.message}`, 500);
@@ -467,7 +442,7 @@ export function buildPackageRoutes(ctx, overrides = {}) {
     if (req.method === 'GET' && url.pathname === '/packages/installed') {
       try {
         const config = deps.readRudiConfig() || { stacks: {} };
-        json(res, { stacks: projectInstalledStacks(config) });
+        json(res, { stacks: listInstalledStackSummaries(config) });
       } catch (err) {
         log('packages', 'error', `installed package read failed: ${err.message}`);
         error(res, `Failed to read installed packages: ${err.message}`, 500);
@@ -582,7 +557,7 @@ export function buildPackageRoutes(ctx, overrides = {}) {
 
     if (req.method === 'GET' && url.pathname === '/packages/secrets') {
       try {
-        const secrets = await deps.getMaskedSecrets();
+        const secrets = await listMaskedSecrets(deps);
         json(res, { secrets });
       } catch (err) {
         log('packages', 'error', `secret list failed: ${err.message}`);
