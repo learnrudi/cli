@@ -112,3 +112,10 @@
 - Non-goals: daemon lifecycle, local LLM, runtime commands, package metadata, and generated `dist/` output.
 - Commands run and results:
   - `node scripts/run-tests.js src/__tests__/unit/install-secrets.test.js src/__tests__/unit/commands.test.js` passed with 31 tests.
+
+## Follow-Up Slice: Instructions Routing Coverage
+
+- Scope: cover parsing for `rudi instructions <agent> --install --project`.
+- Non-goals: daemon lifecycle, local LLM, runtime commands, package metadata, and generated `dist/` output.
+- Commands run and results:
+  - `node scripts/run-tests.js src/__tests__/unit/routing.test.js` passed with 28 tests.

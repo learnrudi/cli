@@ -82,6 +82,15 @@ test('routing: lanes with subcommand', () => {
   assert.strictEqual(result.flags.cwd, '/tmp/repo');
 });
 
+test('routing: instructions with install flag', () => {
+  const result = parseArgs(['instructions', 'codex', '--install', '--project']);
+
+  assert.strictEqual(result.command, 'instructions');
+  assert.deepStrictEqual(result.args, ['codex']);
+  assert.strictEqual(result.flags.install, true);
+  assert.strictEqual(result.flags.project, true);
+});
+
 // =============================================================================
 // FLAGS PARSING
 // =============================================================================
