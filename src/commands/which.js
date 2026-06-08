@@ -133,12 +133,15 @@ export async function cmdWhich(args, flags) {
 /**
  * Detect which runtime (node/python) and entry point the stack uses
  */
-async function detectRuntime(stackPath) {
-  const runtimes = ['node', 'python'];
+export async function detectRuntime(stackPath) {
+  const layouts = [
+    { runtime: 'node', runtimePath: path.join(stackPath, 'node'), entryPrefix: 'node/', explicit: true },
+    { runtime: 'python', runtimePath: path.join(stackPath, 'python'), entryPrefix: 'python/', explicit: true },
+    { runtime: 'node', runtimePath: stackPath, entryPrefix: '', explicit: false },
+    { runtime: 'python', runtimePath: stackPath, entryPrefix: '', explicit: false },
+  ];
 
-  for (const runtime of runtimes) {
-    const runtimePath = path.join(stackPath, runtime);
-
+  for (const { runtime, runtimePath, entryPrefix, explicit } of layouts) {
     try {
       await fs.access(runtimePath);
 
@@ -150,22 +153,22 @@ async function detectRuntime(stackPath) {
 
         try {
           await fs.access(distEntry);
-          return { runtime: 'node', entry: `${runtime}/dist/index.js` };
+          return { runtime: 'node', entry: `${entryPrefix}dist/index.js` };
         } catch {
           try {
             await fs.access(srcEntry);
-            return { runtime: 'node', entry: `${runtime}/src/index.ts` };
+            return { runtime: 'node', entry: `${entryPrefix}src/index.ts` };
           } catch {
-            return { runtime: 'node', entry: null };
+            if (explicit) return { runtime: 'node', entry: null };
           }
         }
       } else if (runtime === 'python') {
         const entry = path.join(runtimePath, 'src', 'index.py');
         try {
           await fs.access(entry);
-          return { runtime: 'python', entry: `${runtime}/src/index.py` };
+          return { runtime: 'python', entry: `${entryPrefix}src/index.py` };
         } catch {
-          return { runtime: 'python', entry: null };
+          if (explicit) return { runtime: 'python', entry: null };
         }
       }
     } catch {
@@ -180,22 +183,22 @@ async function detectRuntime(stackPath) {
 /**
  * Check authentication status
  */
-async function checkAuth(stackPath, runtime) {
+export async function checkAuth(stackPath, runtime, options = {}) {
   const authFiles = [];
   let configured = false;
+  const checkedRoots = new Set();
 
-  if (runtime === 'node' || runtime === 'python') {
-    const runtimePath = path.join(stackPath, runtime);
+  async function scanAuthRoot(rootPath, labelPrefix) {
+    if (!rootPath || checkedRoots.has(rootPath)) return;
+    checkedRoots.add(rootPath);
 
-    // Check for token.json (OAuth stacks like google-workspace)
-    const tokenPath = path.join(runtimePath, 'token.json');
     try {
-      await fs.access(tokenPath);
-      authFiles.push(`${runtime}/token.json`);
+      await fs.access(path.join(rootPath, 'token.json'));
+      authFiles.push(labelPrefix ? `${labelPrefix}/token.json` : 'token.json');
       configured = true;
     } catch {
       // No direct token.json, check for accounts-based structure
-      const accountsPath = path.join(runtimePath, 'accounts');
+      const accountsPath = path.join(rootPath, 'accounts');
       try {
         const accounts = await fs.readdir(accountsPath);
         // Check if any account has a token.json
@@ -204,7 +207,10 @@ async function checkAuth(stackPath, runtime) {
           const accountTokenPath = path.join(accountsPath, account, 'token.json');
           try {
             await fs.access(accountTokenPath);
-            authFiles.push(`${runtime}/accounts/${account}/token.json`);
+            const label = labelPrefix
+              ? `${labelPrefix}/accounts/${account}/token.json`
+              : `accounts/${account}/token.json`;
+            authFiles.push(label);
             configured = true;
           } catch {
             // No token for this account
@@ -215,6 +221,18 @@ async function checkAuth(stackPath, runtime) {
       }
     }
   }
+
+  if (runtime === 'node' || runtime === 'python') {
+    await scanAuthRoot(path.join(stackPath, runtime), runtime);
+    await scanAuthRoot(stackPath, '');
+  }
+
+  const stackName = options.stackName || path.basename(stackPath);
+  const rudiHome = options.rudiHome || PATHS.home;
+  await scanAuthRoot(
+    path.join(rudiHome, 'state', 'stacks', stackName),
+    `state/stacks/${stackName}`,
+  );
 
   // Check for .env file (API key stacks)
   const envPath = path.join(stackPath, '.env');

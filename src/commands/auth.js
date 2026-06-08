@@ -52,12 +52,15 @@ function isPortAvailable(port) {
 /**
  * Detect runtime from stack directory
  */
-async function detectRuntime(stackPath) {
-  const runtimes = ['node', 'python'];
+export async function detectRuntime(stackPath) {
+  const layouts = [
+    { runtime: 'node', runtimePath: path.join(stackPath, 'node') },
+    { runtime: 'node', runtimePath: stackPath },
+    { runtime: 'python', runtimePath: path.join(stackPath, 'python') },
+    { runtime: 'python', runtimePath: stackPath },
+  ];
 
-  for (const runtime of runtimes) {
-    const runtimePath = path.join(stackPath, runtime);
-
+  for (const { runtime, runtimePath } of layouts) {
     try {
       await fs.access(runtimePath);
 

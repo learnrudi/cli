@@ -82,3 +82,12 @@
 - Commands run and results:
   - `node scripts/run-tests.js src/__tests__/unit/integrate-codex.test.js` passed with 4 tests.
   - `node scripts/run-tests.js src/__tests__/unit/commands.test.js` passed in the current worktree.
+
+## Follow-Up Slice: Flat Stack Runtime Detection
+
+- Scope: support flat stack layouts in `rudi auth` and `rudi which` while preserving structured `node/` and `python/` stack layouts.
+- Non-goals: daemon lifecycle, local LLM, runtime commands, stack removal cleanup, and generated `dist/` output.
+- Red command and expected failure:
+  - `node scripts/run-tests.js src/__tests__/unit/stack-runtime-detection.test.js` failed for flat Python detection; `which` returned `{ runtime: 'node', entry: null }` instead of `{ runtime: 'python', entry: 'src/index.py' }`.
+- Commands run and results:
+  - `node scripts/run-tests.js src/__tests__/unit/stack-runtime-detection.test.js` passed with 6 tests after requiring flat root layouts to contain their matching entry point before detection succeeds.
