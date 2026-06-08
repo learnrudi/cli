@@ -49,6 +49,7 @@ export async function cmdInit(args, flags) {
   const dirs = [
     PATHS.stacks,
     PATHS.prompts,
+    PATHS.workflows,
     PATHS.runtimes,
     PATHS.binaries,
     PATHS.agents,

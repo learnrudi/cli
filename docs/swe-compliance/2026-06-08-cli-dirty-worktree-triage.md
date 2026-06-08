@@ -224,3 +224,14 @@
   - `node scripts/run-tests.js packages/mcp/src/__tests__/unit/agents.test.js src/__tests__/unit/integrate-codex.test.js` passed with 25 tests.
   - `git diff --cached --check` passed.
   - `node scripts/agent-debt-runner.mjs --edited packages/mcp/src/agents.js,packages/mcp/src/registry.js,packages/mcp/src/__tests__/unit/agents.test.js` passed with no findings.
+
+## Follow-Up Slice: Workflow Dependency Resolution
+
+- Scope: treat workflows as single-file packages during resolution, resolve workflow-required skills into install order, and create `PATHS.workflows` during `rudi init`.
+- Non-goals: generated package manifest, router secret handling, packaging metadata, generated `dist` output, and public-readiness docs.
+- Commands run and results:
+  - `node --check packages/core/src/resolver.js` passed.
+  - `node --check src/commands/init.js` passed.
+  - `node scripts/run-tests.js packages/core/src/__tests__/unit/resolver-related-skills.test.js packages/env/src/__tests__/unit/env.test.js` passed as part of a focused 48-test run.
+  - `git diff --cached --check` passed.
+  - `node scripts/agent-debt-runner.mjs --edited packages/core/src/resolver.js,packages/core/src/__tests__/unit/resolver-related-skills.test.js,src/commands/init.js` passed with no findings.

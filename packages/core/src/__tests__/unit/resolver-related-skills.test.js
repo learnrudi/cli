@@ -76,3 +76,73 @@ test('resolvePackage surfaces related skills without adding them to dependency i
 
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test('resolvePackage installs workflow-required skills as dependencies', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rudi-workflow-skills-'));
+  const registryRoot = path.join(root, 'registry');
+  const rudiHome = path.join(root, '.rudi');
+
+  process.env.RUDI_HOME = rudiHome;
+  process.env.USE_LOCAL_REGISTRY = 'true';
+  process.env.RUDI_REGISTRY_ROOT = registryRoot;
+
+  writeJson(path.join(registryRoot, 'index.json'), {
+    packages: {
+      workflows: {
+        official: [
+          {
+            id: 'workflow:daily-brief',
+            name: 'Daily Brief',
+            version: '1.0.0',
+            kind: 'workflow',
+            path: 'catalog/workflows/daily-brief.yaml',
+            requires: {
+              skills: ['shortform-your-words-script'],
+            },
+          },
+        ],
+      },
+      skills: {
+        official: [
+          {
+            id: 'skill:shortform-your-words-script',
+            name: 'Shortform Your Words Script',
+            version: '1.0.0',
+            kind: 'skill',
+            path: 'catalog/skills/shortform-your-words-script.md',
+          },
+        ],
+      },
+    },
+  });
+
+  fs.mkdirSync(path.join(registryRoot, 'catalog/workflows'), { recursive: true });
+  fs.writeFileSync(path.join(registryRoot, 'catalog/workflows/daily-brief.yaml'), 'id: workflow:daily-brief\n');
+
+  const { resolvePackage, getInstallOrder } = await import('../../resolver.js');
+
+  const resolved = await resolvePackage('workflow:daily-brief');
+
+  assert.deepEqual(
+    resolved.dependencies.map((dependency) => ({
+      id: dependency.id,
+      kind: dependency.kind,
+      name: dependency.name,
+      installed: dependency.installed,
+    })),
+    [
+      {
+        id: 'skill:shortform-your-words-script',
+        kind: 'skill',
+        name: 'Shortform Your Words Script',
+        installed: false,
+      },
+    ]
+  );
+  assert.deepEqual(
+    getInstallOrder(resolved).map((pkg) => pkg.id),
+    ['skill:shortform-your-words-script', 'workflow:daily-brief']
+  );
+
+  fs.rmSync(root, { recursive: true, force: true });
+});

@@ -6,6 +6,8 @@
 import { getPackage, getManifest } from '@learnrudi/registry-client';
 import { isPackageInstalled, parsePackageId } from '@learnrudi/env';
 
+const SINGLE_FILE_KINDS = new Set(['skill', 'prompt', 'workflow']);
+
 /**
  * Resolve a package and all its dependencies
  * @param {string} id - Package ID (e.g., 'stack:pdf-creator' or just 'pdf-creator')
@@ -26,7 +28,7 @@ export async function resolvePackage(id) {
   // For curated tools (with path field), fetch canonical manifest
   // This ensures install-critical fields (npmPackage, bins, etc.) are available
   let manifest = null;
-  if (pkg.path) {
+  if (pkg.path && !SINGLE_FILE_KINDS.has(pkg.kind)) {
     manifest = await getManifest(pkg);
   }
 
@@ -240,7 +242,7 @@ async function resolveDependencies(pkg) {
     }
   }
 
-  // Resolve required stacks (for skills)
+  // Resolve required stacks (for skills/workflows)
   const requiredStacks = pkg.requires?.stacks || [];
   for (const stackName of requiredStacks) {
     const stackId = stackName.startsWith('stack:') ? stackName : `stack:${stackName}`;
@@ -257,6 +259,27 @@ async function resolveDependencies(pkg) {
       // Recursively resolve the stack's own dependencies
       const stackDeps = await resolveDependencies(stackPkg);
       dependencies.push(...stackDeps);
+    }
+  }
+
+  // Resolve required skills (for workflows)
+  const requiredSkills = pkg.requires?.skills || [];
+  for (const skillName of requiredSkills) {
+    const skillId = skillName.startsWith('skill:')
+      ? skillName
+      : skillName.startsWith('prompt:')
+        ? skillName.replace(/^prompt:/, 'skill:')
+        : `skill:${skillName}`;
+    const skillPkg = await getPackage(skillId);
+    if (skillPkg) {
+      dependencies.push({
+        id: skillId,
+        kind: 'skill',
+        name: skillPkg.name,
+        version: skillPkg.version,
+        installed: isPackageInstalled(skillId),
+        dependencies: []
+      });
     }
   }
 
