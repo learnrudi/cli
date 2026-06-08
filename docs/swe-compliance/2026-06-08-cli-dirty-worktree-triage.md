@@ -165,3 +165,12 @@
   - `node scripts/run-tests.js src/__tests__/unit/daemon-health-operation.test.js src/__tests__/unit/daemon-packages-operation.test.js src/__tests__/unit/daemon-sessions-operation.test.js src/__tests__/unit/daemon-secrets-operation.test.js src/__tests__/unit/daemon-tool-index-operation.test.js src/__tests__/unit/daemon-run-groups-operation.test.js src/__tests__/unit/daemon-artifacts-operation.test.js src/__tests__/unit/packages-routes.test.js` passed with 37 tests.
   - `git diff --cached --check` passed.
   - `node scripts/agent-debt-runner.mjs --edited src/daemon/operations/artifacts.js,src/daemon/operations/health.js,src/daemon/operations/packages.js,src/daemon/operations/run-groups.js,src/daemon/operations/secrets.js,src/daemon/operations/sessions.js,src/daemon/operations/tool-index.js,src/commands/serve/routes/packages.js,src/__tests__/unit/daemon-health-operation.test.js,src/__tests__/unit/daemon-packages-operation.test.js,src/__tests__/unit/daemon-sessions-operation.test.js,src/__tests__/unit/daemon-secrets-operation.test.js,src/__tests__/unit/daemon-tool-index-operation.test.js,src/__tests__/unit/daemon-run-groups-operation.test.js,src/__tests__/unit/daemon-artifacts-operation.test.js` passed with non-blocking orphan warnings for `src/daemon/operations/packages.js` and `src/daemon/operations/secrets.js`; both are exercised by `src/__tests__/unit/packages-routes.test.js`, but the current debt scanner graph still reports the route helpers as orphaned pending the broader daemon route/runtime slice.
+
+## Follow-Up Slice: Operation Consumers
+
+- Scope: wire the operation helpers into existing contract validation, run-group detail/live projections, and session metadata/tag/worktree project projection.
+- Non-goals: daemon lifecycle command, daemon route/runtime extraction, package metadata, and generated `dist/` output.
+- Commands run and results:
+  - `node scripts/run-tests.js src/__tests__/unit/contract-validator.test.js src/__tests__/unit/non-code-use-cases.test.js src/__tests__/unit/run-group-routes-contract.test.js src/__tests__/unit/run-group-observability.test.js src/__tests__/unit/serve-sessions-broadcast.test.js src/__tests__/unit/daemon-artifacts-operation.test.js src/__tests__/unit/daemon-run-groups-operation.test.js src/__tests__/unit/daemon-sessions-operation.test.js` passed with 68 tests.
+  - `git diff --cached --check` passed.
+  - `node scripts/agent-debt-runner.mjs --edited src/commands/agent/contract-validator.js,src/commands/agent/routes/run-group.js,src/commands/serve/sessions.js` passed with no findings.

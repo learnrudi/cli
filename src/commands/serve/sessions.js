@@ -48,6 +48,11 @@ import { readByteRange } from '../sessions/turn-index.js';
 import { createSessionsIngesterModule } from '../sessions/ingester.js';
 import { createTitleBackfillModule } from '../sessions/title-backfill.js';
 import { createMetadataBackfillModule } from '../sessions/metadata-backfill.js';
+import {
+  applySessionDbMetadata,
+  applySessionTags,
+  mergeWorktreeSessionProjects,
+} from '../../daemon/operations/sessions.js';
 
 // ---------------------------------------------------------------------------
 // Constants (local — not extracted)
@@ -1714,18 +1719,7 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
           for (const proj of projects) {
             for (const s of proj.sessions) {
               const row = dbMap.get(`${s.provider || 'claude'}:${s.sessionId}`);
-              if (!row) continue;
-              const display = row.title_override || row.title;
-              if (display) s.dbTitle = display;
-              if (row.description) s.description = row.description;
-              if (row.total_cost > 0) s.totalCost = row.total_cost;
-              if (row.total_input_tokens > 0) s.totalInputTokens = row.total_input_tokens;
-              if (row.total_output_tokens > 0) s.totalOutputTokens = row.total_output_tokens;
-              if (row.turn_count > 0) s.turnCount = row.turn_count;
-              if (row.parent_session_id) s.parentSessionId = row.parent_session_id;
-              if (row.is_sidechain) s.isSidechain = true;
-              if (row.session_type && row.session_type !== 'main') s.sessionType = row.session_type;
-              if (!s.originNativeFile && row.origin_native_file) s.originNativeFile = row.origin_native_file;
+              applySessionDbMetadata(s, row);
             }
           }
 
@@ -1748,8 +1742,7 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
           }
           for (const proj of projects) {
             for (const s of proj.sessions) {
-              const tags = tagMap.get(s.sessionId);
-              if (tags && tags.length > 0) s.tags = tags;
+              applySessionTags(s, tagMap.get(s.sessionId));
             }
           }
         }
@@ -1758,56 +1751,7 @@ export function createSessionsModule({ log, broadcast, json, error, readBody, ge
       }
     }
 
-    // Merge worktree projects into their parent project (two-pass, order-independent).
-    // Claude CLI records the worktree cwd as the project path, creating separate
-    // entries like /repo/.rudi/worktrees/main. Fold those sessions back into /repo.
-    const worktreeMarker = '/.rudi/worktrees/';
-
-    // Pass 1: Separate worktree entries from regular entries
-    const regularProjects = [];
-    const worktreeEntries = []; // { realRoot, proj }
-    for (const proj of projects) {
-      const op = proj.originalPath || '';
-      const wtIdx = op.indexOf(worktreeMarker);
-      if (wtIdx !== -1) {
-        worktreeEntries.push({ realRoot: op.slice(0, wtIdx), proj });
-      } else {
-        regularProjects.push(proj);
-      }
-    }
-
-    // Pass 2: Build merged list — regular projects first, then fold in worktrees
-    const mergedProjects = [];
-    const parentMap = new Map(); // realRoot -> index in mergedProjects
-
-    for (const proj of regularProjects) {
-      const op = proj.originalPath || '';
-      parentMap.set(op, mergedProjects.length);
-      mergedProjects.push(proj);
-    }
-
-    for (const { realRoot, proj } of worktreeEntries) {
-      if (parentMap.has(realRoot)) {
-        // Parent exists — merge sessions into it
-        const parent = mergedProjects[parentMap.get(realRoot)];
-        parent.sessions.push(...proj.sessions);
-      } else {
-        // No parent project found — promote worktree entry as the parent
-        parentMap.set(realRoot, mergedProjects.length);
-        mergedProjects.push({
-          ...proj,
-          name: path.basename(realRoot),
-          originalPath: realRoot,
-        });
-      }
-    }
-
-    // Re-sort sessions within each project after merging
-    for (const proj of mergedProjects) {
-      proj.sessions.sort((a, b) =>
-        new Date(b.modified).getTime() - new Date(a.modified).getTime()
-      );
-    }
+    const mergedProjects = mergeWorktreeSessionProjects(projects);
 
     // Display-name deduplication is handled by the Lite frontend
     // (computeProjectDisplayName). The API returns raw names only.

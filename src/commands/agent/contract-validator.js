@@ -2,6 +2,12 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { execFile } from 'child_process';
+import {
+  collectDeclaredArtifacts,
+  createTaskArtifactAvailabilityMap,
+  projectDependencyArtifactRows,
+  resolveArtifactPath,
+} from '../../daemon/operations/artifacts.js';
 
 const VALIDATION_TIMEOUT_MS = 60_000;
 const OUTPUT_TRUNCATE_CHARS = 2000;
@@ -46,29 +52,6 @@ function execFileAsync(file, args, options) {
       resolve({ stdout, stderr });
     });
   });
-}
-
-function resolveArtifactPath(rootDir, candidatePath) {
-  if (typeof candidatePath !== 'string' || !candidatePath.trim()) {
-    throw new Error('artifact path required');
-  }
-
-  const absolutePath = path.resolve(rootDir, candidatePath);
-  const relativePath = path.relative(rootDir, absolutePath);
-  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
-    throw new Error(`artifact path escapes task root: ${candidatePath}`);
-  }
-  return absolutePath;
-}
-
-function checkExpectedPathType(expectedType, targetPath) {
-  const stat = fs.statSync(targetPath);
-  if (expectedType === 'file' && !stat.isFile()) {
-    throw new Error(`expected file at ${targetPath}`);
-  }
-  if (expectedType === 'directory' && !stat.isDirectory()) {
-    throw new Error(`expected directory at ${targetPath}`);
-  }
 }
 
 async function runCommandValidation(command, { cwd, allowValidationCommands, log }) {
@@ -168,31 +151,6 @@ function writeValidationResult(db, { sessionId, runGroupId, taskIndex, passed, e
     JSON.stringify(artifactIds || []),
     new Date().toISOString(),
   );
-}
-
-function collectDeclaredArtifacts(task, cwd, warnings, errors) {
-  const artifacts = [];
-  if (!task?.output?.path || !task.output.type) {
-    return artifacts;
-  }
-
-  try {
-    const artifactPath = resolveArtifactPath(cwd, task.output.path);
-    if (!fs.existsSync(artifactPath)) {
-      errors.push(`declared output missing: ${task.output.path}`);
-      return artifacts;
-    }
-    checkExpectedPathType(task.output.type, artifactPath);
-    artifacts.push({
-      name: path.basename(task.output.path),
-      path: artifactPath,
-      kind: task.output.type,
-    });
-  } catch (error) {
-    errors.push(error.message);
-  }
-
-  return artifacts;
 }
 
 export async function validateTaskContract({
@@ -318,14 +276,7 @@ export function getTaskArtifactAvailabilityMap(db, runGroupId) {
     WHERE run_group_id = ?
   `).all(runGroupId);
 
-  const artifactMap = new Map();
-  for (const row of rows) {
-    if (!artifactMap.has(row.task_index)) {
-      artifactMap.set(row.task_index, new Set());
-    }
-    artifactMap.get(row.task_index).add(row.artifact_name);
-  }
-  return artifactMap;
+  return createTaskArtifactAvailabilityMap(rows);
 }
 
 export function getDependencyArtifacts(db, runGroupId, dependency) {
@@ -343,9 +294,5 @@ export function getDependencyArtifacts(db, runGroupId, dependency) {
     dependency.artifact || null,
   );
 
-  return rows.map((row) => ({
-    name: row.artifact_name,
-    path: row.artifact_path,
-    kind: row.artifact_kind,
-  }));
+  return projectDependencyArtifactRows(rows);
 }

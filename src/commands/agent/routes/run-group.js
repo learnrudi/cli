@@ -31,7 +31,6 @@ import {
   normalizeGroupTasks,
 } from '../group-spec.js';
 import {
-  deriveRunGroupSessionStatus,
   evaluateDependencyExecution,
   evaluatePhaseExecution,
   parseRunGroupConfig,
@@ -61,7 +60,11 @@ import {
   withImmediateTransaction,
 } from '../run-group-domain.js';
 import { SIDECAR_ERROR_CODES } from '../../serve/error-codes.js';
- 
+import {
+  projectRunGroupDetailSession,
+  projectRunGroupLiveSession,
+} from '../../../daemon/operations/run-groups.js';
+
 const TERMINAL_GROUP_STATUSES = new Set(['completed', 'partial', 'failed', 'stopped']);
 const SPAWN_CHILD_ALLOWED_TOOLS = [
   'mcp__rudi-spawn__spawn_child',
@@ -1228,31 +1231,15 @@ export function buildRunGroupRoutes(ctx) {
 
       const sessionDetails = sessions.map((row) => {
         const live = agentProcesses.get(row.id);
-        const alive = Boolean(live?.proc && !live.proc.killed);
         const progress = resolveRunGroupSessionProgress(
           live,
           readLastRunGroupRuntimeProgress(db, row.id),
         );
-        return {
-          ...row,
-          status: deriveRunGroupSessionStatus({
-            alive,
-            runtimeStatus: row.runtime_status,
-            sessionStatus: row.session_status,
-            groupStatus: refreshed.status,
-          }),
-          alive,
-          turn_active: Boolean(live?.turnActive),
-          pid: live?.proc?.pid || null,
-          last_progress_snippet: progress.snippet,
-          last_progress_type: progress.type,
-          last_progress_at: progress.ts,
-          last_progress_source: progress.source,
-          validation_passed: row.validation_passed == null ? null : Number(row.validation_passed) === 1,
-          validation_errors: row.validation_errors_json ? JSON.parse(row.validation_errors_json) : [],
-          validation_warnings: row.validation_warnings_json ? JSON.parse(row.validation_warnings_json) : [],
-          validated_at: row.validated_at || null,
-        };
+        return projectRunGroupDetailSession(row, {
+          liveEntry: live,
+          progress,
+          groupStatus: refreshed.status,
+        });
       });
 
       json(res, { group: refreshed, sessions: sessionDetails });
@@ -1293,35 +1280,16 @@ export function buildRunGroupRoutes(ctx) {
 
       const liveData = sessions.map((row) => {
         const entry = agentProcesses.get(row.id);
-        const alive = Boolean(entry?.proc && !entry.proc.killed);
-        const status = deriveRunGroupSessionStatus({
-          alive,
-          runtimeStatus: row.runtime_status,
-          sessionStatus: row.session_status,
-          groupStatus: group.status,
-        });
         const progress = resolveRunGroupSessionProgress(
           entry,
           readLastRunGroupRuntimeProgress(db, row.id),
         );
 
-        return {
-          sessionId: row.id,
-          name: row.title_override || row.title || row.id.slice(0, 8),
-          status,
-          alive,
-          turnActive: Boolean(entry?.turnActive),
-          turnCount: Number(row.runtime_turn_count || 0),
-          costTotal: Number(row.runtime_cost_total || 0),
-          tokensTotal: Number(row.runtime_tokens_total || 0),
-          lastError: row.runtime_last_error || null,
-          lastSnippet: progress.snippet,
-          lastProgressType: progress.type,
-          lastProgressAt: progress.ts,
-          lastProgressSource: progress.source,
-          worktreeBranch: row.worktree_branch || null,
-          validationPassed: row.validation_passed == null ? null : Number(row.validation_passed) === 1,
-        };
+        return projectRunGroupLiveSession(row, {
+          liveEntry: entry,
+          progress,
+          groupStatus: group.status,
+        });
       });
 
       json(res, {
