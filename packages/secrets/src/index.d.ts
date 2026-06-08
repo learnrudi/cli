@@ -3,6 +3,21 @@
  */
 
 /**
+ * Get the absolute path to the active secrets file
+ */
+export function getSecretsFilePath(): string;
+
+/**
+ * Load all secrets from storage
+ */
+export function loadSecrets(): Record<string, unknown>;
+
+/**
+ * Save all secrets to storage
+ */
+export function saveSecrets(secrets: Record<string, unknown>): void;
+
+/**
  * Get a secret value
  */
 export function getSecret(name: string): Promise<string | null>;
@@ -44,4 +59,4 @@ export function getStorageInfo(): {
 /**
  * Get all secrets (for internal use)
  */
-export function getAllSecrets(): Record<string, string>;
+export function getAllSecrets(): Record<string, unknown>;

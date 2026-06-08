@@ -11,6 +11,14 @@ import { PATHS } from '@learnrudi/env';
 
 const SECRETS_FILE = path.join(PATHS.home, 'secrets.json');
 
+function isSecretsObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function getSecretsFilePath() {
+  return SECRETS_FILE;
+}
+
 /**
  * Ensure secrets file exists with correct permissions (600)
  */
@@ -36,11 +44,12 @@ function ensureSecretsFile() {
 /**
  * Load secrets from file
  */
-function loadSecrets() {
+export function loadSecrets() {
   ensureSecretsFile();
   try {
     const content = fs.readFileSync(SECRETS_FILE, 'utf-8');
-    return JSON.parse(content);
+    const secrets = JSON.parse(content);
+    return isSecretsObject(secrets) ? secrets : {};
   } catch {
     return {};
   }
@@ -49,12 +58,27 @@ function loadSecrets() {
 /**
  * Save secrets to file (atomic write)
  */
-function saveSecrets(secrets) {
+export function saveSecrets(secrets) {
   ensureSecretsFile();
-  fs.writeFileSync(SECRETS_FILE, JSON.stringify(secrets, null, 2), {
-    encoding: 'utf-8',
-    mode: 0o600
-  });
+  const normalized = isSecretsObject(secrets) ? secrets : {};
+  const tempFile = `${SECRETS_FILE}.${process.pid}.${Date.now()}.tmp`;
+
+  try {
+    fs.writeFileSync(tempFile, JSON.stringify(normalized, null, 2), {
+      encoding: 'utf-8',
+      mode: 0o600
+    });
+    fs.renameSync(tempFile, SECRETS_FILE);
+    try {
+      fs.chmodSync(SECRETS_FILE, 0o600);
+    } catch {
+      // May fail on Windows, that's okay
+    }
+  } finally {
+    if (fs.existsSync(tempFile)) {
+      fs.rmSync(tempFile, { force: true });
+    }
+  }
 }
 
 // =============================================================================
@@ -131,7 +155,7 @@ export async function getMaskedSecrets() {
 export function getStorageInfo() {
   return {
     backend: 'file',
-    file: SECRETS_FILE,
+    file: getSecretsFilePath(),
     permissions: '0600 (owner read/write only)'
   };
 }

@@ -98,3 +98,10 @@
 - Non-goals: daemon lifecycle, local LLM, runtime commands, generated `dist/` output, and broader secrets storage hardening.
 - Commands run and results:
   - `node scripts/run-tests.js src/__tests__/unit/remove-command.test.js packages/core/src/__tests__/unit/tool-index.test.js packages/core/src/__tests__/unit/rudi-config.test.js` passed with 3 tests.
+
+## Follow-Up Slice: Shared Secrets Store
+
+- Scope: make runner secret access use the shared `@learnrudi/secrets` store, expose shared load/save helpers, validate secrets storage shape, and preserve restrictive file permissions under configured `RUDI_HOME`.
+- Non-goals: daemon lifecycle, local LLM, runtime commands, package publish metadata, root package dependency movement, and generated `dist/` output.
+- Commands run and results:
+  - `node scripts/run-tests.js packages/secrets/src/__tests__/unit/secrets.test.js packages/runner/src/__tests__/unit/secrets.test.js` passed with 18 tests.

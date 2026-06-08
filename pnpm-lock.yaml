@@ -127,12 +127,15 @@ importers:
       '@learnrudi/manifest':
         specifier: ^1.0.0
         version: 1.0.0
+      '@learnrudi/secrets':
+        specifier: workspace:*
+        version: link:../secrets
 
   packages/secrets:
     dependencies:
       '@learnrudi/env':
-        specifier: ^1.0.0
-        version: 1.0.0
+        specifier: workspace:*
+        version: link:../env
 
   packages/utils: {}
 

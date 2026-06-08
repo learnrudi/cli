@@ -17,7 +17,8 @@
   "dependencies": {
     "@learnrudi/core": "^1.0.0",
     "@learnrudi/db": "^1.0.0",
-    "@learnrudi/manifest": "^1.0.0"
+    "@learnrudi/manifest": "^1.0.0",
+    "@learnrudi/secrets": "workspace:*"
   },
   "devDependencies": {},
   "engines": {

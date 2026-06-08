@@ -3,11 +3,29 @@
  * Uses isolated temp directory to avoid touching real ~/.rudi/secrets.json
  */
 
-import { test, beforeEach, afterEach } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
+const CLI_ROOT = path.resolve(TEST_DIR, '../../../../..');
+
+function runIsolatedSecretsScript(script, rudiHome) {
+  const output = execFileSync(process.execPath, ['--input-type=module', '--eval', script], {
+    cwd: CLI_ROOT,
+    env: {
+      ...process.env,
+      RUDI_HOME: rudiHome
+    },
+    encoding: 'utf-8'
+  });
+
+  return JSON.parse(output);
+}
 
 // We'll test the masking and storage info functions which don't require file system
 // For the full API, we'll create integration tests
@@ -216,3 +234,53 @@ test('storageInfo: backend is file', () => {
   assert.ok(info.permissions.includes('0600'));
 });
 
+test('store: writes secrets under configured RUDI_HOME with restrictive permissions', () => {
+  const rudiHome = fs.mkdtempSync(path.join(os.tmpdir(), 'rudi-secrets-'));
+
+  try {
+    const result = runIsolatedSecretsScript(`
+      import { existsSync, statSync } from 'node:fs';
+      import { getSecret, getStorageInfo, setSecret } from '@learnrudi/secrets';
+
+      await setSecret('TEST_API_KEY', 'test-secret-value');
+      const info = getStorageInfo();
+      const mode = existsSync(info.file)
+        ? (statSync(info.file).mode & 0o777).toString(8)
+        : null;
+
+      console.log(JSON.stringify({
+        file: info.file,
+        hasExpectedValue: await getSecret('TEST_API_KEY') === 'test-secret-value',
+        mode
+      }));
+    `, rudiHome);
+
+    assert.strictEqual(result.file, path.join(rudiHome, 'secrets.json'));
+    assert.strictEqual(result.hasExpectedValue, true);
+    if (process.platform !== 'win32') {
+      assert.strictEqual(result.mode, '600');
+    }
+  } finally {
+    fs.rmSync(rudiHome, { recursive: true, force: true });
+  }
+});
+
+test('store: rejects non-object secrets files by loading an empty object', () => {
+  const rudiHome = fs.mkdtempSync(path.join(os.tmpdir(), 'rudi-secrets-'));
+
+  try {
+    fs.writeFileSync(path.join(rudiHome, 'secrets.json'), '[]', { mode: 0o600 });
+
+    const result = runIsolatedSecretsScript(`
+      import { loadSecrets } from '@learnrudi/secrets';
+
+      console.log(JSON.stringify({
+        secrets: loadSecrets()
+      }));
+    `, rudiHome);
+
+    assert.deepStrictEqual(result.secrets, {});
+  } finally {
+    fs.rmSync(rudiHome, { recursive: true, force: true });
+  }
+});

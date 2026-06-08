@@ -1,13 +1,12 @@
 /**
- * Secrets management for RUDI
+ * Secrets management for RUDI runners
  * Handles loading, validating, and redacting secrets
  */
 
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
-
-const SECRETS_PATH = path.join(os.homedir(), '.rudi', 'secrets.json');
+import {
+  loadSecrets as loadSharedSecrets,
+  saveSecrets as saveSharedSecrets
+} from '@learnrudi/secrets';
 
 /**
  * @typedef {Object} SecretDefinition
@@ -23,16 +22,7 @@ const SECRETS_PATH = path.join(os.homedir(), '.rudi', 'secrets.json');
  * @returns {Object} Secrets object (name -> value)
  */
 export function loadSecrets() {
-  if (!fs.existsSync(SECRETS_PATH)) {
-    return {};
-  }
-
-  try {
-    const content = fs.readFileSync(SECRETS_PATH, 'utf-8');
-    return JSON.parse(content);
-  } catch {
-    return {};
-  }
+  return loadSharedSecrets();
 }
 
 /**
@@ -40,14 +30,7 @@ export function loadSecrets() {
  * @param {Object} secrets - Secrets object
  */
 export function saveSecrets(secrets) {
-  const dir = path.dirname(SECRETS_PATH);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-
-  fs.writeFileSync(SECRETS_PATH, JSON.stringify(secrets, null, 2), {
-    mode: 0o600 // Read/write only for owner
-  });
+  saveSharedSecrets(secrets);
 }
 
 /**
@@ -59,7 +42,7 @@ export async function getSecrets(required) {
   const allSecrets = loadSecrets();
   const result = {};
 
-  for (const req of required) {
+  for (const req of required || []) {
     const name = typeof req === 'string' ? req : req.name;
     const isRequired = typeof req === 'string' ? true : req.required !== false;
 
@@ -82,7 +65,7 @@ export function checkSecrets(required) {
   const allSecrets = loadSecrets();
   const missing = [];
 
-  for (const req of required) {
+  for (const req of required || []) {
     const name = typeof req === 'string' ? req : req.name;
     const isRequired = typeof req === 'string' ? true : req.required !== false;
 
@@ -124,7 +107,7 @@ export function removeSecret(name) {
  */
 export function listSecretNames() {
   const secrets = loadSecrets();
-  return Object.keys(secrets);
+  return Object.keys(secrets).sort();
 }
 
 /**
