@@ -187,9 +187,15 @@ function getManifestSecrets(manifest) {
   return manifest?.requires?.secrets || manifest?.secrets || [];
 }
 
-function getSecretName(secret) {
+export function getSecretName(secret) {
   if (typeof secret === 'string') return secret;
-  return secret.name || secret.key;
+  if (!secret || typeof secret !== 'object') return null;
+  return secret.name || secret.key || null;
+}
+
+export function isSecretRequired(secret) {
+  if (!secret || typeof secret !== 'object') return true;
+  return secret.required !== false;
 }
 
 function getSecretDescription(secret) {
@@ -438,7 +444,8 @@ async function checkSecrets(manifest) {
 
   for (const secret of secrets) {
     const key = getSecretName(secret);
-    const isRequired = typeof secret === 'object' ? secret.required !== false : true;
+    const isRequired = isSecretRequired(secret);
+    if (!key) continue;
 
     const exists = await hasSecret(key);
     if (exists) {
@@ -568,8 +575,9 @@ export async function cmdInstall(args, flags) {
     const secretsCheck = { found: [], missing: [] };
     if (resolved.requires?.secrets?.length > 0) {
       for (const secret of resolved.requires.secrets) {
-        const name = typeof secret === 'string' ? secret : secret.name;
-        const isRequired = typeof secret === 'object' ? secret.required !== false : true;
+        const name = getSecretName(secret);
+        const isRequired = isSecretRequired(secret);
+        if (!name) continue;
 
         const exists = await hasSecret(name);
         if (exists) {
@@ -759,7 +767,7 @@ export async function cmdInstall(args, flags) {
       console.log(`\n  1. Configure secrets (${missing.length} pending):`);
       for (const key of missing) {
         const secret = getManifestSecrets(manifest).find(s =>
-          (typeof s === 'string' ? s : s.name) === key
+          getSecretName(s) === key
         );
         const helpUrl = getSecretLink(secret);
         console.log(`     rudi secrets set ${key} "<your-value>"`);

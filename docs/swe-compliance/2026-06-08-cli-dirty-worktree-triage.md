@@ -105,3 +105,10 @@
 - Non-goals: daemon lifecycle, local LLM, runtime commands, package publish metadata, root package dependency movement, and generated `dist/` output.
 - Commands run and results:
   - `node scripts/run-tests.js packages/secrets/src/__tests__/unit/secrets.test.js packages/runner/src/__tests__/unit/secrets.test.js` passed with 18 tests.
+
+## Follow-Up Slice: Install Secret Definition Normalization
+
+- Scope: normalize stack secret definitions in `rudi install` across string, `{ name }`, and `{ key }` forms, and skip malformed secret definitions instead of throwing.
+- Non-goals: daemon lifecycle, local LLM, runtime commands, package metadata, and generated `dist/` output.
+- Commands run and results:
+  - `node scripts/run-tests.js src/__tests__/unit/install-secrets.test.js src/__tests__/unit/commands.test.js` passed with 31 tests.
