@@ -8,8 +8,23 @@
  *   rudi remove binaries --all    Remove all binaries
  */
 
-import { uninstallPackage, isPackageInstalled, listInstalled } from '@learnrudi/core';
+import {
+  uninstallPackage,
+  isPackageInstalled,
+  listInstalled,
+  readRudiConfig,
+  removeStack,
+  removeStackFromToolIndex,
+} from '@learnrudi/core';
 import { unregisterMcpAll } from '@learnrudi/mcp';
+import { removeSecret } from '@learnrudi/secrets';
+
+const defaultStackCleanupDeps = {
+  readRudiConfig,
+  removeStack,
+  removeSecret,
+  removeStackFromToolIndex,
+};
 
 function pluralizeKind(kind) {
   if (!kind) return 'packages';
@@ -17,6 +32,72 @@ function pluralizeKind(kind) {
   if (kind === 'skill') return 'skills';
   if (kind === 'workflow') return 'workflows';
   return `${kind}s`;
+}
+
+function isStackPackage(id, kind) {
+  return kind === 'stack' || (typeof id === 'string' && id.startsWith('stack:'));
+}
+
+function normalizeStackPackageId(stackId) {
+  const normalized = typeof stackId === 'string' ? stackId.trim() : '';
+  if (!normalized) {
+    throw new Error('stack id is required');
+  }
+  return normalized.startsWith('stack:') ? normalized : `stack:${normalized}`;
+}
+
+function getSecretName(secret) {
+  if (typeof secret === 'string') return secret;
+  return secret?.name || secret?.key || null;
+}
+
+function getStackSecretNames(config, stackId) {
+  const stack = config?.stacks?.[stackId];
+  const secrets = Array.isArray(stack?.secrets) ? stack.secrets : [];
+  return [...new Set(secrets.map(getSecretName).filter(Boolean))];
+}
+
+function configReferencesSecret(config, secretName) {
+  return Object.values(config?.stacks || {}).some(stack => {
+    const secrets = Array.isArray(stack?.secrets) ? stack.secrets : [];
+    return secrets.some(secret => getSecretName(secret) === secretName);
+  });
+}
+
+export async function cleanupRemovedStack(stackId, deps = defaultStackCleanupDeps) {
+  const normalizedStackId = normalizeStackPackageId(stackId);
+  const beforeConfig = deps.readRudiConfig();
+  const secretNames = getStackSecretNames(beforeConfig, normalizedStackId);
+
+  deps.removeStack(normalizedStackId);
+
+  const afterConfig = deps.readRudiConfig();
+  const removedSecrets = [];
+  for (const secretName of secretNames) {
+    if (configReferencesSecret(afterConfig, secretName)) continue;
+    await deps.removeSecret(secretName);
+    removedSecrets.push(secretName);
+  }
+
+  const prunedToolIndex = deps.removeStackFromToolIndex(normalizedStackId);
+  return { removedSecrets, prunedToolIndex };
+}
+
+async function finalizeRemovedStack(stackId, targetAgents) {
+  const mcpStackId = normalizeStackPackageId(stackId).replace(/^stack:/, '');
+  let cleanupError = null;
+
+  try {
+    await cleanupRemovedStack(stackId);
+  } catch (error) {
+    cleanupError = error;
+  }
+
+  await unregisterMcpAll(mcpStackId, targetAgents);
+
+  if (cleanupError) {
+    throw cleanupError;
+  }
 }
 
 export async function cmdRemove(args, flags) {
@@ -72,9 +153,9 @@ export async function cmdRemove(args, flags) {
     const result = await uninstallPackage(fullId);
 
     if (result.success) {
-      // Unregister MCP from agent configs (only installed agents, or specific agents if --agent flag)
-      const stackId = fullId.replace(/^stack:/, '');
-      await unregisterMcpAll(stackId, targetAgents);
+      if (isStackPackage(fullId)) {
+        await finalizeRemovedStack(fullId, targetAgents);
+      }
 
       console.log(`✓ Removed ${fullId}`);
     } else {
@@ -159,10 +240,8 @@ async function removeBulk(kind, flags) {
         const result = await uninstallPackage(pkg.id);
 
         if (result.success) {
-          // Unregister MCP from agent configs (only installed agents, or specific agents if --agent flag)
-          if (pkg.kind === 'stack') {
-            const stackId = pkg.id.replace(/^stack:/, '');
-            await unregisterMcpAll(stackId, targetAgents);
+          if (isStackPackage(pkg.id, pkg.kind)) {
+            await finalizeRemovedStack(pkg.id, targetAgents);
           }
 
           console.log(`  ✓ Removed ${pkg.id}`);

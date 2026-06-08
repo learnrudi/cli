@@ -83,8 +83,9 @@ function getStackSecrets(stackConfig) {
   const missing = [];
 
   for (const secretDef of stackConfig.secrets || []) {
-    const name = typeof secretDef === 'string' ? secretDef : secretDef.name;
+    const name = typeof secretDef === 'string' ? secretDef : (secretDef?.name || secretDef?.key);
     const required = typeof secretDef === 'object' ? secretDef.required !== false : true;
+    if (!name) continue;
 
     if (allSecrets[name] && allSecrets[name].trim() !== '') {
       secrets[name] = allSecrets[name];
@@ -356,6 +357,27 @@ export function createToolIndex() {
     updatedAt: new Date().toISOString(),
     byStack: {}
   };
+}
+
+/**
+ * Remove one stack entry from the cached tool index.
+ * @param {string} stackId - Stack identifier, e.g. "stack:slack"
+ * @returns {boolean} Whether a cached entry was removed
+ */
+export function removeStackFromToolIndex(stackId) {
+  const normalizedStackId = typeof stackId === 'string' ? stackId.trim() : '';
+  if (!normalizedStackId) {
+    throw new Error('stackId is required to remove a stack from the tool index');
+  }
+
+  const index = readToolIndex();
+  if (!index?.byStack || !Object.prototype.hasOwnProperty.call(index.byStack, normalizedStackId)) {
+    return false;
+  }
+
+  delete index.byStack[normalizedStackId];
+  writeToolIndex(index);
+  return true;
 }
 
 // =============================================================================

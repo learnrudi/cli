@@ -91,3 +91,10 @@
   - `node scripts/run-tests.js src/__tests__/unit/stack-runtime-detection.test.js` failed for flat Python detection; `which` returned `{ runtime: 'node', entry: null }` instead of `{ runtime: 'python', entry: 'src/index.py' }`.
 - Commands run and results:
   - `node scripts/run-tests.js src/__tests__/unit/stack-runtime-detection.test.js` passed with 6 tests after requiring flat root layouts to contain their matching entry point before detection succeeds.
+
+## Follow-Up Slice: Stack Removal Cleanup
+
+- Scope: after uninstalling a stack, remove its RUDI config entry, remove orphaned secret values only when no remaining stack references them, and prune the cached tool-index entry.
+- Non-goals: daemon lifecycle, local LLM, runtime commands, generated `dist/` output, and broader secrets storage hardening.
+- Commands run and results:
+  - `node scripts/run-tests.js src/__tests__/unit/remove-command.test.js packages/core/src/__tests__/unit/tool-index.test.js packages/core/src/__tests__/unit/rudi-config.test.js` passed with 3 tests.

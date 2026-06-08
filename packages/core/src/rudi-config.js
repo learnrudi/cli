@@ -365,7 +365,7 @@ export function updateRudiConfig(modifier) {
  * @param {string} stackInfo.path - Absolute path to stack
  * @param {string} stackInfo.runtime - Runtime type
  * @param {string[]} stackInfo.command - Command array from manifest
- * @param {Array<string | {name: string, required?: boolean}>} [stackInfo.secrets] - Required secrets
+ * @param {Array<string | {name?: string, key?: string, required?: boolean}>} [stackInfo.secrets] - Required secrets
  * @param {string} [stackInfo.version] - Stack version
  */
 export function addStack(stackId, stackInfo) {
@@ -376,10 +376,16 @@ export function addStack(stackId, stackInfo) {
       stackInfo.path
     );
 
-    const secrets = (stackInfo.secrets || []).map(s => ({
-      name: typeof s === 'string' ? s : s.name,
-      required: typeof s === 'object' ? s.required !== false : true
-    }));
+    const secrets = (stackInfo.secrets || [])
+      .map(s => {
+        const name = typeof s === 'string' ? s : (s?.name || s?.key);
+        if (!name) return null;
+        return {
+          name,
+          required: typeof s === 'object' ? s.required !== false : true
+        };
+      })
+      .filter(Boolean);
 
     config.stacks[stackId] = {
       path: stackInfo.path,
@@ -418,7 +424,10 @@ export function removeStack(stackId) {
       if (meta.stack === stackId) {
         // Check if any other stack needs this secret
         const stillNeeded = Object.values(config.stacks).some(stack =>
-          stack.secrets.some(s => s.name === secretName)
+          (stack.secrets || []).some(s => {
+            const name = typeof s === 'string' ? s : (s?.name || s?.key);
+            return name === secretName;
+          })
         );
         if (!stillNeeded) {
           delete config.secrets[secretName];
