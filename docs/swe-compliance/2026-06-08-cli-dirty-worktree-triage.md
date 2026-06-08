@@ -257,3 +257,12 @@
   - `npm pack --dry-run` passed with 11 files in the tarball.
   - `git diff --cached --check` passed.
   - `node scripts/agent-debt-runner.mjs --edited scripts/generate-manifest.js` passed with no findings.
+
+## Follow-Up Slice: Docs And Debt Policy
+
+- Scope: update CLI agent instructions and daemon/public-readiness docs to reflect RUDI as a local capability layer, make debt-scan public API/legacy ownership explicit, and refresh one local apps-layout session fixture.
+- Non-goals: additional implementation changes and generated `dist` output.
+- Commands run and results:
+  - `node scripts/run-tests.js src/__tests__/unit/serve-sessions-broadcast.test.js` passed with 21 tests.
+  - `node scripts/agent-debt-runner.mjs --edited src/__tests__/unit/serve-sessions-broadcast.test.js` passed with no findings.
+  - `node -e "JSON.parse(require('fs').readFileSync('.debt-scan.json','utf8')); console.log('ok')"` passed.

@@ -115,8 +115,8 @@ describe('watcher path parsing (CLAUDE_PROJECTS_DIR watchRoot)', () => {
   });
 
   test('parses UUID-style sessionId', () => {
-    const result = parseWatcherPath(CLAUDE_PROJECTS_DIR, '-Users-hoff-dev-RUDI-lite/baa37a4a-a7d9-4dc4-9d53-1f8722f6c34a.jsonl');
-    assert.strictEqual(result.projectDir, '-Users-hoff-dev-RUDI-lite');
+    const result = parseWatcherPath(CLAUDE_PROJECTS_DIR, '-Users-hoff-dev-RUDI-apps-lite/baa37a4a-a7d9-4dc4-9d53-1f8722f6c34a.jsonl');
+    assert.strictEqual(result.projectDir, '-Users-hoff-dev-RUDI-apps-lite');
     assert.strictEqual(result.sessionId, 'baa37a4a-a7d9-4dc4-9d53-1f8722f6c34a');
   });
 

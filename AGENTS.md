@@ -1,8 +1,14 @@
 # RUDI CLI — Agent Instructions
 <!-- CODEX-AGENTS-LOADED:cli -->
 
-Package manager and sidecar server for RUDI. Node.js, plain JavaScript.
-Repo: `/Users/hoff/dev/RUDI/cli` — `@learnrudi/cli`
+Local capability CLI, daemon lifecycle manager, and MCP router for RUDI.
+Node.js, plain JavaScript.
+Repo: `/Users/hoff/dev/RUDI/apps/cli` — `@learnrudi/cli`
+
+RUDI owns local tools, secrets, stack/tool index, daemon health, artifacts, and
+MCP access. Claude, Codex, Gemini, and other agent hosts own normal agent
+execution. Existing run-group and spawn-child surfaces are legacy compatibility
+unless the task explicitly asks for them.
 
 ---
 
@@ -12,7 +18,7 @@ Most-used commands (CLI has 25+ total — see `src/index.js` for full inventory)
 
 | Command | Aliases | Purpose |
 |---------|---------|---------|
-| `rudi search` | | Search registry for stacks/prompts |
+| `rudi search` | | Search registry for stacks, skills, workflows, and packages |
 | `rudi install` | `i`, `add` | Install a package |
 | `rudi run` | `exec` | Run a stack |
 | `rudi list` | `ls` | List installed packages |
@@ -29,11 +35,15 @@ Most-used commands (CLI has 25+ total — see `src/index.js` for full inventory)
 | `rudi update` | `upgrade` | Update packages |
 | `rudi auth` | `authenticate`, `login` | Authenticate with providers |
 | `rudi mcp` | | MCP operations |
+| `rudi index` | | Rebuild MCP router tool cache |
+| `rudi integrate` | | Wire the RUDI router into agent MCP configs |
+| `rudi instructions` | | Print/install managed agent instruction blocks |
+| `rudi daemon` | | Start, stop, restart, install, or inspect daemon lifecycle |
 | `rudi studio` | | Open RUDI Studio |
 | `rudi home` | | Show ~/.rudi structure and status |
 | `rudi status` | | Show status |
 
-**Shortcuts:** `rudi stacks`, `rudi prompts`, `rudi runtimes`, `rudi binaries` (aliases: `bins`, `tools`), `rudi agents`
+**Shortcuts:** `rudi stacks`, `rudi prompts`, `rudi workflows`, `rudi runtimes`, `rudi binaries` (aliases: `bins`, `tools`), `rudi agents`
 
 ---
 
@@ -44,20 +54,25 @@ Most-used commands (CLI has 25+ total — see `src/index.js` for full inventory)
 ├── rudi.db                     # SQLite database (better-sqlite3, single DB for all data)
 ├── secrets.json                # Secrets file
 ├── stacks/                     # Installed stacks (MCP servers)
+├── skills/                     # Installed skills
+├── workflows/                  # Installed workflow definitions
 ├── runtimes/                   # Installed runtimes
 ├── binaries/                   # Installed binaries/tools
 ├── bins/                       # Binary symlinks
-├── agents/                     # Agent configurations
+├── agents/                     # Agent integration metadata
 ├── blobs/                      # Binary blobs
-├── .rudi-lite-port             # Sidecar port (written by `rudi serve`)
-└── .rudi-lite-token            # Sidecar auth token
+├── .rudi-lite-port             # Daemon port (legacy filename)
+└── .rudi-lite-token            # Daemon auth token (legacy filename)
 
 cli/
 ├── src/
 │   ├── index.js                # Entry point — all command registrations (parseArgs)
 │   ├── commands/               # One file per command
-│   │   ├── serve.js            # HTTP + WebSocket sidecar server
-│   │   ├── parallel.js         # Terminal-based parallel run groups
+│   │   ├── serve.js            # HTTP + WebSocket daemon entrypoint
+│   │   ├── daemon.js           # Lifecycle command and LaunchAgent wrapper
+│   │   ├── integrate.js        # Agent MCP router config integration
+│   │   ├── instructions.js     # Managed CLAUDE.md/AGENTS.md instruction block
+│   │   ├── parallel.js         # Legacy terminal-based run groups
 │   │   ├── agent/
 │   │   │   └── routes/
 │   │   │       └── run-group.js  # Run-group REST API (canonical source)
@@ -74,7 +89,11 @@ cli/
 └── dist/index.cjs              # Built output (bin: rudi)
 ```
 
-**Dependency flow:** `index.js` → `commands/*.js` → `packages/*` → `~/.rudi/rudi.db`
+**Dependency flow:** `index.js` -> `commands/*.js` -> `packages/*` -> `~/.rudi/rudi.db`
+
+Storage is separate from daemon lifecycle. The daemon may call storage
+repositories and report storage health, but database repair/import policy is
+not daemon ownership.
 
 ---
 
@@ -86,9 +105,28 @@ cli/
 
 ---
 
-## Sidecar API (Run Groups)
+## Agent Integration
+
+MCP config and instruction config are separate layers:
+
+- `rudi integrate <agent>` writes one `rudi` MCP server entry that points at
+  `~/.rudi/bins/rudi-router`.
+- `rudi instructions <agent>` prints the managed instruction block.
+- `rudi instructions <agent> --install` writes or updates that block in the
+  agent's global or project instruction file.
+
+Discover installed stacks with `rudi list stacks --json` or inspect
+`~/.rudi/cache/tool-index.json`. Rebuild the router cache with
+`rudi index --json`. Do not use or document `rudi mcp --list`; it is not a
+supported command.
+
+## Legacy Sidecar API (Run Groups)
 
 Canonical source: `src/commands/agent/routes/run-group.js`
+
+These routes are compatibility debt for the older RUDI-as-agent-runner
+direction. Do not build new daemon-owned agent execution features unless the
+task explicitly says to work on legacy run-group compatibility.
 
 **Auth:** All requests require `x-rudi-token` header.
 **Base URL:** `http://localhost:<port>` (port from `~/.rudi/.rudi-lite-port`)
@@ -148,14 +186,17 @@ rudi parallel "task one" "task two" [--name "Batch"] [--provider claude] [--mode
 - Requires `rudi serve` running
 - Creates run-group, polls every 2s, renders live progress
 - Exits on terminal status (completed/partial/failed/stopped)
+- Legacy compatibility command; prefer native Claude/Codex/Gemini agent
+  orchestration unless this surface is explicitly in scope.
 
 ---
 
 ## Key Notes
 
 - **DB path:** `~/.rudi/rudi.db` (SQLite via better-sqlite3)
-- **Sidecar routes:** All routes defined in `src/commands/serve.js` and `src/commands/agent/routes/`
-- **Lite UI paths:** Lite consumes sidecar API via `httpBridge.ts` — see `/Users/hoff/dev/RUDI/lite/AGENTS.md`
+- **Daemon routes:** Legacy routes are still defined in `src/commands/serve.js` and `src/commands/agent/routes/` while migration proceeds.
+- **MCP router:** `src/router-mcp.js` exposes installed stack tools over MCP and must remain independent of Lite being open.
+- **Legacy Lite paths:** Lite consumes the daemon API via `httpBridge.ts` — see `/Users/hoff/dev/RUDI/apps/lite/AGENTS.md`
 - **Type contracts:** CLI returns JSON; Lite types in `src/types/agent.ts` must match CLI response shapes
 - **Sessions table columns:** `total_input_tokens` + `total_output_tokens` (NOT `total_tokens`)
 - **Run-group canonical source:** Always reference `src/commands/agent/routes/run-group.js` — docs may be stale
