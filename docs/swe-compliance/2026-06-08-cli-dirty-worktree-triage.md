@@ -235,3 +235,14 @@
   - `node scripts/run-tests.js packages/core/src/__tests__/unit/resolver-related-skills.test.js packages/env/src/__tests__/unit/env.test.js` passed as part of a focused 48-test run.
   - `git diff --cached --check` passed.
   - `node scripts/agent-debt-runner.mjs --edited packages/core/src/resolver.js,packages/core/src/__tests__/unit/resolver-related-skills.test.js,src/commands/init.js` passed with no findings.
+
+## Follow-Up Slice: Router Index Tooling
+
+- Scope: route `rudi index` through the daemon tool-index operation helpers and allow router stack secret definitions to use either `name` or `key`.
+- Non-goals: workflow dependency resolution, generated package manifest, packaging metadata, generated `dist` output, and public-readiness docs.
+- Commands run and results:
+  - `node --check src/commands/index-tools.js` passed.
+  - `node --check src/router-mcp.js` passed.
+  - `node scripts/run-tests.js packages/core/src/__tests__/unit/tool-index.test.js src/__tests__/unit/daemon-tool-index-operation.test.js` passed as part of a focused 48-test run.
+  - `git diff --cached --check` passed.
+  - `node scripts/agent-debt-runner.mjs --edited src/commands/index-tools.js,src/router-mcp.js` passed with no findings.

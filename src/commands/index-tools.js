@@ -13,8 +13,12 @@
 
 import fs from 'fs';
 import path from 'path';
-import { indexAllStacks, readToolIndex, TOOL_INDEX_PATH, PATHS } from '@learnrudi/core';
+import { TOOL_INDEX_PATH, PATHS } from '@learnrudi/core';
 import { readRudiConfig } from '@learnrudi/core';
+import {
+  readToolIndexCache,
+  rebuildToolIndex,
+} from '../daemon/operations/tool-index.js';
 
 export async function cmdIndex(args, flags) {
   const stackFilter = args.length > 0 ? args : null;
@@ -121,7 +125,7 @@ export async function cmdIndex(args, flags) {
   }
 
   // Check existing index
-  const existingIndex = readToolIndex();
+  const existingIndex = readToolIndexCache({ validate: false });
   if (existingIndex && !forceReindex && !stackFilter) {
     const allCached = stacksToIndex.every(id => {
       const entry = existingIndex.byStack?.[id];
@@ -163,10 +167,11 @@ export async function cmdIndex(args, flags) {
   const log = jsonOutput ? () => {} : console.log;
 
   try {
-    const result = await indexAllStacks({
+    const result = await rebuildToolIndex({
       stacks: stacksToIndex,
       log,
-      timeout: 20000 // 20s per stack
+      timeout: 20000, // 20s per stack
+      validate: false,
     });
 
     // Calculate total tools
