@@ -66,3 +66,11 @@
   - Temp `RUDI_HOME` smoke for `node src/index.js update stack:__missing_stack__` exited 1 with `Package not installed`.
 - Accepted debt: unrelated dirty daemon/runtime/leverage/security/public-readiness work remains in the worktree for later slices.
 - Definition of Done: first cleanup commit is isolated, verified, and remaining groups are named.
+
+## Follow-Up Slice: Leverage Command
+
+- Scope: add the standalone `rudi leverage` calculator command, math helper, CLI route, help text, and focused unit test.
+- Non-goals: local LLM, runtime, daemon, package lifecycle, and generated `dist/` output.
+- Commands run and results:
+  - `node scripts/run-tests.js src/__tests__/unit/leverage-command.test.js` passed with 4 tests.
+  - `node src/index.js leverage frontend --json` passed and returned the expected `5.33` leverage payload.

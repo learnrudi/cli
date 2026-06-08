@@ -61,6 +61,7 @@ import { cmdServe } from './commands/serve.js';
 import { cmdParallel } from './commands/parallel.js';
 import { cmdRunGroup } from './commands/run-group.js';
 import { cmdLanes } from './commands/lanes.js';
+import { cmdLeverage } from './commands/leverage.js';
 
 const VERSION = typeof __RUDI_CLI_VERSION__ === 'string'
   ? __RUDI_CLI_VERSION__
@@ -225,6 +226,10 @@ async function main() {
 
       case 'lanes':
         await cmdLanes(args, flags);
+        break;
+
+      case 'leverage':
+        await cmdLeverage(args, flags);
         break;
 
       // Shortcuts for listing specific package types

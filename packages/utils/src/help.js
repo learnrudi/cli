@@ -47,6 +47,7 @@ RUN
   parallel <tasks...>   Run multiple agent tasks in parallel (grouped)
   run-group <cmd>       Inspect, merge, and cleanup run groups
   lanes <cmd>           Manage the local main/dev lane worktree layout
+  leverage [preset]     Calculate human-attention leverage for agent workflows
 
 SECRETS
   secrets set <name>    Set a secret
@@ -77,6 +78,7 @@ EXAMPLES
   rudi secrets set SLACK_TOKEN   Configure secret
   rudi integrate claude          Wire up Claude Desktop/Code
   rudi instructions codex        Print Codex instruction block
+  rudi leverage frontend         Calculate frontend workflow leverage
   rudi list                      Show installed packages
 
 PACKAGE TYPES
@@ -226,6 +228,30 @@ EXAMPLES
   rudi lanes init
   rudi lanes init --cwd /path/to/repo
   rudi lanes sync
+`,
+    leverage: `
+rudi leverage - Calculate agent workflow leverage
+
+USAGE
+  rudi leverage [preset] [options]
+
+PRESETS
+  frontend                 8h design/engineer/QA workflow baseline
+
+OPTIONS
+  --solo <min>             Solo workflow minutes
+  --budget <min>           Human attention budget (default: solo minutes)
+  --spec <min>             Human spec/direction minutes
+  --review <min>           Human final review/fix minutes
+  --agents <n>             Number of agent roles/workstreams
+  --agent-minutes <min>    Agent minutes per role
+  --serial                 Agents run serially instead of in parallel
+  --json                   Output JSON
+
+EXAMPLES
+  rudi leverage frontend
+  rudi leverage --solo 480 --spec 60 --review 30 --agents 3 --agent-minutes 20
+  rudi leverage --solo 480 --spec 60 --review 30 --agents 3 --agent-minutes 20 --serial
 `,
     list: `
 rudi list - List installed packages

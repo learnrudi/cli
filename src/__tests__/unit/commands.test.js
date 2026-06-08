@@ -109,6 +109,11 @@ test('commands: lanes exports cmdLanes function', async () => {
   assert.strictEqual(typeof cmdLanes, 'function');
 });
 
+test('commands: leverage exports cmdLeverage function', async () => {
+  const { cmdLeverage } = await import('../../commands/leverage.js');
+  assert.strictEqual(typeof cmdLeverage, 'function');
+});
+
 // =============================================================================
 // UTILS EXPORTS
 // =============================================================================
