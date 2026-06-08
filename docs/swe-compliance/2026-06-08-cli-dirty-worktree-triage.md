@@ -204,3 +204,14 @@
   - `node scripts/run-tests.js src/__tests__/unit/schema-migrations.test.js` passed with 4 tests.
   - `git diff --cached --check` passed.
   - `node scripts/agent-debt-runner.mjs --edited packages/db/src/schema.js,src/__tests__/unit/schema-migrations.test.js` passed with no findings.
+
+## Follow-Up Slice: Sidecar OpenAPI Daemon Surface
+
+- Scope: document authenticated daemon readiness/version/status routes, local-LLM broker routes, and additive daemon schema components in the generated sidecar OpenAPI artifact.
+- Non-goals: package metadata, generated `dist` output, and public-readiness docs.
+- Commands run and results:
+  - `npm run generate:sidecar-openapi` regenerated `docs/sidecar/openapi.json`.
+  - `node --check src/contracts/sidecar-openapi.js` passed.
+  - `node scripts/run-tests.js src/__tests__/unit/sidecar-openapi-contract.test.js src/__tests__/unit/daemon-schemas-contract.test.js src/__tests__/unit/daemon-routes-contract.test.js src/__tests__/unit/local-llm.test.js` passed with 38 tests.
+  - `git diff --cached --check` passed.
+  - `node scripts/agent-debt-runner.mjs --edited src/contracts/sidecar-openapi.js,src/__tests__/unit/sidecar-openapi-contract.test.js` passed with no findings.

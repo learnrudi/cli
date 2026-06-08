@@ -7,6 +7,28 @@ import {
   createRunGroupStartedEvent,
   createRunGroupStoppedEvent,
 } from '../commands/agent/run-group-domain.js';
+import {
+  AgentSessionSchema as DaemonAgentSessionSchema,
+  ArtifactSchema as DaemonArtifactSchema,
+  DaemonHealthSchema,
+  DaemonReadinessSchema,
+  DaemonStatusSchema,
+  EventEnvelopeSchema as DaemonEventEnvelopeSchema,
+  FailureEnvelopeSchema as DaemonFailureEnvelopeSchema,
+  JobSchema as DaemonJobSchema,
+  LocalLlmEnvExportSchema as DaemonLocalLlmEnvExportSchema,
+  LocalLlmRuntimeStatusSchema as DaemonLocalLlmRuntimeStatusSchema,
+  PackageDescriptorSchema as DaemonPackageDescriptorSchema,
+  PackageStatusSchema as DaemonPackageStatusSchema,
+  RequestContextSchema as DaemonRequestContextSchema,
+  RunGroupSchema as DaemonRunGroupSchema,
+  SecretStatusSchema as DaemonSecretStatusSchema,
+  SessionSummarySchema as DaemonSessionSummarySchema,
+  SuccessEnvelopeSchema as DaemonSuccessEnvelopeSchema,
+  ToolDescriptorSchema as DaemonToolDescriptorSchema,
+  ToolIndexCacheSchema as DaemonToolIndexCacheSchema,
+  ToolIndexStatusSchema as DaemonToolIndexStatusSchema,
+} from '../daemon/schemas/index.js';
 
 const JSON_CONTENT_TYPE = 'application/json';
 const REQUEST_ID_HEADER = 'x-rudi-request-id';
@@ -49,6 +71,58 @@ function errorResponse(errorDefinition, example) {
       requestId: 'req_example_123',
     },
   );
+}
+
+function localLlmQueryParameters(options = {}) {
+  const params = [
+    {
+      name: 'target',
+      in: 'query',
+      required: false,
+      schema: { type: 'string', default: 'mac_host' },
+      description: 'Runtime target to resolve, such as mac_host.',
+    },
+    {
+      name: 'context',
+      in: 'query',
+      required: false,
+      schema: { type: 'string' },
+      description: 'Consumer network context, such as host_process or docker_container.',
+    },
+    {
+      name: 'model',
+      in: 'query',
+      required: false,
+      schema: { type: 'string' },
+      description: 'Preferred model tag to render into consumer env output.',
+    },
+    {
+      name: 'baseUrl',
+      in: 'query',
+      required: false,
+      schema: { type: 'string' },
+      description: 'Explicit OpenAI-compatible base URL override.',
+    },
+    {
+      name: 'timeoutMs',
+      in: 'query',
+      required: false,
+      schema: { type: 'integer', minimum: 1, default: 5000 },
+      description: 'Health/model list request timeout in milliseconds.',
+    },
+  ];
+
+  if (options.includeRuntimeQuery) {
+    params.unshift({
+      name: 'runtime',
+      in: 'query',
+      required: false,
+      schema: { type: 'string', default: 'ollama' },
+      description: 'Runtime registry id or name.',
+    });
+  }
+
+  return params;
 }
 
 function buildWebsocketEventsExtension() {
@@ -152,6 +226,8 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
     ],
     tags: [
       { name: 'Health' },
+      { name: 'Daemon' },
+      { name: 'Local LLM' },
       { name: 'Projects' },
       { name: 'Notes' },
       { name: 'Sessions' },
@@ -173,6 +249,173 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
               status: 'ok',
               version: SIDECAR_API_VERSION,
             }),
+          },
+        },
+      },
+      '/ready': {
+        get: {
+          tags: ['Daemon'],
+          summary: 'Daemon readiness',
+          description: 'Authenticated readiness check for dependencies needed by the local daemon.',
+          operationId: 'getDaemonReadiness',
+          responses: {
+            '200': jsonResponse('Daemon readiness status', 'DaemonReadiness', {
+              status: 'ready',
+              ready: true,
+              checks: {
+                routes: true,
+                db: { status: 'ready', ready: true },
+                toolIndex: { status: 'ready', ready: true, toolCount: 4 },
+              },
+            }),
+            '401': responseRef('UnauthorizedError'),
+          },
+        },
+      },
+      '/version': {
+        get: {
+          tags: ['Daemon'],
+          summary: 'Daemon API version',
+          description: 'Authenticated sidecar API version endpoint.',
+          operationId: 'getDaemonVersion',
+          responses: {
+            '200': jsonResponse('Daemon API version', 'VersionResponse', {
+              version: SIDECAR_API_VERSION,
+            }),
+            '401': responseRef('UnauthorizedError'),
+          },
+        },
+      },
+      '/daemon/status': {
+        get: {
+          tags: ['Daemon'],
+          summary: 'Daemon status',
+          description: 'Authenticated runtime status for the local daemon process and key subsystems.',
+          operationId: 'getDaemonStatus',
+          responses: {
+            '200': jsonResponse('Daemon runtime status', 'DaemonStatus', {
+              version: SIDECAR_API_VERSION,
+              pid: 12345,
+              port: 8100,
+              uptimeMs: 1500,
+              rudiHome: '/Users/hoff/.rudi',
+              platform: 'darwin',
+              runtime: { name: 'node', version: 'v20.0.0' },
+              startedAt: '2026-05-17T12:00:00.000Z',
+              toolIndexStatus: { status: 'ready', ready: true, toolCount: 4 },
+              dbStatus: { status: 'ready', ready: true },
+              packageCounts: { stack: 2 },
+              activeSessionCount: 1,
+              activeJobCount: 0,
+            }),
+            '401': responseRef('UnauthorizedError'),
+          },
+        },
+      },
+      '/local-llm/status': {
+        get: {
+          tags: ['Local LLM'],
+          summary: 'Local LLM runtime status',
+          description: 'Resolves a registry-backed local LLM runtime target and checks its OpenAI-compatible models endpoint.',
+          operationId: 'getLocalLlmStatus',
+          parameters: localLlmQueryParameters({ includeRuntimeQuery: true }),
+          responses: {
+            '200': jsonResponse('Local LLM runtime status', 'DaemonLocalLlmRuntimeStatus', {
+              runtime: 'ollama',
+              providerFamily: 'openai_compatible',
+              target: 'mac_host',
+              consumer: null,
+              consumerContext: 'host_process',
+              baseUrl: 'http://localhost:11434/v1',
+              healthUrl: 'http://localhost:11434/v1/models',
+              apiKeyPolicy: 'placeholder',
+              available: true,
+              statusCode: 200,
+              models: ['llama3.2:3b'],
+              error: null,
+            }),
+            '400': responseRef('BadRequestError'),
+            '401': responseRef('UnauthorizedError'),
+          },
+        },
+      },
+      '/local-llm/models': {
+        get: {
+          tags: ['Local LLM'],
+          summary: 'Local LLM models',
+          description: 'Lists models reported by the resolved OpenAI-compatible local LLM runtime.',
+          operationId: 'listLocalLlmModels',
+          parameters: localLlmQueryParameters({ includeRuntimeQuery: true }),
+          responses: {
+            '200': jsonResponse('Local LLM model list', 'LocalLlmModelsResponse', {
+              runtime: 'ollama',
+              target: 'mac_host',
+              consumerContext: 'host_process',
+              available: true,
+              models: ['llama3.2:3b'],
+              error: null,
+            }),
+            '400': responseRef('BadRequestError'),
+            '401': responseRef('UnauthorizedError'),
+          },
+        },
+      },
+      '/local-llm/env/{consumer}': {
+        parameters: [
+          { $ref: '#/components/parameters/LocalLlmConsumer' },
+        ],
+        get: {
+          tags: ['Local LLM'],
+          summary: 'Local LLM consumer env export',
+          description: 'Renders consumer-specific environment values from daemon-owned runtime metadata.',
+          operationId: 'getLocalLlmConsumerEnv',
+          parameters: localLlmQueryParameters({ includeRuntimeQuery: true }),
+          responses: {
+            '200': jsonResponse('Local LLM consumer env export', 'DaemonLocalLlmEnvExport', {
+              runtime: 'ollama',
+              providerFamily: 'openai_compatible',
+              target: 'mac_host',
+              consumer: 'content-engine',
+              consumerContext: 'docker_container',
+              baseUrl: 'http://host.docker.internal:11434/v1',
+              env: {
+                LOCAL_LLM_BASE_URL: 'http://host.docker.internal:11434/v1',
+                LOCAL_LLM_API_KEY: 'ollama',
+                LOCAL_LLM_MODEL: 'llama3.2:3b',
+              },
+            }),
+            '400': responseRef('BadRequestError'),
+            '401': responseRef('UnauthorizedError'),
+          },
+        },
+      },
+      '/runtimes/{runtime}/status': {
+        parameters: [
+          { $ref: '#/components/parameters/LocalLlmRuntime' },
+        ],
+        get: {
+          tags: ['Local LLM'],
+          summary: 'Runtime status',
+          description: 'Runtime status adapter for local LLM runtimes backed by the daemon runtime broker.',
+          operationId: 'getRuntimeStatus',
+          parameters: localLlmQueryParameters(),
+          responses: {
+            '200': jsonResponse('Runtime status', 'DaemonLocalLlmRuntimeStatus', {
+              runtime: 'ollama',
+              providerFamily: 'openai_compatible',
+              target: 'mac_host',
+              consumer: null,
+              consumerContext: 'host_process',
+              baseUrl: 'http://localhost:11434/v1',
+              healthUrl: 'http://localhost:11434/v1/models',
+              apiKeyPolicy: 'placeholder',
+              available: true,
+              statusCode: 200,
+              models: ['llama3.2:3b'],
+              error: null,
+            }),
+            '400': responseRef('BadRequestError'),
+            '401': responseRef('UnauthorizedError'),
           },
         },
       },
@@ -1125,6 +1368,20 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
           required: true,
           schema: { type: 'string' },
         },
+        LocalLlmConsumer: {
+          name: 'consumer',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+          example: 'content-engine',
+        },
+        LocalLlmRuntime: {
+          name: 'runtime',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+          example: 'ollama',
+        },
       },
       responses: {
         UnauthorizedError: errorResponse(SIDECAR_ERROR_CODES.UNAUTHORIZED, {
@@ -1215,11 +1472,55 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
         }),
       },
       schemas: {
+        DaemonSuccessEnvelope: DaemonSuccessEnvelopeSchema,
+        DaemonFailureEnvelope: DaemonFailureEnvelopeSchema,
+        DaemonRequestContext: DaemonRequestContextSchema,
+        DaemonEventEnvelope: DaemonEventEnvelopeSchema,
+        DaemonHealth: DaemonHealthSchema,
+        DaemonReadiness: DaemonReadinessSchema,
+        DaemonStatus: DaemonStatusSchema,
+        DaemonLocalLlmRuntimeStatus: DaemonLocalLlmRuntimeStatusSchema,
+        DaemonLocalLlmEnvExport: DaemonLocalLlmEnvExportSchema,
+        DaemonPackageDescriptor: DaemonPackageDescriptorSchema,
+        DaemonPackageStatus: DaemonPackageStatusSchema,
+        DaemonSecretStatus: DaemonSecretStatusSchema,
+        DaemonToolIndexCache: DaemonToolIndexCacheSchema,
+        DaemonToolDescriptor: DaemonToolDescriptorSchema,
+        DaemonToolIndexStatus: DaemonToolIndexStatusSchema,
+        DaemonRunGroup: DaemonRunGroupSchema,
+        DaemonAgentSession: DaemonAgentSessionSchema,
+        DaemonSessionSummary: DaemonSessionSummarySchema,
+        DaemonJob: DaemonJobSchema,
+        DaemonArtifact: DaemonArtifactSchema,
+        LocalLlmModelsResponse: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['runtime', 'target', 'consumerContext', 'available', 'models', 'error'],
+          properties: {
+            runtime: { type: 'string' },
+            target: { type: 'string' },
+            consumerContext: { type: 'string' },
+            available: { type: 'boolean' },
+            models: {
+              type: 'array',
+              items: { type: 'string' },
+            },
+            error: { type: ['string', 'null'] },
+          },
+        },
         HealthResponse: {
           type: 'object',
           required: ['status', 'version'],
           properties: {
             status: { type: 'string', const: 'ok' },
+            version: { type: 'string' },
+          },
+        },
+        VersionResponse: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['version'],
+          properties: {
             version: { type: 'string' },
           },
         },

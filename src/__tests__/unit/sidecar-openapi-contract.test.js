@@ -32,6 +32,11 @@ test('sidecar OpenAPI spec documents only the public run-group websocket contrac
 
 test('sidecar OpenAPI spec keeps /health unauthenticated and documents the stable project CRUD paths', () => {
   assert.deepEqual(committedSpec.paths['/health']?.get?.security, []);
+  assert.notDeepEqual(committedSpec.paths['/ready']?.get?.security, []);
+  assert.notDeepEqual(committedSpec.paths['/version']?.get?.security, []);
+  assert.notDeepEqual(committedSpec.paths['/daemon/status']?.get?.security, []);
+  assert.notDeepEqual(committedSpec.paths['/local-llm/status']?.get?.security, []);
+  assert.notDeepEqual(committedSpec.paths['/local-llm/env/{consumer}']?.get?.security, []);
   assert.ok(committedSpec.paths['/projects']);
   assert.ok(committedSpec.paths['/projects/{projectId}']);
 });
@@ -51,4 +56,35 @@ test('sidecar OpenAPI spec documents shell and terminal helper routes with expli
   assert.ok(committedSpec.paths['/shell/open']?.post?.description.includes('macOS-specific helper'));
   assert.ok(committedSpec.paths['/terminal/open']?.post?.description.includes('@lydell/node-pty'));
   assert.ok(committedSpec.paths['/terminal/close']);
+});
+
+test('sidecar OpenAPI spec publishes additive daemon schema components without changing legacy routes', () => {
+  const schemas = committedSpec.components?.schemas || {};
+  for (const schemaName of [
+    'DaemonSuccessEnvelope',
+    'DaemonFailureEnvelope',
+    'DaemonRequestContext',
+    'DaemonEventEnvelope',
+    'DaemonHealth',
+    'DaemonReadiness',
+    'DaemonStatus',
+    'DaemonLocalLlmRuntimeStatus',
+    'DaemonLocalLlmEnvExport',
+    'LocalLlmModelsResponse',
+    'DaemonPackageStatus',
+    'DaemonSecretStatus',
+    'DaemonToolIndexCache',
+    'DaemonRunGroup',
+    'DaemonAgentSession',
+    'DaemonJob',
+    'DaemonArtifact',
+  ]) {
+    assert.ok(schemas[schemaName], `${schemaName} should be published in OpenAPI components`);
+  }
+
+  assert.deepEqual(schemas.DaemonSuccessEnvelope.required, ['ok', 'data']);
+  assert.deepEqual(schemas.DaemonFailureEnvelope.required, ['ok', 'error']);
+  assert.deepEqual(schemas.DaemonToolIndexCache.required, ['version', 'updatedAt', 'byStack']);
+  assert.deepEqual(schemas.HealthResponse.required, ['status', 'version']);
+  assert.deepEqual(schemas.VersionResponse.required, ['version']);
 });
