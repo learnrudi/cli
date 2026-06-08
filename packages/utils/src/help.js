@@ -35,6 +35,8 @@ INSTALLED
   which <cmd>           Show path to a command
   info <pkg>            Show package details
   shims [cmd]           Manage shims in ~/.rudi/bins (list, check, fix, rebuild)
+  local-llm <cmd>       Check local OpenAI-compatible LLM runtimes and export env
+  runtime <cmd>         Inspect runtime registry entries and status
 
 AGENT INTEGRATION
   integrate <agent>     Wire up RUDI router (claude, cursor, gemini, codex, all)
@@ -252,6 +254,43 @@ EXAMPLES
   rudi leverage frontend
   rudi leverage --solo 480 --spec 60 --review 30 --agents 3 --agent-minutes 20
   rudi leverage --solo 480 --spec 60 --review 30 --agents 3 --agent-minutes 20 --serial
+`,
+    'local-llm': `
+rudi local-llm - Inspect local OpenAI-compatible LLM runtimes
+
+USAGE
+  rudi local-llm status [runtime] [options]
+  rudi local-llm models [runtime] [options]
+  rudi local-llm env [consumer] [options]
+
+OPTIONS
+  --runtime <name>              Runtime name (default: ollama)
+  --target <name>               Runtime target (default: mac_host)
+  --consumer <name>             Consumer app for status resolution
+  --consumer-context <name>     host_process or docker_container
+  --model <tag>                 Model tag for env rendering
+  --base-url <url>              Override resolved base URL
+  --timeout <ms>                Health/model request timeout
+  --json                        Output raw JSON
+
+EXAMPLES
+  rudi local-llm status
+  rudi local-llm models
+  rudi local-llm env content-engine --model llama3.2:3b
+`,
+    runtime: `
+rudi runtime - Inspect runtime registry entries
+
+USAGE
+  rudi runtime list
+  rudi runtime status <runtime>
+
+OPTIONS
+  --json                        Output raw JSON
+
+EXAMPLES
+  rudi runtime list
+  rudi runtime status ollama
 `,
     list: `
 rudi list - List installed packages

@@ -119,3 +119,10 @@
 - Non-goals: daemon lifecycle, local LLM, runtime commands, package metadata, and generated `dist/` output.
 - Commands run and results:
   - `node scripts/run-tests.js src/__tests__/unit/routing.test.js` passed with 28 tests.
+
+## Follow-Up Slice: Local LLM Runtime CLI
+
+- Scope: add local OpenAI-compatible LLM runtime inspection/env export support, a `rudi runtime status` wrapper for local LLM runtimes, minimal sidecar fallback behavior, and schema-backed local LLM operation results.
+- Non-goals: daemon lifecycle management, daemon HTTP route registration, full sidecar OpenAPI updates, package metadata, and generated `dist/` output.
+- Commands run and results:
+  - `node scripts/run-tests.js src/__tests__/unit/local-llm.test.js` passed with 13 tests.

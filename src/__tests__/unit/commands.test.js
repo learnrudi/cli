@@ -109,6 +109,16 @@ test('commands: lanes exports cmdLanes function', async () => {
   assert.strictEqual(typeof cmdLanes, 'function');
 });
 
+test('commands: local-llm exports cmdLocalLlm function', async () => {
+  const { cmdLocalLlm } = await import('../../commands/local-llm.js');
+  assert.strictEqual(typeof cmdLocalLlm, 'function');
+});
+
+test('commands: runtime exports cmdRuntime function', async () => {
+  const { cmdRuntime } = await import('../../commands/runtime.js');
+  assert.strictEqual(typeof cmdRuntime, 'function');
+});
+
 test('commands: leverage exports cmdLeverage function', async () => {
   const { cmdLeverage } = await import('../../commands/leverage.js');
   assert.strictEqual(typeof cmdLeverage, 'function');

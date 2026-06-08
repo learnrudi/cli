@@ -61,6 +61,8 @@ import { cmdServe } from './commands/serve.js';
 import { cmdParallel } from './commands/parallel.js';
 import { cmdRunGroup } from './commands/run-group.js';
 import { cmdLanes } from './commands/lanes.js';
+import { cmdLocalLlm } from './commands/local-llm.js';
+import { cmdRuntime } from './commands/runtime.js';
 import { cmdLeverage } from './commands/leverage.js';
 
 const VERSION = typeof __RUDI_CLI_VERSION__ === 'string'
@@ -226,6 +228,14 @@ async function main() {
 
       case 'lanes':
         await cmdLanes(args, flags);
+        break;
+
+      case 'local-llm':
+        await cmdLocalLlm(args, flags);
+        break;
+
+      case 'runtime':
+        await cmdRuntime(args, flags);
         break;
 
       case 'leverage':
