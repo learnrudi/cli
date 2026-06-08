@@ -8,12 +8,14 @@ function pluralizeKind(kind) {
   if (!kind) return 'packages';
   if (kind === 'binary') return 'binaries';
   if (kind === 'skill') return 'skills';
+  if (kind === 'workflow') return 'workflows';
   return `${kind}s`;
 }
 
 function headingForKind(kind) {
   if (kind === 'binary') return 'BINARIES';
   if (kind === 'skill') return 'SKILLS';
+  if (kind === 'workflow') return 'WORKFLOWS';
   return `${kind.toUpperCase()}S`;
 }
 
@@ -37,6 +39,7 @@ export async function cmdSearch(args, flags) {
     console.error('       rudi search --all --runtimes List all runtimes');
     console.error('       rudi search --all --binaries List all binaries');
     console.error('       rudi search --all --agents   List all agents');
+    console.error('       rudi search --all --workflows List all workflows');
     console.error('Example: rudi search pdf');
     process.exit(1);
   }
@@ -46,13 +49,15 @@ export async function cmdSearch(args, flags) {
     ? 'stack'
     : (flags.skills || flags.prompts)
       ? 'skill'
-      : flags.runtimes
-        ? 'runtime'
-        : binariesFlag
-          ? 'binary'
-          : flags.agents
-            ? 'agent'
-            : null;
+      : flags.workflows
+        ? 'workflow'
+        : flags.runtimes
+          ? 'runtime'
+          : binariesFlag
+            ? 'binary'
+            : flags.agents
+              ? 'agent'
+              : null;
 
   // Show deprecation note for --prompts flag
   if (flags.prompts && !flags.skills) {
@@ -79,7 +84,9 @@ export async function cmdSearch(args, flags) {
     // Group by kind
     const grouped = {
       stack: results.filter(r => r.kind === 'stack'),
+      skill: results.filter(r => r.kind === 'skill'),
       prompt: results.filter(r => r.kind === 'prompt'),
+      workflow: results.filter(r => r.kind === 'workflow'),
       runtime: results.filter(r => r.kind === 'runtime'),
       binary: results.filter(r => r.kind === 'binary'),
       agent: results.filter(r => r.kind === 'agent')
@@ -117,13 +124,15 @@ async function listAllPackages(flags) {
     ? 'stack'
     : (flags.skills || flags.prompts)
       ? 'skill'
-      : flags.runtimes
-        ? 'runtime'
-        : binariesFlag
-          ? 'binary'
-          : flags.agents
-            ? 'agent'
-            : null;
+      : flags.workflows
+        ? 'workflow'
+        : flags.runtimes
+          ? 'runtime'
+          : binariesFlag
+            ? 'binary'
+            : flags.agents
+              ? 'agent'
+              : null;
 
   // Show deprecation note for --prompts flag
   if (flags.prompts && !flags.skills) {
@@ -131,7 +140,7 @@ async function listAllPackages(flags) {
   }
 
   try {
-    const kinds = kind ? [kind] : ['stack', 'skill', 'runtime', 'binary', 'agent'];
+    const kinds = kind ? [kind] : ['stack', 'skill', 'workflow', 'runtime', 'binary', 'agent'];
     const allPackages = {};
     let totalCount = 0;
 

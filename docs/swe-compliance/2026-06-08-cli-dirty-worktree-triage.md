@@ -1,0 +1,68 @@
+# CLI Dirty Worktree Triage Checklist
+
+## Phase 0: Baseline And Manual Lookup
+
+- Scope: sort the existing dirty CLI worktree into coherent, reviewable commits without reverting unrelated local work.
+- Files to inspect before editing: `git status -sb`, `git diff --stat`, local compliance docs, changed command/package files, and untracked test files.
+- Relevant SWE manual sections: `10-Engineering-Operating-Manual-Index.md`; Appendix C / C7A in `01-Master-Engineering-Doctrine.txt`.
+- Current-state commands: `git status -sb`; `git diff --stat`; targeted diffs for package lifecycle, daemon, runtime, leverage, and security/schema groups.
+- Risks and invariants: no bulk staging; no hidden daemon/runtime/leverage files in package lifecycle commits; no clean-checkout import of untracked modules; generated `dist/` artifacts are not staged while the source tree still contains unrelated local changes.
+- Exit criteria: dirty work is classified before the next commit.
+
+## Phase 1: Scope Lock
+
+- In scope for first cleanup commit: package lifecycle and workflow support, including workflow package kind, update command state migration, local registry source filtering, and related tests/docs.
+- Non-goals for first cleanup commit: daemon command/lifecycle, daemon HTTP schema/routes, local LLM runtime command, leverage command, package publish/dependency metadata, generated `dist/` output, and unrelated security hardening.
+- Expected files touched in first cleanup commit: env/manifest/registry-client/core installer/update/list/search/remove/help surfaces, focused tests, and this checklist if its status is useful to reviewers.
+- External inputs and trust boundaries: package IDs, registry index entries, local registry source paths, installed package manifests, mutable install-local stack state.
+- Failure behavior to define: ambiguous update targets, missing installed packages, install-local state migration conflicts, unsupported single-file package placeholders, invalid workflow manifests.
+- Exit criteria: first commit has no dependency on untracked daemon modules.
+
+## Phase 2: Red Tests
+
+- Observable behavior to prove: existing local tests already encode the intended behavior for update target resolution, state migration, workflow package paths, workflow manifest validation, and local registry copy filtering.
+- Test files to add or edit: no new red tests planned in this triage pass unless a missing behavior gap is found while isolating the commit.
+- Red command: use recorded red commands from `docs/swe-compliance/2026-06-08-rudi-update-cli-compliance.md` for update/state migration behavior.
+- Expected failure: already recorded before this triage; this pass is isolation and verification, not new feature design.
+- Exit criteria: targeted green commands are rerun after isolation.
+
+## Phase 3: Implementation
+
+- Implementation rules: stage exact hunks; prefer source-level independence over pulling daemon files into package lifecycle; keep generated artifacts out until their source slice is settled.
+- Files allowed to change during first cleanup commit: package lifecycle files and focused docs/tests only.
+- Validation and error-handling requirements: package kind parsing remains explicit; update errors are surfaced; state migration refuses overwrite conflicts; local registry copy filters generated/dependency paths.
+- Observability requirements: update prints registry refresh, update progress, and tool-index rebuild without printing secrets.
+- Exit criteria: staged diff contains only the first cleanup commit scope.
+
+## Phase 4: Green Tests And Refactor
+
+- Green command: run focused package lifecycle/update/workflow tests after staging decision.
+- Refactor constraints: no unrelated cleanup while slicing commits.
+- Regression checks: command export/shortcut tests and affected package tests.
+- Exit criteria: targeted tests pass in the current worktree.
+
+## Phase 5: Full Verification
+
+- Targeted tests: package lifecycle/update/workflow commands.
+- Full suite: `npm test` when the slice is stable.
+- Build/typecheck/lint: `npm run build` when the slice is stable.
+- JS/TS debt scan, if applicable: run `scripts/agent-debt-runner.mjs` for edited JS files in the committed slice.
+- Live smoke checks: run lightweight CLI smoke for workflow package path/listing and update missing-package behavior where practical.
+- Exit criteria: all checks pass or residual risk is recorded.
+
+## Phase 6: Docs, Contracts, And Closure
+
+- Docs or API contracts to update: README/package docs only when they match committed behavior.
+- Final files touched in first cleanup commit: `packages/env/src/index.js`, `packages/manifest/src/validate.js`, `packages/registry-client/src/index.js`, `packages/core/src/installer.js`, `packages/core/src/lockfile.js`, `src/commands/update.js`, `src/commands/list.js`, `src/commands/search.js`, `src/commands/remove.js`, `src/index.js`, `packages/utils/src/help.js`, focused tests, README, update compliance checklist, and this triage checklist.
+- Commands run and results:
+  - `node scripts/run-tests.js packages/env/src/__tests__/unit/env.test.js packages/manifest/src/__tests__/unit/validate.test.js packages/registry-client/src/__tests__/unit/index.test.js` passed.
+  - `node scripts/run-tests.js src/__tests__/unit/update-command.test.js packages/core/src/__tests__/unit/installer-state-preservation.test.js packages/core/src/__tests__/unit/installer-list-installed.test.js` passed.
+  - `node scripts/run-tests.js src/__tests__/unit/remove-command.test.js src/__tests__/unit/stack-runtime-detection.test.js` passed in the current worktree; stack cleanup/runtime-detection changes remain separate from the staged package lifecycle commit.
+  - `node scripts/run-tests.js packages/env/src/__tests__/unit/env.test.js packages/manifest/src/__tests__/unit/validate.test.js packages/registry-client/src/__tests__/unit/index.test.js src/__tests__/unit/update-command.test.js packages/core/src/__tests__/unit/installer-state-preservation.test.js packages/core/src/__tests__/unit/installer-list-installed.test.js src/__tests__/unit/commands.test.js` passed with 117 tests.
+  - `npm run build` passed.
+  - `npm test` passed with 664 tests.
+  - `node scripts/agent-debt-runner.mjs --edited <staged-js-files>` passed with 0 findings.
+  - Temp `RUDI_HOME` smoke for `node src/index.js list workflows --json` passed and returned `workflow:daily-brief`.
+  - Temp `RUDI_HOME` smoke for `node src/index.js update stack:__missing_stack__` exited 1 with `Package not installed`.
+- Accepted debt: unrelated dirty daemon/runtime/leverage/security/public-readiness work remains in the worktree for later slices.
+- Definition of Done: first cleanup commit is isolated, verified, and remaining groups are named.

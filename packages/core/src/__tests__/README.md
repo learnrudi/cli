@@ -254,7 +254,7 @@ node --inspect-brk ../../scripts/run-tests.js src/__tests__/unit/platform-resolv
 
 ## Test Data
 
-Sample manifests for manual testing are in `/Users/hoff/dev/RUDI/registry/`.
+Sample manifests for manual testing are in `/Users/hoff/dev/RUDI/apps/registry/`.
 
 To test against local registry:
 

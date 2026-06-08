@@ -4,7 +4,7 @@
  *
  * Commands:
  *   rudi home                Show ~/.rudi structure and status
- *   rudi search <query>      Search registry for stacks/prompts
+ *   rudi search <query>      Search registry for packages
  *   rudi install <pkg>       Install a package
  *   rudi run <stack>         Run a stack
  *
@@ -13,6 +13,7 @@
  *   rudi binaries            List installed binaries
  *   rudi agents              List installed agents
  *   rudi prompts             List installed prompts
+ *   rudi workflows           List installed workflows
  *   rudi list [kind]         List all installed packages
  *
  *   rudi db <cmd>            Database operations
@@ -233,6 +234,10 @@ async function main() {
 
       case 'prompts':
         await cmdList(['prompts'], flags);
+        break;
+
+      case 'workflows':
+        await cmdList(['workflows'], flags);
         break;
 
       case 'runtimes':

@@ -171,7 +171,7 @@ test('aliases: command aliases are documented', () => {
 
 test('shortcuts: package type shortcuts exist', () => {
   // These are shortcuts that expand to 'list <type>'
-  const shortcuts = ['stacks', 'prompts', 'runtimes', 'binaries', 'agents'];
+  const shortcuts = ['stacks', 'prompts', 'workflows', 'runtimes', 'binaries', 'agents'];
 
   for (const shortcut of shortcuts) {
     assert.ok(typeof shortcut === 'string');

@@ -29,19 +29,104 @@ export const RUNTIMES_DOWNLOAD_BASE = 'https://github.com/learnrudi/registry/rel
  */
 export const CACHE_TTL = 60 * 60 * 1000;
 
-/**
- * Local registry paths (for development)
- * Set USE_LOCAL_REGISTRY=true environment variable to enable local development mode
- */
-function getLocalRegistryPaths() {
+function getRegistryRootCandidates(startDir) {
+  const roots = [];
+  let current = path.resolve(startDir);
+
+  while (true) {
+    roots.push(path.join(current, 'registry'));
+    roots.push(path.join(current, 'apps', 'registry'));
+
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return roots;
+    }
+    current = parent;
+  }
+}
+
+function getLocalRegistryRoots() {
   if (process.env.USE_LOCAL_REGISTRY !== 'true') {
     return [];
   }
-  return [
-    path.join(process.cwd(), 'registry', 'index.json'),
-    path.join(process.cwd(), '..', 'registry', 'index.json'),
-    '/Users/hoff/dev/RUDI/registry/index.json'
-  ];
+
+  const cwd = process.cwd();
+  const workspaceRoot = process.env.RUDI_WORKSPACE_ROOT;
+  const roots = [
+    process.env.RUDI_REGISTRY_ROOT,
+    workspaceRoot ? path.join(workspaceRoot, 'apps', 'registry') : null,
+    ...getRegistryRootCandidates(cwd),
+  ].filter(Boolean);
+
+  return [...new Set(roots.map((registryPath) => path.resolve(registryPath)))];
+}
+
+/**
+ * Local registry paths (for development)
+ * Set USE_LOCAL_REGISTRY=true environment variable to enable local development mode.
+ * Set RUDI_REGISTRY_ROOT for a non-standard local registry checkout.
+ */
+function getLocalRegistryPaths() {
+  return getLocalRegistryRoots().map((registryRoot) => {
+    return path.join(registryRoot, 'index.json');
+  });
+}
+
+function getLocalRegistrySource(registryPath) {
+  if (process.env.USE_LOCAL_REGISTRY !== 'true') {
+    return null;
+  }
+
+  for (const registryRoot of getLocalRegistryRoots()) {
+    const localPath = path.join(registryRoot, registryPath);
+    if (fs.existsSync(localPath)) {
+      return localPath;
+    }
+  }
+
+  return null;
+}
+
+function shouldCopyLocalRegistryFile(sourcePath) {
+  const name = path.basename(sourcePath);
+  const segments = sourcePath.split(path.sep);
+  if (segments.includes('composer') && segments.includes('public') && segments.includes('media')) {
+    return false;
+  }
+
+  return ![
+    '.DS_Store',
+    '.git',
+    '.test-rudi',
+    'clips',
+    'node_modules',
+    'output',
+    'outputs',
+    'runs',
+    '__pycache__'
+  ].includes(name) && !name.endsWith('.pyc');
+}
+
+function copyLocalRegistrySource(sourcePath, destPath, onProgress) {
+  const sourceStat = fs.statSync(sourcePath);
+  fs.rmSync(destPath, { recursive: true, force: true });
+
+  if (sourceStat.isDirectory()) {
+    fs.mkdirSync(destPath, { recursive: true });
+    fs.cpSync(sourcePath, destPath, {
+      recursive: true,
+      filter: shouldCopyLocalRegistryFile
+    });
+    onProgress?.({ phase: 'downloading', source: 'local', directory: sourcePath });
+    return;
+  }
+
+  const destDir = path.dirname(destPath);
+  if (!fs.existsSync(destDir)) {
+    fs.mkdirSync(destDir, { recursive: true });
+  }
+  fs.copyFileSync(sourcePath, destPath);
+  onProgress?.({ phase: 'downloading', source: 'local', file: sourcePath });
 }
 
 // =============================================================================
@@ -224,7 +309,7 @@ export function checkCache() {
 /**
  * All valid package kinds
  */
-export const PACKAGE_KINDS = ['stack', 'prompt', 'runtime', 'binary', 'agent'];
+export const PACKAGE_KINDS = ['stack', 'skill', 'prompt', 'workflow', 'runtime', 'binary', 'agent'];
 
 const KIND_PLURALS = {
   binary: 'binaries'
@@ -324,11 +409,9 @@ export async function getManifest(pkg) {
 
   // Try local registry first (development mode)
   if (process.env.USE_LOCAL_REGISTRY === 'true') {
-    const localPaths = [
-      path.join(process.cwd(), 'registry', manifestPath),
-      path.join(process.cwd(), '..', 'registry', manifestPath),
-      `/Users/hoff/dev/RUDI/registry/${manifestPath}`
-    ];
+    const localPaths = getLocalRegistryRoots().map((registryRoot) => {
+      return path.join(registryRoot, manifestPath);
+    });
 
     for (const localPath of localPaths) {
       if (fs.existsSync(localPath)) {
@@ -369,7 +452,7 @@ export async function getManifest(pkg) {
 
 /**
  * List all packages of a specific kind
- * @param {'stack' | 'prompt' | 'runtime' | 'binary' | 'agent'} kind
+ * @param {'stack' | 'skill' | 'prompt' | 'workflow' | 'runtime' | 'binary' | 'agent'} kind
  * @returns {Promise<Array>}
  */
 export async function listPackages(kind) {
@@ -411,23 +494,24 @@ const GITHUB_RAW_BASE = 'https://raw.githubusercontent.com/learnrudi/registry/ma
 export async function downloadPackage(pkg, destPath, options = {}) {
   const { onProgress } = options;
 
-  const registryPath = pkg.path; // e.g., 'catalog/stacks/slack' or 'catalog/prompts/code-review.md'
-
-  // Create destination directory
-  if (!fs.existsSync(destPath)) {
-    fs.mkdirSync(destPath, { recursive: true });
-  }
+  const registryPath = pkg.path; // e.g., 'catalog/stacks/slack' or 'catalog/skills/code-review.md'
+  const isSingleFilePackage = (
+    pkg.kind === 'skill' ||
+    pkg.kind === 'prompt' ||
+    pkg.kind === 'workflow' ||
+    registryPath.endsWith('.md')
+  );
 
   onProgress?.({ phase: 'downloading', package: pkg.name || pkg.id });
 
-  // For stacks, download source files from GitHub raw
-  if (pkg.kind === 'stack' || registryPath.includes('/stacks/')) {
-    await downloadStackFromGitHub(registryPath, destPath, onProgress);
+  const localSourcePath = getLocalRegistrySource(registryPath);
+  if (localSourcePath) {
+    copyLocalRegistrySource(localSourcePath, destPath, onProgress);
     return { success: true, path: destPath };
   }
 
-  // For single file packages (prompts)
-  if (registryPath.endsWith('.md')) {
+  // For single file packages (skills/prompts/workflows)
+  if (isSingleFilePackage) {
     const url = `${GITHUB_RAW_BASE}/${registryPath}`;
     const response = await fetch(url, {
       headers: { 'User-Agent': 'rudi-cli/2.0' }
@@ -442,7 +526,21 @@ export async function downloadPackage(pkg, destPath, options = {}) {
     if (!fs.existsSync(destDir)) {
       fs.mkdirSync(destDir, { recursive: true });
     }
+    if (fs.existsSync(destPath) && fs.statSync(destPath).isDirectory()) {
+      fs.rmSync(destPath, { recursive: true, force: true });
+    }
     fs.writeFileSync(destPath, content);
+    return { success: true, path: destPath };
+  }
+
+  // Create destination directory
+  if (!fs.existsSync(destPath)) {
+    fs.mkdirSync(destPath, { recursive: true });
+  }
+
+  // For stacks, download source files from GitHub raw
+  if (pkg.kind === 'stack' || registryPath.includes('/stacks/')) {
+    await downloadStackFromGitHub(registryPath, destPath, onProgress);
     return { success: true, path: destPath };
   }
 

@@ -124,7 +124,8 @@ rudi shims check         # Validate shim targets exist
 
 ```bash
 rudi update              # Update all packages
-rudi update slack        # Update specific package
+rudi update stack:slack  # Reinstall a specific stack and rebuild its tool index
+rudi update stack:slack --preserve-state  # Opt in to preserving install-local state paths
 rudi remove slack        # Uninstall a package
 rudi doctor              # Check system health
 ```
@@ -133,35 +134,44 @@ rudi doctor              # Check system health
 
 ```
 ~/.rudi/
-├── bins/                 # Shims (opt-in; add to PATH if desired)
-│   ├── tsc              # → binaries/npm/typescript/...
-│   ├── ffmpeg           # → binaries/ffmpeg/...
-│   └── rudi-mcp         # MCP router for agents
+├── stacks/               # Installed MCP stack package code
+├── skills/               # Installed reusable skill definitions
+├── workflows/            # Installed workflow definitions
+├── runtimes/             # Managed language runtimes
+├── binaries/             # Managed third-party CLI tools
+├── agents/               # Managed AI agent CLI installations
 │
-├── stacks/               # MCP server installations
-│   ├── slack/
-│   │   ├── manifest.json
-│   │   ├── index.js
-│   │   └── node_modules/
-│   └── google-workspace/
+├── bins/                 # Current command shims and router entrypoints
+├── shims/                # Legacy shim directory for older integrations
+├── router/               # Local MCP router and permission-hook runtime files
 │
-├── binaries/             # CLI tool installations
-│   ├── ffmpeg/           # Upstream binary
-│   ├── supabase/         # npm-based CLI
-│   └── npm/              # Dynamic npm packages
-│       ├── typescript/
-│       └── vercel/
+├── state/                # Persistent per-stack runtime state
+│   └── stacks/
+│       └── google-workspace/
+│           └── accounts/ # OAuth tokens and selected account state
+├── secrets/              # Stack-specific secret/env files
+├── secrets.json          # Primary secret store (mode 0600)
 │
-├── runtimes/             # Language runtimes
-│   ├── node/
-│   └── python/
-│
-├── agents/               # AI agent CLI installations
-│
-├── secrets.json          # API keys (mode 0600)
+├── rudi.db               # SQLite database
+├── rudi.db-wal           # SQLite write-ahead log, SQLite-managed
+├── rudi.db-shm           # SQLite shared-memory file, SQLite-managed
+├── rudi.json             # Installed package and stack configuration
+├── settings.json         # Local settings
 ├── shim-registry.json    # Shim ownership tracking
-└── rudi.db               # Local metadata database
+│
+├── cache/                # Rebuildable registry/package/tool-index cache
+├── locks/                # Package install lock files
+├── logs/                 # Daemon and runtime logs
+├── notes/                # Local user artifacts from RUDI workflows
+├── archive/              # Manual cleanup archives
+├── prompts/              # Legacy prompt directory; new assets map to skills/
+├── .rudi-lite-port       # Current daemon port file, legacy Lite naming
+└── .rudi-lite-token      # Current daemon auth token, legacy Lite naming
 ```
+
+Use `rudi home` for a lifecycle-oriented view of this tree. It labels each path
+as installed code, persistent state, secret material, generated cache, operational
+logs, or legacy compatibility. Use `rudi home --json` for machine-readable output.
 
 ## How MCP Integration Works
 

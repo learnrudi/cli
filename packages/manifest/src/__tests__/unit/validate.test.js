@@ -7,10 +7,12 @@ import assert from 'node:assert';
 import {
   validateStack,
   validatePrompt,
+  validateWorkflow,
   validateRuntime,
   validateManifest,
   stackSchema,
   promptSchema,
+  workflowSchema,
   runtimeSchema
 } from '../../validate.js';
 
@@ -160,6 +162,37 @@ test('validatePrompt: validates variables structure', () => {
 });
 
 // =============================================================================
+// WORKFLOW VALIDATION
+// =============================================================================
+
+test('validateWorkflow: accepts valid workflow manifest', () => {
+  const manifest = {
+    id: 'workflow:daily-brief',
+    name: 'Daily Brief',
+    steps: [
+      { id: 'collect', uses: 'stack:calendar' }
+    ]
+  };
+
+  const result = validateWorkflow(manifest);
+  assert.strictEqual(result.valid, true);
+  assert.strictEqual(result.errors.length, 0);
+});
+
+test('validateWorkflow: requires executable steps', () => {
+  const manifest = {
+    id: 'workflow:daily-brief',
+    name: 'Daily Brief',
+    steps: [
+      { id: 'collect' }
+    ]
+  };
+
+  const result = validateWorkflow(manifest);
+  assert.strictEqual(result.valid, false);
+});
+
+// =============================================================================
 // RUNTIME VALIDATION
 // =============================================================================
 
@@ -245,6 +278,20 @@ test('validateManifest: auto-detects runtime from id prefix', () => {
   assert.strictEqual(result.valid, true);
 });
 
+test('validateManifest: auto-detects workflow from id prefix', () => {
+  const manifest = {
+    id: 'workflow:daily-brief',
+    name: 'Daily Brief',
+    steps: [
+      { id: 'collect', run: 'rudi list stacks --json' }
+    ]
+  };
+
+  const result = validateManifest(manifest);
+  assert.strictEqual(result.kind, 'workflow');
+  assert.strictEqual(result.valid, true);
+});
+
 test('validateManifest: uses explicit kind field', () => {
   const manifest = {
     id: 'test',
@@ -288,6 +335,11 @@ test('schema: stackSchema has required fields', () => {
 test('schema: promptSchema has category enum', () => {
   assert.ok(promptSchema.properties.category);
   assert.ok(promptSchema.properties.category.enum.includes('coding'));
+});
+
+test('schema: workflowSchema requires steps', () => {
+  assert.ok(workflowSchema.required.includes('steps'));
+  assert.strictEqual(workflowSchema.properties.steps.type, 'array');
 });
 
 test('schema: runtimeSchema has binaries array', () => {

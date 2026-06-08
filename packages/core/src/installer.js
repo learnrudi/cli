@@ -24,6 +24,213 @@ import { resolvePackage, getInstallOrder } from './resolver.js';
 import { writeLockfile } from './lockfile.js';
 import { createShimsForTool, removeShims } from './shims.js';
 
+const SINGLE_FILE_KINDS = new Set(['skill', 'prompt', 'workflow']);
+const WORKFLOW_EXTENSIONS = ['.yaml', '.yml', '.json'];
+const DEFAULT_STACK_STATE_PATHS = ['runs'];
+
+function normalizeInstalledPackageId(kind, manifestId, directoryName) {
+  const rawId = typeof manifestId === 'string' ? manifestId.trim() : '';
+  if (!rawId) return `${kind}:${directoryName}`;
+  if (!rawId.includes(':')) return `${kind}:${rawId}`;
+
+  const [idKind] = parsePackageId(rawId);
+  if (idKind !== kind) {
+    throw new Error(`Installed ${kind} manifest id must use "${kind}:" prefix: ${rawId}`);
+  }
+
+  return rawId;
+}
+
+function normalizePreservedStatePaths(paths) {
+  const normalized = [];
+  const seen = new Set();
+
+  for (const value of paths || []) {
+    if (typeof value !== 'string') continue;
+    const rel = path.normalize(value.trim()).replace(/\\/g, '/');
+    if (!rel || rel === '.' || rel === '..' || path.isAbsolute(rel) || rel.startsWith('../') || rel.includes('/../')) {
+      continue;
+    }
+    if (!seen.has(rel)) {
+      seen.add(rel);
+      normalized.push(rel);
+    }
+  }
+
+  return normalized;
+}
+
+function getMutableStatePaths(pkg, options = {}) {
+  const configured = Array.isArray(options.preserveStatePaths)
+    ? options.preserveStatePaths
+    : (
+        Array.isArray(pkg?.statePaths) ? pkg.statePaths
+          : Array.isArray(pkg?.preserveStatePaths) ? pkg.preserveStatePaths
+            : Array.isArray(pkg?.mutableStatePaths) ? pkg.mutableStatePaths
+              : null
+      );
+
+  return normalizePreservedStatePaths(
+    configured || (pkg?.kind === 'stack' ? DEFAULT_STACK_STATE_PATHS : [])
+  );
+}
+
+function getPreservedStatePaths(pkg, options = {}) {
+  if (options.preserveState === false) return [];
+  return getMutableStatePaths(pkg, options);
+}
+
+function getMigratedStatePaths(pkg, options = {}) {
+  if (options.preserveState !== false || options.migrateState === false) return [];
+  return getMutableStatePaths(pkg, options);
+}
+
+function getPackageStateRoot(pkg) {
+  if (pkg?.kind !== 'stack') return null;
+  const [kind, name] = parsePackageId(pkg.id);
+  if (kind !== 'stack') return null;
+  return path.join(PATHS.home, 'state', 'stacks', name);
+}
+
+function makeStateBackupRoot(installPath) {
+  const parent = path.dirname(installPath);
+  const base = path.basename(installPath).replace(/[^a-zA-Z0-9_.-]/g, '_');
+  return path.join(parent, `.${base}.state-backup-${process.pid}-${Date.now()}`);
+}
+
+function assertStateDestinationOutsideInstall(installPath, stateRoot) {
+  const installRoot = path.resolve(installPath);
+  const targetRoot = path.resolve(stateRoot);
+  if (targetRoot === installRoot || targetRoot.startsWith(`${installRoot}${path.sep}`)) {
+    throw new Error(`State root must be outside install path: ${stateRoot}`);
+  }
+}
+
+function ensureNoMigrationConflicts(sourcePath, destPath) {
+  if (!fs.existsSync(destPath)) return;
+
+  const sourceStat = fs.lstatSync(sourcePath);
+  const destStat = fs.lstatSync(destPath);
+  if (sourceStat.isDirectory() && destStat.isDirectory()) {
+    for (const entry of fs.readdirSync(sourcePath)) {
+      ensureNoMigrationConflicts(path.join(sourcePath, entry), path.join(destPath, entry));
+    }
+    return;
+  }
+
+  throw new Error(`Cannot migrate install-local state because destination already exists: ${destPath}`);
+}
+
+function renameOrCopyPath(sourcePath, destPath) {
+  fs.mkdirSync(path.dirname(destPath), { recursive: true });
+  try {
+    fs.renameSync(sourcePath, destPath);
+  } catch (error) {
+    if (error.code !== 'EXDEV') throw error;
+    fs.cpSync(sourcePath, destPath, { recursive: true, errorOnExist: true, force: false });
+    fs.rmSync(sourcePath, { recursive: true, force: true });
+  }
+}
+
+function movePathWithoutOverwrite(sourcePath, destPath) {
+  if (!fs.existsSync(destPath)) {
+    renameOrCopyPath(sourcePath, destPath);
+    return;
+  }
+
+  const sourceStat = fs.lstatSync(sourcePath);
+  const destStat = fs.lstatSync(destPath);
+  if (!sourceStat.isDirectory() || !destStat.isDirectory()) {
+    throw new Error(`Cannot migrate install-local state because destination already exists: ${destPath}`);
+  }
+
+  fs.mkdirSync(destPath, { recursive: true });
+  for (const entry of fs.readdirSync(sourcePath)) {
+    movePathWithoutOverwrite(path.join(sourcePath, entry), path.join(destPath, entry));
+  }
+  fs.rmdirSync(sourcePath);
+}
+
+function restorePreservedState(backups) {
+  for (const backup of backups) {
+    if (!fs.existsSync(backup.backupPath)) continue;
+    fs.mkdirSync(path.dirname(backup.sourcePath), { recursive: true });
+    fs.rmSync(backup.sourcePath, { recursive: true, force: true });
+    fs.renameSync(backup.backupPath, backup.sourcePath);
+    backup.onProgress?.({ phase: 'restored-state', package: backup.packageId, path: backup.relativePath });
+  }
+}
+
+export async function withPreservedInstallState(installPath, relativePaths, operation, options = {}) {
+  const pathsToPreserve = normalizePreservedStatePaths(relativePaths);
+  if (pathsToPreserve.length === 0) {
+    return operation();
+  }
+
+  const backupRoot = makeStateBackupRoot(installPath);
+  const backups = [];
+
+  for (const relativePath of pathsToPreserve) {
+    const sourcePath = path.join(installPath, relativePath);
+    if (!fs.existsSync(sourcePath)) continue;
+
+    const backupPath = path.join(backupRoot, relativePath);
+    fs.mkdirSync(path.dirname(backupPath), { recursive: true });
+    fs.renameSync(sourcePath, backupPath);
+    backups.push({
+      sourcePath,
+      backupPath,
+      relativePath,
+      packageId: options.packageId,
+      onProgress: options.onProgress,
+    });
+    options.onProgress?.({ phase: 'preserving-state', package: options.packageId, path: relativePath });
+  }
+
+  if (backups.length === 0) {
+    return operation();
+  }
+
+  let result;
+  try {
+    result = await operation();
+  } catch (error) {
+    restorePreservedState(backups);
+    try { fs.rmSync(backupRoot, { recursive: true, force: true }); } catch {}
+    throw error;
+  }
+
+  restorePreservedState(backups);
+  try { fs.rmSync(backupRoot, { recursive: true, force: true }); } catch {}
+  return result;
+}
+
+async function withMigratedInstallState(installPath, stateRoot, relativePaths, operation, options = {}) {
+  const pathsToMigrate = normalizePreservedStatePaths(relativePaths);
+  if (!stateRoot || pathsToMigrate.length === 0) {
+    return operation();
+  }
+
+  assertStateDestinationOutsideInstall(installPath, stateRoot);
+  const migrations = [];
+
+  for (const relativePath of pathsToMigrate) {
+    const sourcePath = path.join(installPath, relativePath);
+    if (!fs.existsSync(sourcePath)) continue;
+
+    const destPath = path.join(stateRoot, relativePath);
+    ensureNoMigrationConflicts(sourcePath, destPath);
+    migrations.push({ sourcePath, destPath, relativePath });
+  }
+
+  for (const migration of migrations) {
+    movePathWithoutOverwrite(migration.sourcePath, migration.destPath);
+    options.onProgress?.({ phase: 'migrated-state', package: options.packageId, path: migration.relativePath });
+  }
+
+  return operation();
+}
+
 function getNpmModulesRoot(installRoot, scope = 'local') {
   if (scope === 'global') {
     return path.join(installRoot, 'lib', 'node_modules');
@@ -111,12 +318,23 @@ function hasInstallScripts(installRoot, packageName, scope = 'local') {
  * @param {string} id - Package ID
  * @param {Object} options
  * @param {boolean} [options.force] - Force reinstall
+ * @param {boolean} [options.preserveState] - Preserve mutable stack state during force reinstall
+ * @param {boolean} [options.migrateState] - Move mutable stack state to ~/.rudi/state before force reinstall
+ * @param {string[]} [options.preserveStatePaths] - Relative install paths to preserve
  * @param {boolean} [options.withShims] - Create/update shims in ~/.rudi/bins
  * @param {Function} [options.onProgress] - Progress callback
  * @returns {Promise<InstallResult>}
  */
 export async function installPackage(id, options = {}) {
-  const { force = false, allowScripts = false, withShims = false, onProgress } = options;
+  const {
+    force = false,
+    allowScripts = false,
+    withShims = false,
+    preserveState = false,
+    migrateState = true,
+    preserveStatePaths,
+    onProgress
+  } = options;
 
   // Ensure directories exist
   ensureDirectories();
@@ -149,7 +367,15 @@ export async function installPackage(id, options = {}) {
     onProgress?.({ phase: 'installing', package: pkg.id, total: toInstall.length, current: results.length + 1 });
 
     try {
-      const result = await installSinglePackage(pkg, { force, allowScripts, withShims, onProgress });
+      const result = await installSinglePackage(pkg, {
+        force,
+        allowScripts,
+        withShims,
+        preserveState,
+        migrateState,
+        preserveStatePaths,
+        onProgress
+      });
       results.push(result);
     } catch (error) {
       return {
@@ -274,7 +500,15 @@ async function installBinaryStack(pkg, installPath, options = {}) {
  * @returns {Promise<InstallResult>}
  */
 async function installSinglePackage(pkg, options = {}) {
-  const { force = false, allowScripts = false, withShims = false, onProgress } = options;
+  const {
+    force = false,
+    allowScripts = false,
+    withShims = false,
+    preserveState = false,
+    migrateState = true,
+    preserveStatePaths,
+    onProgress,
+  } = options;
   const installPath = getPackagePath(pkg.id);
   const pkgName = pkg.id.replace(/^(runtime|binary|agent):/, '');
   const isAgentNpm = pkg.kind === 'agent' && pkg.npmPackage;
@@ -646,14 +880,14 @@ async function installSinglePackage(pkg, options = {}) {
     }
   }
 
-  // Handle stacks/prompts - download from registry or local
+  // Handle registry/local package source downloads
   if (pkg.path) {
     onProgress?.({ phase: 'downloading', package: pkg.id });
-    try {
+    const installFromRegistry = async () => {
       await downloadPackage(pkg, installPath, { onProgress });
 
-      // Skills and prompts are single .md files, no manifest.json needed
-      if (pkg.kind !== 'prompt' && pkg.kind !== 'skill') {
+      // Single-file packages do not need manifest.json or dependency install here.
+      if (!SINGLE_FILE_KINDS.has(pkg.kind)) {
         // Only write manifest.json if one wasn't downloaded from registry
         const manifestPath = path.join(installPath, 'manifest.json');
         if (!fs.existsSync(manifestPath)) {
@@ -684,15 +918,33 @@ async function installSinglePackage(pkg, options = {}) {
 
       onProgress?.({ phase: 'installed', package: pkg.id });
       return { success: true, id: pkg.id, path: installPath };
+    };
+
+    try {
+      const migrateAndInstall = () => withMigratedInstallState(
+        installPath,
+        getPackageStateRoot(pkg),
+        getMigratedStatePaths(pkg, { preserveState, migrateState, preserveStatePaths }),
+        installFromRegistry,
+        { packageId: pkg.id, onProgress }
+      );
+
+      return await withPreservedInstallState(
+        installPath,
+        getPreservedStatePaths(pkg, { preserveState, preserveStatePaths }),
+        migrateAndInstall,
+        { packageId: pkg.id, onProgress }
+      );
     } catch (error) {
       throw new Error(`Failed to install ${pkg.id}: ${error.message}`);
     }
   }
 
   // Fallback: create placeholder
-  // For skills and prompts, we can't create a placeholder - they must come from registry
-  if (pkg.kind === 'prompt' || pkg.kind === 'skill') {
-    throw new Error(`${pkg.kind === 'skill' ? 'Skill' : 'Prompt'} ${pkg.id} not found in registry`);
+  // Single-file packages must come from registry; placeholders hide missing content.
+  if (SINGLE_FILE_KINDS.has(pkg.kind)) {
+    const label = pkg.kind.charAt(0).toUpperCase() + pkg.kind.slice(1);
+    throw new Error(`${label} ${pkg.id} not found in registry`);
   }
 
   if (fs.existsSync(installPath)) {
@@ -737,7 +989,7 @@ export async function uninstallPackage(id) {
     // Read manifest to get bins list for shim cleanup
     let bins = [];
     let manifest = null;
-    if (kind !== 'prompt' && kind !== 'skill') {
+    if (!SINGLE_FILE_KINDS.has(kind)) {
       const manifestPath = path.join(installPath, 'manifest.json');
       if (fs.existsSync(manifestPath)) {
         try {
@@ -770,8 +1022,8 @@ export async function uninstallPackage(id) {
       removeShims(bins);
     }
 
-    // Skills and prompts are single files, not directories
-    if (kind === 'prompt' || kind === 'skill') {
+    // Skills, prompts, and workflows are single files, not directories
+    if (SINGLE_FILE_KINDS.has(kind)) {
       fs.unlinkSync(installPath);
     } else {
       fs.rmSync(installPath, { recursive: true });
@@ -863,13 +1115,85 @@ async function copyDirectory(src, dest) {
   }
 }
 
+function stripQuotes(value) {
+  return String(value || '').trim().replace(/^["']|["']$/g, '');
+}
+
+function parseListValue(lines, startIndex) {
+  const values = [];
+  for (let i = startIndex + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!/^\s+/.test(line)) break;
+    const itemMatch = line.match(/^\s*-\s+(.+?)\s*$/);
+    if (itemMatch) {
+      values.push(stripQuotes(itemMatch[1]));
+    }
+  }
+  return values;
+}
+
+function parseSimpleYamlMetadata(yaml) {
+  const metadata = {};
+  const lines = yaml.split(/\r?\n/);
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const scalarMatch = line.match(/^(name|description|version|category|icon):\s*(.+?)\s*$/);
+    if (scalarMatch) {
+      metadata[scalarMatch[1]] = stripQuotes(scalarMatch[2]);
+      continue;
+    }
+
+    if (/^tags:\s*$/.test(line)) {
+      metadata.tags = parseListValue(lines, i);
+      continue;
+    }
+
+    if (/^requires:\s*$/.test(line)) {
+      const requires = {};
+      for (let j = i + 1; j < lines.length; j++) {
+        const nested = lines[j];
+        if (!/^\s+/.test(nested)) break;
+        const sectionMatch = nested.match(/^\s+(stacks|skills):\s*$/);
+        if (sectionMatch) {
+          requires[sectionMatch[1]] = parseListValue(lines, j);
+        }
+      }
+      if (Object.keys(requires).length > 0) {
+        metadata.requires = requires;
+      }
+    }
+  }
+
+  return metadata;
+}
+
+function extractSingleFileMetadata(filePath, kind) {
+  const content = fs.readFileSync(filePath, 'utf-8');
+
+  if (kind === 'workflow' && filePath.endsWith('.json')) {
+    return JSON.parse(content);
+  }
+
+  const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+  if (frontmatterMatch) {
+    return parseSimpleYamlMetadata(frontmatterMatch[1]);
+  }
+
+  if (kind === 'workflow') {
+    return parseSimpleYamlMetadata(content);
+  }
+
+  return {};
+}
+
 /**
  * List all installed packages
- * @param {'stack' | 'skill' | 'prompt' | 'runtime' | 'binary' | 'agent'} [kind] - Filter by kind
+ * @param {'stack' | 'skill' | 'prompt' | 'workflow' | 'runtime' | 'binary' | 'agent'} [kind] - Filter by kind
  * @returns {Promise<Array>}
  */
 export async function listInstalled(kind) {
-  const kinds = kind ? [kind] : ['stack', 'skill', 'prompt', 'runtime', 'binary', 'agent'];
+  const kinds = kind ? [kind] : ['stack', 'skill', 'workflow', 'runtime', 'binary', 'agent'];
   const packages = [];
 
   for (const k of kinds) {
@@ -877,6 +1201,7 @@ export async function listInstalled(kind) {
       stack: PATHS.stacks,
       skill: PATHS.skills,
       prompt: PATHS.skills,  // Backward compat: prompts map to skills
+      workflow: PATHS.workflows,
       runtime: PATHS.runtimes,
       binary: PATHS.binaries,
       agent: PATHS.agents
@@ -886,55 +1211,19 @@ export async function listInstalled(kind) {
 
     const entries = fs.readdirSync(dir, { withFileTypes: true });
 
-    // Skills and prompts are .md files, not directories
-    if (k === 'skill' || k === 'prompt') {
+    // Skills, prompts, and workflows are single files, not directories
+    if (k === 'skill' || k === 'prompt' || k === 'workflow') {
+      const extensions = k === 'workflow' ? WORKFLOW_EXTENSIONS : ['.md'];
       for (const entry of entries) {
-        if (!entry.isFile() || !entry.name.endsWith('.md') || entry.name.startsWith('.')) continue;
+        const extension = path.extname(entry.name);
+        if (!entry.isFile() || !extensions.includes(extension) || entry.name.startsWith('.')) continue;
 
         const filePath = path.join(dir, entry.name);
-        const name = entry.name.replace(/\.md$/, '');
+        const name = entry.name.slice(0, -extension.length);
 
-        // Read skill/prompt file to extract frontmatter metadata
+        // Read single-file package to extract metadata
         try {
-          const content = fs.readFileSync(filePath, 'utf-8');
-          const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
-
-          let metadata = {};
-          if (frontmatterMatch) {
-            // Simple YAML parsing for common fields
-            const yaml = frontmatterMatch[1];
-            const nameMatch = yaml.match(/^name:\s*["']?(.+?)["']?\s*$/m);
-            const descMatch = yaml.match(/^description:\s*["']?(.+?)["']?\s*$/m);
-            const versionMatch = yaml.match(/^version:\s*["']?(.+?)["']?\s*$/m);
-            const categoryMatch = yaml.match(/^category:\s*["']?(.+?)["']?\s*$/m);
-            const iconMatch = yaml.match(/^icon:\s*["']?(.+?)["']?\s*$/m);
-
-            if (nameMatch) metadata.name = nameMatch[1];
-            if (descMatch) metadata.description = descMatch[1];
-            if (versionMatch) metadata.version = versionMatch[1];
-            if (categoryMatch) metadata.category = categoryMatch[1];
-            if (iconMatch) metadata.icon = iconMatch[1];
-
-            // Parse tags (YAML list format)
-            const tagsSection = yaml.match(/^tags:\s*\n((?:\s+-\s+.+\n?)+)/m);
-            if (tagsSection) {
-              metadata.tags = tagsSection[1]
-                .split('\n')
-                .map(line => line.replace(/^\s+-\s+/, '').trim())
-                .filter(Boolean);
-            }
-
-            // Parse requires.stacks (for skills)
-            const requiresStacksMatch = yaml.match(/^requires:\s*\n\s+stacks:\s*\n((?:\s+-\s+.+\n?)+)/m);
-            if (requiresStacksMatch) {
-              metadata.requires = {
-                stacks: requiresStacksMatch[1]
-                  .split('\n')
-                  .map(line => line.replace(/^\s+-\s+/, '').trim())
-                  .filter(Boolean)
-              };
-            }
-          }
+          const metadata = extractSingleFileMetadata(filePath, k);
 
           packages.push({
             id: `${k}:${name}`,
@@ -977,7 +1266,13 @@ export async function listInstalled(kind) {
 
       if (fs.existsSync(manifestPath)) {
         const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
-        packages.push({ ...manifest, kind: k, path: pkgDir });
+        packages.push({
+          ...manifest,
+          id: normalizeInstalledPackageId(k, manifest.id, entry.name),
+          kind: k,
+          name: manifest.name || entry.name,
+          path: pkgDir
+        });
       } else if (fs.existsSync(runtimePath)) {
         // Older format - has runtime.json
         const runtimeMeta = JSON.parse(fs.readFileSync(runtimePath, 'utf-8'));
@@ -1002,9 +1297,9 @@ export async function listInstalled(kind) {
  * @param {string} id - Package ID
  * @returns {Promise<InstallResult>}
  */
-export async function updatePackage(id) {
+export async function updatePackage(id, options = {}) {
   // Force reinstall
-  return installPackage(id, { force: true });
+  return installPackage(id, { ...options, force: true });
 }
 
 /**
@@ -1021,7 +1316,7 @@ export async function updateAll(options = {}) {
     options.onProgress?.({ package: pkg.id, current: results.length + 1, total: installed.length });
 
     try {
-      const result = await updatePackage(pkg.id);
+      const result = await updatePackage(pkg.id, options);
       results.push(result);
     } catch (error) {
       results.push({ success: false, id: pkg.id, error: error.message });

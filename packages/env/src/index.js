@@ -18,7 +18,9 @@ import fs from 'fs';
 /**
  * Root directory for all RUDI data
  */
-export const RUDI_HOME = path.join(os.homedir(), '.rudi');
+export const RUDI_HOME = process.env.RUDI_HOME
+  ? path.resolve(process.env.RUDI_HOME)
+  : path.join(os.homedir(), '.rudi');
 
 /**
  * All standard paths
@@ -32,6 +34,7 @@ export const PATHS = {
   stacks: path.join(RUDI_HOME, 'stacks'),     // Shared with Studio
   skills: path.join(RUDI_HOME, 'skills'),     // Shared with Studio
   prompts: path.join(RUDI_HOME, 'skills'),    // Backward compat alias -> skills
+  workflows: path.join(RUDI_HOME, 'workflows'),
 
   // Runtimes (interpreters: node, python, deno, bun)
   runtimes: path.join(RUDI_HOME, 'runtimes'),
@@ -216,6 +219,7 @@ export function ensureDirectories() {
   const dirs = [
     PATHS.stacks,      // MCP servers (google-ai, notion-workspace, etc.)
     PATHS.skills,      // Reusable skills (formerly prompts)
+    PATHS.workflows,   // Repeatable workflow definitions
     PATHS.runtimes,    // Language runtimes (node, python, bun, deno)
     PATHS.binaries,    // Utility binaries (ffmpeg, git, jq, etc.)
     PATHS.agents,      // AI CLI agents (claude, codex, gemini, copilot)
@@ -270,7 +274,7 @@ export function areDirectoriesInitialized() {
 /**
  * All valid package kinds
  */
-export const PACKAGE_KINDS = ['stack', 'skill', 'prompt', 'runtime', 'binary', 'agent'];
+export const PACKAGE_KINDS = ['stack', 'skill', 'prompt', 'workflow', 'runtime', 'binary', 'agent'];
 
 /**
  * Parse a package ID into kind and name
@@ -279,7 +283,7 @@ export const PACKAGE_KINDS = ['stack', 'skill', 'prompt', 'runtime', 'binary', '
  */
 export function parsePackageId(id) {
   // Allow 'npm:' prefix for dynamic npm installs
-  const match = id.match(/^(stack|skill|prompt|runtime|binary|agent|npm):(.+)$/);
+  const match = id.match(/^(stack|skill|prompt|workflow|runtime|binary|agent|npm):(.+)$/);
   if (!match) {
     throw new Error(`Invalid package ID: ${id} (expected format: kind:name, where kind is one of: ${PACKAGE_KINDS.join(', ')}, npm)`);
   }
@@ -315,6 +319,9 @@ export function getPackagePath(id) {
     case 'prompt':
       // Backward compat: prompts map to skills directory
       return path.join(PATHS.skills, `${name}.md`);
+    case 'workflow':
+      // Workflows are single YAML definition files, not directories
+      return path.join(PATHS.workflows, `${name}.yaml`);
     case 'runtime':
       return path.join(PATHS.runtimes, name);
     case 'binary':
@@ -379,8 +386,8 @@ export function isPackageInstalled(id) {
   const packagePath = getPackagePath(id);
   const [kind, name] = parsePackageId(id);
 
-  // Skills (and prompts for backward compat) are single .md files
-  if (kind === 'skill' || kind === 'prompt') {
+  // Skills, prompts, and workflows are single files
+  if (kind === 'skill' || kind === 'prompt' || kind === 'workflow') {
     return fs.existsSync(packagePath) && fs.statSync(packagePath).isFile();
   }
 
@@ -421,7 +428,7 @@ export function isPackageInstalled(id) {
 
 /**
  * Get list of installed packages by kind
- * @param {'stack' | 'skill' | 'prompt' | 'runtime' | 'binary' | 'agent'} kind
+ * @param {'stack' | 'skill' | 'prompt' | 'workflow' | 'runtime' | 'binary' | 'agent'} kind
  * @returns {string[]} Package names
  */
 export function getInstalledPackages(kind) {
@@ -429,6 +436,7 @@ export function getInstalledPackages(kind) {
     stack: PATHS.stacks,
     skill: PATHS.skills,
     prompt: PATHS.skills,  // Backward compat: prompts map to skills
+    workflow: PATHS.workflows,
     runtime: PATHS.runtimes,
     binary: PATHS.binaries,
     agent: PATHS.agents
@@ -445,6 +453,14 @@ export function getInstalledPackages(kind) {
       const stat = fs.statSync(path.join(dir, name));
       return stat.isFile();
     }).map(name => name.replace(/\.md$/, '')); // Return name without extension
+  }
+
+  if (kind === 'workflow') {
+    return fs.readdirSync(dir).filter(name => {
+      if (!/\.(ya?ml|json)$/.test(name) || name.startsWith('.')) return false;
+      const stat = fs.statSync(path.join(dir, name));
+      return stat.isFile();
+    }).map(name => name.replace(/\.(ya?ml|json)$/, ''));
   }
 
   // Other packages are directories

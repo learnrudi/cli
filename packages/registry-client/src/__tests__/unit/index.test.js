@@ -4,7 +4,15 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { DEFAULT_REGISTRY_URL, RUNTIMES_DOWNLOAD_BASE, CACHE_TTL } from '../../index.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {
+  DEFAULT_REGISTRY_URL,
+  RUNTIMES_DOWNLOAD_BASE,
+  CACHE_TTL,
+  downloadPackage
+} from '../../index.js';
 
 // =============================================================================
 // CONFIGURATION CONSTANTS
@@ -116,7 +124,9 @@ test('index: expected structure', () => {
       stacks: [],
       runtimes: [],
       binaries: [],
+      skills: [],
       prompts: [],
+      workflows: [],
       agents: []
     }
   };
@@ -138,7 +148,62 @@ test('index: package entry structure', () => {
   };
 
   assert.ok(pkg.id.includes(':'));
-  assert.ok(['stack', 'runtime', 'binary', 'prompt', 'agent'].includes(pkg.kind));
+  assert.ok(['stack', 'runtime', 'binary', 'skill', 'prompt', 'workflow', 'agent'].includes(pkg.kind));
   assert.ok(pkg.name);
   assert.ok(pkg.version);
+});
+
+test('downloadPackage local registry copy excludes generated stack state and dependency directories', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rudi-local-registry-copy-'));
+  const registryRoot = path.join(root, 'registry');
+  const stackRoot = path.join(registryRoot, 'catalog', 'stacks', 'demo');
+  const destRoot = path.join(root, 'dest');
+  const previousUseLocal = process.env.USE_LOCAL_REGISTRY;
+  const previousRegistryRoot = process.env.RUDI_REGISTRY_ROOT;
+
+  try {
+    fs.mkdirSync(path.join(stackRoot, 'src'), { recursive: true });
+    fs.mkdirSync(path.join(stackRoot, 'runs', 'run-1'), { recursive: true });
+    fs.mkdirSync(path.join(stackRoot, 'outputs'), { recursive: true });
+    fs.mkdirSync(path.join(stackRoot, '.test-rudi'), { recursive: true });
+    fs.mkdirSync(path.join(stackRoot, 'node_modules', 'dep'), { recursive: true });
+    fs.mkdirSync(path.join(stackRoot, 'composer', 'public', 'media'), { recursive: true });
+    fs.writeFileSync(path.join(stackRoot, 'manifest.json'), '{"id":"stack:demo"}');
+    fs.writeFileSync(path.join(stackRoot, 'src', 'index.js'), 'export {};');
+    fs.writeFileSync(path.join(stackRoot, 'runs', 'run-1', 'project.json'), '{}');
+    fs.writeFileSync(path.join(stackRoot, 'outputs', 'render.mp4'), 'fake');
+    fs.writeFileSync(path.join(stackRoot, '.test-rudi', 'state.json'), '{}');
+    fs.writeFileSync(path.join(stackRoot, 'node_modules', 'dep', 'package.json'), '{}');
+    fs.writeFileSync(path.join(stackRoot, 'composer', 'public', 'media', 'cache.mp4'), 'fake');
+
+    process.env.USE_LOCAL_REGISTRY = 'true';
+    process.env.RUDI_REGISTRY_ROOT = registryRoot;
+
+    await downloadPackage({
+      id: 'stack:demo',
+      kind: 'stack',
+      name: 'demo',
+      path: 'catalog/stacks/demo'
+    }, destRoot);
+
+    assert.equal(fs.existsSync(path.join(destRoot, 'manifest.json')), true);
+    assert.equal(fs.existsSync(path.join(destRoot, 'src', 'index.js')), true);
+    assert.equal(fs.existsSync(path.join(destRoot, 'runs')), false);
+    assert.equal(fs.existsSync(path.join(destRoot, 'outputs')), false);
+    assert.equal(fs.existsSync(path.join(destRoot, '.test-rudi')), false);
+    assert.equal(fs.existsSync(path.join(destRoot, 'node_modules')), false);
+    assert.equal(fs.existsSync(path.join(destRoot, 'composer', 'public', 'media')), false);
+  } finally {
+    if (previousUseLocal === undefined) {
+      delete process.env.USE_LOCAL_REGISTRY;
+    } else {
+      process.env.USE_LOCAL_REGISTRY = previousUseLocal;
+    }
+    if (previousRegistryRoot === undefined) {
+      delete process.env.RUDI_REGISTRY_ROOT;
+    } else {
+      process.env.RUDI_REGISTRY_ROOT = previousRegistryRoot;
+    }
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

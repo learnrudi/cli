@@ -161,7 +161,7 @@ async function computeChecksum(pkg) {
 export function getAllLockfiles() {
   const lockfiles = [];
 
-  for (const kind of ['stacks', 'prompts', 'runtimes', 'binaries', 'agents']) {
+  for (const kind of ['stacks', 'skills', 'prompts', 'workflows', 'runtimes', 'binaries', 'agents']) {
     const lockDir = path.join(PATHS.locks, kind);
 
     if (!fs.existsSync(lockDir)) continue;
@@ -188,7 +188,7 @@ export function getAllLockfiles() {
 export async function cleanOrphanedLockfiles() {
   const removed = [];
 
-  for (const kind of ['stacks', 'prompts', 'runtimes', 'binaries', 'agents']) {
+  for (const kind of ['stacks', 'skills', 'prompts', 'workflows', 'runtimes', 'binaries', 'agents']) {
     const lockDir = path.join(PATHS.locks, kind);
 
     if (!fs.existsSync(lockDir)) continue;

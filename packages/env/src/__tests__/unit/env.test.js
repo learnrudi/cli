@@ -45,7 +45,7 @@ test('RUDI_HOME: is absolute path', () => {
 // =============================================================================
 
 test('PATHS: has required directories', () => {
-  const required = ['home', 'stacks', 'runtimes', 'binaries', 'agents', 'db', 'cache'];
+  const required = ['home', 'stacks', 'skills', 'workflows', 'runtimes', 'binaries', 'agents', 'db', 'cache'];
 
   for (const key of required) {
     assert.ok(PATHS[key], `PATHS should have ${key}`);
@@ -53,7 +53,7 @@ test('PATHS: has required directories', () => {
 });
 
 test('PATHS: all paths are under RUDI_HOME', () => {
-  const pathKeys = ['stacks', 'runtimes', 'binaries', 'agents', 'cache', 'locks'];
+  const pathKeys = ['stacks', 'skills', 'workflows', 'runtimes', 'binaries', 'agents', 'cache', 'locks'];
 
   for (const key of pathKeys) {
     assert.ok(
@@ -167,6 +167,8 @@ test('platform: exactly one platform function is true', () => {
 test('PACKAGE_KINDS: contains expected kinds', () => {
   assert.ok(Array.isArray(PACKAGE_KINDS));
   assert.ok(PACKAGE_KINDS.includes('stack'));
+  assert.ok(PACKAGE_KINDS.includes('skill'));
+  assert.ok(PACKAGE_KINDS.includes('workflow'));
   assert.ok(PACKAGE_KINDS.includes('runtime'));
   assert.ok(PACKAGE_KINDS.includes('binary'));
   assert.ok(PACKAGE_KINDS.includes('agent'));
@@ -202,6 +204,13 @@ test('parsePackageId: parses agent:name format', () => {
 
   assert.strictEqual(kind, 'agent');
   assert.strictEqual(name, 'claude');
+});
+
+test('parsePackageId: parses workflow:name format', () => {
+  const [kind, name] = parsePackageId('workflow:daily-brief');
+
+  assert.strictEqual(kind, 'workflow');
+  assert.strictEqual(name, 'daily-brief');
 });
 
 test('parsePackageId: parses npm:name format', () => {
@@ -282,6 +291,13 @@ test('getPackagePath: prompt maps to skills directory as a backward-compatible .
   assert.ok(pkgPath.endsWith('code-review.md'));
 });
 
+test('getPackagePath: workflow goes to workflows directory as a .yaml file', () => {
+  const pkgPath = getPackagePath('workflow:daily-brief');
+
+  assert.ok(pkgPath.startsWith(PATHS.workflows));
+  assert.ok(pkgPath.endsWith('daily-brief.yaml'));
+});
+
 test('getPackagePath: npm goes to binaries/npm directory', () => {
   const pkgPath = getPackagePath('npm:cowsay');
 
@@ -330,11 +346,13 @@ test('getLockfilePath: binaries use binaries subdirectory', () => {
 test('paths: are consistent with package layout', () => {
   // Verify the path structure makes sense
   const stackPath = getPackagePath('stack:test');
+  const workflowPath = getPackagePath('workflow:test');
   const runtimePath = getPackagePath('runtime:test');
   const binaryPath = getPackagePath('binary:test');
 
   // All should be siblings under RUDI_HOME
   assert.strictEqual(path.dirname(stackPath), PATHS.stacks);
+  assert.strictEqual(path.dirname(workflowPath), PATHS.workflows);
   assert.strictEqual(path.dirname(runtimePath), PATHS.runtimes);
   assert.strictEqual(path.dirname(binaryPath), PATHS.binaries);
 });

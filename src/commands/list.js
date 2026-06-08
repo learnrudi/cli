@@ -4,6 +4,7 @@
  * Usage:
  *   rudi list [kind]              List all or filter by kind
  *   rudi list skills              List skills
+ *   rudi list workflows           List workflows
  *   rudi list skills --category=coding   Filter by category
  *   rudi list stacks --detected   Show MCP servers from agent configs
  *   rudi list --json              Output as JSON
@@ -17,12 +18,14 @@ function pluralizeKind(kind) {
   if (!kind) return 'packages';
   if (kind === 'binary') return 'binaries';
   if (kind === 'skill') return 'skills';
+  if (kind === 'workflow') return 'workflows';
   return `${kind}s`;
 }
 
 function headingForKind(kind) {
   if (kind === 'binary') return 'BINARIES';
   if (kind === 'skill') return 'SKILLS';
+  if (kind === 'workflow') return 'WORKFLOWS';
   return `${kind.toUpperCase()}S`;
 }
 
@@ -35,6 +38,7 @@ export async function cmdList(args, flags) {
     if (kind === 'stacks') kind = 'stack';
     if (kind === 'skills') kind = 'skill';
     if (kind === 'prompts') kind = 'prompt';
+    if (kind === 'workflows') kind = 'workflow';
     if (kind === 'runtimes') kind = 'runtime';
     if (kind === 'binaries') kind = 'binary';
     if (kind === 'tools') kind = 'binary';
@@ -46,9 +50,9 @@ export async function cmdList(args, flags) {
       kind = 'skill';
     }
 
-    if (!['stack', 'skill', 'runtime', 'binary', 'agent'].includes(kind)) {
+    if (!['stack', 'skill', 'workflow', 'runtime', 'binary', 'agent'].includes(kind)) {
       console.error(`Invalid kind: ${kind}`);
-      console.error(`Valid kinds: stack, skill, runtime, binary, agent`);
+      console.error(`Valid kinds: stack, skill, workflow, runtime, binary, agent`);
       process.exit(1);
     }
   }
@@ -127,7 +131,7 @@ export async function cmdList(args, flags) {
   try {
     let packages = await listInstalled(kind);
 
-    // Filter by category (only for prompts)
+    // Filter by category (mainly for skills/workflows)
     const categoryFilter = flags.category;
     if (categoryFilter) {
       packages = packages.filter(p => p.category === categoryFilter);
@@ -188,6 +192,7 @@ export async function cmdList(args, flags) {
     const grouped = {
       stack: packages.filter(p => p.kind === 'stack'),
       skill: packages.filter(p => p.kind === 'skill'),
+      workflow: packages.filter(p => p.kind === 'workflow'),
       runtime: packages.filter(p => p.kind === 'runtime'),
       binary: packages.filter(p => p.kind === 'binary'),
       agent: packages.filter(p => p.kind === 'agent')

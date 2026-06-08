@@ -29,7 +29,7 @@ REGISTRY
   update [pkg]          Update packages
 
 INSTALLED
-  list [kind]           List installed packages (stacks, skills, runtimes, binaries, agents)
+  list [kind]           List installed packages (stacks, skills, workflows, runtimes, binaries, agents)
   home                  Show ~/.rudi structure and status
   doctor                Check system health and dependencies
   which <cmd>           Show path to a command
@@ -85,6 +85,7 @@ PACKAGE TYPES
   binary:<name>        ffmpeg, ripgrep, etc.
   agent:<name>         Claude, Codex, Gemini CLIs
   skill:<name>         Skill (prompt with optional stack requirements)
+  workflow:<name>      Repeatable workflow definition
 `);
 }
 
@@ -99,6 +100,7 @@ USAGE
 OPTIONS
   --stacks         Filter to stacks only
   --skills         Filter to skills only (alias: --prompts)
+  --workflows      Filter to workflows only
   --runtimes       Filter to runtimes only
   --binaries       Filter to binaries only
   --agents         Filter to agents only
@@ -129,6 +131,7 @@ EXAMPLES
   rudi install runtime:python
   rudi install binary:ffmpeg
   rudi install agent:claude
+  rudi install workflow:daily-brief
 `,
     run: `
 rudi run - Execute a stack
@@ -231,7 +234,7 @@ USAGE
   rudi list [kind]
 
 ARGUMENTS
-  kind             Filter: stacks, skills, runtimes, binaries, agents
+  kind             Filter: stacks, skills, workflows, runtimes, binaries, agents
 
 OPTIONS
   --json           Output as JSON
@@ -240,6 +243,7 @@ OPTIONS
 
 EXAMPLES
   rudi list
+  rudi list workflows
   rudi list stacks
   rudi list stacks --detected     Show MCP servers in Claude/Gemini/Codex
   rudi list binaries

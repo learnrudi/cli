@@ -15,6 +15,7 @@ function pluralizeKind(kind) {
   if (!kind) return 'packages';
   if (kind === 'binary') return 'binaries';
   if (kind === 'skill') return 'skills';
+  if (kind === 'workflow') return 'workflows';
   return `${kind}s`;
 }
 
@@ -108,6 +109,7 @@ async function removeBulk(kind, flags) {
     if (kind === 'stacks') kind = 'stack';
     if (kind === 'skills') kind = 'skill';
     if (kind === 'prompts') kind = 'prompt';
+    if (kind === 'workflows') kind = 'workflow';
     if (kind === 'runtimes') kind = 'runtime';
     if (kind === 'binaries') kind = 'binary';
     if (kind === 'tools') kind = 'binary';
@@ -119,9 +121,9 @@ async function removeBulk(kind, flags) {
       kind = 'skill';
     }
 
-    if (!['stack', 'skill', 'runtime', 'binary', 'agent'].includes(kind)) {
+    if (!['stack', 'skill', 'workflow', 'runtime', 'binary', 'agent'].includes(kind)) {
       console.error(`Invalid kind: ${kind}`);
-      console.error(`Valid kinds: stack, skill, runtime, binary, agent`);
+      console.error(`Valid kinds: stack, skill, workflow, runtime, binary, agent`);
       process.exit(1);
     }
   }

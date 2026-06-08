@@ -1,195 +1,203 @@
 /**
- * Update command - update installed packages
+ * Update command - update installed packages from the registry.
  */
 
-import fs from 'fs';
-import path from 'path';
-import { execSync } from 'child_process';
-import { PATHS, getPackagePath, parsePackageId } from '@learnrudi/env';
-import { getPackage } from '@learnrudi/registry-client';
+import { indexAllStacks, listInstalled, updatePackage as coreUpdatePackage } from '@learnrudi/core';
+import { fetchIndex } from '@learnrudi/registry-client';
 
-export async function cmdUpdate(args, flags) {
-  const pkgId = args[0];
+const KNOWN_PACKAGE_KINDS = new Set(['stack', 'skill', 'prompt', 'workflow', 'runtime', 'binary', 'agent', 'npm']);
 
-  if (!pkgId) {
-    // Update all installed packages
-    return updateAll(flags);
+function rebuildToolIndex(options = {}) {
+  return indexAllStacks({
+    stacks: options.stacks,
+    log: options.log,
+    timeout: options.timeout,
+  });
+}
+
+const defaultDependencies = {
+  fetchIndex,
+  listInstalled,
+  updatePackage: coreUpdatePackage,
+  rebuildToolIndex,
+  log: console.log,
+  error: console.error,
+};
+
+function packageNameFromId(id) {
+  return String(id || '').split(':').slice(1).join(':');
+}
+
+function packageKindFromId(id) {
+  return String(id || '').split(':')[0];
+}
+
+function hasKnownPackagePrefix(id) {
+  const value = String(id || '');
+  if (!value.includes(':')) return false;
+  return KNOWN_PACKAGE_KINDS.has(packageKindFromId(value));
+}
+
+function assertKnownPackagePrefix(id) {
+  const value = String(id || '');
+  if (!value.includes(':')) return;
+  const kind = packageKindFromId(value);
+  if (!KNOWN_PACKAGE_KINDS.has(kind)) {
+    throw new Error(`Unknown package kind "${kind}" in ${value}`);
+  }
+}
+
+function formatTargetList(packages) {
+  return packages.map(pkg => pkg.id).sort().join(', ');
+}
+
+function isPackageNotFoundError(error) {
+  return /Package not found/i.test(String(error?.message || error || ''));
+}
+
+function isTruthyFlag(value) {
+  if (value === true) return true;
+  if (typeof value !== 'string') return false;
+
+  const normalized = value.trim().toLowerCase();
+  return normalized !== '' && !['0', 'false', 'no', 'off'].includes(normalized);
+}
+
+function shouldPreserveInstallState(flags = {}) {
+  return isTruthyFlag(flags['preserve-state']) || isTruthyFlag(flags.preserveState);
+}
+
+async function getInstalledPackages(deps) {
+  const installed = await deps.listInstalled();
+  return Array.isArray(installed) ? installed.filter(pkg => typeof pkg?.id === 'string') : [];
+}
+
+export async function resolveUpdateTarget(rawTarget, deps = defaultDependencies) {
+  const target = String(rawTarget || '').trim();
+  if (!target) {
+    throw new Error('Package id is required');
   }
 
-  // Normalize package ID
-  const fullId = pkgId.includes(':') ? pkgId : `runtime:${pkgId}`;
+  assertKnownPackagePrefix(target);
+  const installed = await getInstalledPackages(deps);
 
+  if (hasKnownPackagePrefix(target)) {
+    const match = installed.find(pkg => pkg.id === target);
+    if (!match) {
+      throw new Error(`Package not installed: ${target}`);
+    }
+    return match;
+  }
+
+  const matches = installed.filter(pkg => pkg.name === target || packageNameFromId(pkg.id) === target);
+  if (matches.length === 0) {
+    throw new Error(`Package kind is required for "${target}" because no installed package with that name was found`);
+  }
+  if (matches.length > 1) {
+    throw new Error(`Ambiguous package "${target}". Use one of: ${formatTargetList(matches)}`);
+  }
+
+  return matches[0];
+}
+
+async function rebuildUpdatedStackIndex(stackIds, flags, deps) {
+  const uniqueStackIds = [...new Set(stackIds)].sort();
+  if (uniqueStackIds.length === 0) return null;
+
+  deps.log(`Rebuilding tool index for ${uniqueStackIds.length} stack(s)...`);
+  return deps.rebuildToolIndex({
+    stacks: uniqueStackIds,
+    log: flags.verbose ? deps.log : () => {},
+    timeout: 20000,
+    validate: false,
+  });
+}
+
+async function updateOnePackage(pkg, flags, deps) {
+  deps.log(`Updating ${pkg.id}...`);
+  const result = await deps.updatePackage(pkg.id, {
+    preserveState: shouldPreserveInstallState(flags),
+  });
+  if (!result?.success) {
+    throw new Error(result?.error || `Failed to update ${pkg.id}`);
+  }
+  return {
+    id: pkg.id,
+    kind: pkg.kind || packageKindFromId(pkg.id),
+    result,
+  };
+}
+
+export async function runUpdate(args = [], flags = {}, deps = defaultDependencies) {
+  const pkgId = args[0];
+  const updatedPackages = [];
+  const failedPackages = [];
+  const skippedPackages = [];
+  let target = null;
+  let installed = null;
+
+  if (pkgId) {
+    target = await resolveUpdateTarget(pkgId, deps);
+  } else {
+    installed = await getInstalledPackages(deps);
+  }
+
+  deps.log('Refreshing registry...');
+  await deps.fetchIndex({ force: true });
+
+  if (pkgId) {
+    const updated = await updateOnePackage(target, flags, deps);
+    updatedPackages.push(updated);
+  } else {
+    deps.log('Checking installed packages for updates...');
+
+    for (const pkg of installed) {
+      try {
+        const updated = await updateOnePackage(pkg, flags, deps);
+        updatedPackages.push(updated);
+      } catch (error) {
+        if (isPackageNotFoundError(error)) {
+          skippedPackages.push({ id: pkg.id, error: error.message });
+          deps.log(`  - ${pkg.id}: skipped, not found in registry`);
+          continue;
+        }
+        failedPackages.push({ id: pkg.id, error: error.message });
+        deps.error(`  x ${pkg.id}: ${error.message}`);
+      }
+    }
+  }
+
+  const updatedStackIds = updatedPackages
+    .filter(pkg => pkg.kind === 'stack')
+    .map(pkg => pkg.id);
+  const indexResult = await rebuildUpdatedStackIndex(updatedStackIds, flags, deps);
+
+  if (pkgId) {
+    deps.log(`Updated ${updatedPackages[0].id}`);
+  } else {
+    deps.log(`\nUpdated ${updatedPackages.length} package(s)${failedPackages.length > 0 ? `, ${failedPackages.length} failed` : ''}${skippedPackages.length > 0 ? `, ${skippedPackages.length} skipped` : ''}`);
+  }
+
+  return {
+    updated: updatedPackages.length,
+    failed: failedPackages.length,
+    skipped: skippedPackages.length,
+    packages: updatedPackages,
+    failures: failedPackages,
+    skippedPackages,
+    indexedStacks: updatedStackIds,
+    indexResult,
+  };
+}
+
+export async function cmdUpdate(args, flags) {
   try {
-    const result = await updatePackage(fullId, flags);
-    if (result.success) {
-      console.log(`Updated ${fullId}${result.version ? ` to v${result.version}` : ''}`);
-    } else {
-      console.error(`Failed to update ${fullId}: ${result.error}`);
+    const result = await runUpdate(args, flags);
+    if (result.failed > 0) {
       process.exit(1);
     }
   } catch (error) {
     console.error(`Update failed: ${error.message}`);
     process.exit(1);
   }
-}
-
-/**
- * Update a single package
- */
-async function updatePackage(pkgId, flags) {
-  const [kind, name] = parsePackageId(pkgId);
-  const installPath = getPackagePath(pkgId);
-
-  // Check if installed
-  if (!fs.existsSync(installPath)) {
-    return { success: false, error: 'Package not installed' };
-  }
-
-  // Get package info from registry
-  const pkg = await getPackage(pkgId);
-  if (!pkg) {
-    return { success: false, error: 'Package not found in registry' };
-  }
-
-  console.log(`Updating ${pkgId}...`);
-
-  // Handle npm packages
-  if (pkg.npmPackage) {
-    try {
-      execSync(`npm install ${pkg.npmPackage}@latest`, {
-        cwd: installPath,
-        stdio: flags.verbose ? 'inherit' : 'pipe'
-      });
-
-      // Get new version
-      const version = getInstalledVersion(installPath, pkg.npmPackage);
-
-      // Update runtime.json
-      updateRuntimeMetadata(installPath, { version, updatedAt: new Date().toISOString() });
-
-      return { success: true, version };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  }
-
-  // Handle pip packages
-  if (pkg.pipPackage) {
-    try {
-      const venvPip = path.join(installPath, 'venv', 'bin', 'pip');
-      execSync(`"${venvPip}" install --upgrade ${pkg.pipPackage}`, {
-        stdio: flags.verbose ? 'inherit' : 'pipe'
-      });
-
-      // Get new version
-      const versionOutput = execSync(`"${venvPip}" show ${pkg.pipPackage} | grep Version`, {
-        encoding: 'utf-8'
-      });
-      const version = versionOutput.split(':')[1]?.trim();
-
-      // Update runtime.json
-      updateRuntimeMetadata(installPath, { version, updatedAt: new Date().toISOString() });
-
-      return { success: true, version };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  }
-
-  // Handle tarball packages - re-download
-  if (kind === 'runtime' && !pkg.npmPackage && !pkg.pipPackage) {
-    try {
-      const { downloadRuntime } = await import('@learnrudi/registry-client');
-
-      // Remove old version
-      fs.rmSync(installPath, { recursive: true, force: true });
-
-      // Download new version
-      await downloadRuntime(name, pkg.version || 'latest', installPath, {
-        onProgress: (p) => {
-          if (flags.verbose) console.log(`  ${p.phase}...`);
-        }
-      });
-
-      return { success: true, version: pkg.version };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  }
-
-  return { success: false, error: 'Unknown package type' };
-}
-
-/**
- * Update all installed packages
- */
-async function updateAll(flags) {
-  console.log('Checking for updates...');
-
-  const kinds = ['runtime', 'stack', 'skill'];
-  let updated = 0;
-  let failed = 0;
-
-  for (const kind of kinds) {
-    const dir = kind === 'runtime' ? PATHS.runtimes :
-                kind === 'stack' ? PATHS.stacks : PATHS.prompts;
-
-    if (!fs.existsSync(dir)) continue;
-
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-
-    for (const entry of entries) {
-      if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
-
-      const pkgId = `${kind}:${entry.name}`;
-      const result = await updatePackage(pkgId, flags);
-
-      if (result.success) {
-        console.log(`  ✓ ${pkgId}${result.version ? ` → v${result.version}` : ''}`);
-        updated++;
-      } else if (result.error !== 'Package not found in registry') {
-        console.log(`  ✗ ${pkgId}: ${result.error}`);
-        failed++;
-      }
-    }
-  }
-
-  console.log(`\nUpdated ${updated} package(s)${failed > 0 ? `, ${failed} failed` : ''}`);
-}
-
-/**
- * Get installed version from package.json
- */
-function getInstalledVersion(installPath, npmPackage) {
-  try {
-    const pkgJsonPath = path.join(installPath, 'node_modules', npmPackage.replace('@', '').split('/')[0], 'package.json');
-    if (fs.existsSync(pkgJsonPath)) {
-      const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf-8'));
-      return pkgJson.version;
-    }
-
-    // Try root package.json
-    const rootPkgPath = path.join(installPath, 'package.json');
-    if (fs.existsSync(rootPkgPath)) {
-      const rootPkg = JSON.parse(fs.readFileSync(rootPkgPath, 'utf-8'));
-      const dep = rootPkg.dependencies?.[npmPackage];
-      if (dep) return dep.replace(/[\^~]/, '');
-    }
-  } catch {}
-  return null;
-}
-
-/**
- * Update runtime.json metadata
- */
-function updateRuntimeMetadata(installPath, updates) {
-  const metaPath = path.join(installPath, 'runtime.json');
-  try {
-    let meta = {};
-    if (fs.existsSync(metaPath)) {
-      meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-    }
-    meta = { ...meta, ...updates };
-    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2));
-  } catch {}
 }
