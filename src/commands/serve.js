@@ -15,11 +15,8 @@
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import { URL } from 'url';
-import { PATHS } from '@learnrudi/env';
 import { getDb } from '@learnrudi/db';
-import { WebSocketServer } from 'ws';
 
 // Serve subsystem modules
 import { createGitHandler, getProjectGitStatus } from './serve/git.js';
@@ -27,31 +24,47 @@ import { createAgentHandler, createIdleReaper } from './serve/agent.js';
 import { createSessionsModule } from './serve/sessions.js';
 import { createInfrastructure } from './serve/ctx.js';
 import { runStartupTasks } from './serve/startup.js';
-import { buildLogsRoutes } from './serve/routes/logs.js';
-import { buildFsRoutes } from './serve/routes/fs.js';
-import { buildAuthRoutes } from './serve/routes/auth.js';
-import { buildProjectRoutes } from './serve/routes/projects.js';
-import { buildNotesRoutes } from './serve/routes/notes.js';
-import { buildShellRoutes } from './serve/routes/shell.js';
-import { buildTerminalRoutes } from './serve/routes/terminal.js';
-import { buildSuggestRoutes } from './serve/routes/suggest.js';
-import { buildProviderRoutes } from './serve/routes/providers.js';
-import { buildAnalyticsRoutes } from './serve/routes/analytics.js';
-import { buildPlansRoutes } from './serve/routes/plans.js';
-import { buildPackageRoutes } from './serve/routes/packages.js';
-import { SIDECAR_API_VERSION } from './serve/metadata.js';
+import {
+  buildAnalyticsRoutes,
+  buildAuthRoutes,
+  buildFsRoutes,
+  buildLogsRoutes,
+  buildNotesRoutes,
+  buildPackageRoutes,
+  buildPlansRoutes,
+  buildProjectRoutes,
+  buildProviderRoutes,
+  buildShellRoutes,
+  buildSuggestRoutes,
+  buildTerminalRoutes,
+} from '../daemon/routes/index.js';
+import {
+  buildDaemonHealthRoutes,
+} from '../daemon/routes/health.js';
+import { buildEnvRoutes } from '../daemon/routes/env.js';
+import { buildAdminRoutes } from '../daemon/routes/admin.js';
+import { buildLocalLlmRoutes } from '../daemon/routes/local-llm.js';
+import { buildHttpAuthMiddleware } from '../daemon/runtime/auth.js';
+import {
+  parseRequestedPort,
+  printStartupBanner,
+  removeConnectionFiles,
+  resolveWebRoot,
+  startDaemonHttpServer,
+  writeConnectionFiles,
+} from '../daemon/runtime/bootstrap.js';
+import { createDaemonProcessManager } from '../daemon/runtime/process-manager.js';
+import { createGracefulShutdown } from '../daemon/runtime/shutdown.js';
+import { createWebSocketRuntime } from '../daemon/runtime/websocket.js';
 
 // Re-exports for test compatibility
 export { parseWorktreeList } from './serve/git.js';
 export { extractSessionCwdFromJsonlChunk, parseSessionMessagesFromJsonl } from './serve/sessions.js';
+export { createHealthResponse } from '../daemon/routes/health.js';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-const PORT_FILE = path.join(PATHS.home, '.rudi-lite-port');
-const TOKEN_FILE = path.join(PATHS.home, '.rudi-lite-token');
-const WS_TOKEN_PROTOCOL_PREFIX = 'rudi-token.';
 
 export function clampedInt(value, { min = 0, max = Number.MAX_SAFE_INTEGER, fallback }) {
   const parsed = Number.parseInt(value, 10);
@@ -81,20 +94,6 @@ export function shouldRunInitialTurnBackfill(db) {
   }
 }
 
-function readWsTokenFromProtocolHeader(headerValue) {
-  if (!headerValue) return null;
-  const raw = Array.isArray(headerValue) ? headerValue.join(',') : headerValue;
-  const protocols = raw.split(',').map((p) => p.trim()).filter(Boolean);
-  for (const protocol of protocols) {
-    // Some clients/libraries may quote protocol values; strip optional quotes.
-    const normalized = protocol.replace(/^"+|"+$/g, '');
-    if (normalized.startsWith(WS_TOKEN_PROTOCOL_PREFIX)) {
-      return normalized.slice(WS_TOKEN_PROTOCOL_PREFIX.length);
-    }
-  }
-  return null;
-}
-
 // ---------------------------------------------------------------------------
 // Main server
 // ---------------------------------------------------------------------------
@@ -119,6 +118,8 @@ const MIME_TYPES = {
 };
 
 export async function cmdServe(args, flags) {
+  const startedAtMs = Date.now();
+
   // 1. Create shared infrastructure (log, broadcast, json, error, etc.)
   const ctx = createInfrastructure();
   const {
@@ -127,29 +128,30 @@ export async function cmdServe(args, flags) {
     json,
     error,
     readBody,
-    checkAuth,
     createRequestContext,
     attachRequestContext,
-    updateRequestAuth,
     generateToken,
     setWss,
     setToken,
-    REQUEST_ID_HEADER,
   } = ctx;
+  const authMiddleware = buildHttpAuthMiddleware(ctx);
 
-  // Web mode: resolve --web-root to absolute path
-  const webRoot = flags['web-root'] ? path.resolve(flags['web-root']) : null;
-  if (webRoot) {
-    if (!fs.existsSync(path.join(webRoot, 'index.html'))) {
-      console.error(`[web-root] No index.html found in ${webRoot}`);
+  // Web mode: resolve --web-root to absolute path.
+  let webRoot = null;
+  try {
+    webRoot = resolveWebRoot(flags);
+  } catch (err) {
+    if (err.code === 'RUDI_WEB_ROOT_INDEX_MISSING') {
+      console.error(`[web-root] ${err.message}`);
       console.error('  Build the frontend first: cd lite && pnpm build');
       process.exit(1);
     }
+    throw err;
   }
 
-  // 2. Shared maps (owned by serve.js, passed to agent handler)
-  const agentProcesses = new Map();
-  const resumeSessionIndex = new Map();
+  // 2. Process ownership maps (owned by daemon runtime, passed to agent handler)
+  const processManager = createDaemonProcessManager();
+  const { agentProcesses, resumeSessionIndex } = processManager;
 
   // 3. Lazy DB resolver for sessions module
   let _sessionsDb = null;
@@ -200,6 +202,22 @@ export async function cmdServe(args, flags) {
   const analyticsRoutes = buildAnalyticsRoutes(ctx);
   const plansRoutes = buildPlansRoutes(ctx);
   const packageRoutes = buildPackageRoutes(ctx);
+  const localLlmRoutes = buildLocalLlmRoutes(ctx);
+  const daemonHealthRoutes = buildDaemonHealthRoutes(ctx, {
+    agentProcesses,
+    getPort: () => sidecarPort,
+    startedAtMs,
+  });
+  const envRoutes = buildEnvRoutes(ctx);
+  const adminRoutes = buildAdminRoutes(ctx, {
+    backfillSessionMetadata,
+    backfillSessionTitles,
+    backfillSessionTurnsToDb,
+    getMetadataBackfillStats,
+    getTitleBackfillStats,
+    getTurnIngestStats,
+    repairNoTextSessionTurnsToDb,
+  });
 
   // 8. Previously-extracted handlers (git, agent)
   const handleGit = createGitHandler({ readBody, error, json });
@@ -213,7 +231,7 @@ export async function cmdServe(args, flags) {
   });
 
   // 9. Create HTTP server
-  const requestedPort = parseInt(flags.port, 10) || 0;
+  const requestedPort = parseRequestedPort(flags);
   const token = generateToken();
   setToken(token);
 
@@ -221,16 +239,7 @@ export async function cmdServe(args, flags) {
     const requestContext = createRequestContext(req);
     attachRequestContext(res, requestContext);
 
-    // CORS preflight
-    if (req.method === 'OPTIONS') {
-      updateRequestAuth(res, { required: false, result: 'skipped' });
-      res.writeHead(204, {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, X-Rudi-Token, X-Rudi-Caller-Session',
-        [REQUEST_ID_HEADER]: requestContext.requestId,
-      });
-      res.end();
+    if (authMiddleware.handleCorsPreflight(req, res, requestContext)) {
       return;
     }
 
@@ -239,45 +248,20 @@ export async function cmdServe(args, flags) {
 
     try {
       // Health check (no auth required)
-      if (url.pathname === '/health') {
-        updateRequestAuth(res, { required: false, result: 'skipped' });
-        json(res, { status: 'ok', version: SIDECAR_API_VERSION });
+      if (daemonHealthRoutes.handlePublic(req, res, url)) {
         return;
       }
 
-      // Environment info (needs auth)
-      if (url.pathname === '/env') {
-        if (!checkAuth(req)) {
-          updateRequestAuth(res, { required: true, result: 'failed' });
-          log('http', 'warn', 'auth_failed', {
-            requestId: requestContext.requestId,
-            method: req.method,
-            path: url.pathname,
-            status: 401,
-          });
-          error(res, 'Unauthorized', 401);
-          return;
-        }
-        updateRequestAuth(res, { required: true, result: 'passed' });
-        json(res, { home: os.homedir(), platform: os.platform() });
+      if (!authMiddleware.requireAuth(req, res, url)) {
         return;
       }
-
-      // Auth check
-      if (!checkAuth(req)) {
-        updateRequestAuth(res, { required: true, result: 'failed' });
-        log('http', 'warn', 'auth_failed', {
-          requestId: requestContext.requestId,
-          method: req.method,
-          path: url.pathname,
-          status: 401,
-        });
-        error(res, 'Unauthorized', 401);
-        return;
-      }
-      updateRequestAuth(res, { required: true, result: 'passed' });
 
       // Route to handlers — order preserved from original
+      if (await daemonHealthRoutes.handle(req, res, url)) return;
+      if (await envRoutes.handle(req, res, url)) return;
+      if (url.pathname.startsWith('/local-llm') || url.pathname.startsWith('/runtimes/')) {
+        if (await localLlmRoutes.handle(req, res, url)) return;
+      }
       if (url.pathname.startsWith('/logs')) {
         if (await logsRoutes.handle(req, res, url)) return;
       }
@@ -319,103 +303,7 @@ export async function cmdServe(args, flags) {
       if (url.pathname.startsWith('/plans')) {
         if (plansRoutes.handle(req, res, url)) return;
       }
-      if (url.pathname === '/admin/ingester' && req.method === 'GET') {
-        const stats = getTurnIngestStats();
-        json(res, { status: stats.errors.length > 0 ? 'degraded' : 'healthy', ...stats });
-        return;
-      }
-      if (url.pathname === '/admin/backfill' && req.method === 'POST') {
-        const stats = getTurnIngestStats();
-        if (!stats.backfillRunning) {
-          backfillSessionTurnsToDb()
-            .then((result) => log('sessions', 'info', 'Manual backfill complete', result))
-            .catch((err) => log('sessions', 'warn', `Manual backfill failed: ${err.message}`));
-          const next = getTurnIngestStats();
-          json(res, {
-            status: 'started',
-            backfillRunning: next.backfillRunning,
-            progress: {
-              filesDone: next.backfillFilesDone || 0,
-              filesTotal: next.backfillFilesTotal || 0,
-            },
-          });
-        } else {
-          json(res, {
-            status: 'running',
-            backfillRunning: true,
-            progress: {
-              filesDone: stats.backfillFilesDone || 0,
-              filesTotal: stats.backfillFilesTotal || 0,
-            },
-          });
-        }
-        return;
-      }
-      if (url.pathname === '/admin/repair-no-text' && req.method === 'POST') {
-        const stats = getTurnIngestStats();
-        if (!stats.repairRunning) {
-          const limitRaw = url.searchParams.get('limit');
-          const limit = limitRaw ? Number.parseInt(limitRaw, 10) : 0;
-          repairNoTextSessionTurnsToDb({ limit: Number.isFinite(limit) ? limit : 0 })
-            .then((result) => log('sessions', 'info', 'Manual no-text repair complete', result))
-            .catch((err) => log('sessions', 'warn', `Manual no-text repair failed: ${err.message}`));
-          const next = getTurnIngestStats();
-          json(res, {
-            status: 'started',
-            repairRunning: next.repairRunning,
-            progress: {
-              sessionsDone: next.repairSessionsDone || 0,
-              sessionsTotal: next.repairSessionsTotal || 0,
-            },
-          });
-        } else {
-          json(res, {
-            status: 'running',
-            repairRunning: true,
-            progress: {
-              sessionsDone: stats.repairSessionsDone || 0,
-              sessionsTotal: stats.repairSessionsTotal || 0,
-            },
-          });
-        }
-        return;
-      }
-      if (url.pathname === '/admin/title-backfill' && req.method === 'GET') {
-        json(res, getTitleBackfillStats());
-        return;
-      }
-      if (url.pathname === '/admin/title-backfill' && req.method === 'POST') {
-        const stats = getTitleBackfillStats();
-        if (!stats.running) {
-          const useLlm = url.searchParams.get('llm') !== 'false';
-          const minTurnsRaw = url.searchParams.get('minTurns');
-          const parsedMinTurns = minTurnsRaw == null ? 1 : Number.parseInt(minTurnsRaw, 10);
-          const minTurns = Number.isFinite(parsedMinTurns) && parsedMinTurns >= 0 ? parsedMinTurns : 1;
-          backfillSessionTitles({ llm: useLlm, minTurns })
-            .then((result) => log('sessions', 'info', 'Manual title backfill complete', result))
-            .catch((err) => log('sessions', 'warn', `Manual title backfill failed: ${err.message}`));
-          json(res, { status: 'started', ...getTitleBackfillStats() });
-        } else {
-          json(res, { status: 'running', ...stats });
-        }
-        return;
-      }
-      if (url.pathname === '/admin/metadata-backfill' && req.method === 'GET') {
-        json(res, getMetadataBackfillStats());
-        return;
-      }
-      if (url.pathname === '/admin/metadata-backfill' && req.method === 'POST') {
-        const stats = getMetadataBackfillStats();
-        if (!stats.running) {
-          backfillSessionMetadata()
-            .then((result) => log('sessions', 'info', 'Manual metadata backfill complete', result))
-            .catch((err) => log('sessions', 'warn', `Manual metadata backfill failed: ${err.message}`));
-          json(res, { status: 'started', ...getMetadataBackfillStats() });
-        } else {
-          json(res, { status: 'running', ...stats });
-        }
-        return;
-      }
+      if (await adminRoutes.handle(req, res, url)) return;
 
       // Web mode: serve static files from --web-root
       if (webRoot && req.method === 'GET') {
@@ -470,63 +358,14 @@ export async function cmdServe(args, flags) {
   });
 
   // 10. WebSocket server
-  const wss = new WebSocketServer({
-    noServer: true,
-    // Avoid extension negotiation edge-cases across runtimes/webviews.
-    perMessageDeflate: false,
-    handleProtocols: (protocols) => {
-      for (const offered of protocols) {
-        const normalized = offered.replace(/^"+|"+$/g, '');
-        if (normalized.startsWith(WS_TOKEN_PROTOCOL_PREFIX)) {
-          return normalized;
-        }
-      }
-      // Allow connections that authenticate via query token and don't send
-      // Sec-WebSocket-Protocol.
-      return protocols.size === 0 ? undefined : false;
-    },
+  const wsRuntime = createWebSocketRuntime({
+    getToken: () => token,
+    handleMessage: handleSessionsWsMessage,
+    handleDisconnect: handleSessionsWsDisconnect,
+    log,
   });
-  setWss(wss);
-
-  server.on('upgrade', (req, socket, head) => {
-    const url = new URL(req.url, `http://localhost`);
-    const protocolToken = readWsTokenFromProtocolHeader(req.headers['sec-websocket-protocol']);
-    const queryToken = url.searchParams.get('token');
-    const presentedToken = protocolToken ?? queryToken;
-    // Allow same-origin token for web mode (localhost only)
-    const isSameOrigin = presentedToken === 'same-origin' &&
-      (req.headers.host || '').match(/^(127\.0\.0\.1|localhost)(:|$)/);
-    if (presentedToken !== token && !isSameOrigin) {
-      log('ws', 'warn', 'upgrade auth failed', {
-        path: url.pathname,
-        hasProtocolToken: !!protocolToken,
-        hasQueryToken: !!queryToken,
-      });
-      socket.destroy();
-      return;
-    }
-    wss.handleUpgrade(req, socket, head, (ws) => {
-      wss.emit('connection', ws, req);
-    });
-  });
-
-  wss.on('connection', (ws) => {
-    log('ws', 'info', `client connected (total: ${wss.clients.size})`, { protocol: ws.protocol || null });
-
-    ws.on('message', (raw) => {
-      try {
-        const msg = JSON.parse(typeof raw === 'string' ? raw : raw.toString());
-        handleSessionsWsMessage(ws, msg);
-      } catch {
-        // Ignore malformed messages
-      }
-    });
-
-    ws.on('close', () => {
-      log('ws', 'info', `client disconnected (total: ${wss.clients.size})`);
-      handleSessionsWsDisconnect(ws);
-    });
-  });
+  setWss(wsRuntime.wss);
+  wsRuntime.attachToServer(server);
 
   // 11. Start watchers and reapers
   startSessionsWatcher();
@@ -538,119 +377,103 @@ export async function cmdServe(args, flags) {
   });
 
   // 12. Start listening
-  server.listen(requestedPort, '127.0.0.1', () => {
-    const actualPort = server.address().port;
-    sidecarPort = actualPort;
-    sidecarToken = token;
+  startDaemonHttpServer(server, {
+    port: requestedPort,
+    onListening: (actualPort) => {
+      sidecarPort = actualPort;
+      sidecarToken = token;
 
-    fs.mkdirSync(PATHS.home, { recursive: true });
-    fs.writeFileSync(PORT_FILE, String(actualPort), { mode: 0o600 });
-    fs.writeFileSync(TOKEN_FILE, token, { mode: 0o600 });
+      writeConnectionFiles({ port: actualPort, token });
+      printStartupBanner({ port: actualPort, token, webRoot });
 
-    console.log('');
-    console.log('═'.repeat(50));
-    console.log(webRoot ? '  RUDI Dashboard' : '  RUDI Lite Server');
-    console.log('═'.repeat(50));
-    if (webRoot) {
-      console.log(`  Open:  http://localhost:${actualPort}`);
-    }
-    console.log(`  Port:  ${actualPort}`);
-    console.log(`  Token: ${token.slice(0, 8)}...`);
-    console.log(`  PID:   ${process.pid}`);
-    if (webRoot) {
-      console.log(`  Web:   ${webRoot}`);
-    }
-    console.log('');
-    console.log(`  Port file:  ${PORT_FILE}`);
-    console.log(`  Token file: ${TOKEN_FILE}`);
-    console.log('═'.repeat(50));
-    console.log('');
+      // DB spine: enable immediately if DB has rows from a prior boot, then reconcile in background
+      const db = sessionsResolveDb();
+      if (db) {
+        try {
+          const { c } = db.prepare(`SELECT COUNT(*) as c FROM sessions WHERE status != 'deleted'`).get();
+          if (c > 0) {
+            enableDbSpine();
+            log('sessions', 'info', `DB-as-spine enabled immediately (${c} existing rows)`);
+          }
+        } catch {
+          // DB not ready — will enable after reconciliation
+        }
+      }
 
-    // DB spine: enable immediately if DB has rows from a prior boot, then reconcile in background
-    const db = sessionsResolveDb();
-    if (db) {
-      try {
-        const { c } = db.prepare(`SELECT COUNT(*) as c FROM sessions WHERE status != 'deleted'`).get();
-        if (c > 0) {
+      reconcileSessionsToDb().catch(err => {
+        log('sessions', 'warn', `Reconciliation failed (continuing): ${err.message}`);
+      }).then(async () => {
+        if (!isDbSpineEnabled()) {
           enableDbSpine();
-          log('sessions', 'info', `DB-as-spine enabled immediately (${c} existing rows)`);
+          log('sessions', 'info', 'DB-as-spine enabled after reconciliation');
         }
-      } catch {
-        // DB not ready — will enable after reconciliation
-      }
-    }
-
-    reconcileSessionsToDb().catch(err => {
-      log('sessions', 'warn', `Reconciliation failed (continuing): ${err.message}`);
-    }).then(async () => {
-      if (!isDbSpineEnabled()) {
-        enableDbSpine();
-        log('sessions', 'info', 'DB-as-spine enabled after reconciliation');
-      }
-      // Backfill missing/corrupted project_path values (runs even if reconcile failed)
-      try {
-        const db = sessionsResolveDb();
-        await backfillProjectPaths(db);
-      } catch (bfErr) {
-        log('sessions', 'warn', `[backfill] project paths failed: ${bfErr.message}`);
-      }
-      try {
-        const db = sessionsResolveDb();
-        const shouldBackfill = shouldRunInitialTurnBackfill(db);
-        if (shouldBackfill) {
-          await backfillSessionTurnsToDb();
-        } else {
-          await reconcileSessionTurnsToDb();
+        // Backfill missing/corrupted project_path values (runs even if reconcile failed)
+        try {
+          const db = sessionsResolveDb();
+          await backfillProjectPaths(db);
+        } catch (bfErr) {
+          log('sessions', 'warn', `[backfill] project paths failed: ${bfErr.message}`);
         }
-      } catch (ingestErr) {
-        log('sessions', 'warn', `Turn ingest reconcile failed: ${ingestErr.message}`);
-      }
-      // Title backfill runs after turn ingest (needs turn data for first-message lookup)
-      try {
-        await backfillSessionTitles({ llm: true, minTurns: 1 });
-      } catch (titleErr) {
-        log('sessions', 'warn', `Title backfill failed: ${titleErr.message}`);
-      }
-      // Metadata backfill runs after turn ingest (enriches subagent sessions)
-      try {
-        await backfillSessionMetadata();
-      } catch (metaErr) {
-        log('sessions', 'warn', `Metadata backfill failed: ${metaErr.message}`);
-      }
-    }).finally(() => {
-      startPeriodicReconcile();
-      startTurnIngestReconcile();
-    });
+        try {
+          const db = sessionsResolveDb();
+          const shouldBackfill = shouldRunInitialTurnBackfill(db);
+          if (shouldBackfill) {
+            await backfillSessionTurnsToDb();
+          } else {
+            await reconcileSessionTurnsToDb();
+          }
+        } catch (ingestErr) {
+          log('sessions', 'warn', `Turn ingest reconcile failed: ${ingestErr.message}`);
+        }
+        // Title backfill runs after turn ingest (needs turn data for first-message lookup)
+        try {
+          await backfillSessionTitles({ llm: true, minTurns: 1 });
+        } catch (titleErr) {
+          log('sessions', 'warn', `Title backfill failed: ${titleErr.message}`);
+        }
+        // Metadata backfill runs after turn ingest (enriches subagent sessions)
+        try {
+          await backfillSessionMetadata();
+        } catch (metaErr) {
+          log('sessions', 'warn', `Metadata backfill failed: ${metaErr.message}`);
+        }
+      }).finally(() => {
+        startPeriodicReconcile();
+        startTurnIngestReconcile();
+      });
+    },
   });
 
   // 13. Cleanup on exit
-  let cleanupDone = false;
-  const cleanup = (exitCode = 0) => {
-    if (cleanupDone) return;
-    cleanupDone = true;
-    try { fs.unlinkSync(PORT_FILE); } catch {}
-    try { fs.unlinkSync(TOKEN_FILE); } catch {}
-    for (const [, { proc }] of agentProcesses) {
-      try { proc.kill(); } catch {}
+  function cleanupStep(name, fn) {
+    try {
+      fn();
+    } catch (err) {
+      log('serve', 'warn', `Cleanup step failed: ${name}: ${err.message}`);
     }
-    terminalRoutes.cleanup();
-    fsRoutes.cleanup();
-    suggestRoutes.cleanup();
-    packageRoutes.cleanup();
-    resumeSessionIndex.clear();
-    cleanupSessions();
-    stopIdleReaper();
-    process.exit(exitCode);
-  };
+  }
 
-  process.on('SIGINT', () => cleanup(0));
-  process.on('SIGTERM', () => cleanup(0));
-  process.on('uncaughtException', (err) => {
-    log('serve', 'error', `Uncaught exception: ${err.message}`);
-    cleanup(1);
+  const gracefulShutdown = createGracefulShutdown({
+    server,
+    wss: wsRuntime.wss,
+    log,
+    cleanupResources: () => {
+      cleanupStep('connection-files', () => removeConnectionFiles());
+      cleanupStep('process-manager', () => processManager.cleanup());
+      cleanupStep('terminal-routes', () => terminalRoutes.cleanup());
+      cleanupStep('fs-routes', () => fsRoutes.cleanup());
+      cleanupStep('suggest-routes', () => suggestRoutes.cleanup());
+      cleanupStep('package-routes', () => packageRoutes.cleanup());
+      cleanupStep('sessions', () => cleanupSessions());
+      cleanupStep('idle-reaper', () => stopIdleReaper());
+    },
   });
-  process.on('unhandledRejection', (err) => {
-    log('serve', 'error', `Unhandled rejection: ${err}`);
-    cleanup(1);
+  gracefulShutdown.registerProcessHandlers({
+    onUncaughtException: (err) => {
+      log('serve', 'error', `Uncaught exception: ${err.message}`);
+    },
+    onUnhandledRejection: (err) => {
+      log('serve', 'error', `Unhandled rejection: ${err}`);
+    },
   });
 }

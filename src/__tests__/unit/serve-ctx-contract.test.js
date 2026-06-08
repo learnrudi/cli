@@ -320,6 +320,20 @@ describe('createInfrastructure', () => {
       const result = ctx.checkAuth({ url: '/test', headers: { 'x-rudi-token': 'wrong' } });
       assert.strictEqual(result, false);
     });
+
+    test('rejects same-origin token from localhost host headers', () => {
+      const ctx = createInfrastructure();
+      ctx.setToken('secret');
+      const result = ctx.checkAuth({
+        url: '/test',
+        headers: {
+          host: 'localhost:8123',
+          origin: 'https://example.invalid',
+          'x-rudi-token': 'same-origin',
+        },
+      });
+      assert.strictEqual(result, false);
+    });
   });
 
   // --- broadcast ---

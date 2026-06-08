@@ -174,3 +174,13 @@
   - `node scripts/run-tests.js src/__tests__/unit/contract-validator.test.js src/__tests__/unit/non-code-use-cases.test.js src/__tests__/unit/run-group-routes-contract.test.js src/__tests__/unit/run-group-observability.test.js src/__tests__/unit/serve-sessions-broadcast.test.js src/__tests__/unit/daemon-artifacts-operation.test.js src/__tests__/unit/daemon-run-groups-operation.test.js src/__tests__/unit/daemon-sessions-operation.test.js` passed with 68 tests.
   - `git diff --cached --check` passed.
   - `node scripts/agent-debt-runner.mjs --edited src/commands/agent/contract-validator.js,src/commands/agent/routes/run-group.js,src/commands/serve/sessions.js` passed with no findings.
+
+## Follow-Up Slice: Daemon Route And Runtime Extraction
+
+- Scope: extract public health/status, authenticated env/admin/local-LLM routes, HTTP auth/CORS middleware, WebSocket auth/runtime, bootstrap connection-file helpers, process ownership, graceful shutdown, and wire `serve` through those modules.
+- Security invariant: the literal `same-origin` token is not accepted as HTTP or WebSocket authentication; callers must present the generated daemon token.
+- Non-goals: LaunchAgent lifecycle command, DB schema/OpenAPI/package metadata, and generated `dist/` output.
+- Commands run and results:
+  - `node scripts/run-tests.js src/__tests__/unit/daemon-routes-contract.test.js src/__tests__/unit/daemon-runtime-contract.test.js src/__tests__/unit/serve-ctx-contract.test.js src/__tests__/unit/serve-health-contract.test.js src/__tests__/unit/local-llm.test.js src/__tests__/unit/packages-routes.test.js` passed with 71 tests.
+  - `git diff --cached --check` passed.
+  - `node scripts/agent-debt-runner.mjs --edited src/commands/serve.js,src/commands/serve/ctx.js,src/__tests__/unit/serve-ctx-contract.test.js,src/__tests__/unit/serve-health-contract.test.js,src/__tests__/unit/daemon-routes-contract.test.js,src/__tests__/unit/daemon-runtime-contract.test.js,src/daemon/routes/admin.js,src/daemon/routes/env.js,src/daemon/routes/health.js,src/daemon/routes/index.js,src/daemon/routes/local-llm.js,src/daemon/runtime/auth.js,src/daemon/runtime/bootstrap.js,src/daemon/runtime/process-manager.js,src/daemon/runtime/shutdown.js,src/daemon/runtime/websocket.js` passed with no findings.
