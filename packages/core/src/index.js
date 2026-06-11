@@ -8,6 +8,9 @@
 // Re-export from env for convenience
 export {
   PATHS,
+  CLAUDE_HOME,
+  discoverSkillPackages,
+  getSkillDiscoveryRoots,
   getPackagePath,
   getLockfilePath,
   isPackageInstalled,

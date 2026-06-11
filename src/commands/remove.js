@@ -46,6 +46,13 @@ function normalizeStackPackageId(stackId) {
   return normalized.startsWith('stack:') ? normalized : `stack:${normalized}`;
 }
 
+export function filterRemovablePackages(packages) {
+  return packages.filter(pkg => {
+    if (pkg.kind !== 'skill') return true;
+    return !pkg.source || pkg.source === 'rudi';
+  });
+}
+
 function getSecretName(secret) {
   if (typeof secret === 'string') return secret;
   return secret?.name || secret?.key || null;
@@ -211,7 +218,7 @@ async function removeBulk(kind, flags) {
 
   try {
     // Get list of packages to remove
-    const packages = await listInstalled(kind);
+    const packages = filterRemovablePackages(await listInstalled(kind));
 
     if (packages.length === 0) {
       console.log(kind ? `No ${pluralizeKind(kind)} installed.` : 'No packages installed.');

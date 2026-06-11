@@ -30,6 +30,7 @@ REGISTRY
 
 INSTALLED
   list [kind]           List installed packages (stacks, skills, workflows, runtimes, binaries, agents)
+  skills                List installed and discovered skills
   home                  Show ~/.rudi structure and status
   doctor                Check system health and dependencies
   which <cmd>           Show path to a command
@@ -338,6 +339,7 @@ EXAMPLES
   rudi list stacks --detected     Show MCP servers in Claude/Gemini/Codex
   rudi list binaries
   rudi list workflows
+  rudi skills
   rudi list skills --category=coding
 `,
     secrets: `

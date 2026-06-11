@@ -1,7 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { cleanupRemovedStack } from '../../commands/remove.js';
+import {
+  cleanupRemovedStack,
+  filterRemovablePackages,
+} from '../../commands/remove.js';
 
 test('cleanupRemovedStack removes stack config, orphaned secrets, and cached tools', async () => {
   const calls = [];
@@ -55,4 +58,19 @@ test('cleanupRemovedStack removes stack config, orphaned secrets, and cached too
     removedSecrets: ['SLACK_BOT_TOKEN', 'SLACK_CHANNEL_ID'],
     prunedToolIndex: true,
   });
+});
+
+test('filterRemovablePackages excludes external discovered skills', () => {
+  const packages = filterRemovablePackages([
+    { id: 'skill:local-flat', kind: 'skill', source: 'rudi' },
+    { id: 'skill:legacy-local', kind: 'skill' },
+    { id: 'skill:external-docx', kind: 'skill', source: 'claude' },
+    { id: 'stack:slack', kind: 'stack' },
+  ]);
+
+  assert.deepEqual(packages.map(pkg => pkg.id), [
+    'skill:local-flat',
+    'skill:legacy-local',
+    'stack:slack',
+  ]);
 });

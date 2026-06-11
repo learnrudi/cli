@@ -9,6 +9,7 @@
  *   rudi run <stack>         Run a stack
  *
  *   rudi stacks              List installed stacks
+ *   rudi skills              List installed skills
  *   rudi runtimes            List installed runtimes
  *   rudi binaries            List installed binaries
  *   rudi agents              List installed agents
@@ -250,6 +251,10 @@ async function main() {
       // Shortcuts for listing specific package types
       case 'stacks':
         await cmdList(['stacks'], flags);
+        break;
+
+      case 'skills':
+        await cmdList(['skills'], flags);
         break;
 
       case 'prompts':

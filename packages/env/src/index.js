@@ -23,6 +23,14 @@ export const RUDI_HOME = process.env.RUDI_HOME
   : path.join(os.homedir(), '.rudi');
 
 /**
+ * Claude Code home directory. RUDI may discover skills from this directory, but
+ * does not own or mutate it.
+ */
+export const CLAUDE_HOME = process.env.CLAUDE_HOME
+  ? path.resolve(process.env.CLAUDE_HOME)
+  : path.join(os.homedir(), '.claude');
+
+/**
  * All standard paths
  */
 export const PATHS = {
@@ -303,6 +311,86 @@ export function createPackageId(kind, name) {
 }
 
 /**
+ * Get skill roots in precedence order.
+ * @param {{ includeExternal?: boolean }} options
+ * @returns {Array<{source: 'rudi' | 'claude', path: string}>}
+ */
+export function getSkillDiscoveryRoots(options = {}) {
+  const roots = [
+    { source: 'rudi', path: PATHS.skills }
+  ];
+
+  if (options.includeExternal) {
+    roots.push({ source: 'claude', path: path.join(CLAUDE_HOME, 'skills') });
+  }
+
+  return roots;
+}
+
+function readSkillCandidates(root) {
+  if (!root?.path || !fs.existsSync(root.path)) return [];
+
+  const candidates = [];
+
+  for (const entry of fs.readdirSync(root.path, { withFileTypes: true })) {
+    if (entry.name.startsWith('.')) continue;
+
+    if (entry.isFile() && entry.name.endsWith('.md')) {
+      const name = entry.name.replace(/\.md$/, '');
+      const filePath = path.join(root.path, entry.name);
+      candidates.push({
+        name,
+        source: root.source,
+        format: 'flat',
+        packagePath: filePath,
+        entryPath: filePath
+      });
+      continue;
+    }
+
+    if (entry.isDirectory()) {
+      const packagePath = path.join(root.path, entry.name);
+      const entryPath = path.join(packagePath, 'SKILL.md');
+      if (fs.existsSync(entryPath) && fs.statSync(entryPath).isFile()) {
+        candidates.push({
+          name: entry.name,
+          source: root.source,
+          format: 'directory',
+          packagePath,
+          entryPath
+        });
+      }
+    }
+  }
+
+  return candidates;
+}
+
+/**
+ * Discover skills in precedence order. RUDI skills win over external skills.
+ * Within the same root, flat files keep backward-compatible precedence.
+ * @param {{ includeExternal?: boolean }} options
+ * @returns {Array<{name: string, source: string, format: string, packagePath: string, entryPath: string}>}
+ */
+export function discoverSkillPackages(options = {}) {
+  const byName = new Map();
+
+  for (const root of getSkillDiscoveryRoots(options)) {
+    for (const candidate of readSkillCandidates(root)) {
+      if (!byName.has(candidate.name)) {
+        byName.set(candidate.name, candidate);
+      }
+    }
+  }
+
+  return Array.from(byName.values());
+}
+
+function findLocalSkillPackage(name) {
+  return discoverSkillPackages().find(skill => skill.name === name) || null;
+}
+
+/**
  * Get path for an installed package
  * @param {string} id - Package ID (e.g., 'stack:pdf-creator', 'binary:ffmpeg', 'agent:claude')
  * @returns {string} Install path
@@ -313,9 +401,10 @@ export function getPackagePath(id) {
   switch (kind) {
     case 'stack':
       return path.join(PATHS.stacks, name);
-    case 'skill':
-      // Skills are single .md files, not directories
-      return path.join(PATHS.skills, `${name}.md`);
+    case 'skill': {
+      const existingSkill = findLocalSkillPackage(name);
+      return existingSkill?.packagePath || path.join(PATHS.skills, `${name}.md`);
+    }
     case 'prompt':
       // Backward compat: prompts map to skills directory
       return path.join(PATHS.skills, `${name}.md`);
@@ -386,8 +475,12 @@ export function isPackageInstalled(id) {
   const packagePath = getPackagePath(id);
   const [kind, name] = parsePackageId(id);
 
+  if (kind === 'skill') {
+    return Boolean(findLocalSkillPackage(name));
+  }
+
   // Skills, prompts, and workflows are single files
-  if (kind === 'skill' || kind === 'prompt' || kind === 'workflow') {
+  if (kind === 'prompt' || kind === 'workflow') {
     return fs.existsSync(packagePath) && fs.statSync(packagePath).isFile();
   }
 
@@ -446,8 +539,13 @@ export function getInstalledPackages(kind) {
     return [];
   }
 
-  // Skills and prompts are .md files, not directories
-  if (kind === 'skill' || kind === 'prompt') {
+  // Skills support both legacy name.md files and name/SKILL.md directories.
+  if (kind === 'skill') {
+    return discoverSkillPackages().map(skill => skill.name);
+  }
+
+  // Prompts are backward-compatible .md files in the skills directory.
+  if (kind === 'prompt') {
     return fs.readdirSync(dir).filter(name => {
       if (!name.endsWith('.md') || name.startsWith('.')) return false;
       const stat = fs.statSync(path.join(dir, name));

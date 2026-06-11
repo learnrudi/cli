@@ -29,6 +29,15 @@ function headingForKind(kind) {
   return `${kind.toUpperCase()}S`;
 }
 
+function formatSkillSource(pkg) {
+  if (pkg.kind !== 'skill') return '';
+
+  const details = [];
+  if (pkg.format) details.push(pkg.format);
+  if (pkg.source && pkg.source !== 'rudi') details.push(pkg.source);
+  return details.length > 0 ? ` [${details.join(', ')}]` : '';
+}
+
 export async function cmdList(args, flags) {
   let kind = args[0];
 
@@ -170,7 +179,7 @@ export async function cmdList(args, flags) {
         console.log(`\n  ${category.toUpperCase()} (${skills.length}):`);
         for (const pkg of skills) {
           const icon = pkg.icon ? `${pkg.icon} ` : '';
-          console.log(`    ${icon}${pkg.id || `skill:${pkg.name}`}`);
+          console.log(`    ${icon}${pkg.id || `skill:${pkg.name}`}${formatSkillSource(pkg)}`);
           if (pkg.description) {
             console.log(`      ${pkg.description}`);
           }
@@ -209,7 +218,7 @@ export async function cmdList(args, flags) {
 
       for (const pkg of pkgs) {
         const icon = pkg.icon ? `${pkg.icon} ` : '';
-        console.log(`  ${icon}${pkg.id || `${pkgKind}:${pkg.name}`}`);
+        console.log(`  ${icon}${pkg.id || `${pkgKind}:${pkg.name}`}${formatSkillSource(pkg)}`);
         console.log(`    Version: ${pkg.version || 'unknown'}`);
         if (pkg.description) {
           console.log(`    ${pkg.description}`);
