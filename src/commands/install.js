@@ -12,10 +12,10 @@
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
 import { fetchIndex, installPackage, resolvePackage, checkAllDependencies, formatDependencyResults, addStack, removeStack, updateSecretStatus } from '@learnrudi/core';
 import { hasSecret, listSecrets, setSecret, getSecret } from '@learnrudi/secrets';
 import { getInstalledAgents } from '@learnrudi/mcp';
+import { runCommand } from '../utils/subprocess.js';
 
 /**
  * Load manifest from installed stack path
@@ -134,8 +134,8 @@ async function installDependencies(stackPath, manifest, options = {}) {
       // Use bundled npm if available
       const npmCmd = getBundledBinary('node', 'npm');
       console.log(`  Installing npm dependencies...`);
-      const installArgs = includeDevDeps ? 'install' : 'install --production';
-      execSync(`"${npmCmd}" ${installArgs}`, {
+      const installArgs = includeDevDeps ? ['install'] : ['install', '--production'];
+      runCommand(npmCmd, installArgs, {
         cwd: project.root,
         stdio: 'pipe',
       });
@@ -163,7 +163,7 @@ async function installDependencies(stackPath, manifest, options = {}) {
       const pipCmd = getBundledBinary('python', 'pip');
       console.log(`  Installing pip dependencies...`);
       try {
-        execSync(`"${pipCmd}" install -r requirements.txt`, {
+        runCommand(pipCmd, ['install', '-r', 'requirements.txt'], {
           cwd: reqCwd,
           stdio: 'pipe',
         });
@@ -418,7 +418,7 @@ async function buildStackIfNeeded(stackPath, manifest, options = {}) {
   console.log(`  Building stack...`);
 
   try {
-    execSync(`"${npmCmd}" run build`, {
+    runCommand(npmCmd, ['run', 'build'], {
       cwd: project.root,
       stdio: verbose ? 'inherit' : 'pipe',
     });

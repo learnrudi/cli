@@ -10,7 +10,8 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { spawn, execSync } from 'child_process';
+import { spawn } from 'child_process';
+import { runCommand } from '../utils/subprocess.js';
 
 const STUDIO_WEBSITE = 'https://learnrudi.com';
 
@@ -67,9 +68,10 @@ function findStudioPath() {
   // On macOS, use Spotlight to find the app anywhere
   if (platform === 'darwin') {
     try {
-      const result = execSync('mdfind "kMDItemCFBundleIdentifier == \'com.rudi.studio\'" 2>/dev/null', {
+      const result = runCommand('mdfind', ["kMDItemCFBundleIdentifier == 'com.rudi.studio'"], {
         encoding: 'utf-8',
-        timeout: 5000
+        timeout: 5000,
+        stdio: ['pipe', 'pipe', 'ignore'],
       }).trim();
 
       if (result) {
@@ -81,9 +83,10 @@ function findStudioPath() {
       }
 
       // Fallback: search by name
-      const nameResult = execSync('mdfind "kMDItemDisplayName == \'RUDI Studio\' && kMDItemContentType == \'com.apple.application-bundle\'" 2>/dev/null', {
+      const nameResult = runCommand('mdfind', ["kMDItemDisplayName == 'RUDI Studio' && kMDItemContentType == 'com.apple.application-bundle'"], {
         encoding: 'utf-8',
-        timeout: 5000
+        timeout: 5000,
+        stdio: ['pipe', 'pipe', 'ignore'],
       }).trim();
 
       if (nameResult) {

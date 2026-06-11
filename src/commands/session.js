@@ -5,6 +5,7 @@
 import { getDb, isDatabaseInitialized } from '@learnrudi/db';
 import { formatDuration } from '@learnrudi/utils/args';
 import { createInterface } from 'readline';
+import { runCommand } from '../utils/subprocess.js';
 
 // Lazy load embeddings to avoid startup cost
 let embeddingsModule = null;
@@ -119,8 +120,7 @@ async function ensureEmbeddingProvider(preferredProvider = 'auto', options = {})
 
     // Pull embedding model
     console.log('  Pulling nomic-embed-text model (274MB)...');
-    const { execSync } = await import('child_process');
-    execSync('ollama pull nomic-embed-text', { stdio: 'inherit' });
+    runCommand('ollama', ['pull', 'nomic-embed-text'], { stdio: 'inherit' });
     console.log('  ✓ Model ready\n');
 
     return await getProvider('ollama');

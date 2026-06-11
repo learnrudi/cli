@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { homedir } from 'node:os';
-import { execSync } from 'node:child_process';
+import { createWhichCommand, runCommandPlan } from '../../../utils/subprocess.js';
 
 // Static provider configs — inlined for compatibility with bundled/compiled builds
 // where import.meta.url and filesystem scanning are unavailable.
@@ -52,7 +52,7 @@ export function resolveProviderBinary(config) {
 
   if (config.binary.fallback === 'which') {
     try {
-      return execSync(`which ${config.binary.name}`, { encoding: 'utf-8' }).trim();
+      return runCommandPlan(createWhichCommand(config.binary.name), { encoding: 'utf-8' }).trim();
     } catch {
       // which failed — binary not found
     }

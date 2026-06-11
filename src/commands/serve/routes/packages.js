@@ -6,7 +6,6 @@ import crypto from 'crypto';
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
 import {
   addStack,
   installPackage,
@@ -32,6 +31,7 @@ import {
 import {
   listMaskedSecrets,
 } from '../../../daemon/operations/secrets.js';
+import { runCommand } from '../../../utils/subprocess.js';
 
 const SECRET_NAME_RE = /^[A-Z][A-Z0-9_]*$/;
 const JOB_TTL_MS = 10 * 60 * 1000;
@@ -183,7 +183,7 @@ async function buildStackIfNeeded(stackPath, manifest, onProgress) {
   onProgress?.({ phase: 'building' });
   const npmCmd = getBundledBinary('node', 'npm');
   try {
-    execSync(`"${npmCmd}" run build`, {
+    runCommand(npmCmd, ['run', 'build'], {
       cwd: project.root,
       stdio: 'pipe',
     });

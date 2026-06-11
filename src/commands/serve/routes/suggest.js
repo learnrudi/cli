@@ -6,8 +6,9 @@
  */
 
 import os from 'os';
-import { spawn, execSync } from 'child_process';
+import { spawn } from 'child_process';
 import { resolveClaudeBinary } from '../agent.js';
+import { runGit } from '../../../utils/subprocess.js';
 
 export function buildSuggestRoutes(ctx) {
   const { json, error, readBody, log } = ctx;
@@ -36,9 +37,10 @@ export function buildSuggestRoutes(ctx) {
     const cwd = typeof body.cwd === 'string' ? body.cwd : null;
     if (cwd) {
       try {
-        const statusOut = execSync('git status --porcelain', { cwd, stdio: 'pipe', timeout: 3000 }).toString().trim();
-        const logOut = execSync('git log --oneline -5 2>/dev/null', { cwd, stdio: 'pipe', timeout: 3000 }).toString().trim();
-        const branchOut = execSync('git branch --show-current 2>/dev/null', { cwd, stdio: 'pipe', timeout: 3000 }).toString().trim();
+        const gitOptions = { stdio: 'pipe', timeout: 3000 };
+        const statusOut = runGit(cwd, ['status', '--porcelain'], gitOptions).toString().trim();
+        const logOut = runGit(cwd, ['log', '--oneline', '-5'], gitOptions).toString().trim();
+        const branchOut = runGit(cwd, ['branch', '--show-current'], gitOptions).toString().trim();
         const parts = [];
         if (branchOut) parts.push(`Branch: ${branchOut}`);
         if (statusOut) parts.push(`Uncommitted changes:\n${statusOut}`);

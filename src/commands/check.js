@@ -14,10 +14,10 @@
  */
 
 import { PATHS, isPackageInstalled, getPackagePath, resolveNodeRuntimeBin, checkStackLifecycle, readRudiConfig } from '@learnrudi/core';
-import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { createWhichCommand, runCommand, runCommandPlan } from '../utils/subprocess.js';
 
 // Agent credential checks
 const AGENT_CREDENTIALS = {
@@ -35,7 +35,7 @@ function fileExists(filePath) {
 function checkKeychain(service) {
   if (process.platform !== 'darwin') return false;
   try {
-    execSync(`security find-generic-password -s "${service}"`, {
+    runCommand('security', ['find-generic-password', '-s', service], {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     return true;
@@ -46,12 +46,29 @@ function checkKeychain(service) {
 
 function getVersion(binaryPath, versionFlag = '--version') {
   try {
-    const output = execSync(`"${binaryPath}" ${versionFlag} 2>&1`, {
+    const output = runCommand(binaryPath, [versionFlag], {
       encoding: 'utf-8',
       timeout: 5000,
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
     const match = output.match(/(\d+\.\d+\.?\d*)/);
     return match ? match[1] : null;
+  } catch (error) {
+    const output = `${error.stdout?.toString() || ''}\n${error.stderr?.toString() || ''}`.trim();
+    if (output) {
+      const match = output.match(/(\d+\.\d+\.?\d*)/);
+      return match ? match[1] : null;
+    }
+    return null;
+  }
+}
+
+function findGlobalBinary(name) {
+  try {
+    return runCommandPlan(createWhichCommand(name), {
+      encoding: 'utf-8',
+      timeout: 3000,
+    }).trim();
   } catch {
     return null;
   }
@@ -104,19 +121,15 @@ function detectKindFromFilesystem(name) {
   if (fs.existsSync(stackPath)) return 'stack';
 
   // Not found in RUDI - check global PATH and guess based on what it is
-  try {
-    const globalPath = execSync(`which ${name} 2>/dev/null`, { encoding: 'utf-8' }).trim();
-    if (globalPath) {
-      // If it's in a typical runtime location, it's probably a runtime
-      if (globalPath.includes('/node') || globalPath.includes('/python') ||
-          globalPath.includes('/deno') || globalPath.includes('/bun')) {
-        return 'runtime';
-      }
-      // Otherwise assume binary (most common case for global tools)
-      return 'binary';
+  const globalPath = findGlobalBinary(name);
+  if (globalPath) {
+    // If it's in a typical runtime location, it's probably a runtime
+    if (globalPath.includes('/node') || globalPath.includes('/python') ||
+        globalPath.includes('/deno') || globalPath.includes('/bun')) {
+      return 'runtime';
     }
-  } catch {
-    // Not in PATH
+    // Otherwise assume binary (most common case for global tools)
+    return 'binary';
   }
 
   // Default to stack for unknown (user can be explicit with stack:name)
@@ -169,15 +182,11 @@ export async function cmdCheck(args, flags) {
       let globalPath = null;
       let globalInstalled = false;
       if (!rudiInstalled) {
-        try {
-          const which = execSync(`which ${name} 2>/dev/null`, { encoding: 'utf-8' }).trim();
-          // Make sure it's not a RUDI shim
-          if (which && !which.includes('.rudi/bins') && !which.includes('.rudi/shims')) {
-            globalPath = which;
-            globalInstalled = true;
-          }
-        } catch {
-          // Not in PATH
+        const which = findGlobalBinary(name);
+        // Make sure it's not a RUDI shim
+        if (which && !which.includes('.rudi/bins') && !which.includes('.rudi/shims')) {
+          globalPath = which;
+          globalInstalled = true;
         }
       }
 
@@ -212,15 +221,11 @@ export async function cmdCheck(args, flags) {
         result.version = getVersion(rudiPath);
       } else {
         // Check global
-        try {
-          const globalPath = execSync(`which ${name} 2>/dev/null`, { encoding: 'utf-8' }).trim();
-          if (globalPath) {
-            result.installed = true;
-            result.path = globalPath;
-            result.version = getVersion(globalPath);
-          }
-        } catch {
-          // Not found
+        const globalPath = findGlobalBinary(name);
+        if (globalPath) {
+          result.installed = true;
+          result.path = globalPath;
+          result.version = getVersion(globalPath);
         }
       }
       result.ready = result.installed;
@@ -235,14 +240,10 @@ export async function cmdCheck(args, flags) {
         result.path = rudiPath;
       } else {
         // Check global
-        try {
-          const globalPath = execSync(`which ${name} 2>/dev/null`, { encoding: 'utf-8' }).trim();
-          if (globalPath) {
-            result.installed = true;
-            result.path = globalPath;
-          }
-        } catch {
-          // Not found
+        const globalPath = findGlobalBinary(name);
+        if (globalPath) {
+          result.installed = true;
+          result.path = globalPath;
         }
       }
       result.ready = result.installed;

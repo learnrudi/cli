@@ -6,10 +6,10 @@
 
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
 import { getDb, initSchema } from '@learnrudi/db';
 import { transitionSessionStatus } from '../agent/db.js';
 import { refreshRunGroupAggregates, withImmediateTransaction } from '../agent/run-group-domain.js';
+import { runCommand, runGit } from '../../utils/subprocess.js';
 
 /**
  * Run synchronous startup tasks. Call before server.listen().
@@ -94,7 +94,7 @@ export function runStartupTasks({ log }) {
 
   // 3. Kill orphaned Claude CLI processes
   try {
-    const psOutput = execSync('ps -axo pid=,ppid=,command=', {
+    const psOutput = runCommand('ps', ['-axo', 'pid=,ppid=,command='], {
       encoding: 'utf-8',
       timeout: 3000,
     });
@@ -127,7 +127,7 @@ export function runStartupTasks({ log }) {
       }
       for (const pid of orphanPids) {
         try {
-          const alive = execSync(`ps -p ${pid} -o pid=`, {
+          const alive = runCommand('ps', ['-p', String(pid), '-o', 'pid='], {
             encoding: 'utf-8',
             timeout: 500,
           }).trim();
@@ -160,7 +160,7 @@ export function runStartupTasks({ log }) {
       }
 
       try {
-        const uncommitted = execSync('git status --porcelain', { cwd: row.worktree_path, stdio: 'pipe' }).toString().trim();
+        const uncommitted = runGit(row.worktree_path, ['status', '--porcelain'], { stdio: 'pipe' }).toString().trim();
         if (uncommitted) {
           log('serve', 'warn', `orphan worktree has uncommitted changes, skipping: ${row.worktree_path}`);
           continue;
@@ -169,10 +169,9 @@ export function runStartupTasks({ log }) {
         let unmerged = '';
         if (row.worktree_branch && row.base_branch && row.project_root) {
           try {
-            unmerged = execSync(
-              `git log ${row.base_branch}..${row.worktree_branch} --oneline`,
-              { cwd: row.project_root, stdio: 'pipe' }
-            ).toString().trim();
+            unmerged = runGit(row.project_root, ['log', `${row.base_branch}..${row.worktree_branch}`, '--oneline'], {
+              stdio: 'pipe',
+            }).toString().trim();
           } catch {}
         }
         if (unmerged) {
@@ -181,9 +180,9 @@ export function runStartupTasks({ log }) {
         }
 
         const repoDir = row.project_root || path.dirname(path.dirname(path.dirname(row.worktree_path)));
-        execSync(`git worktree remove ${JSON.stringify(row.worktree_path)}`, { cwd: repoDir, stdio: 'pipe' });
+        runGit(repoDir, ['worktree', 'remove', row.worktree_path], { stdio: 'pipe' });
         if (row.worktree_branch) {
-          try { execSync(`git branch -d ${row.worktree_branch}`, { cwd: repoDir, stdio: 'pipe' }); } catch {}
+          try { runGit(repoDir, ['branch', '-d', '--', row.worktree_branch], { stdio: 'pipe' }); } catch {}
         }
         db.prepare('UPDATE session_runtime_state SET worktree_path = NULL, worktree_branch = NULL WHERE session_id = ?').run(row.session_id);
         log('serve', 'info', `cleaned up orphan worktree: ${row.worktree_path}`);

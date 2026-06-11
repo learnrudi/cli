@@ -12,7 +12,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { PATHS, getPackagePath } from '@learnrudi/env';
 import { createShimsForTool } from './shims.js';
 
@@ -42,7 +42,7 @@ export async function registerSystemBinary(name, options = {}) {
 
   // 2. Validate it works (catches Xcode CLT stub issue on macOS)
   try {
-    execSync(`"${systemPath}" --version`, { stdio: 'pipe' });
+    execFileSync(systemPath, ['--version'], { stdio: 'pipe' });
   } catch (error) {
     return {
       success: false,

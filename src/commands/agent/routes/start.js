@@ -7,7 +7,6 @@ import os from 'os';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { execSync } from 'child_process';
 import { PATHS } from '@learnrudi/env';
 import { loadProviderConfig, resolveProviderBinary, buildArgs, getPermissionArgs, buildEnv, hasCapability, expandConditional } from '../providers/index.js';
 import { buildSystemPrompt } from '../prompts.js';
@@ -15,6 +14,7 @@ import { dbWrite, resolveDb, transitionSessionStatus } from '../db.js';
 import { resolveReusableEntry, countAlive, buildUserInputEvent, dropResumeMappingsForSession } from '../helpers.js';
 import { getRepoRoot, createSessionWorktree, restoreSessionWorktree } from '../worktree.js';
 import { spawnAgentProcess } from '../spawn-process.js';
+import { runGit } from '../../../utils/subprocess.js';
 
 const MAX_AGENT_BODY_SIZE = 50 * 1024 * 1024; // allow image attachments
 const SPAWN_CHILD_ALLOWED_TOOLS = [
@@ -310,9 +310,9 @@ export function buildStartRoute(ctx) {
     let repoRoot = null;
     let isGitRepo = false;
     try {
-      execSync('git rev-parse --is-inside-work-tree', { cwd: workingDir, stdio: 'pipe' });
+      runGit(workingDir, ['rev-parse', '--is-inside-work-tree'], { stdio: 'pipe' });
       repoRoot = getRepoRoot(workingDir);
-      currentBranch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: workingDir, stdio: 'pipe' }).toString().trim();
+      currentBranch = runGit(workingDir, ['rev-parse', '--abbrev-ref', 'HEAD'], { stdio: 'pipe' }).toString().trim();
       isGitRepo = true;
     } catch {
       isGitRepo = false;

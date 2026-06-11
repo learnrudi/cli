@@ -6,9 +6,9 @@
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
 import { PATHS } from '@learnrudi/env';
 import { loadProviderConfig, resolveProviderBinary } from './providers/index.js';
+import { createWhichCommand, runCommandPlan } from '../../utils/subprocess.js';
 
 // Provider-specific auth modules
 import * as claudeAuth from './auth/claude.js';
@@ -51,7 +51,7 @@ export function resolveClaudeBinary() {
   }
 
   try {
-    const which = execSync('which claude', { encoding: 'utf-8' }).trim();
+    const which = runCommandPlan(createWhichCommand('claude'), { encoding: 'utf-8' }).trim();
     if (which && fs.existsSync(which)) {
       _cachedClaudeBinary = which;
       return which;

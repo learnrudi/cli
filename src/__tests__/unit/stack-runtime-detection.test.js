@@ -5,7 +5,11 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { detectRuntime as detectAuthRuntime } from '../../commands/auth.js';
-import { checkAuth, detectRuntime as detectWhichRuntime } from '../../commands/which.js';
+import {
+  checkAuth,
+  checkIfRunning,
+  detectRuntime as detectWhichRuntime,
+} from '../../commands/which.js';
 
 async function withTempStack(layout, run) {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'rudi-stack-'));
@@ -124,4 +128,20 @@ test('which auth status finds account tokens in RUDI stack state', async () => {
     },
   );
   await rm(home, { recursive: true, force: true });
+});
+
+test('which running check treats stack names as literal process filters', () => {
+  const calls = [];
+  const running = checkIfRunning('video-editor"; touch /tmp/rudi-probe #', {
+    runCommand(command, args) {
+      calls.push({ command, args });
+      return [
+        'hoff 101 0.0 node /Users/hoff/.rudi/stacks/video-editor/dist/index.js',
+        'hoff 202 0.0 node /Users/hoff/.rudi/stacks/google-workspace/dist/index.js',
+      ].join('\n');
+    },
+  });
+
+  assert.equal(running, false);
+  assert.deepEqual(calls, [{ command: 'ps', args: ['aux'] }]);
 });

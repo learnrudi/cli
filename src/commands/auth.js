@@ -8,9 +8,8 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { execSync } from 'child_process';
+import { execFileSync as defaultExecFileSync } from 'child_process';
 import { listInstalled } from '@learnrudi/core';
-import { PATHS } from '@learnrudi/env';
 import * as net from 'net';
 
 /**
@@ -98,6 +97,60 @@ export async function detectRuntime(stackPath) {
   return null;
 }
 
+function requireSubprocessArg(value, name) {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`${name} must be a non-empty string`);
+  }
+  if (value.includes('\0')) {
+    throw new Error(`${name} must not contain NUL bytes`);
+  }
+  return value;
+}
+
+function accountArg(accountEmail) {
+  if (accountEmail === undefined || accountEmail === null || accountEmail === '') {
+    return [];
+  }
+  return [requireSubprocessArg(accountEmail, 'account email')];
+}
+
+export function createAuthSubprocess({
+  runtime,
+  scriptPath,
+  useTsx = false,
+  accountEmail,
+}) {
+  const safeScriptPath = requireSubprocessArg(scriptPath, 'auth script path');
+  const accountArgs = accountArg(accountEmail);
+
+  if (runtime === 'node') {
+    if (useTsx) {
+      return { command: 'npx', args: ['tsx', safeScriptPath, ...accountArgs] };
+    }
+    return { command: 'node', args: [safeScriptPath, ...accountArgs] };
+  }
+
+  if (runtime === 'python') {
+    return { command: 'python3', args: [safeScriptPath, ...accountArgs] };
+  }
+
+  throw new Error(`Unsupported auth runtime: ${runtime}`);
+}
+
+export function runAuthSubprocess(plan, options = {}) {
+  const execFileSync = options.execFileSync || defaultExecFileSync;
+  const command = requireSubprocessArg(plan?.command, 'auth command');
+  const args = Array.isArray(plan?.args)
+    ? plan.args.map((arg, index) => requireSubprocessArg(arg, `auth arg ${index}`))
+    : [];
+
+  execFileSync(command, args, {
+    cwd: options.cwd,
+    stdio: options.stdio || 'inherit',
+    ...(options.env ? { env: options.env } : {}),
+  });
+}
+
 /**
  * Run authentication for a stack
  */
@@ -152,8 +205,6 @@ export async function cmdAuth(args, flags) {
     console.log(`Using port: ${port}`);
     console.log('');
 
-    // Prepare authentication command
-    let cmd;
     const cwd = path.dirname(authInfo.authScript);
 
     if (authInfo.runtime === 'node') {
@@ -169,7 +220,6 @@ export async function cmdAuth(args, flags) {
         if (distContent.includes('findAvailablePort')) {
           // Use the compiled version directly - it already has dynamic port support!
           console.log('Using compiled authentication script...');
-          cmd = `node ${distAuth}${accountEmail ? ` ${accountEmail}` : ''}`;
           useBuiltInPort = true;
         }
       } catch {
@@ -190,19 +240,19 @@ export async function cmdAuth(args, flags) {
           .replace(/server\.listen\(3456/g, `server.listen(${port}`);
 
         await fs.writeFile(tempAuthScript, modifiedContent);
-
-        if (authInfo.useTsx) {
-          cmd = `npx tsx ${tempAuthScript}${accountEmail ? ` ${accountEmail}` : ''}`;
-        } else {
-          cmd = `node ${tempAuthScript}${accountEmail ? ` ${accountEmail}` : ''}`;
-        }
       }
 
       console.log('Starting OAuth flow...');
       console.log('');
 
       try {
-        execSync(cmd, {
+        const plan = createAuthSubprocess({
+          runtime: 'node',
+          scriptPath: useBuiltInPort ? distAuth : tempAuthScript,
+          useTsx: useBuiltInPort ? false : authInfo.useTsx,
+          accountEmail,
+        });
+        runAuthSubprocess(plan, {
           cwd,
           stdio: 'inherit',
         });
@@ -224,12 +274,15 @@ export async function cmdAuth(args, flags) {
       }
 
     } else if (authInfo.runtime === 'python') {
-      cmd = `python3 ${authInfo.authScript}${accountEmail ? ` ${accountEmail}` : ''}`;
-
       console.log('Starting OAuth flow...');
       console.log('');
 
-      execSync(cmd, {
+      const plan = createAuthSubprocess({
+        runtime: 'python',
+        scriptPath: authInfo.authScript,
+        accountEmail,
+      });
+      runAuthSubprocess(plan, {
         cwd,
         stdio: 'inherit',
         env: {

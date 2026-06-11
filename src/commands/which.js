@@ -9,10 +9,10 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { execSync } from 'child_process';
 import { listInstalled } from '@learnrudi/core';
 import { PATHS } from '@learnrudi/env';
 import { formatRelatedSkillsLine, getRelatedSkillIds } from './related-skills.js';
+import { runCommand as defaultRunCommand } from '../utils/subprocess.js';
 
 export async function cmdWhich(args, flags) {
   const stackId = args[0];
@@ -272,21 +272,25 @@ export async function checkAuth(stackPath, runtime, options = {}) {
 /**
  * Check if MCP server process is running
  */
-function checkIfRunning(stackName) {
+export function isStackProcessLine(line, stackName) {
+  return Boolean(
+    line &&
+    typeof stackName === 'string' &&
+    stackName.length > 0 &&
+    line.includes(stackName) &&
+    (line.includes('index.ts') || line.includes('index.js') || line.includes('index.py'))
+  );
+}
+
+export function checkIfRunning(stackName, options = {}) {
+  const runCommand = options.runCommand || defaultRunCommand;
   try {
-    // Use ps to find processes matching the stack name
-    const result = execSync(`ps aux | grep "${stackName}" | grep -v grep || true`, {
+    const result = runCommand('ps', ['aux'], {
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'ignore'] // Suppress stderr
     });
 
-    // Filter out the current grep process and check if any actual MCP server is running
-    const lines = result.trim().split('\n').filter(line => {
-      return line &&
-             line.includes('index.ts') || line.includes('index.js') || line.includes('index.py');
-    });
-
-    return lines.length > 0;
+    return result.trim().split('\n').some(line => isStackProcessLine(line, stackName));
   } catch {
     return false;
   }

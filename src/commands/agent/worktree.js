@@ -5,8 +5,9 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { execSync, execFileSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { getDb } from '@learnrudi/db';
+import { runGit } from '../../utils/subprocess.js';
 
 /**
  * Get the actual repository root, even when called from inside a worktree.
@@ -45,10 +46,7 @@ export function createSessionWorktree({ repoRoot, currentBranch, shortId, log })
     // Try the current branch directly first (works if not checked out elsewhere)
     let branchName = currentBranch;
     try {
-      execSync(
-        `git worktree add ${JSON.stringify(worktreeDir)} ${branchName}`,
-        { cwd: repoRoot, stdio: 'pipe' }
-      );
+      runGit(repoRoot, ['worktree', 'add', worktreeDir, branchName], { stdio: 'pipe' });
     } catch {
       // Branch already checked out (expected — main repo is on it)
       // Clean up any partial directory from the failed attempt
@@ -56,10 +54,7 @@ export function createSessionWorktree({ repoRoot, currentBranch, shortId, log })
       // Collision fallback: sanitize slashes to dashes to avoid git ref conflict
       const safeBase = currentBranch.replace(/\//g, '-');
       branchName = `${safeBase}-session-${shortId}`;
-      execSync(
-        `git worktree add -b ${branchName} ${JSON.stringify(worktreeDir)}`,
-        { cwd: repoRoot, stdio: 'pipe' }
-      );
+      runGit(repoRoot, ['worktree', 'add', '-b', branchName, worktreeDir], { stdio: 'pipe' });
     }
 
     let worktreePath = null;
@@ -121,10 +116,7 @@ export function restoreSessionWorktree({ resumeSessionId, repoRoot, currentBranc
       const worktreeDir = path.join(repoRoot, '.rudi', 'worktrees', recreateName);
       try {
         fs.mkdirSync(path.join(repoRoot, '.rudi', 'worktrees'), { recursive: true });
-        execSync(
-          `git worktree add ${JSON.stringify(worktreeDir)} ${row.worktree_branch}`,
-          { cwd: repoRoot, stdio: 'pipe' }
-        );
+        runGit(repoRoot, ['worktree', 'add', worktreeDir, row.worktree_branch], { stdio: 'pipe' });
         log('agent', 'info', `recreated worktree from existing branch: ${worktreeDir}`, { sessionId: shortId });
         return {
           worktreePath: worktreeDir,

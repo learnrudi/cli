@@ -9,8 +9,9 @@ import fs from 'fs';
 import fsp from 'fs/promises';
 import path from 'path';
 import os from 'os';
-import { execSync, execFile } from 'child_process';
+import { execFile } from 'child_process';
 import { findSessionIdentityRow, resolveSessionRowIdentity } from '@learnrudi/db/session-identity';
+import { runGit } from '../../utils/subprocess.js';
 
 import {
   extractContent,
@@ -312,9 +313,10 @@ export function computeGitDiffStats(projectPath, created, modified) {
     const gitDir = path.join(projectPath, '.git');
     if (!fs.existsSync(gitDir)) return null;
 
-    const result = execSync(
-      `git log --after="${created}" --before="${modified}" --shortstat --pretty="" 2>/dev/null`,
-      { cwd: projectPath, encoding: 'utf-8', timeout: 5000 }
+    const result = runGit(
+      projectPath,
+      ['log', `--after=${created}`, `--before=${modified}`, '--shortstat', '--pretty='],
+      { encoding: 'utf-8', timeout: 5000 }
     );
 
     if (!result.trim()) return null;

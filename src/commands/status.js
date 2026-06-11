@@ -13,11 +13,11 @@
  */
 
 import { PATHS, getInstalledPackages, isPackageInstalled, resolveNodeRuntimeBin } from '@learnrudi/core';
-import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { getSidecarDaemonStatus } from './sidecar-client.js';
+import { createWhichCommand, runCommand, runCommandPlan } from '../utils/subprocess.js';
 
 // Agent definitions with credential check info
 const AGENTS = [
@@ -82,7 +82,7 @@ function fileExists(filePath) {
 function checkKeychain(service) {
   if (process.platform !== 'darwin') return false;
   try {
-    execSync(`security find-generic-password -s "${service}"`, {
+    runCommand('security', ['find-generic-password', '-s', service], {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     return true;
@@ -96,7 +96,7 @@ function checkKeychain(service) {
  */
 function getVersion(command, versionFlag) {
   try {
-    const output = execSync(`${command} ${versionFlag} 2>&1`, {
+    const output = runCommand(command, [versionFlag], {
       encoding: 'utf-8',
       timeout: 5000,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -104,6 +104,22 @@ function getVersion(command, versionFlag) {
     // Extract version number (first match of semver-like pattern)
     const match = output.match(/(\d+\.\d+\.?\d*)/);
     return match ? match[1] : output.trim().split('\n')[0].slice(0, 50);
+  } catch (error) {
+    const output = `${error.stdout?.toString() || ''}\n${error.stderr?.toString() || ''}`.trim();
+    if (output) {
+      const match = output.match(/(\d+\.\d+\.?\d*)/);
+      return match ? match[1] : output.split('\n')[0].trim().slice(0, 50);
+    }
+    return null;
+  }
+}
+
+function findGlobalBinary(command, options = {}) {
+  try {
+    return runCommandPlan(createWhichCommand(command), {
+      encoding: 'utf-8',
+      timeout: options.timeout || 3000,
+    }).trim();
   } catch {
     return null;
   }
@@ -152,17 +168,9 @@ function findBinary(command, kind = 'binary') {
   }
 
   // Check global PATH
-  try {
-    const output = execSync(`which ${command} 2>/dev/null`, {
-      encoding: 'utf-8',
-      timeout: 3000,
-    });
-    const globalPath = output.trim();
-    if (globalPath) {
-      return { found: true, path: globalPath, source: 'global' };
-    }
-  } catch {
-    // Not found in PATH
+  const globalPath = findGlobalBinary(command);
+  if (globalPath) {
+    return { found: true, path: globalPath, source: 'global' };
   }
 
   return { found: false, path: null, source: null };
@@ -181,15 +189,11 @@ function getAgentStatus(agent) {
   let globalPath = null;
   let globalInstalled = false;
   if (!rudiInstalled) {
-    try {
-      const which = execSync(`which ${agent.id} 2>/dev/null`, { encoding: 'utf-8' }).trim();
-      // Make sure it's not a RUDI shim
-      if (which && !which.includes('.rudi/bins') && !which.includes('.rudi/shims')) {
-        globalPath = which;
-        globalInstalled = true;
-      }
-    } catch {
-      // Not in PATH
+    const which = findGlobalBinary(agent.id);
+    // Make sure it's not a RUDI shim
+    if (which && !which.includes('.rudi/bins') && !which.includes('.rudi/shims')) {
+      globalPath = which;
+      globalInstalled = true;
     }
   }
 

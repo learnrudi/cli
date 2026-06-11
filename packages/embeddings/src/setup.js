@@ -4,6 +4,7 @@
  * Helps users get a working embedding provider configured.
  */
 
+import { execFileSync } from 'child_process';
 import { createOllamaProvider } from './providers/ollama.js';
 
 const EMBEDDING_MODELS = [
@@ -32,9 +33,8 @@ export async function checkProviderStatus() {
   // Check Ollama
   try {
     // Check if ollama binary exists
-    const { execSync } = await import('child_process');
     try {
-      execSync('which ollama', { stdio: 'pipe' });
+      execFileSync('which', ['ollama'], { stdio: 'pipe' });
       status.ollama.installed = true;
     } catch {
       // Not installed
@@ -144,9 +144,8 @@ export async function autoSetupOllama() {
 
   // Pull embedding model
   try {
-    const { execSync } = await import('child_process');
     console.log('Pulling nomic-embed-text model...');
-    execSync('ollama pull nomic-embed-text', { stdio: 'inherit' });
+    execFileSync('ollama', ['pull', 'nomic-embed-text'], { stdio: 'inherit' });
     return { success: true, message: 'Ollama configured with nomic-embed-text' };
   } catch (err) {
     return { success: false, message: `Failed to pull model: ${err.message}` };

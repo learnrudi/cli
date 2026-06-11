@@ -11,7 +11,7 @@ import os from 'os';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { execSync, execFileSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { PATHS } from '@learnrudi/env';
 import { getDb } from '@learnrudi/db';
 import { transitionSessionStatus } from '../db.js';
@@ -64,6 +64,7 @@ import {
   projectRunGroupDetailSession,
   projectRunGroupLiveSession,
 } from '../../../daemon/operations/run-groups.js';
+import { runGit } from '../../../utils/subprocess.js';
 
 const TERMINAL_GROUP_STATUSES = new Set(['completed', 'partial', 'failed', 'stopped']);
 const SPAWN_CHILD_ALLOWED_TOOLS = [
@@ -73,11 +74,11 @@ const SPAWN_CHILD_ALLOWED_TOOLS = [
 
 function detectGitContext(workingDir) {
   try {
-    execSync('git rev-parse --is-inside-work-tree', { cwd: workingDir, stdio: 'pipe' });
+    runGit(workingDir, ['rev-parse', '--is-inside-work-tree'], { stdio: 'pipe' });
     return {
       isGitRepo: true,
       repoRoot: getRepoRoot(workingDir),
-      currentBranch: execSync('git rev-parse --abbrev-ref HEAD', { cwd: workingDir, stdio: 'pipe' })
+      currentBranch: runGit(workingDir, ['rev-parse', '--abbrev-ref', 'HEAD'], { stdio: 'pipe' })
         .toString().trim(),
     };
   } catch {

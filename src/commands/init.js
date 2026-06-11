@@ -13,10 +13,10 @@ import path from 'path';
 import { pipeline } from 'stream/promises';
 import { createWriteStream } from 'fs';
 import { createGunzip } from 'zlib';
-import { execSync } from 'child_process';
 import { PATHS, ensureDirectories, getPlatformArch } from '@learnrudi/env';
 import { fetchIndex } from '@learnrudi/registry-client';
 import { initSchema } from '@learnrudi/db';
+import { runCommand } from '../utils/subprocess.js';
 
 // Download base URL for RUDI registry releases
 const RELEASES_BASE = 'https://github.com/learnrudi/registry/releases/download/v1.0.0';
@@ -256,12 +256,12 @@ async function downloadAndExtract(url, destPath, name, extractConfig) {
 
   // Extract
   try {
-    execSync(`tar -xzf "${tempFile}" -C "${destPath}" --strip-components=1`, {
+    runCommand('tar', ['-xzf', tempFile, '-C', destPath, '--strip-components=1'], {
       stdio: 'pipe'
     });
   } catch {
     // Try without strip-components for flat archives
-    execSync(`tar -xzf "${tempFile}" -C "${destPath}"`, { stdio: 'pipe' });
+    runCommand('tar', ['-xzf', tempFile, '-C', destPath], { stdio: 'pipe' });
   }
 
   // Cleanup

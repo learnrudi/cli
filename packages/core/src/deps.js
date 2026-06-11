@@ -5,7 +5,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { PATHS } from '@learnrudi/env';
 import { fetchIndex } from '@learnrudi/registry-client';
 
@@ -188,7 +188,7 @@ function getSystemCommand(name) {
 // Helper: Find executable in PATH
 function which(cmd) {
   try {
-    const result = execSync(`which ${cmd} 2>/dev/null`, { encoding: 'utf-8' });
+    const result = execFileSync('which', [cmd], { encoding: 'utf-8' });
     return result.trim();
   } catch {
     return null;
@@ -214,13 +214,22 @@ function getVersion(binPath, name) {
   const flag = versionFlags[name] || '--version';
 
   try {
-    const output = execSync(`"${binPath}" ${flag} 2>&1`, { encoding: 'utf-8' });
-    // Extract version number (first match of semver-like pattern)
-    const match = output.match(/(\d+\.\d+(?:\.\d+)?)/);
-    return match ? match[1] : output.split('\n')[0].trim();
-  } catch {
+    const output = execFileSync(binPath, [flag], {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    return parseVersionOutput(output);
+  } catch (error) {
+    const output = `${error.stdout?.toString() || ''}\n${error.stderr?.toString() || ''}`.trim();
+    if (output) return parseVersionOutput(output);
     return null;
   }
+}
+
+function parseVersionOutput(output) {
+  // Extract version number (first match of semver-like pattern)
+  const match = output.match(/(\d+\.\d+(?:\.\d+)?)/);
+  return match ? match[1] : output.split('\n')[0].trim();
 }
 
 /**
