@@ -13,7 +13,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const REGISTRY_PATHS = [
   process.env.RUDI_REGISTRY_CATALOG,
@@ -37,7 +38,7 @@ function readCatalogDir(dirPath) {
     return [];
   }
 
-  const files = fs.readdirSync(dirPath).filter(f => f.endsWith('.json'));
+  const files = fs.readdirSync(dirPath).filter(f => f.endsWith('.json')).sort();
   return files.map(f => {
     const content = fs.readFileSync(path.join(dirPath, f), 'utf-8');
     return JSON.parse(content);
@@ -165,16 +166,31 @@ function processPackages(catalogPath, kind) {
   });
 }
 
+export function getManifestGeneratedAt(env = process.env) {
+  const sourceDateEpoch = env.SOURCE_DATE_EPOCH;
+  if (sourceDateEpoch !== undefined && sourceDateEpoch !== '') {
+    const seconds = Number(sourceDateEpoch);
+    if (!Number.isFinite(seconds) || seconds < 0) {
+      throw new Error('SOURCE_DATE_EPOCH must be a non-negative Unix timestamp in seconds');
+    }
+    return new Date(seconds * 1000).toISOString();
+  }
+
+  return '1970-01-01T00:00:00.000Z';
+}
+
 /**
  * Generate the manifest
  */
-function generateManifest() {
-  const catalogPath = findRegistryPath();
-  console.log(`Reading catalog from: ${catalogPath}`);
+export function generateManifest(options = {}) {
+  const catalogPath = options.catalogPath ? path.resolve(options.catalogPath) : findRegistryPath();
+  const env = options.env || process.env;
+  const log = options.log || console.log;
+  log(`Reading catalog from: ${catalogPath}`);
 
   const manifest = {
     version: '1.0.0',
-    generated: new Date().toISOString(),
+    generated: getManifestGeneratedAt(env),
     packages: {
       runtimes: processPackages(catalogPath, 'runtime'),
       agents: processPackages(catalogPath, 'agent'),
@@ -188,7 +204,7 @@ function generateManifest() {
     agents: manifest.packages.agents.length,
     binaries: manifest.packages.binaries.length,
   };
-  console.log(`Found: ${counts.runtimes} runtimes, ${counts.agents} agents, ${counts.binaries} binaries`);
+  log(`Found: ${counts.runtimes} runtimes, ${counts.agents} agents, ${counts.binaries} binaries`);
 
   // Count total commands
   let totalCommands = 0;
@@ -197,7 +213,7 @@ function generateManifest() {
       totalCommands += pkg.commands.length;
     }
   }
-  console.log(`Total commands: ${totalCommands}`);
+  log(`Total commands: ${totalCommands}`);
 
   return manifest;
 }
@@ -220,4 +236,6 @@ function main() {
   }
 }
 
-main();
+if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
+  main();
+}

@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "generated": "2026-06-08T23:21:09.666Z",
+  "generated": "1970-01-01T00:00:00.000Z",
   "packages": {
     "runtimes": [
       {
@@ -122,22 +122,16 @@
         "id": "claude",
         "name": "Claude Code",
         "kind": "agent",
-        "installDir": "claude",
-        "basePath": "agents",
-        "installType": "native-installer",
+        "installDir": "node",
+        "basePath": "runtimes",
+        "installType": "npm-global",
         "commands": [
           {
             "name": "claude",
-            "bin": "claude",
+            "bin": "bin/claude",
             "args": null
           }
-        ],
-        "nativeInstaller": {
-          "darwin": "curl -fsSL https://claude.ai/install.sh | sh",
-          "linux": "curl -fsSL https://claude.ai/install.sh | sh",
-          "win32": "irm https://claude.ai/install.ps1 | iex"
-        },
-        "nativeBinPath": ".local/bin/claude"
+        ]
       },
       {
         "id": "codex",
