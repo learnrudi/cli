@@ -1,0 +1,710 @@
+# Full RUDI CLI SWE Compliance Audit
+
+This checklist governs a repo-wide compliance review of `/Users/hoff/dev/RUDI/apps/cli`.
+It is separate from the narrower `rudi update stack:<name>` checklist.
+
+Current verdict: the audited CLI scope is SWE Operating Manual compliant. P1, P2, and P3 findings in this checklist are fixed or removed; build, full tests, repo-wide debt scan, subprocess hardening scans, diff hygiene, and representative stack smoke checks pass. One product gap remains outside the CLI repo: the registry metadata for `stack:video-editor` still depends on `binary:whisper` and `binary:chromium` entries without real install sources, and the CLI now fails honestly instead of creating placeholder installs.
+
+## Phase 0: Baseline And Manual Lookup
+
+- Status: complete.
+- Scope:
+  - [x] Review the full CLI repo for SWE Operating Manual compliance.
+  - [x] Treat this as an audit first: record findings, severity, evidence, and fix phases before broad implementation.
+  - [x] Separate current repo dirtiness from audit findings and avoid reverting unrelated work.
+- Files inspected before editing:
+  - [x] `AGENTS.md`
+  - [x] `package.json`
+  - [x] `src/index.js`
+  - [x] `src/commands/serve.js`
+  - [x] `src/commands/serve/ctx.js`
+  - [x] `src/daemon/runtime/auth.js`
+  - [x] `src/daemon/runtime/websocket.js`
+  - [x] `src/commands/serve/routes/auth.js`
+  - [x] `src/commands/serve/routes/fs.js`
+  - [x] `src/commands/serve/git.js`
+  - [x] `src/commands/serve/routes/shell.js`
+  - [x] `src/commands/serve/routes/terminal.js`
+  - [x] `src/commands/serve/routes/packages.js`
+  - [x] `src/commands/auth.js`
+  - [x] `src/commands/which.js`
+  - [x] `packages/core/src/installer.js`
+  - [x] `packages/registry-client/src/index.js`
+  - [x] Existing route, auth, installer, update, and contract tests.
+- Relevant SWE manual sections:
+  - [x] `10-Engineering-Operating-Manual-Index.md`
+  - [x] `01-Master-Engineering-Doctrine.txt`: trust boundaries, review dimensions, testing doctrine.
+  - [x] `05-API-Engineering-Standard.md`: sidecar route contracts, errors, schema discipline.
+  - [x] `06-Security-Engineering-Standard.md`: secrets, shell execution, filesystem mutation, untrusted inputs.
+  - [x] `07-Backend-Application-Engineering-Standard.md`: lifecycle, failure behavior, observability.
+  - [x] `08-Infrastructure-and-Deployment-Engineering-Standard.md`: build and runtime lifecycle.
+- Current-state commands:
+  - [x] `git status -sb`
+  - [x] `sed -n '1,220p' package.json`
+  - [x] `sed -n '1,260p' src/index.js`
+  - [x] `rg --files`
+  - [x] Shell execution scan: `rg -n "\b(execSync|execFileSync|spawn\(|spawnSync|exec\()" src packages scripts`
+  - [x] Destructive filesystem scan: `rg -n "\b(rmSync|unlinkSync|rmdirSync|renameSync|cpSync|writeFileSync|chmodSync|mkdirSync)\b" src packages scripts`
+  - [x] Secrets/token scan: `rg -n "token|secret|password|apiKey|apikey|authorization|x-rudi-token|process\.env|\.env" src packages scripts`
+  - [x] Route/body scan: `rg -n "createServer|router|route|method|pathname|req\.url|JSON\.parse|body" src/commands src/daemon packages`
+- Risks and invariants:
+  - [x] User data under `~/.rudi` must not be destroyed or silently overwritten.
+  - [x] Secrets must never be printed, logged, put in URLs, or sent over unauthenticated routes.
+  - [x] CLI args, env vars, registry content, request bodies, tool inputs, and filesystem paths are untrusted boundaries.
+  - [x] Commands with side effects must define failure and partial-completion behavior.
+  - [x] Daemon routes must have explicit auth, schemas, and stable error models.
+  - [x] Shell commands must avoid untrusted string interpolation.
+  - [x] Build artifacts must match source and packaging contract.
+- Exit criteria:
+  - [x] Baseline inventory is complete.
+  - [x] Manual references are loaded.
+  - [x] Audit scope and severity model are locked.
+
+## Phase 1: Scope Lock
+
+- Status: complete.
+- In scope:
+  - [x] CLI entrypoint, command modules, daemon/sidecar routes, agent compatibility routes, package installer, registry client, env/path helpers, secrets, runner, DB/service layer, scripts, tests, docs, and build artifacts.
+  - [x] Rank findings by severity and subsystem.
+  - [x] Recommend fix phases with files likely to change and proof commands.
+- Non-goals:
+  - [x] No broad fixes until findings are ranked.
+  - [x] No revert/stage/commit work.
+  - [x] No destructive operations against real `~/.rudi`.
+- Expected files touched:
+  - [x] `docs/swe-compliance/2026-06-08-full-cli-compliance-audit.md`
+  - [x] Temporary generated manifest timestamp/no-newline churn from `npm run build` was restored to keep the audit scoped.
+- External inputs and trust boundaries:
+  - [x] CLI arguments and flags.
+  - [x] Environment variables.
+  - [x] Registry JSON and package source.
+  - [x] Local config files and `~/.rudi` state.
+  - [x] HTTP request bodies, params, query strings, headers, and WebSocket messages.
+  - [x] Agent/tool payloads and LLM outputs.
+  - [x] Shell subprocess output and filesystem discovery.
+- Failure behavior to define in fix phases:
+  - [x] Invalid input.
+  - [x] Missing dependency.
+  - [x] Auth failure.
+  - [x] Partial install/update/remove.
+  - [x] Daemon route failure.
+  - [x] DB lock/migration failure.
+  - [x] Secret provider failure.
+  - [x] Child process timeout/crash.
+- Exit criteria:
+  - [x] Audit dimensions are explicit enough to execute in repeatable passes.
+
+## Phase 2: Automated And Static Audit Passes
+
+- Status: complete.
+- Commands and results:
+  - [x] `npm run build`
+    - Result: pass.
+    - Note: `scripts/generate-manifest.js:177` writes `generated: new Date().toISOString()`, so a normal build dirties tracked `src/packages-manifest.json` and `dist/packages-manifest.json` timestamps. This was restored after recording the finding.
+  - [x] `npm test`
+    - Result: pass, 667 tests, 0 failures.
+  - [x] `node scripts/agent-debt-runner.mjs --changed-since HEAD --no-log`
+    - Result: no scannable JS/TS targets during the build-artifact check; generated JSON files were skipped.
+  - [x] `node /Users/hoff/dev/dev-help/agent-debt-scan.js --repo /Users/hoff/dev/RUDI/apps/cli --config /Users/hoff/dev/RUDI/apps/cli/.debt-scan.json --profile pr-review --severity error --json`
+    - Result: fail, 3 error findings.
+  - [x] `node /Users/hoff/dev/dev-help/agent-debt-scan.js --repo /Users/hoff/dev/RUDI/apps/cli --config /Users/hoff/dev/RUDI/apps/cli/.debt-scan.json --profile pr-review --exclude node_modules --json`
+    - Result: fail, 35 findings: 3 errors and 32 warnings.
+  - [x] Full debt scan without `node_modules` exclusion was also sampled.
+    - Result: fail, 721 findings because vendored files under `packages/embeddings/node_modules/.ignored/**` are included by the scanner configuration.
+- Exit criteria:
+  - [x] Pattern inventory is complete and de-duplicated into review targets.
+
+## Phase 3: Manual Subsystem Review
+
+- Status: complete.
+- Subsystems reviewed:
+  - [x] CLI entrypoint and argument parsing.
+  - [x] Install/update/remove/list/search/info/check/status/home commands by representative surface and targeted scans.
+  - [x] Registry client and package resolver.
+  - [x] Core installer, stack state migration, tool index, and shims by targeted scans.
+  - [x] Secrets and auth commands.
+  - [x] Daemon runtime, auth, WebSocket runtime, and route dispatch.
+  - [x] Legacy agent/run-group compatibility routes by targeted scans and debt scan.
+  - [x] DB/session surfaces by route inventory and existing tests.
+  - [x] Build scripts and package publish contract.
+- Review dimensions:
+  - [x] Correctness and invariants.
+  - [x] Boundary validation.
+  - [x] Failure and rollback behavior.
+  - [x] Observability and diagnostics.
+  - [x] Security and secrets.
+  - [x] Data ownership and destructive operations.
+  - [x] Test coverage and proof quality.
+  - [x] Maintainability and architecture boundaries.
+- Exit criteria:
+  - [x] Findings have severity, file/line evidence, and fix recommendation.
+
+## Phase 4: Findings
+
+### P1 Blocking Before Calling CLI SWE-Compliant
+
+- [x] HTTP auth accepted the sidecar token in the URL query string. Fixed in Phase A.
+  - Evidence: `src/commands/serve/ctx.js:303-309`.
+  - Red test: `src/__tests__/unit/serve-ctx-contract.test.js:302-308` now rejects `?token=`.
+  - Why it matters: query tokens leak through browser history, request URLs, logs, referrers, and copied links. The manual treats secrets in URLs as a boundary failure.
+  - Fixed behavior: HTTP auth uses only `x-rudi-token`.
+
+- [x] WebSocket auth also accepted the token in the URL query string. Fixed in Phase A.
+  - Evidence: `src/daemon/runtime/websocket.js:59-63`.
+  - Red test: `src/__tests__/unit/daemon-runtime-contract.test.js` rejects `?token=` and accepts `rudi-token.<token>`.
+  - Why it matters: same URL-token leak risk as HTTP, plus WebSocket URLs are commonly logged by clients.
+  - Fixed behavior: WebSocket auth uses only `rudi-token.<token>` subprotocol auth.
+
+- [x] Sidecar git routes shelled untrusted request-body values into git commands. Fixed in Phase C1.
+  - Evidence before fix:
+    - `src/commands/serve/git.js` built shell strings for stage, unstage, revert, commit, branch, checkout, and worktree commands.
+  - Why it matters: authenticated local sidecar is still an external input boundary. Shell interpolation creates command-injection and destructive-operation risk.
+  - Fixed behavior:
+    - `src/commands/serve/git.js:6-12` runs git through `execFileSync('git', args)` with no shell.
+    - `src/commands/serve/git.js:15-42` validates file-array payloads and passes file paths behind `--`.
+    - `src/commands/serve/git.js:158-469` uses argument arrays for status, stage, unstage, revert, commit, branch, checkout, worktree, stash, and init routes.
+    - Destructive git routes still require explicit `confirmDestructive: true` from Phase B1.
+
+- [x] Sidecar filesystem and terminal routes exposed broad local mutation without path policy or operation schema. Fixed in Phase B2 for filesystem, shell-open, and terminal path/payload boundaries.
+  - Evidence:
+    - `src/commands/serve/routes/fs.js:85-247` reads, writes, removes, and renames arbitrary supplied paths.
+    - `src/commands/serve/routes/terminal.js:44-116` opens a shell at arbitrary `cwd` and writes arbitrary terminal data.
+  - Why it matters: token auth is necessary but not sufficient. The API surface needs explicit path validation, stable schemas, and designed failure behavior.
+  - Fixed behavior:
+    - `src/commands/serve/validation.js` centralizes absolute-path validation, filesystem-root rejection, and destructive confirmation checks.
+    - `src/commands/serve/routes/fs.js` rejects non-string, relative, NUL-containing, and root-targeting mutating paths before filesystem side effects.
+    - `src/commands/serve/routes/shell.js` validates absolute existing paths before host app dispatch, removes raw command logging, and quotes Terminal AppleScript paths through `quoted form`.
+    - `src/commands/serve/routes/terminal.js` validates absolute existing `cwd`, restricts embedded terminal shells to `/bin/zsh`, `/bin/bash`, or `/bin/sh`, and rejects non-string terminal write data before session lookup.
+    - `src/contracts/sidecar-openapi.js` and `docs/sidecar/openapi.json` now document absolute path schemas, mutable path root rejection, validation errors, terminal shell allowlist, and filesystem serve/watch helper routes.
+
+- [x] Sidecar auth route wrote raw credentials to plaintext `.env`. Fixed in Phase D1.
+  - Evidence before fix:
+    - `src/commands/serve/routes/auth.js` wrote `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` to `~/.rudi/.env`.
+    - The Terminal helper wrote captured OAuth tokens back to `.env` and kept capture files on failure.
+  - Why it matters: RUDI has a secrets layer; daemon routes should not add a parallel plaintext credential store unless it is explicitly designed and documented.
+  - Fixed behavior:
+    - `src/commands/serve/routes/auth.js:25-40` maps Claude and Codex credentials to canonical RUDI secrets names.
+    - `src/commands/serve/routes/auth.js:79-87` saves direct API/OAuth login values to the RUDI secrets store.
+    - `src/commands/serve/routes/auth.js:93-95` keeps Codex passwordless login on the Codex CLI path instead of launching the Claude helper.
+    - `src/commands/serve/routes/auth.js:108-135` launches the Claude Terminal helper without shelling `osascript` and writes captured tokens through `rudi secrets set`.
+    - `src/commands/serve/routes/auth.js:121-127` removes helper capture files on both success and failure.
+    - `src/commands/agent/auth/claude.js:35-48` reads Claude credentials from the RUDI secrets store before keychain/file fallbacks.
+    - `src/commands/agent/auth/codex.js:20-48` reads `CODEX_API_KEY` or `OPENAI_API_KEY` from env or the RUDI secrets store, with no `.env` fallback.
+
+### P2 Compliance Issues
+
+- [x] CLI `rudi auth <stack>` constructed shell command strings from stack paths and user-provided account input. Fixed in Phase C2.
+  - Evidence: `src/commands/auth.js:171-205` and `src/commands/auth.js:226-238`.
+  - Fixed behavior:
+    - `src/commands/auth.js` now builds auth subprocesses as `{ command, args }` plans and dispatches them through `execFileSync(command, args, ...)`.
+    - Node, tsx, and Python auth scripts receive account input as a literal argv entry rather than shell-interpolated text.
+    - Account and script arguments reject NUL bytes before subprocess dispatch.
+    - `src/__tests__/unit/auth-command-execution.test.js` proves suspicious account strings remain literal args and no shell option is passed.
+
+- [x] Installer and registry extraction relied on interpolated shell strings at supply-chain boundaries. Fixed in Phase C3.
+  - Evidence before fix:
+    - `packages/core/src/installer.js` extracted downloaded binary archives with shell strings.
+    - `packages/core/src/installer.js` executed manifest-provided native installers and `postInstall` strings.
+    - `packages/core/src/installer.js` installed manifest-provided npm and Python packages through shell strings.
+    - `packages/registry-client/src/index.js` used shell strings for GitHub `curl` downloads and tar/unzip extraction.
+    - `/Users/hoff/dev/RUDI/apps/registry/catalog/agents/claude.json` advertised a pipe-to-shell native installer even though the registry index already advertised Claude as npm.
+  - Fixed behavior:
+    - `packages/core/src/installer.js` now builds archive, npm, pip, post-install, native-installer, and dependency-install subprocesses as explicit `{ command, args }` plans.
+    - `packages/core/src/installer.js` validates npm package names, pip specs, native installer argv metadata, and post-install metadata before execution.
+    - `packages/registry-client/src/index.js` now runs GitHub `curl` downloads and archive extraction through `execFileSync(command, args, ...)`.
+    - String native installers are rejected; arbitrary shell pipelines are not accepted as compatibility fallback.
+    - `/Users/hoff/dev/RUDI/apps/registry/catalog/agents/claude.json` now matches the index and installs `@anthropic-ai/claude-code` through npm.
+    - `/Users/hoff/dev/RUDI/apps/registry/catalog/binaries/playwright.json` now uses structured post-install metadata: `bin: "playwright"`, `args: ["install", "chromium"]`.
+
+- [x] Installer created placeholder package manifests when binary/runtime downloads failed. Fixed in Phase C4.
+  - Evidence before fix:
+    - A temp-home install smoke for `stack:video-editor` created placeholder manifests for missing `binary:whisper` and `binary:chromium` registry sources.
+  - Why it matters: fake installed packages hide supply-chain/catalog defects and create operational debt. The expected behavior is a clear install failure with partial install cleanup.
+  - Fixed behavior:
+    - `packages/core/src/installer.js` no longer writes placeholder manifests after download/source failures.
+    - Missing install sources now return structured install failure from the top-level API.
+    - Partial install paths are removed instead of left as fake successful installs.
+
+- [x] Shell-open route validated app names but not paths, and logged command arguments. Fixed in Phase B2.
+  - Evidence: `src/commands/serve/routes/shell.js:21-60`.
+  - Fixed behavior:
+    - `src/commands/serve/routes/shell.js` validates absolute existing paths before app dispatch.
+    - Host app dispatch uses injectable `spawn` with argv arrays.
+    - Terminal AppleScript path changes use `quoted form of POSIX path`.
+    - Raw command/argument `console.log` and `console.error` calls were removed.
+
+- [x] Debt scan configuration reported blocking boundary errors. Fixed in Phase E1.
+  - Evidence:
+    - `src/__tests__/unit/packages-routes.test.js:4` imports `src/commands/serve/routes/packages.js`.
+    - `src/__tests__/unit/run-group-observability.test.js:9` imports `src/commands/agent/routes/run-group.js`.
+    - `src/__tests__/unit/spawn-retry-integration.test.js:8` imports `src/commands/agent/routes/lifecycle.js`.
+  - Fixed behavior:
+    - `.debt-scan.json` now explicitly allowlists these intentional route-contract test imports.
+    - Full error-severity debt scan now reports 0 errors.
+
+- [x] Debt scan configuration included vendored ignored dependencies in repo-wide scans. Fixed in Phase E1.
+  - Evidence: full scan reports 721 findings, mostly under `packages/embeddings/node_modules/.ignored/**`.
+  - Fixed behavior:
+    - `.debt-scan.json` now ignores `node_modules` and `.ignored`.
+    - Full scan findings dropped from 721 findings to 21 P3 warnings, with no errors.
+
+- [x] Build was not hermetic because tracked manifests included a generated wall-clock timestamp. Fixed in Phase E1.
+  - Evidence: `scripts/generate-manifest.js:177`.
+  - Fixed behavior:
+    - `scripts/generate-manifest.js` now defaults `generated` to `1970-01-01T00:00:00.000Z` and honors `SOURCE_DATE_EPOCH` when supplied.
+    - Catalog JSON reads are sorted for deterministic package ordering.
+    - `src/packages-manifest.json` and `dist/packages-manifest.json` now carry the deterministic timestamp.
+    - Repeat-build checksum proof showed both manifest files unchanged across builds.
+
+### P3 Cleanup/Debt
+
+- [x] Reachability warnings identified legacy or under-owned surfaces. Fixed in Phase F.
+  - Evidence before fix: repo debt scan reported 21 P3 orphan/ownership warnings after P1/P2 cleanup.
+  - Fixed behavior:
+    - Sidecar and daemon route barrel files now use explicit imports/exports so route modules are reachable in the ownership graph.
+    - Stale unreachable files were deleted: `src/adapters/bun-sqlite.js`, `src/serve-entry.js`, `src/utils/arrays.ts`, `src/utils/dates.ts`, and `src/utils/strings.ts`.
+    - Test-owned helper and package-unit files are precisely allowlisted in `.debt-scan.json`.
+    - The full repo debt scan now reports 0 findings.
+
+- [x] Some cleanup paths swallowed errors without structured context. Fixed in Phase F.
+  - Evidence examples before fix: terminal and filesystem route cleanup catches suppressed process/watch cleanup failures.
+  - Fixed behavior:
+    - `src/commands/serve/routes/terminal.js` logs terminal process kill failures during session replacement, session close, and route cleanup.
+    - `src/commands/serve/routes/fs.js` logs watcher close failures during cleanup.
+    - `src/__tests__/unit/serve-routes-contract.test.js` proves terminal close kill failures are logged with context.
+
+## Phase 5: Fix Phases
+
+### Fix Phase A: Token Transport Hardening
+
+- Status: complete.
+- Scope:
+  - [x] Remove HTTP query-token auth.
+  - [x] Remove WebSocket query-token auth.
+  - [x] Keep `x-rudi-token` for HTTP and `rudi-token.<token>` WebSocket subprotocol.
+- Files likely touched:
+  - [x] `src/commands/serve/ctx.js`
+  - [x] `src/daemon/runtime/websocket.js`
+  - [x] `src/__tests__/unit/serve-ctx-contract.test.js`
+  - [x] `src/__tests__/unit/daemon-runtime-contract.test.js`
+  - [x] `docs/rudi-local-daemon-architecture.md`
+  - [x] `docs/swe-manual-compliance-checklist.md`
+- Red tests:
+  - [x] Query token is rejected for HTTP.
+  - [x] Query token is rejected for WebSocket upgrade.
+  - [x] Header/subprotocol auth still passes.
+- Verification:
+  - [x] Red command: `node --test src/__tests__/unit/serve-ctx-contract.test.js src/__tests__/unit/daemon-runtime-contract.test.js`
+    - Result before implementation: failed for the expected query-token assertions.
+  - [x] Green command: `node --test src/__tests__/unit/serve-ctx-contract.test.js src/__tests__/unit/daemon-runtime-contract.test.js`
+    - Result after implementation: pass, 45 tests, 0 failures.
+  - [x] `npm test`
+    - Result: pass, 668 tests, 0 failures.
+  - [x] `npm run build`
+    - Result: pass.
+  - [x] `node scripts/agent-debt-runner.mjs --edited src/commands/serve/ctx.js,src/daemon/runtime/websocket.js,src/__tests__/unit/serve-ctx-contract.test.js,src/__tests__/unit/daemon-runtime-contract.test.js --no-log`
+    - Result: pass, 0 findings.
+  - [x] Documentation scan for query-token compatibility references.
+    - Result: only rejection tests and this audit checklist mention `?token=`.
+
+### Fix Phase B: Sidecar Route Schemas And Destructive Operation Policy
+
+- Status: complete.
+- Scope:
+  - [x] Add centralized request validators for fs/git/shell/terminal route payloads.
+    - [x] B2: absolute path validation, filesystem-root rejection, and selected scalar payload checks.
+  - [x] Define allowed path model and destructive-operation confirmation model.
+    - [x] B1: destructive sidecar operations require `confirmDestructive: true`.
+    - [x] B2: path fields must be absolute non-empty local filesystem paths with no NUL bytes; filesystem root is rejected for mutating/watch operations.
+  - [x] Preserve existing intended local UX while making privileged behavior explicit.
+- Files likely touched:
+  - [x] B1: `src/commands/serve/validation.js`
+  - [x] B1: `src/commands/serve/routes/fs.js`
+  - [x] B1: `src/commands/serve/git.js`
+  - [x] B1: `src/commands/serve.js`
+  - [x] B1: `src/contracts/sidecar-openapi.js`
+  - [x] B1: `docs/sidecar/openapi.json`
+  - [x] B1: `src/__tests__/unit/serve-fs-contract.test.js`
+  - [x] B1: `src/__tests__/unit/serve-git-contract.test.js`
+  - [x] B2: `src/commands/serve/routes/shell.js`
+  - [x] B2: `src/commands/serve/routes/terminal.js`
+  - [x] No `src/daemon/schemas/**` changes were needed; the public sidecar contract lives in `src/contracts/sidecar-openapi.js`.
+  - [x] B2: `src/__tests__/unit/serve-routes-contract.test.js`
+  - [x] No `src/__tests__/unit/daemon-schemas-contract.test.js` changes were needed for this sidecar route phase.
+  - [x] B1/B2: `src/__tests__/unit/sidecar-openapi-contract.test.js`
+  - [x] B3: `src/commands/serve/routes/fs.js`
+  - [x] B3: `src/commands/serve/routes/terminal.js`
+  - [x] B3: `src/contracts/sidecar-openapi.js`
+  - [x] B3: `docs/sidecar/openapi.json`
+  - [x] B3: `src/__tests__/unit/serve-fs-contract.test.js`
+  - [x] B3: `src/__tests__/unit/serve-routes-contract.test.js`
+  - [x] B3: `src/__tests__/unit/sidecar-openapi-contract.test.js`
+- Red tests:
+  - [x] B2: Invalid path payloads fail with stable error bodies.
+  - [x] B2: Shell-open validates path before app dispatch and rejects missing paths before spawning.
+  - [x] B2: Terminal-open validates `cwd` and shell allowlist before PTY spawn.
+  - [x] B2: Terminal-write rejects non-string data before session lookup.
+  - [x] B3: `/fs/write-binary` rejects malformed base64 before writing.
+  - [x] B3: `/terminal/open` rejects invalid dimensions before PTY spawn.
+  - [x] B1: `/fs/remove` without explicit confirmation fails with a stable error body.
+  - [x] B1: `/git/revert`, `/git/branch/delete`, and `/git/worktree/remove` without explicit confirmation fail with stable error bodies.
+  - [x] B1: `/fs/remove` still deletes when `confirmDestructive: true` is provided.
+- Verification:
+  - [x] B1 red command: `node --test src/__tests__/unit/serve-fs-contract.test.js src/__tests__/unit/serve-git-contract.test.js`
+    - Result before implementation: failed for expected missing-confirmation behavior.
+  - [x] B1 green command: `node --test src/__tests__/unit/serve-fs-contract.test.js src/__tests__/unit/serve-git-contract.test.js`
+    - Result after implementation: pass, 19 tests, 0 failures.
+  - [x] B1 OpenAPI generation: `npm run generate:sidecar-openapi`
+    - Result: pass.
+  - [x] B1 focused route/OpenAPI tests: `node --test src/__tests__/unit/serve-fs-contract.test.js src/__tests__/unit/serve-git-contract.test.js src/__tests__/unit/sidecar-openapi-contract.test.js`
+    - Result: pass, 25 tests, 0 failures.
+  - [x] B1 full suite: `npm test`
+    - Result: pass, 672 tests, 0 failures.
+  - [x] B1 build: `npm run build`
+    - Result: pass.
+  - [x] B1 debt runner: `node scripts/agent-debt-runner.mjs --edited src/commands/serve/validation.js,src/commands/serve/routes/fs.js,src/commands/serve/git.js,src/commands/serve.js,src/contracts/sidecar-openapi.js,src/__tests__/unit/serve-fs-contract.test.js,src/__tests__/unit/serve-git-contract.test.js --no-log`
+    - Result: pass with 1 warning for `src/commands/serve/routes/fs.js` route-module reachability; this is known Phase E debt and not introduced by B1.
+  - [x] B2 red command: `node --test --test-name-pattern "rejects|filesystem root|non-string path|relative path" src/__tests__/unit/serve-fs-contract.test.js src/__tests__/unit/serve-routes-contract.test.js`
+    - Result before implementation: failed for the expected validation assertions. Current terminal behavior also spawned PTY sessions for invalid `cwd`/shell inputs before returning `200`; no lingering test PTY process remained, and B2 moved validation ahead of PTY spawn.
+  - [x] B2 green command: `node --test src/__tests__/unit/serve-fs-contract.test.js src/__tests__/unit/serve-routes-contract.test.js`
+    - Result after implementation: pass, 49 tests, 0 failures.
+  - [x] B2 OpenAPI generation: `npm run generate:sidecar-openapi`
+    - Result: pass.
+  - [x] B2 focused route/OpenAPI tests: `node --test src/__tests__/unit/serve-fs-contract.test.js src/__tests__/unit/serve-routes-contract.test.js src/__tests__/unit/sidecar-openapi-contract.test.js`
+    - Result: pass, 55 tests, 0 failures.
+  - [x] B2 debt runner: `node scripts/agent-debt-runner.mjs --edited src/commands/serve/validation.js,src/commands/serve/routes/fs.js,src/commands/serve/routes/shell.js,src/commands/serve/routes/terminal.js,src/contracts/sidecar-openapi.js,src/__tests__/unit/serve-fs-contract.test.js,src/__tests__/unit/serve-routes-contract.test.js,src/__tests__/unit/sidecar-openapi-contract.test.js --no-log`
+    - Result: pass with 3 warnings for route-module reachability in `fs.js`, `shell.js`, and `terminal.js`; this is known Phase E debt.
+  - [x] B2 full suite: `npm test`
+    - Result: pass, 690 tests, 0 failures.
+  - [x] B2 build: `npm run build`
+    - Result: pass.
+  - [x] B2 diff hygiene: `git diff --check`
+    - Result: pass.
+  - [x] B3 red command: `node --test src/__tests__/unit/serve-fs-contract.test.js src/__tests__/unit/serve-routes-contract.test.js`
+    - Result before implementation: failed for expected malformed base64 and invalid terminal dimension assertions.
+  - [x] B3 green command: `node --test src/__tests__/unit/serve-fs-contract.test.js src/__tests__/unit/serve-routes-contract.test.js`
+    - Result after implementation: pass, 52 tests, 0 failures.
+  - [x] B3 OpenAPI generation: `npm run generate:sidecar-openapi`
+    - Result: pass.
+  - [x] B3 focused route/OpenAPI tests: `node --test src/__tests__/unit/serve-fs-contract.test.js src/__tests__/unit/serve-routes-contract.test.js src/__tests__/unit/sidecar-openapi-contract.test.js`
+    - Result: pass, 58 tests, 0 failures.
+  - [x] B3 edited-file debt scan: `node scripts/agent-debt-runner.mjs --edited src/commands/serve/routes/fs.js,src/commands/serve/routes/terminal.js,src/contracts/sidecar-openapi.js,src/__tests__/unit/serve-fs-contract.test.js,src/__tests__/unit/serve-routes-contract.test.js,src/__tests__/unit/sidecar-openapi-contract.test.js --no-log`
+    - Result: pass, 0 findings.
+- Remaining Phase B work:
+  - [x] Define and test path policy for fs read/write/rename/remove/watch operations.
+  - [x] Add stable request schemas for shell and terminal route payloads.
+  - [x] Validate terminal `cwd`, shell command input, and filesystem path payloads before side effects.
+  - [x] Expand OpenAPI coverage beyond `/fs/remove` where these sidecar routes are public contract.
+  - [x] Add stricter non-path scalar validation for high-risk remaining fields: binary base64 payloads and terminal open dimensions.
+
+### Fix Phase C: Git/Auth/Installer Command Execution Cleanup
+
+- Status: complete.
+- Scope:
+  - [x] Replace shell-string subprocess calls that include request, CLI, registry, or manifest-controlled values.
+    - [x] C1: sidecar git routes no longer shell request-body values.
+    - [x] C2: CLI `rudi auth <stack>` no longer shells stack auth script paths or account input.
+    - [x] C3: installer and registry-client package/archive execution no longer shells registry or manifest values.
+    - [x] C4: remaining production `execSync` subprocess calls were converted to argv plans.
+  - [x] Keep arbitrary manifest script execution opt-in and visible.
+    - [x] C3 rejects string native installers instead of preserving pipe-to-shell compatibility.
+  - [x] Remove fake install success paths.
+    - [x] C4 rejects missing install sources and download failures instead of creating placeholder manifests.
+- Files likely touched:
+  - [x] C1: `src/commands/serve/git.js`
+  - [x] C1: `src/__tests__/unit/serve-git-contract.test.js`
+  - [x] C2: `src/commands/auth.js`
+  - [x] C2: `src/__tests__/unit/auth-command-execution.test.js`
+  - [x] C3: `packages/core/src/installer.js`
+  - [x] C3: `packages/registry-client/src/index.js`
+  - [x] C3: `packages/core/src/__tests__/unit/installer-command-execution.test.js`
+  - [x] C3: `packages/registry-client/src/__tests__/unit/command-execution.test.js`
+  - [x] C3: `/Users/hoff/dev/RUDI/apps/registry/catalog/agents/claude.json`
+  - [x] C3: `/Users/hoff/dev/RUDI/apps/registry/catalog/binaries/playwright.json`
+  - [x] C4: `src/utils/subprocess.js`
+  - [x] C4: `src/__tests__/unit/subprocess-contract.test.js`
+  - [x] C4: `src/commands/check.js`
+  - [x] C4: `src/commands/status.js`
+  - [x] C4: `src/commands/install.js`
+  - [x] C4: `src/commands/init.js`
+  - [x] C4: `src/commands/session.js`
+  - [x] C4: `src/commands/studio.js`
+  - [x] C4: `src/commands/which.js`
+  - [x] C4: `src/commands/agent/auth.js`
+  - [x] C4: `src/commands/agent/auth/claude.js`
+  - [x] C4: `src/commands/agent/providers/index.js`
+  - [x] C4: `src/commands/agent/routes/start.js`
+  - [x] C4: `src/commands/agent/routes/run-group.js`
+  - [x] C4: `src/commands/agent/worktree.js`
+  - [x] C4: `src/commands/serve/startup.js`
+  - [x] C4: `src/commands/serve/routes/packages.js`
+  - [x] C4: `src/commands/serve/routes/suggest.js`
+  - [x] C4: `src/commands/serve/sessions.js`
+  - [x] C4: `packages/core/src/deps.js`
+  - [x] C4: `packages/core/src/system-registry.js`
+  - [x] C4: `packages/embeddings/src/setup.js`
+  - [x] C4: `packages/core/src/installer.js`
+  - [x] C4: `packages/core/src/__tests__/unit/installer-state-preservation.test.js`
+  - [x] C4: `src/__tests__/unit/stack-runtime-detection.test.js`
+  - [x] Tests for git route command args, auth command args, and installer helpers.
+- Red tests:
+  - [x] C1: `/git/stage` does not require destructive confirmation.
+  - [x] C1: Malicious file strings are passed as literal git args and do not execute shell metacharacters.
+  - [x] C1: Malicious branch strings are passed as literal git args and do not execute command substitution.
+  - [x] C1: Git destructive operations keep Phase B1 confirmation gates.
+  - [x] C2: Malicious account strings are passed as literal auth-script args or rejected for NUL bytes.
+  - [x] C3: Malicious package/manifest strings are passed as literal args or rejected.
+  - [x] C3: Archive extraction plans preserve suspicious path values as argv entries.
+  - [x] C3: String native installer pipelines are rejected.
+- Verification:
+  - [x] C1 regression red command: `node --test src/__tests__/unit/serve-git-contract.test.js`
+    - Result before guard fix: failed because `/git/stage` returned `400` instead of staging.
+  - [x] C1 injection red command: `node --test src/__tests__/unit/serve-git-contract.test.js`
+    - Result before subprocess fix: failed because semicolon and command-substitution payloads created probe files.
+  - [x] C1 green command: `node --test src/__tests__/unit/serve-git-contract.test.js`
+    - Result after implementation: pass, 6 tests, 0 failures.
+  - [x] C1 affected command: `node --test src/__tests__/unit/serve-fs-contract.test.js src/__tests__/unit/serve-git-contract.test.js src/__tests__/unit/sidecar-openapi-contract.test.js src/__tests__/unit/worktree-parser.test.js`
+    - Result: pass, 33 tests, 0 failures.
+  - [x] C1 shell scan: `rg -n "execSync|exec\\(|spawn\\(|JSON\\.stringify|join\\(' '\\)" src/commands/serve/git.js`
+    - Result: no matches.
+  - [x] C1 edited-file debt scan: `node scripts/agent-debt-runner.mjs --edited src/commands/serve/git.js,src/__tests__/unit/serve-git-contract.test.js --no-log`
+    - Result: pass, 0 findings.
+  - [x] C1 full suite: `npm test`
+    - Result: pass, 675 tests, 0 failures.
+  - [x] C1 build: `npm run build`
+    - Result: pass.
+  - [x] C2 red command: `node --test src/__tests__/unit/auth-command-execution.test.js`
+    - Result before implementation: failed because `src/commands/auth.js` did not export the new argv-plan helpers.
+  - [x] C2 green command: `node --test src/__tests__/unit/auth-command-execution.test.js src/__tests__/unit/stack-runtime-detection.test.js`
+    - Result after implementation: pass, 10 tests, 0 failures.
+  - [x] C2 command-execution scan: `rg -n 'execSync|exec\(|PATHS' src/commands/auth.js`
+    - Result: no matches.
+  - [x] C2 edited-file debt scan: `node scripts/agent-debt-runner.mjs --edited src/commands/auth.js,src/__tests__/unit/auth-command-execution.test.js --no-log`
+    - Result: pass, 0 findings.
+  - [x] C2 full suite: `npm test`
+    - Result: pass, 694 tests, 0 failures.
+  - [x] C2 build: `npm run build`
+    - Result: pass.
+  - [x] C2 diff hygiene: `git diff --check`
+    - Result: pass.
+  - [x] C3 red command: `node --test packages/core/src/__tests__/unit/installer-command-execution.test.js packages/registry-client/src/__tests__/unit/command-execution.test.js`
+    - Result before implementation: failed because safe command-planning exports did not exist.
+  - [x] C3 green command: `node --test packages/core/src/__tests__/unit/installer-command-execution.test.js packages/registry-client/src/__tests__/unit/command-execution.test.js`
+    - Result after implementation: pass, 10 tests, 0 failures.
+  - [x] C3 neighboring tests: `node --test packages/core/src/__tests__/unit/installer-list-installed.test.js packages/core/src/__tests__/unit/installer-state-preservation.test.js packages/registry-client/src/__tests__/unit/index.test.js packages/core/src/__tests__/unit/resolver-related-skills.test.js`
+    - Result: pass, 19 tests, 0 failures.
+  - [x] C3 local-registry smoke: `USE_LOCAL_REGISTRY=true RUDI_REGISTRY_ROOT=/Users/hoff/dev/RUDI/apps/registry RUDI_HOME=<temp> node --input-type=module -e "...resolvePackage('agent:claude')...resolvePackage('binary:playwright')..."`
+    - Result: pass; Claude resolves as npm with `@anthropic-ai/claude-code` and no `nativeInstaller`; Playwright resolves with structured post-install metadata.
+  - [x] C3 command-execution scan: `rg -n "execSync|exec\\(|tar -x|unzip -o|curl -sL|which |pip install|npm install|nativeInstaller.*\\|" packages/core/src/installer.js packages/registry-client/src/index.js /Users/hoff/dev/RUDI/apps/registry/catalog/agents/claude.json /Users/hoff/dev/RUDI/apps/registry/catalog/binaries/playwright.json`
+    - Result: no command-execution hits; remaining matches were comments/progress text only.
+  - [x] C3 edited-file debt scan: `node scripts/agent-debt-runner.mjs --edited packages/core/src/installer.js,packages/core/src/__tests__/unit/installer-command-execution.test.js,packages/registry-client/src/index.js,packages/registry-client/src/__tests__/unit/command-execution.test.js --no-log`
+    - Result: pass, 0 findings.
+  - [x] C3 registry build: `npm run build` in `/Users/hoff/dev/RUDI/apps/registry`
+    - Result: pass, 83 catalog packages validated and compiled.
+  - [x] C3 CLI build: `npm run build`
+    - Result: pass.
+  - [x] C3 full suite after build: `npm test`
+    - Result: pass, 696 tests, 0 failures.
+  - [x] C3 full debt scan: `node /Users/hoff/dev/dev-help/agent-debt-scan.js --repo /Users/hoff/dev/RUDI/apps/cli --config /Users/hoff/dev/RUDI/apps/cli/.debt-scan.json --profile pr-review --json`
+    - Result: pass with 0 errors and 21 P3 orphan warnings.
+  - [x] C3 diff hygiene: `git diff --check` in `/Users/hoff/dev/RUDI/apps/cli` and `/Users/hoff/dev/RUDI/apps/registry`
+    - Result: pass in both repos.
+  - [x] C4 stack-runtime red command: `node --test src/__tests__/unit/stack-runtime-detection.test.js`
+    - Result before implementation: failed because `checkIfRunning` was not exported for behavior-level testing.
+  - [x] C4 stack-runtime green command: `node --test src/__tests__/unit/stack-runtime-detection.test.js`
+    - Result after implementation: pass.
+  - [x] C4 installer red command: `node --test packages/core/src/__tests__/unit/installer-state-preservation.test.js`
+    - Result before implementation: failed because missing binary downloads created placeholder manifests and returned success.
+  - [x] C4 installer green command: `node --test packages/core/src/__tests__/unit/installer-state-preservation.test.js`
+    - Result after implementation: pass, including `installPackage fails missing binary downloads instead of creating placeholders`.
+  - [x] C4 subprocess helper tests: `node --test src/__tests__/unit/subprocess-contract.test.js`
+    - Result: pass.
+  - [x] C4 production subprocess scan: `rg -n "execSync" src packages scripts -g '*.js' -g '*.mjs' -g '!**/__tests__/**' && exit 1 || exit 0`
+    - Result: pass, no production `execSync` matches.
+  - [x] C4 placeholder scan: `rg -n "source: 'placeholder'|source\": \"placeholder\"|Creating placeholder|Package download failed" packages/core/src/installer.js src/commands/install.js packages/registry-client/src/index.js && exit 1 || exit 0`
+    - Result: pass, no placeholder fallback matches.
+
+### Fix Phase D: Secret Storage Consolidation
+
+- Status: complete for the current sidecar Claude and Codex auth surfaces.
+- Scope:
+  - [x] Remove parallel plaintext credential writes from sidecar auth.
+  - [x] Store provider credentials through RUDI secrets paths.
+  - [x] Update auth status checks to read the canonical secret source.
+- Files likely touched:
+  - [x] `src/commands/serve/routes/auth.js`
+  - [x] `src/commands/agent/auth/claude.js`
+  - [x] `src/commands/agent/auth/codex.js`
+  - [x] `src/__tests__/unit/serve-auth-contract.test.js`
+  - [x] No `packages/secrets/src/index.js` change was needed; existing secrets provider APIs were sufficient.
+  - [x] No `src/__tests__/unit/packages-routes.test.js` change was needed for this auth-storage surface.
+- Red tests:
+  - [x] API key/OAuth login does not write raw token values to `~/.rudi/.env`.
+  - [x] Secret value is stored through the secrets provider.
+  - [x] Auth status reads configured credentials from the secrets provider.
+  - [x] `provider: "codex"` API keys are stored as `OPENAI_API_KEY`, not `ANTHROPIC_API_KEY`.
+- Verification:
+  - [x] D1 red command: `node --test src/__tests__/unit/serve-auth-contract.test.js`
+    - Result before implementation: failed because `.env` was created and status fell through to keychain instead of secrets-store credentials.
+  - [x] D1 green command: `node --test src/__tests__/unit/serve-auth-contract.test.js`
+    - Result after Claude implementation: pass, 3 tests, 0 failures.
+  - [x] D1 Codex red command: `node --test src/__tests__/unit/serve-auth-contract.test.js`
+    - Result before Codex implementation: failed because `provider: "codex"` API keys were not stored as `OPENAI_API_KEY` and `checkCodexCredential` ignored the secrets store.
+  - [x] D1 Codex green command: `node --test src/__tests__/unit/serve-auth-contract.test.js`
+    - Result after Codex implementation: pass, 5 tests, 0 failures.
+  - [x] D1 credential-file scan: `rg -n "\\.env|echo \\".*API_KEY|Capture file kept|CLAUDE_CODE_OAUTH_TOKEN=.*TOKEN|ANTHROPIC_API_KEY=.*apiKey|OPENAI_API_KEY=.*apiKey" src/commands/serve/routes/auth.js src/commands/agent/auth/claude.js src/commands/agent/auth/codex.js`
+    - Result: no `.env` writes, no `.env` credential guidance, and no kept capture-file branch; remaining matches are env checks and process-local env assignment.
+  - [x] D1 full suite: `npm test`
+    - Result: pass, 680 tests, 0 failures.
+  - [x] D1 build: `npm run build`
+    - Result: pass.
+  - [x] D1 debt runner: `node scripts/agent-debt-runner.mjs --edited src/commands/serve/routes/auth.js,src/commands/agent/auth/claude.js,src/commands/agent/auth/codex.js,src/__tests__/unit/serve-auth-contract.test.js --no-log`
+    - Result: pass with 1 warning for `src/commands/serve/routes/auth.js` route-module reachability; this is known Phase E debt.
+
+### Fix Phase E: Debt Scanner And Build Reproducibility
+
+- Status: complete.
+- Scope:
+  - [x] Clean or justify debt-scan boundary errors.
+  - [x] Exclude vendored dependency directories from repo debt scans.
+  - [x] Stop tracked build artifacts from changing due only to wall-clock timestamp.
+  - [x] Hand off remaining P3 ownership cleanup to Phase F instead of accepting warnings.
+- Files likely touched:
+  - [x] `.debt-scan.json`
+  - [x] `scripts/generate-manifest.js`
+  - [x] `src/packages-manifest.json`
+  - [x] `dist/packages-manifest.json`
+  - [x] `src/__tests__/unit/generate-manifest-contract.test.js`
+- Red tests/proof:
+  - [x] Debt scan initially fails with the known 3 errors.
+  - [x] Build initially dirties generated manifest timestamp.
+  - [x] Manifest generator red test fails before deterministic helper exports exist.
+- Verification:
+  - [x] E1 red command: `node --test src/__tests__/unit/generate-manifest-contract.test.js`
+    - Result before implementation: failed because `scripts/generate-manifest.js` did not export deterministic generator helpers.
+  - [x] E1 green command: `node --test src/__tests__/unit/generate-manifest-contract.test.js`
+    - Result after implementation: pass, 2 tests, 0 failures.
+  - [x] E1 edited-file debt scan: `node scripts/agent-debt-runner.mjs --edited scripts/generate-manifest.js,src/__tests__/unit/generate-manifest-contract.test.js --no-log`
+    - Result: pass, 0 findings.
+  - [x] E1 error-severity debt scan: `node /Users/hoff/dev/dev-help/agent-debt-scan.js --repo /Users/hoff/dev/RUDI/apps/cli --config /Users/hoff/dev/RUDI/apps/cli/.debt-scan.json --profile pr-review --severity error --json`
+    - Result: pass, 0 errors.
+  - [x] E1 full debt scan: `node /Users/hoff/dev/dev-help/agent-debt-scan.js --repo /Users/hoff/dev/RUDI/apps/cli --config /Users/hoff/dev/RUDI/apps/cli/.debt-scan.json --profile pr-review --json`
+    - Result: exits clean with 21 P3 orphan warnings, down from 721 findings with 3 errors.
+  - [x] E1 changed-file debt runner: `node scripts/agent-debt-runner.mjs --changed-since HEAD --no-log`
+    - Result: pass, 0 findings for changed scannable files.
+  - [x] E1 repeat-build checksum proof: `shasum src/packages-manifest.json dist/packages-manifest.json && npm run build >/tmp/rudi-build-repeat.log && shasum src/packages-manifest.json dist/packages-manifest.json`
+    - Result: both files kept checksum `f4b54917edf9479e6d9d2939673f90260247261c` before and after the repeated build.
+  - [x] E1 full suite: `npm test`
+    - Result: pass, 696 tests, 0 failures.
+  - [x] E1 diff hygiene: `git diff --check`
+    - Result: pass.
+  - [x] Remaining P3 orphan warnings were resolved in Phase F.
+
+### Fix Phase F: P3 Ownership Cleanup, Final Boundary Tightening, And Smoke Proof
+
+- Status: complete.
+- Scope:
+  - [x] Resolve remaining P3 reachability/ownership warnings without hiding real debt.
+  - [x] Include package unit tests in the default `npm test` runner.
+  - [x] Delete stale unreachable modules after repository-wide reference checks.
+  - [x] Add structured cleanup observability for best-effort lifecycle cleanup.
+  - [x] Add final non-path scalar validation for sidecar binary writes and terminal open dimensions.
+  - [x] Prove install/update/index/check behavior with a representative stack in a temp RUDI home.
+- Files touched:
+  - [x] `.debt-scan.json`
+  - [x] `scripts/run-tests.js`
+  - [x] `src/commands/serve/agent.js`
+  - [x] `src/daemon/routes/index.js`
+  - [x] `src/commands/serve/routes/fs.js`
+  - [x] `src/commands/serve/routes/terminal.js`
+  - [x] `src/contracts/sidecar-openapi.js`
+  - [x] `docs/sidecar/openapi.json`
+  - [x] `src/__tests__/unit/serve-fs-contract.test.js`
+  - [x] `src/__tests__/unit/serve-routes-contract.test.js`
+  - [x] `src/__tests__/unit/sidecar-openapi-contract.test.js`
+  - [x] Deleted: `src/adapters/bun-sqlite.js`
+  - [x] Deleted: `src/serve-entry.js`
+  - [x] Deleted: `src/utils/arrays.ts`
+  - [x] Deleted: `src/utils/dates.ts`
+  - [x] Deleted: `src/utils/strings.ts`
+- Red tests/proof:
+  - [x] `npm test`
+    - Result before `scripts/run-tests.js` fix: failed because the default package-unit glob `packages/*/src/__tests__/unit/*.test.js` was not expanded by the runner.
+  - [x] `node --test src/__tests__/unit/serve-fs-contract.test.js src/__tests__/unit/serve-routes-contract.test.js`
+    - Result before B3 implementation: failed for expected malformed base64 and invalid terminal dimension assertions.
+  - [x] Full repo debt scan before Phase F:
+    - Result: 21 P3 warnings remained.
+- Verification:
+  - [x] `node --test src/__tests__/unit/serve-fs-contract.test.js src/__tests__/unit/serve-routes-contract.test.js src/__tests__/unit/sidecar-openapi-contract.test.js`
+    - Result: pass, 58 tests, 0 failures.
+  - [x] `node scripts/agent-debt-runner.mjs --edited src/commands/serve/routes/fs.js,src/commands/serve/routes/terminal.js,src/contracts/sidecar-openapi.js,src/__tests__/unit/serve-fs-contract.test.js,src/__tests__/unit/serve-routes-contract.test.js,src/__tests__/unit/sidecar-openapi-contract.test.js --no-log`
+    - Result: pass, 0 findings.
+  - [x] `npm run build`
+    - Result: pass.
+  - [x] `npm test`
+    - Result: pass, 991 tests, 102 suites, 0 failures.
+  - [x] Full repo debt scan: `node /Users/hoff/dev/dev-help/agent-debt-scan.js --repo /Users/hoff/dev/RUDI/apps/cli --config /Users/hoff/dev/RUDI/apps/cli/.debt-scan.json --profile pr-review --json`
+    - Result: pass, 0 findings.
+  - [x] Production subprocess scan: `rg -n "execSync" src packages scripts -g '*.js' -g '*.mjs' -g '!**/__tests__/**' && exit 1 || exit 0`
+    - Result: pass, no output.
+  - [x] Placeholder fallback scan: `rg -n "source: 'placeholder'|source\": \"placeholder\"|Creating placeholder|Package download failed" packages/core/src/installer.js src/commands/install.js packages/registry-client/src/index.js && exit 1 || exit 0`
+    - Result: pass, no output.
+  - [x] Diff hygiene: `git diff --check && git -C /Users/hoff/dev/RUDI/apps/registry diff --check`
+    - Result: pass in both repos.
+  - [x] Temp-home stack smoke: `stack:sqlite`
+    - Commands: install with local registry, set `SQLITE_DB_PATH`, `rudi update stack:sqlite`, `rudi index --json`, and `rudi check stack:sqlite --json`.
+    - Result: stack ready, `totalTools: 5`, failed index count `0`, and router cache contains `sqlite_list_tables`.
+  - [x] Temp-home stack smoke: `stack:video-editor`
+    - Result: exposed registry metadata gap for missing `binary:whisper` and `binary:chromium` install sources. The CLI behavior is now correct: fail clearly instead of creating placeholder packages.
+
+## Phase 6: Closure
+
+- Status: complete for the audited CLI repo scope.
+- Commands run and results:
+  - [x] `npm run build`: pass.
+  - [x] `npm test`: pass, 667 tests, 0 failures during audit baseline; pass, 668 tests, 0 failures after Phase A; pass, 672 tests, 0 failures after Phase B1; pass, 675 tests, 0 failures after Phase C1; pass, 680 tests, 0 failures after D1; pass, 690 tests, 0 failures after Phase B2; pass, 694 tests, 0 failures after Phase C2; pass, 696 tests, 0 failures after Phase E1/C3; final pass, 991 tests, 102 suites, 0 failures after Phase F and package-test runner coverage.
+  - [x] Repo debt runner on changed files: no JS/TS scan targets for generated JSON.
+  - [x] Full debt scan with `--severity error`: initially failed with 3 boundary errors; fixed in Phase E.
+  - [x] Full debt scan with `--exclude node_modules`: initially failed with 35 findings; fixed in Phases E and F.
+  - [x] Final full debt scan: pass, 0 findings.
+  - [x] Phase A targeted red/green auth tests completed.
+  - [x] Phase B1 targeted red/green destructive-confirmation tests completed.
+  - [x] Phase B1 OpenAPI generation and focused route/OpenAPI tests completed.
+  - [x] Phase B2 targeted red/green filesystem/shell/terminal path and payload validation tests completed.
+  - [x] Phase B2 OpenAPI generation and focused route/OpenAPI tests completed.
+  - [x] Phase B3 targeted red/green filesystem base64 and terminal dimension validation tests completed.
+  - [x] Phase C1 targeted red/green git command-execution tests completed.
+  - [x] Phase C2 targeted red/green stack-auth command-execution tests completed.
+  - [x] Phase C3 targeted red/green installer and registry-client command-execution tests completed.
+  - [x] Phase C4 targeted red/green subprocess and no-placeholder installer tests completed.
+  - [x] Phase D1 targeted red/green Claude and Codex auth secret-storage tests completed.
+  - [x] Phase E1 targeted red/green manifest reproducibility tests completed.
+  - [x] Phase E1 debt-scan policy verification completed.
+  - [x] Phase F P3 ownership cleanup, route cleanup observability, full verification, and temp-home stack smoke completed.
+- Final files touched:
+  - [x] `docs/swe-compliance/2026-06-08-full-cli-compliance-audit.md`
+  - [x] `src/packages-manifest.json` and `dist/packages-manifest.json`
+  - [x] Phase A files: `src/commands/serve/ctx.js`, `src/daemon/runtime/websocket.js`, `src/__tests__/unit/serve-ctx-contract.test.js`, `src/__tests__/unit/daemon-runtime-contract.test.js`, `docs/rudi-local-daemon-architecture.md`, `docs/swe-manual-compliance-checklist.md`, and built `dist/index.cjs`.
+  - [x] Phase B1 files: `src/commands/serve/validation.js`, `src/commands/serve/routes/fs.js`, `src/commands/serve/git.js`, `src/commands/serve.js`, `src/contracts/sidecar-openapi.js`, `docs/sidecar/openapi.json`, `src/__tests__/unit/serve-fs-contract.test.js`, `src/__tests__/unit/serve-git-contract.test.js`, and built `dist/index.cjs`.
+  - [x] Phase B2/B3 files: `src/commands/serve/validation.js`, `src/commands/serve/routes/fs.js`, `src/commands/serve/routes/shell.js`, `src/commands/serve/routes/terminal.js`, `src/contracts/sidecar-openapi.js`, `docs/sidecar/openapi.json`, `src/__tests__/unit/serve-fs-contract.test.js`, `src/__tests__/unit/serve-routes-contract.test.js`, `src/__tests__/unit/sidecar-openapi-contract.test.js`, and built `dist/index.cjs`.
+  - [x] Phase C1 files: `src/commands/serve/git.js`, `src/__tests__/unit/serve-git-contract.test.js`, and built `dist/index.cjs`.
+  - [x] Phase C2 files: `src/commands/auth.js`, `src/__tests__/unit/auth-command-execution.test.js`, and built `dist/index.cjs`.
+  - [x] Phase C3 files: `packages/core/src/installer.js`, `packages/core/src/__tests__/unit/installer-command-execution.test.js`, `packages/registry-client/src/index.js`, `packages/registry-client/src/__tests__/unit/command-execution.test.js`, `src/packages-manifest.json`, `dist/packages-manifest.json`, and built `dist/index.cjs`.
+  - [x] Phase C4 files: `src/utils/subprocess.js`, `src/__tests__/unit/subprocess-contract.test.js`, `src/commands/check.js`, `src/commands/status.js`, `src/commands/install.js`, `src/commands/init.js`, `src/commands/session.js`, `src/commands/studio.js`, `src/commands/which.js`, `src/commands/agent/auth.js`, `src/commands/agent/auth/claude.js`, `src/commands/agent/providers/index.js`, `src/commands/agent/routes/start.js`, `src/commands/agent/routes/run-group.js`, `src/commands/agent/worktree.js`, `src/commands/serve/startup.js`, `src/commands/serve/routes/packages.js`, `src/commands/serve/routes/suggest.js`, `src/commands/serve/sessions.js`, `packages/core/src/deps.js`, `packages/core/src/system-registry.js`, `packages/embeddings/src/setup.js`, `packages/core/src/__tests__/unit/installer-state-preservation.test.js`, `src/__tests__/unit/stack-runtime-detection.test.js`, and built `dist/index.cjs`.
+  - [x] Phase C3 registry files: `/Users/hoff/dev/RUDI/apps/registry/catalog/agents/claude.json` and `/Users/hoff/dev/RUDI/apps/registry/catalog/binaries/playwright.json`.
+  - [x] Phase D1 files: `src/commands/serve/routes/auth.js`, `src/commands/agent/auth/claude.js`, `src/commands/agent/auth/codex.js`, `src/__tests__/unit/serve-auth-contract.test.js`, and built `dist/index.cjs`.
+  - [x] Phase E1 files: `.debt-scan.json`, `scripts/generate-manifest.js`, `src/__tests__/unit/generate-manifest-contract.test.js`, `src/packages-manifest.json`, `dist/packages-manifest.json`, and built `dist/index.cjs`.
+  - [x] Phase F files: `.debt-scan.json`, `scripts/run-tests.js`, `src/commands/serve/agent.js`, `src/daemon/routes/index.js`, `src/commands/serve/routes/fs.js`, `src/commands/serve/routes/terminal.js`, `src/contracts/sidecar-openapi.js`, `docs/sidecar/openapi.json`, `src/__tests__/unit/serve-fs-contract.test.js`, `src/__tests__/unit/serve-routes-contract.test.js`, `src/__tests__/unit/sidecar-openapi-contract.test.js`, and built `dist/index.cjs`.
+  - [x] Phase F deleted files: `src/adapters/bun-sqlite.js`, `src/serve-entry.js`, `src/utils/arrays.ts`, `src/utils/dates.ts`, and `src/utils/strings.ts`.
+- Accepted debt:
+  - [x] No known remaining P1/P2 debt is accepted as compliant.
+  - [x] No known remaining CLI P3 debt is accepted as compliant; final repo debt scan has 0 findings.
+  - [x] External registry/product gap is recorded but not accepted as CLI debt: `stack:video-editor` depends on `binary:whisper` and `binary:chromium` entries without real install sources.
+- Definition of Done for full CLI compliance:
+  - [x] P1 findings fixed and red/green tested.
+  - [x] P2 findings fixed and red/green tested.
+  - [x] P3 findings fixed, deleted, wired, or precisely test-owned.
+  - [x] Debt scan has no findings and no vendored-noise baseline.
+  - [x] Build is reproducible or generated artifacts are intentionally untracked.
+  - [x] Full test suite passes.
+  - [x] Smoke checks prove install/update/index/check behavior for a representative stack without mutating real `~/.rudi`.

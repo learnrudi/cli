@@ -246,8 +246,8 @@ This checklist tracks the work needed to bring the current RUDI CLI/daemon state
 ### Checklist
 
 - [x] Docs state exactly which HTTP routes are public vs authenticated.
-- [x] `/health` is documented as public; non-health HTTP routes require the real daemon token through `x-rudi-token` or the legacy query-token compatibility path where still supported.
-- [x] WebSocket authentication behavior is documented: real daemon token via `rudi-token.<token>` protocol or query `token`; host-based same-origin trust is not authentication.
+- [x] `/health` is documented as public; non-health HTTP routes require the real daemon token through `x-rudi-token`.
+- [x] WebSocket authentication behavior is documented: real daemon token via `rudi-token.<token>` protocol; host-based same-origin trust and query-token transport are not authentication.
 - [x] OpenAPI artifact was regenerated.
 - [x] OpenAPI contract tests pass.
 
