@@ -129,3 +129,129 @@ test('updatePackage migrates install-local stack state unless preservation is ex
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('installPackage fails missing binary downloads instead of creating placeholders', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rudi-no-placeholder-'));
+  const rudiHome = path.join(root, '.rudi');
+  const registryRoot = path.join(root, 'registry');
+  fs.mkdirSync(registryRoot, { recursive: true });
+  fs.writeFileSync(path.join(registryRoot, 'index.json'), JSON.stringify({
+    packages: {
+      binaries: {
+        official: [
+          {
+            id: 'binary:ghost-tool',
+            name: 'Ghost Tool',
+            version: '1.0.0',
+            kind: 'binary',
+          },
+        ],
+      },
+    },
+  }, null, 2));
+
+  try {
+    const script = `
+      const fs = await import('node:fs');
+      const path = await import('node:path');
+      const { installPackage } = await import(process.argv[1]);
+      const result = await installPackage('binary:ghost-tool', { force: true });
+      const installPath = path.join(process.env.RUDI_HOME, 'binaries', 'ghost-tool');
+      console.log(JSON.stringify({
+        success: result.success,
+        message: result.error,
+        manifestExists: fs.existsSync(path.join(installPath, 'manifest.json')),
+      }));
+    `;
+    const output = execFileSync(process.execPath, ['--input-type=module', '-e', script, installerUrl], {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        RUDI_HOME: rudiHome,
+        USE_LOCAL_REGISTRY: 'true',
+        RUDI_REGISTRY_ROOT: registryRoot,
+      },
+      encoding: 'utf8',
+    });
+
+    const result = JSON.parse(output.trim().split(/\r?\n/).at(-1));
+    assert.equal(result.success, false);
+    assert.match(result.message, /Failed to install binary:ghost-tool/);
+    assert.equal(result.manifestExists, false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('installPackage registers system binaries instead of downloading them', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rudi-system-binary-'));
+  const rudiHome = path.join(root, '.rudi');
+  const registryRoot = path.join(root, 'registry');
+  const binRoot = path.join(root, 'bin');
+  const fakeTool = path.join(binRoot, 'system-tool');
+
+  fs.mkdirSync(path.join(registryRoot, 'catalog', 'binaries'), { recursive: true });
+  fs.mkdirSync(binRoot, { recursive: true });
+  fs.writeFileSync(fakeTool, '#!/usr/bin/env bash\necho system-tool 1.0.0\n');
+  fs.chmodSync(fakeTool, 0o755);
+  fs.writeFileSync(path.join(registryRoot, 'index.json'), JSON.stringify({
+    packages: {
+      binaries: {
+        official: [
+          {
+            id: 'binary:system-tool',
+            name: 'System Tool',
+            version: 'system',
+            path: 'catalog/binaries/system-tool.json',
+          },
+        ],
+      },
+    },
+  }, null, 2));
+  fs.writeFileSync(path.join(registryRoot, 'catalog', 'binaries', 'system-tool.json'), JSON.stringify({
+    id: 'binary:system-tool',
+    name: 'System Tool',
+    version: 'system',
+    installType: 'system',
+    managed: false,
+    binary: 'system-tool',
+    bins: ['system-tool'],
+    checkCommand: 'system-tool --version',
+  }, null, 2));
+
+  try {
+    const script = `
+      const fs = await import('node:fs');
+      const path = await import('node:path');
+      const { installPackage } = await import(process.argv[1]);
+      const result = await installPackage('binary:system-tool', { force: true, withShims: true });
+      const installPath = path.join(process.env.RUDI_HOME, 'binaries', 'system-tool');
+      const manifest = JSON.parse(fs.readFileSync(path.join(installPath, 'manifest.json'), 'utf8'));
+      console.log(JSON.stringify({
+        success: result.success,
+        installType: manifest.installType,
+        sourcePath: manifest.source?.path,
+        shimExists: fs.existsSync(path.join(process.env.RUDI_HOME, 'bins', 'system-tool')),
+      }));
+    `;
+    const output = execFileSync(process.execPath, ['--input-type=module', '-e', script, installerUrl], {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        PATH: `${binRoot}${path.delimiter}${process.env.PATH || ''}`,
+        RUDI_HOME: rudiHome,
+        USE_LOCAL_REGISTRY: 'true',
+        RUDI_REGISTRY_ROOT: registryRoot,
+      },
+      encoding: 'utf8',
+    });
+
+    const result = JSON.parse(output.trim().split(/\r?\n/).at(-1));
+    assert.equal(result.success, true);
+    assert.equal(result.installType, 'system');
+    assert.equal(result.sourcePath, fakeTool);
+    assert.equal(result.shimExists, true);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -6,11 +6,13 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { execFileSync as defaultExecFileSync } from 'child_process';
 import { pipeline } from 'stream/promises';
 import { createWriteStream } from 'fs';
 import { createGunzip } from 'zlib';
 import {
   PATHS,
+  discoverSkillPackages,
   getPackagePath,
   ensureDirectories,
   parsePackageId,
@@ -27,6 +29,203 @@ import { createShimsForTool, removeShims } from './shims.js';
 const SINGLE_FILE_KINDS = new Set(['skill', 'prompt', 'workflow']);
 const WORKFLOW_EXTENSIONS = ['.yaml', '.yml', '.json'];
 const DEFAULT_STACK_STATE_PATHS = ['runs'];
+const NPM_PACKAGE_PATTERN = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*(?:@[a-zA-Z0-9._~^>=<:+-][a-zA-Z0-9._~^>=<:+-]*)?$/;
+const PIP_PACKAGE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*(?:\[[A-Za-z0-9_,.-]+])?(?:[<>=!~]=?[A-Za-z0-9.*+!_~:-]+)?$/;
+const SHELL_CONTROL_PATTERN = /[|&;<>()`$\\\n\r]/;
+
+function assertCommandArg(value, label) {
+  if (typeof value !== 'string' || value.length === 0 || value.includes('\0')) {
+    throw new Error(`Invalid command ${label}`);
+  }
+  return value;
+}
+
+function assertNoShellControlSyntax(value, label) {
+  assertCommandArg(value, label);
+  if (SHELL_CONTROL_PATTERN.test(value)) {
+    throw new Error(`Unsupported ${label}: shell control syntax is not allowed`);
+  }
+  return value;
+}
+
+function normalizeCommandPlan(plan) {
+  if (!plan || typeof plan !== 'object' || Array.isArray(plan)) {
+    throw new Error('Command plan must be an object');
+  }
+
+  const command = assertCommandArg(plan.command, 'command');
+  const args = Array.isArray(plan.args)
+    ? plan.args.map((arg, index) => assertCommandArg(arg, `arg ${index}`))
+    : [];
+
+  return { command, args };
+}
+
+export function runCommandPlan(plan, options = {}) {
+  const { execFileSync = defaultExecFileSync, ...execOptions } = options;
+  const { command, args } = normalizeCommandPlan(plan);
+  return execFileSync(command, args, execOptions);
+}
+
+export function createArchiveExtractCommand(extractType, archivePath, destPath, options = {}) {
+  const archive = assertCommandArg(archivePath, 'archive path');
+  const dest = assertCommandArg(destPath, 'destination path');
+  const stripComponents = Number(options.stripComponents || 0);
+  const withStrip = [];
+
+  if (!Number.isInteger(stripComponents) || stripComponents < 0) {
+    throw new Error(`Invalid stripComponents: ${options.stripComponents}`);
+  }
+  if (stripComponents > 0) {
+    withStrip.push(`--strip-components=${stripComponents}`);
+  }
+
+  if (extractType === 'tar.gz' || extractType === 'tgz') {
+    return { command: 'tar', args: ['-xzf', archive, '-C', dest, ...withStrip] };
+  }
+  if (extractType === 'tar.xz') {
+    return { command: 'tar', args: ['-xJf', archive, '-C', dest, ...withStrip] };
+  }
+  if (extractType === 'zip') {
+    return { command: 'unzip', args: ['-o', archive, '-d', dest] };
+  }
+
+  throw new Error(`Unsupported extract type: ${extractType}`);
+}
+
+function assertNpmPackageName(packageName) {
+  const value = assertCommandArg(packageName, 'npm package name');
+  if (!NPM_PACKAGE_PATTERN.test(value)) {
+    throw new Error(`Invalid npm package name: ${packageName}`);
+  }
+  return value;
+}
+
+function assertPipPackageSpec(packageSpec) {
+  const value = assertCommandArg(packageSpec, 'pip package spec');
+  if (!PIP_PACKAGE_PATTERN.test(value)) {
+    throw new Error(`Invalid pip package spec: ${packageSpec}`);
+  }
+  return value;
+}
+
+export function createNpmInitCommand(npmCmd) {
+  return { command: assertCommandArg(npmCmd, 'npm command'), args: ['init', '-y'] };
+}
+
+export function createNpmInstallCommand(options = {}) {
+  const command = assertCommandArg(options.npmCmd, 'npm command');
+  const packageName = assertNpmPackageName(options.packageName);
+  const args = ['install'];
+
+  if (options.global) {
+    args.push('-g');
+  }
+
+  args.push(packageName);
+
+  if (options.ignoreScripts) {
+    args.push('--ignore-scripts');
+  }
+
+  args.push('--no-audit', '--no-fund');
+
+  if (options.prefix) {
+    args.push('--prefix', assertCommandArg(options.prefix, 'npm prefix'));
+  }
+
+  return { command, args };
+}
+
+export function createNpmUninstallCommand(options = {}) {
+  const command = assertCommandArg(options.npmCmd, 'npm command');
+  const packageName = assertNpmPackageName(options.packageName);
+  const args = ['uninstall', '-g', packageName, '--no-audit', '--no-fund'];
+
+  if (options.prefix) {
+    args.push('--prefix', assertCommandArg(options.prefix, 'npm prefix'));
+  }
+
+  return { command, args };
+}
+
+export function createPipInstallCommand(pipCmd, pipPackage) {
+  return {
+    command: assertCommandArg(pipCmd, 'pip command'),
+    args: ['install', assertPipPackageSpec(pipPackage)],
+  };
+}
+
+function tokenizeSimpleRegistryCommand(command, label) {
+  let value;
+  try {
+    value = assertNoShellControlSyntax(command, label).trim();
+  } catch {
+    throw new Error(`Unsupported ${label} command`);
+  }
+  if (value.includes('"') || value.includes("'")) {
+    throw new Error(`Unsupported ${label} command`);
+  }
+  return value.split(/\s+/).filter(Boolean);
+}
+
+function normalizeRegistryArgList(args, label) {
+  if (!Array.isArray(args)) {
+    throw new Error(`${label} args must be an array`);
+  }
+  return args.map((arg, index) => assertNoShellControlSyntax(arg, `${label} arg ${index}`));
+}
+
+export function createPostInstallCommand(postInstall, binDir) {
+  const binRoot = assertCommandArg(binDir, 'postInstall bin directory');
+
+  if (postInstall && typeof postInstall === 'object' && !Array.isArray(postInstall)) {
+    if (postInstall.bin) {
+      return {
+        command: path.join(binRoot, assertNoShellControlSyntax(postInstall.bin, 'postInstall bin')),
+        args: normalizeRegistryArgList(postInstall.args || [], 'postInstall'),
+      };
+    }
+    return normalizeCommandPlan({
+      command: assertNoShellControlSyntax(postInstall.command, 'postInstall command'),
+      args: normalizeRegistryArgList(postInstall.args || [], 'postInstall'),
+    });
+  }
+
+  const tokens = tokenizeSimpleRegistryCommand(postInstall, 'postInstall');
+  if (tokens.length < 2 || tokens[0] !== 'npx') {
+    throw new Error('Unsupported postInstall command: expected npx <bin> [args...]');
+  }
+
+  return {
+    command: path.join(binRoot, assertNoShellControlSyntax(tokens[1], 'postInstall bin')),
+    args: tokens.slice(2).map((arg, index) => assertNoShellControlSyntax(arg, `postInstall arg ${index}`)),
+  };
+}
+
+export function createNativeInstallerCommand(nativeInstaller, platform = process.platform) {
+  const installer = nativeInstaller?.[platform];
+  if (!installer) {
+    throw new Error(`No native installer available for platform: ${platform}`);
+  }
+
+  if (typeof installer === 'string') {
+    throw new Error('Native installer must be explicit argv metadata, not a shell command string');
+  }
+
+  const rawPlan = Array.isArray(installer)
+    ? { command: installer[0], args: installer.slice(1) }
+    : installer;
+
+  if (!rawPlan || typeof rawPlan !== 'object') {
+    throw new Error('Native installer must be explicit argv metadata');
+  }
+
+  return normalizeCommandPlan({
+    command: assertNoShellControlSyntax(rawPlan.command, 'native installer command'),
+    args: normalizeRegistryArgList(rawPlan.args || [], 'native installer'),
+  });
+}
 
 function normalizeInstalledPackageId(kind, manifestId, directoryName) {
   const rawId = typeof manifestId === 'string' ? manifestId.trim() : '';
@@ -58,6 +257,179 @@ function normalizePreservedStatePaths(paths) {
   }
 
   return normalized;
+}
+
+function isSystemBinaryPackage(pkg) {
+  return pkg.kind === 'binary' && (
+    pkg.installType === 'system' ||
+    pkg.managed === false ||
+    pkg.install?.source === 'system'
+  );
+}
+
+function executableBasename(value) {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().replace(/\\/g, '/');
+  if (!normalized) return null;
+  const name = path.posix.basename(normalized);
+  return name && name !== '.' && name !== '..' ? name : null;
+}
+
+function normalizeBinaryList(pkg, pkgName) {
+  const candidates = [
+    ...(Array.isArray(pkg.bins) ? pkg.bins : []),
+    ...(Array.isArray(pkg.binaries) ? pkg.binaries : []),
+  ];
+
+  if (typeof pkg.binary === 'string') {
+    candidates.push(pkg.binary);
+  }
+
+  const bins = [];
+  const seen = new Set();
+  for (const candidate of candidates) {
+    const name = executableBasename(candidate);
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    bins.push(name);
+  }
+
+  return bins.length > 0 ? bins : [pkgName];
+}
+
+function getSystemDetectPlan(pkg, pkgName) {
+  const rawCommand = pkg.checkCommand || pkg.detect?.command || pkg.install?.detect?.command || `${pkgName} --version`;
+  const tokens = tokenizeSimpleRegistryCommand(rawCommand, 'system detect');
+  if (tokens.length === 0) {
+    throw new Error(`System binary ${pkg.id} must declare a detect command`);
+  }
+  return { command: tokens[0], args: tokens.slice(1), rawCommand };
+}
+
+function isExecutableFile(filePath) {
+  try {
+    fs.accessSync(filePath, fs.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function findExecutableOnPath(command) {
+  if (path.isAbsolute(command)) {
+    return isExecutableFile(command) ? command : null;
+  }
+
+  try {
+    const result = runCommandPlan({ command: 'which', args: [command] }, { encoding: 'utf8' }).trim();
+    return result && isExecutableFile(result) ? result : null;
+  } catch {
+    return null;
+  }
+}
+
+function collectSystemExecutableCandidates(command, pkg) {
+  const candidates = [];
+  const addCandidate = (candidate) => {
+    if (typeof candidate === 'string' && candidate && !candidates.includes(candidate)) {
+      candidates.push(candidate);
+    }
+  };
+
+  addCandidate(findExecutableOnPath(command));
+
+  for (const candidate of pkg.systemPaths || []) {
+    if (typeof candidate !== 'string' || !candidate.trim()) continue;
+    const resolved = path.resolve(candidate);
+    if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
+      addCandidate(resolved);
+      continue;
+    }
+    addCandidate(path.join(resolved, command));
+  }
+
+  if (path.isAbsolute(command)) {
+    addCandidate(command);
+  }
+
+  return candidates.filter(Boolean);
+}
+
+function detectSystemBinary(pkg, pkgName) {
+  const detectPlan = getSystemDetectPlan(pkg, pkgName);
+  const candidates = collectSystemExecutableCandidates(detectPlan.command, pkg);
+  const commandsToTry = candidates.length > 0 ? candidates : [detectPlan.command];
+
+  for (const command of commandsToTry) {
+    try {
+      runCommandPlan({ command, args: detectPlan.args }, { stdio: 'pipe' });
+      const resolvedPath = path.isAbsolute(command)
+        ? command
+        : findExecutableOnPath(command);
+      if (resolvedPath && isExecutableFile(resolvedPath)) {
+        return {
+          path: resolvedPath,
+          command: detectPlan.rawCommand,
+        };
+      }
+    } catch {
+      // Continue through the declared candidates.
+    }
+  }
+
+  return null;
+}
+
+async function installSystemBinaryPackage(pkg, installPath, pkgName, options = {}) {
+  const { withShims = false, onProgress } = options;
+  const bins = normalizeBinaryList(pkg, pkgName);
+
+  onProgress?.({ phase: 'detecting', package: pkg.id });
+
+  const detected = detectSystemBinary(pkg, bins[0] || pkgName);
+  if (!detected) {
+    const hint = pkg.instructions ? ` ${pkg.instructions}` : '';
+    throw new Error(`System binary ${pkg.id} was not detected.${hint}`);
+  }
+
+  if (fs.existsSync(installPath)) {
+    fs.rmSync(installPath, { recursive: true, force: true });
+  }
+  fs.mkdirSync(installPath, { recursive: true });
+
+  const manifest = {
+    id: pkg.id,
+    kind: pkg.kind,
+    name: pkgName,
+    version: pkg.version || 'system',
+    installType: 'system',
+    managed: false,
+    bins,
+    checkCommand: detected.command,
+    installedAt: new Date().toISOString(),
+    source: {
+      type: 'system',
+      path: detected.path,
+    },
+  };
+
+  fs.writeFileSync(
+    path.join(installPath, 'manifest.json'),
+    JSON.stringify(manifest, null, 2)
+  );
+
+  if (withShims) {
+    await createShimsForTool({
+      id: pkg.id,
+      installType: 'system',
+      installDir: installPath,
+      bins,
+      name: pkgName,
+      source: { path: detected.path },
+    });
+  }
+
+  return { success: true, id: pkg.id, path: installPath };
 }
 
 function getMutableStatePaths(pkg, options = {}) {
@@ -444,20 +816,13 @@ async function installBinaryStack(pkg, installPath, options = {}) {
 
     // Extract
     onProgress?.({ phase: 'extracting', package: pkg.id });
-    const { execSync } = await import('child_process');
 
     if (extractType === 'none') {
       // Raw binary — move directly
       const destPath = path.join(installPath, binaryName);
       fs.copyFileSync(tempFile, destPath);
-    } else if (extractType === 'tar.gz' || extractType === 'tgz') {
-      execSync(`tar -xzf "${tempFile}" -C "${installPath}"`, { stdio: 'pipe' });
-    } else if (extractType === 'tar.xz') {
-      execSync(`tar -xJf "${tempFile}" -C "${installPath}"`, { stdio: 'pipe' });
-    } else if (extractType === 'zip') {
-      execSync(`unzip -o "${tempFile}" -d "${installPath}"`, { stdio: 'pipe' });
     } else {
-      throw new Error(`Unsupported extract type: ${extractType}`);
+      runCommandPlan(createArchiveExtractCommand(extractType, tempFile, installPath), { stdio: 'pipe' });
     }
 
     // Make binary executable
@@ -546,7 +911,6 @@ async function installSinglePackage(pkg, options = {}) {
 
     // Handle native installer packages (e.g., Claude CLI)
     if (pkg.installType === 'native-installer' && pkg.nativeInstaller) {
-      const { execSync } = await import('child_process');
       const homedir = os.homedir();
       const nativeBin = pkg.nativeBinPath
         ? path.join(homedir, pkg.nativeBinPath)
@@ -568,7 +932,7 @@ async function installSinglePackage(pkg, options = {}) {
       // Also check PATH
       if (!force) {
         try {
-          const which = execSync(`which ${pkgName}`, { encoding: 'utf-8' }).trim();
+          const which = runCommandPlan({ command: 'which', args: [pkgName] }, { encoding: 'utf-8' }).trim();
           if (which && fs.existsSync(which)) {
             console.log(`  Found ${pkg.name} in PATH: ${which}`);
             if (!fs.existsSync(installPath)) fs.mkdirSync(installPath, { recursive: true });
@@ -591,11 +955,11 @@ async function installSinglePackage(pkg, options = {}) {
       }
 
       console.log(`  Running native installer for ${pkg.name}...`);
-      execSync(installerCmd, { stdio: 'inherit' });
+      runCommandPlan(createNativeInstallerCommand(pkg.nativeInstaller, platform), { stdio: 'inherit' });
 
       // Verify installation
       const verifyPath = nativeBin && fs.existsSync(nativeBin) ? nativeBin : (() => {
-        try { return execSync(`which ${pkgName}`, { encoding: 'utf-8' }).trim(); }
+        try { return runCommandPlan({ command: 'which', args: [pkgName] }, { encoding: 'utf-8' }).trim(); }
         catch { return null; }
       })();
       if (!verifyPath || !fs.existsSync(verifyPath)) {
@@ -613,10 +977,16 @@ async function installSinglePackage(pkg, options = {}) {
       return { success: true, id: pkg.id, path: installPath };
     }
 
+    if (isSystemBinaryPackage(pkg)) {
+      return await installSystemBinaryPackage(pkg, installPath, pkgName, {
+        withShims,
+        onProgress,
+      });
+    }
+
     // Handle npm-based packages (agents, cloud CLIs)
     if (pkg.npmPackage) {
       try {
-        const { execSync } = await import('child_process');
         const npmInstallRoot = isAgentNpm ? getNodeRuntimeRoot() : installPath;
         const npmScope = isAgentNpm ? 'global' : 'local';
 
@@ -638,21 +1008,28 @@ async function installSinglePackage(pkg, options = {}) {
 
         // Initialize package.json if needed (local installs only)
         if (!isAgentNpm && !fs.existsSync(path.join(installPath, 'package.json'))) {
-          execSync(`"${npmCmd}" init -y`, { cwd: installPath, stdio: 'pipe', env: buildNodeToolEnv(npmCmd) });
+          runCommandPlan(createNpmInitCommand(npmCmd), {
+            cwd: installPath,
+            stdio: 'pipe',
+            env: buildNodeToolEnv(npmCmd),
+          });
         }
 
         // Install the npm package with safety flags
         // --ignore-scripts: prevent arbitrary code execution during install (safer default)
         // --no-audit --no-fund: reduce noise
         const shouldIgnoreScripts = pkg.source?.type === 'npm' && !allowScripts;
-        const installFlags = shouldIgnoreScripts
-          ? '--ignore-scripts --no-audit --no-fund'  // Dynamic npm: safer default
-          : '--no-audit --no-fund';  // Curated or --allow-scripts: run scripts
-
-        const installCmd = isAgentNpm
-          ? `install -g ${pkg.npmPackage} ${installFlags} --prefix "${npmInstallRoot}"`
-          : `install ${pkg.npmPackage} ${installFlags}`;
-        execSync(`"${npmCmd}" ${installCmd}`, { cwd: installPath, stdio: 'pipe', env: buildNodeToolEnv(npmCmd) });
+        runCommandPlan(createNpmInstallCommand({
+          npmCmd,
+          packageName: pkg.npmPackage,
+          global: isAgentNpm,
+          prefix: isAgentNpm ? npmInstallRoot : null,
+          ignoreScripts: shouldIgnoreScripts,
+        }), {
+          cwd: installPath,
+          stdio: 'pipe',
+          env: buildNodeToolEnv(npmCmd),
+        });
 
         // Auto-discover bins if not specified (dynamic npm installs)
         let bins = pkg.bins;
@@ -679,12 +1056,7 @@ async function installSinglePackage(pkg, options = {}) {
           const binDir = isAgentNpm
             ? getNodeRuntimeBinDir()
             : path.join(installPath, 'node_modules', '.bin');
-          // Replace 'npx <cmd>' with direct bin path for reliability
-          const postInstallCmd = pkg.postInstall.replace(
-            /^npx\s+(\S+)/,
-            `"${path.join(binDir, '$1')}"`
-          );
-          execSync(postInstallCmd, {
+          runCommandPlan(createPostInstallCommand(pkg.postInstall, binDir), {
             cwd: installPath,
             stdio: 'pipe',
             env: {
@@ -696,7 +1068,7 @@ async function installSinglePackage(pkg, options = {}) {
 
         // Check if package has install scripts
         const scriptsDetected = hasInstallScripts(npmInstallRoot, pkg.npmPackage, npmScope);
-        const scriptsPolicy = installFlags.includes('--ignore-scripts') ? 'ignore' : 'allow';
+        const scriptsPolicy = shouldIgnoreScripts ? 'ignore' : 'allow';
 
         // Warn if scripts were skipped
         if (scriptsDetected && scriptsPolicy === 'ignore') {
@@ -836,26 +1208,8 @@ async function installSinglePackage(pkg, options = {}) {
       }
       return { success: true, id: pkg.id, path: installPath };
     } catch (error) {
-      // If download fails, create placeholder (for development/testing)
-      console.warn(`Package download failed: ${error.message}`);
-      console.warn(`Creating placeholder for ${pkg.id}`);
-
-      if (!fs.existsSync(installPath)) {
-        fs.mkdirSync(installPath, { recursive: true });
-      }
-      fs.writeFileSync(
-        path.join(installPath, 'manifest.json'),
-        JSON.stringify({
-          id: pkg.id,
-          kind: pkg.kind,
-          name: pkg.name,
-          version: pkg.version,
-          installedAt: new Date().toISOString(),
-          source: 'placeholder',
-          error: error.message
-        }, null, 2)
-      );
-      return { success: true, id: pkg.id, path: installPath, placeholder: true };
+      try { fs.rmSync(installPath, { recursive: true, force: true }); } catch {}
+      throw new Error(`Failed to install ${pkg.id}: ${error.message}`);
     }
   }
 
@@ -940,36 +1294,8 @@ async function installSinglePackage(pkg, options = {}) {
     }
   }
 
-  // Fallback: create placeholder
-  // Single-file packages must come from registry; placeholders hide missing content.
-  if (SINGLE_FILE_KINDS.has(pkg.kind)) {
-    const label = pkg.kind.charAt(0).toUpperCase() + pkg.kind.slice(1);
-    throw new Error(`${label} ${pkg.id} not found in registry`);
-  }
-
-  if (fs.existsSync(installPath)) {
-    fs.rmSync(installPath, { recursive: true });
-  }
-  fs.mkdirSync(installPath, { recursive: true });
-
-  const manifest = {
-    id: pkg.id,
-    kind: pkg.kind,
-    name: pkg.name,
-    version: pkg.version,
-    description: pkg.description,
-    installedAt: new Date().toISOString(),
-    source: 'registry'
-  };
-
-  fs.writeFileSync(
-    path.join(installPath, 'manifest.json'),
-    JSON.stringify(manifest, null, 2)
-  );
-
-  onProgress?.({ phase: 'installed', package: pkg.id });
-
-  return { success: true, id: pkg.id, path: installPath };
+  const label = pkg.kind.charAt(0).toUpperCase() + pkg.kind.slice(1);
+  throw new Error(`${label} ${pkg.id} has no install source`);
 }
 
 /**
@@ -1005,10 +1331,13 @@ export async function uninstallPackage(id) {
     // Uninstall global npm package for agents
     if (kind === 'agent' && manifest?.npmPackage) {
       try {
-        const { execSync } = await import('child_process');
         const npmCmd = await findNpmExecutable();
         const npmPrefix = getNodeRuntimeRoot();
-        execSync(`"${npmCmd}" uninstall -g ${manifest.npmPackage} --prefix "${npmPrefix}" --no-audit --no-fund`, {
+        runCommandPlan(createNpmUninstallCommand({
+          npmCmd,
+          packageName: manifest.npmPackage,
+          prefix: npmPrefix,
+        }), {
           stdio: 'pipe',
           env: buildNodeToolEnv(npmCmd)
         });
@@ -1211,8 +1540,48 @@ export async function listInstalled(kind) {
 
     const entries = fs.readdirSync(dir, { withFileTypes: true });
 
-    // Skills, prompts, and workflows are single files, not directories
-    if (k === 'skill' || k === 'prompt' || k === 'workflow') {
+    if (k === 'skill') {
+      for (const skill of discoverSkillPackages({ includeExternal: true })) {
+        try {
+          const metadata = extractSingleFileMetadata(skill.entryPath, k);
+
+          packages.push({
+            id: `${k}:${skill.name}`,
+            kind: k,
+            name: metadata.name || skill.name,
+            version: metadata.version || '1.0.0',
+            description: metadata.description || `${skill.name} ${k}`,
+            category: metadata.category || 'general',
+            tags: metadata.tags || [],
+            icon: metadata.icon || '',
+            requires: metadata.requires,
+            format: skill.format,
+            source: skill.source,
+            entryPath: skill.entryPath,
+            path: skill.packagePath
+          });
+        } catch {
+          // If we can't read the skill entry file, still list it.
+          packages.push({
+            id: `${k}:${skill.name}`,
+            kind: k,
+            name: skill.name,
+            version: '1.0.0',
+            description: `${skill.name} ${k}`,
+            category: 'general',
+            tags: [],
+            format: skill.format,
+            source: skill.source,
+            entryPath: skill.entryPath,
+            path: skill.packagePath
+          });
+        }
+      }
+      continue;
+    }
+
+    // Prompts and workflows are single files, not directories
+    if (k === 'prompt' || k === 'workflow') {
       const extensions = k === 'workflow' ? WORKFLOW_EXTENSIONS : ['.md'];
       for (const entry of entries) {
         const extension = path.extname(entry.name);
@@ -1333,8 +1702,6 @@ export async function updateAll(options = {}) {
  * @returns {Promise<void>}
  */
 async function installStackDependencies(stackPath, onProgress) {
-  const { execSync } = await import('child_process');
-
   // Check for Node.js dependencies
   // Support both flat layout (package.json at root) and structured layout (node/package.json)
   const nodeDepsPaths = [
@@ -1356,7 +1723,10 @@ async function installStackDependencies(stackPath, onProgress) {
         const pnpmStore = path.join(PATHS.cache, 'pnpm');
         fs.mkdirSync(pnpmStore, { recursive: true });
 
-        execSync(`"${pnpmCmd}" install --store-dir "${pnpmStore}" --prefer-frozen-lockfile`, {
+        runCommandPlan({
+          command: pnpmCmd,
+          args: ['install', '--store-dir', pnpmStore, '--prefer-frozen-lockfile'],
+        }, {
           cwd: nodePath,
           stdio: 'pipe',
           env: buildNodeToolEnv(pnpmCmd)
@@ -1372,7 +1742,11 @@ async function installStackDependencies(stackPath, onProgress) {
     if (!installedWithPnpm) {
       try {
         const npmCmd = await findNpmExecutable();
-        execSync(`"${npmCmd}" install`, { cwd: nodePath, stdio: 'pipe', env: buildNodeToolEnv(npmCmd) });
+        runCommandPlan({ command: npmCmd, args: ['install'] }, {
+          cwd: nodePath,
+          stdio: 'pipe',
+          env: buildNodeToolEnv(npmCmd),
+        });
         onProgress?.({ phase: 'installing-deps', message: 'Dependencies installed with npm' });
       } catch (error) {
         console.warn(`Warning: Failed to install Node.js dependencies: ${error.message}`);
@@ -1513,8 +1887,7 @@ async function findPnpmExecutable() {
 
   // Check if pnpm is in system PATH
   try {
-    const { execSync } = await import('child_process');
-    execSync('pnpm --version', { stdio: 'pipe' });
+    runCommandPlan({ command: 'pnpm', args: ['--version'] }, { stdio: 'pipe' });
     return 'pnpm';
   } catch {
     // pnpm not found
@@ -1571,8 +1944,7 @@ export function findUvExecutable() {
 
   // Check if uv is in system PATH
   try {
-    const { execSync } = require('child_process');
-    execSync('uv --version', { stdio: 'pipe' });
+    runCommandPlan({ command: 'uv', args: ['--version'] }, { stdio: 'pipe' });
     return 'uv';
   } catch {
     return null;
@@ -1616,18 +1988,21 @@ export async function ensureUv(onProgress) {
  * @returns {Promise<{ usedUv: boolean }>}
  */
 async function installPythonPackage(installPath, pipPackage, onProgress) {
-  const { execSync } = await import('child_process');
   const uvCmd = findUvExecutable();
+  const validatedPipPackage = assertPipPackageSpec(pipPackage);
 
   if (uvCmd) {
     // Use uv - 10-100x faster than pip
     onProgress?.({ phase: 'installing', message: `uv pip install ${pipPackage}` });
 
     // Create venv with uv
-    execSync(`"${uvCmd}" venv "${installPath}/venv"`, { stdio: 'pipe' });
+    runCommandPlan({ command: uvCmd, args: ['venv', path.join(installPath, 'venv')] }, { stdio: 'pipe' });
 
     // Install package with uv
-    execSync(`"${uvCmd}" pip install --python "${installPath}/venv/bin/python" ${pipPackage}`, { stdio: 'pipe' });
+    runCommandPlan({
+      command: uvCmd,
+      args: ['pip', 'install', '--python', path.join(installPath, 'venv', 'bin', 'python'), validatedPipPackage],
+    }, { stdio: 'pipe' });
 
     return { usedUv: true };
   } else {
@@ -1637,10 +2012,10 @@ async function installPythonPackage(installPath, pipPackage, onProgress) {
     const pythonCmd = await findPythonExecutable();
 
     // Create venv with python
-    execSync(`"${pythonCmd}" -m venv "${installPath}/venv"`, { stdio: 'pipe' });
+    runCommandPlan({ command: pythonCmd, args: ['-m', 'venv', path.join(installPath, 'venv')] }, { stdio: 'pipe' });
 
     // Install package with pip
-    execSync(`"${installPath}/venv/bin/pip" install ${pipPackage}`, { stdio: 'pipe' });
+    runCommandPlan(createPipInstallCommand(path.join(installPath, 'venv', 'bin', 'pip'), validatedPipPackage), { stdio: 'pipe' });
 
     return { usedUv: false };
   }
@@ -1653,7 +2028,6 @@ async function installPythonPackage(installPath, pipPackage, onProgress) {
  * @returns {Promise<{ usedUv: boolean }>}
  */
 async function installPythonRequirements(pythonPath, onProgress) {
-  const { execSync } = await import('child_process');
   const uvCmd = findUvExecutable();
   const isWindows = process.platform === 'win32';
   const venvPython = isWindows
@@ -1665,10 +2039,16 @@ async function installPythonRequirements(pythonPath, onProgress) {
     onProgress?.({ phase: 'installing-deps', message: 'Installing Python dependencies with uv...' });
 
     // Create venv with uv
-    execSync(`"${uvCmd}" venv "${pythonPath}/venv"`, { cwd: pythonPath, stdio: 'pipe' });
+    runCommandPlan({ command: uvCmd, args: ['venv', path.join(pythonPath, 'venv')] }, {
+      cwd: pythonPath,
+      stdio: 'pipe',
+    });
 
     // Install requirements with uv
-    execSync(`"${uvCmd}" pip install --python "${venvPython}" -r requirements.txt`, { cwd: pythonPath, stdio: 'pipe' });
+    runCommandPlan({
+      command: uvCmd,
+      args: ['pip', 'install', '--python', venvPython, '-r', 'requirements.txt'],
+    }, { cwd: pythonPath, stdio: 'pipe' });
 
     return { usedUv: true };
   } else {
@@ -1678,11 +2058,17 @@ async function installPythonRequirements(pythonPath, onProgress) {
     const pythonCmd = await findPythonExecutable();
 
     // Create venv with python
-    execSync(`"${pythonCmd}" -m venv venv`, { cwd: pythonPath, stdio: 'pipe' });
+    runCommandPlan({ command: pythonCmd, args: ['-m', 'venv', 'venv'] }, {
+      cwd: pythonPath,
+      stdio: 'pipe',
+    });
 
     // Install requirements with pip
     const pipCmd = isWindows ? '.\\venv\\Scripts\\pip' : './venv/bin/pip';
-    execSync(`${pipCmd} install -r requirements.txt`, { cwd: pythonPath, stdio: 'pipe' });
+    runCommandPlan({ command: pipCmd, args: ['install', '-r', 'requirements.txt'] }, {
+      cwd: pythonPath,
+      stdio: 'pipe',
+    });
 
     return { usedUv: false };
   }

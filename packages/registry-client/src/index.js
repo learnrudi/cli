@@ -8,6 +8,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import { execFileSync as defaultExecFileSync } from 'child_process';
 import { PATHS, getPlatformArch } from '@learnrudi/env';
 
 // =============================================================================
@@ -28,6 +29,90 @@ export const RUNTIMES_DOWNLOAD_BASE = 'https://github.com/learnrudi/registry/rel
  * Cache TTL in milliseconds (1 hour)
  */
 export const CACHE_TTL = 60 * 60 * 1000;
+
+function assertCommandArg(value, label) {
+  if (typeof value !== 'string' || value.length === 0 || value.includes('\0')) {
+    throw new Error(`Invalid command ${label}`);
+  }
+  return value;
+}
+
+function normalizeCommandPlan(plan) {
+  if (!plan || typeof plan !== 'object' || Array.isArray(plan)) {
+    throw new Error('Command plan must be an object');
+  }
+
+  const command = assertCommandArg(plan.command, 'command');
+  const args = Array.isArray(plan.args)
+    ? plan.args.map((arg, index) => assertCommandArg(arg, `arg ${index}`))
+    : [];
+
+  return { command, args };
+}
+
+export function runRegistryCommandPlan(plan, options = {}) {
+  const { execFileSync = defaultExecFileSync, ...execOptions } = options;
+  const { command, args } = normalizeCommandPlan(plan);
+  return execFileSync(command, args, execOptions);
+}
+
+export function createRegistryArchiveExtractCommand(archiveType, archivePath, destPath, options = {}) {
+  const archive = assertCommandArg(archivePath, 'archive path');
+  const dest = assertCommandArg(destPath, 'destination path');
+  const stripComponents = Number(options.stripComponents || 0);
+  const withStrip = [];
+
+  if (!Number.isInteger(stripComponents) || stripComponents < 0) {
+    throw new Error(`Invalid stripComponents: ${options.stripComponents}`);
+  }
+  if (stripComponents > 0) {
+    withStrip.push(`--strip-components=${stripComponents}`);
+  }
+
+  if (archiveType === 'tar.gz' || archiveType === 'tgz') {
+    return { command: 'tar', args: ['-xzf', archive, '-C', dest, ...withStrip] };
+  }
+  if (archiveType === 'tar.xz') {
+    return { command: 'tar', args: ['-xJf', archive, '-C', dest, ...withStrip] };
+  }
+  if (archiveType === 'zip') {
+    return { command: 'unzip', args: ['-o', archive, '-d', dest] };
+  }
+
+  throw new Error(`Unsupported archive type: ${archiveType}`);
+}
+
+export function installRawBinaryDownload(downloadPath, destPath, binaryName, options = {}) {
+  const source = assertCommandArg(downloadPath, 'raw binary download path');
+  const destinationRoot = assertCommandArg(destPath, 'raw binary destination');
+  const rawName = assertCommandArg(binaryName, 'raw binary name').replaceAll('\\', '/');
+  const finalName = path.posix.basename(rawName);
+
+  if (!finalName || finalName === '.' || finalName === '..') {
+    throw new Error(`Invalid raw binary name: ${binaryName}`);
+  }
+
+  fs.mkdirSync(destinationRoot, { recursive: true });
+  const finalPath = path.join(destinationRoot, finalName);
+  fs.copyFileSync(source, finalPath);
+
+  if (options.chmod !== false) {
+    fs.chmodSync(finalPath, 0o755);
+  }
+
+  return finalPath;
+}
+
+function createCurlDownloadCommand(url, destPath) {
+  const parsed = new URL(assertCommandArg(url, 'download URL'));
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    throw new Error(`Unsupported download protocol: ${parsed.protocol}`);
+  }
+  return {
+    command: 'curl',
+    args: ['-sL', parsed.toString(), '-o', assertCommandArg(destPath, 'download destination')],
+  };
+}
 
 function getRegistryRootCandidates(startDir) {
   const roots = [];
@@ -735,7 +820,6 @@ export const RUNTIMES_RELEASE_VERSION = 'v1.0.0';
 export async function downloadRuntime(runtime, version, destPath, options = {}) {
   const { onProgress } = options;
   const platformArch = getPlatformArch();
-  const { execSync } = await import('child_process');
 
   // Try to load runtime manifest for custom download URLs
   const runtimeManifest = await loadRuntimeManifest(runtime);
@@ -776,7 +860,7 @@ export async function downloadRuntime(runtime, version, destPath, options = {}) 
     // Download the file (follow redirects with curl for GitHub releases)
     if (url.includes('github.com')) {
       // Use curl for GitHub releases to follow redirects properly
-      execSync(`curl -sL "${url}" -o "${tempFile}"`, { stdio: 'pipe' });
+      runRegistryCommandPlan(createCurlDownloadCommand(url, tempFile), { stdio: 'pipe' });
     } else {
       const response = await fetch(url, {
         headers: {
@@ -803,13 +887,17 @@ export async function downloadRuntime(runtime, version, destPath, options = {}) 
       fs.renameSync(tempFile, binaryPath);
       fs.chmodSync(binaryPath, 0o755);
     } else if (downloadType === 'tar.gz' || downloadType === 'tgz') {
-      execSync(`tar -xzf "${tempFile}" -C "${destPath}" --strip-components=1`, { stdio: 'pipe' });
+      runRegistryCommandPlan(createRegistryArchiveExtractCommand(downloadType, tempFile, destPath, {
+        stripComponents: 1,
+      }), { stdio: 'pipe' });
       fs.unlinkSync(tempFile);
     } else if (downloadType === 'tar.xz') {
-      execSync(`tar -xJf "${tempFile}" -C "${destPath}" --strip-components=1`, { stdio: 'pipe' });
+      runRegistryCommandPlan(createRegistryArchiveExtractCommand(downloadType, tempFile, destPath, {
+        stripComponents: 1,
+      }), { stdio: 'pipe' });
       fs.unlinkSync(tempFile);
     } else if (downloadType === 'zip') {
-      execSync(`unzip -o "${tempFile}" -d "${destPath}"`, { stdio: 'pipe' });
+      runRegistryCommandPlan(createRegistryArchiveExtractCommand(downloadType, tempFile, destPath), { stdio: 'pipe' });
       fs.unlinkSync(tempFile);
     } else {
       throw new Error(`Unsupported download type: ${downloadType}`);
@@ -876,8 +964,6 @@ export async function downloadTool(toolName, destPath, options = {}) {
   }
   fs.mkdirSync(destPath, { recursive: true });
 
-  const { execSync } = await import('child_process');
-
   // Check for new multi-download format first
   const downloads = toolManifest.downloads?.[platformArch];
 
@@ -919,21 +1005,17 @@ export async function downloadTool(toolName, destPath, options = {}) {
 
         onProgress?.({ phase: 'extracting', tool: toolName, binary: path.basename(binary) });
 
-        // Extract based on archive type
         const archiveType = type || guessArchiveType(urlFilename);
-
-        if (archiveType === 'zip') {
-          execSync(`unzip -o "${tempFile}" -d "${destPath}"`, { stdio: 'pipe' });
-        } else if (archiveType === 'tar.xz') {
-          execSync(`tar -xJf "${tempFile}" -C "${destPath}"`, { stdio: 'pipe' });
-        } else if (archiveType === 'tar.gz' || archiveType === 'tgz') {
-          execSync(`tar -xzf "${tempFile}" -C "${destPath}"`, { stdio: 'pipe' });
+        if (archiveType === 'raw') {
+          installRawBinaryDownload(tempFile, destPath, binary || toolName, { chmod: download.chmod });
         } else {
-          throw new Error(`Unsupported archive type: ${archiveType}`);
-        }
+          runRegistryCommandPlan(createRegistryArchiveExtractCommand(archiveType, tempFile, destPath), {
+            stdio: 'pipe',
+          });
 
-        // Extract/move the specific binary to dest root
-        await extractBinaryFromPath(destPath, binary, destPath);
+          // Extract/move the specific binary to dest root
+          await extractBinaryFromPath(destPath, binary, destPath);
+        }
 
         // Clean up temp file
         fs.unlinkSync(tempFile);
@@ -991,20 +1073,18 @@ export async function downloadTool(toolName, destPath, options = {}) {
 
       const archiveType = extractConfig.type || guessArchiveType(urlFilename);
       const stripComponents = extractConfig.strip || 0;
-      const stripFlag = stripComponents > 0 ? ` --strip-components=${stripComponents}` : '';
-
-      if (archiveType === 'zip') {
-        execSync(`unzip -o "${tempFile}" -d "${destPath}"`, { stdio: 'pipe' });
-      } else if (archiveType === 'tar.xz') {
-        execSync(`tar -xJf "${tempFile}" -C "${destPath}"${stripFlag}`, { stdio: 'pipe' });
-      } else if (archiveType === 'tar.gz' || archiveType === 'tgz') {
-        execSync(`tar -xzf "${tempFile}" -C "${destPath}"${stripFlag}`, { stdio: 'pipe' });
+      if (archiveType === 'raw') {
+        installRawBinaryDownload(tempFile, destPath, extractConfig.binary || toolName, {
+          chmod: extractConfig.chmod,
+        });
       } else {
-        throw new Error(`Unsupported archive type: ${archiveType}`);
-      }
+        runRegistryCommandPlan(createRegistryArchiveExtractCommand(archiveType, tempFile, destPath, {
+          stripComponents,
+        }), { stdio: 'pipe' });
 
-      // Extract the binary
-      await extractBinaryFromPath(destPath, extractConfig.binary || toolName, destPath);
+        // Extract the binary
+        await extractBinaryFromPath(destPath, extractConfig.binary || toolName, destPath);
+      }
 
       // Make binaries executable
       const binaries = [toolName, ...(toolManifest.additionalBinaries || [])];
