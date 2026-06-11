@@ -4,8 +4,16 @@
  * Owns: terminalSessions Map, pendingTerminalOpens Set, ptyModulePromise.
  */
 
-export function buildTerminalRoutes(ctx) {
-  const { json, error, readBody, broadcast, requiredField, requiredFields } = ctx;
+import fs from 'fs';
+import { rejectInvalidPathField } from '../validation.js';
+
+const DEFAULT_TERMINAL_SHELL = '/bin/zsh';
+const ALLOWED_TERMINAL_SHELLS = ['/bin/zsh', '/bin/bash', '/bin/sh'];
+const ALLOWED_TERMINAL_SHELL_SET = new Set(ALLOWED_TERMINAL_SHELLS);
+const MAX_TERMINAL_DIMENSION = 1000;
+
+export function buildTerminalRoutes(ctx, deps = {}) {
+  const { json, error, readBody, broadcast, requiredField, requiredFields, invalidField, log } = ctx;
 
   const terminalSessions = new Map(); // sessionKey -> { proc, cwd, shell, buffer }
   const pendingTerminalOpens = new Set(); // sessionKey lock to prevent double-spawn races
@@ -32,6 +40,10 @@ export function buildTerminalRoutes(ctx) {
   }
 
   async function getPtyModule() {
+    if (Object.prototype.hasOwnProperty.call(deps, 'ptyModule')) {
+      return deps.ptyModule;
+    }
+
     if (!ptyModulePromise) {
       ptyModulePromise = import('@lydell/node-pty')
         .then((mod) => (mod?.spawn ? mod : (mod?.default?.spawn ? mod.default : null)))
@@ -40,14 +52,89 @@ export function buildTerminalRoutes(ctx) {
     return ptyModulePromise;
   }
 
+  function rejectTerminalCwd(cwd, res) {
+    if (!cwd || typeof cwd !== 'string') {
+      return requiredField(res, 'cwd');
+    }
+
+    if (rejectInvalidPathField({
+      value: cwd,
+      field: 'cwd',
+      res,
+      invalidField,
+      error,
+    })) {
+      return true;
+    }
+
+    let stat;
+    try {
+      stat = fs.statSync(cwd);
+    } catch {
+      invalidField(res, 'cwd', 'cwd must reference an existing directory', {
+        reason: 'path_not_found',
+      });
+      return true;
+    }
+
+    if (!stat.isDirectory()) {
+      invalidField(res, 'cwd', 'cwd must reference an existing directory', {
+        reason: 'not_directory',
+      });
+      return true;
+    }
+
+    return false;
+  }
+
+  function rejectTerminalShell(shellPath, res) {
+    if (typeof shellPath !== 'string' || !ALLOWED_TERMINAL_SHELL_SET.has(shellPath)) {
+      invalidField(res, 'shell', `shell must be one of ${ALLOWED_TERMINAL_SHELLS.join(', ')}`, {
+        reason: 'unsupported_value',
+        details: {
+          allowed: ALLOWED_TERMINAL_SHELLS,
+          value: shellPath,
+        },
+      });
+      return true;
+    }
+
+    return false;
+  }
+
+  function parseTerminalDimension(value, field, fallback, res) {
+    if (value === undefined || value === null || value === '') {
+      return fallback;
+    }
+
+    const dimension = Number(value);
+    if (!Number.isInteger(dimension) || dimension <= 0 || dimension > MAX_TERMINAL_DIMENSION) {
+      invalidField(res, field, `${field} must be a positive integer`, {
+        reason: 'invalid_terminal_dimension',
+      });
+      return null;
+    }
+
+    return dimension;
+  }
+
+  function killTerminalProcess(proc, reason) {
+    try {
+      proc.kill();
+    } catch (err) {
+      log?.('terminal', 'warn', `failed to kill terminal process during ${reason}: ${err.message}`);
+    }
+  }
+
   async function handle(req, res, url) {
     // POST /terminal/open { sessionKey, cwd, shell? }
     if (req.method === 'POST' && url.pathname === '/terminal/open') {
       const body = await readBody(req);
       const sessionKey = String(body.sessionKey || 'global');
       const cwd = body.cwd;
-      const shellPath = body.shell || '/bin/zsh';
-      if (!cwd || typeof cwd !== 'string') return requiredField(res, 'cwd');
+      const shellPath = body.shell === undefined ? DEFAULT_TERMINAL_SHELL : body.shell;
+      if (rejectTerminalCwd(cwd, res)) return true;
+      if (rejectTerminalShell(shellPath, res)) return true;
 
       // Prevent double-spawn races
       if (pendingTerminalOpens.has(sessionKey)) {
@@ -60,7 +147,7 @@ export function buildTerminalRoutes(ctx) {
         if (existing.cwd === cwd) {
           return json(res, { ok: true, sessionKey, reused: true, buffer: existing.buffer.getAll() });
         }
-        try { existing.proc.kill(); } catch {}
+        killTerminalProcess(existing.proc, 'session replacement');
         terminalSessions.delete(sessionKey);
       }
 
@@ -69,10 +156,13 @@ export function buildTerminalRoutes(ctx) {
         return error(res, 'Real PTY backend unavailable: install @lydell/node-pty in cli workspace', 503);
       }
 
+      const cols = parseTerminalDimension(body.cols, 'cols', 80, res);
+      if (cols === null) return true;
+      const rows = parseTerminalDimension(body.rows, 'rows', 24, res);
+      if (rows === null) return true;
+
       pendingTerminalOpens.add(sessionKey);
       try {
-        const cols = Number(body.cols) || 80;
-        const rows = Number(body.rows) || 24;
         const proc = nodePty.spawn(shellPath, ['-il'], {
           name: 'xterm-256color',
           cols,
@@ -108,7 +198,13 @@ export function buildTerminalRoutes(ctx) {
     if (req.method === 'POST' && url.pathname === '/terminal/write') {
       const body = await readBody(req);
       const sessionKey = String(body.sessionKey || 'global');
-      const data = typeof body.data === 'string' ? body.data : '';
+      if (body.data === undefined) return requiredField(res, 'data');
+      if (typeof body.data !== 'string') {
+        return invalidField(res, 'data', 'data must be a string', {
+          reason: 'invalid_type',
+        });
+      }
+      const data = body.data;
       const entry = terminalSessions.get(sessionKey);
       if (!entry) return error(res, 'terminal session not found', 404);
       try {
@@ -144,7 +240,7 @@ export function buildTerminalRoutes(ctx) {
       const sessionKey = String(body.sessionKey || 'global');
       const entry = terminalSessions.get(sessionKey);
       if (!entry) return json(res, { ok: true });
-      try { entry.proc.kill(); } catch {}
+      killTerminalProcess(entry.proc, 'session close');
       terminalSessions.delete(sessionKey);
       return json(res, { ok: true });
     }
@@ -154,7 +250,7 @@ export function buildTerminalRoutes(ctx) {
 
   function cleanup() {
     for (const [, { proc }] of terminalSessions) {
-      try { proc.kill(); } catch {}
+      killTerminalProcess(proc, 'route cleanup');
     }
     terminalSessions.clear();
   }

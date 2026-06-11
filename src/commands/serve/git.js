@@ -1,6 +1,46 @@
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
+import { rejectMissingDestructiveConfirmation } from './validation.js';
+
+function runGit(projectPath, args, options = {}) {
+  return execFileSync('git', args, {
+    cwd: projectPath,
+    encoding: 'utf-8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: options.timeout || 10000,
+  });
+}
+
+function rejectInvalidGitFiles({ files, res, invalidField, error }) {
+  if (files === undefined || files === null) return false;
+  if (!Array.isArray(files)) {
+    if (typeof invalidField === 'function') {
+      return invalidField(res, 'files', 'files must be an array of file paths', {
+        reason: 'invalid_type',
+      });
+    }
+    return error(res, 'files must be an array of file paths', 400);
+  }
+
+  const invalidIndex = files.findIndex(file => typeof file !== 'string' || file.length === 0);
+  if (invalidIndex !== -1) {
+    if (typeof invalidField === 'function') {
+      return invalidField(res, 'files', 'files must contain only non-empty strings', {
+        reason: 'invalid_item',
+        details: { index: invalidIndex },
+      });
+    }
+    return error(res, 'files must contain only non-empty strings', 400);
+  }
+
+  return false;
+}
+
+function gitFileArgs(files) {
+  const targets = Array.isArray(files) && files.length > 0 ? files : ['.'];
+  return ['--', ...targets];
+}
 
 /**
  * Get git status for a project directory.
@@ -14,16 +54,12 @@ export function getProjectGitStatus(projectPath) {
     if (!fs.existsSync(gitDir)) return null;
 
     // Get current branch
-    const branch = execSync('git rev-parse --abbrev-ref HEAD 2>/dev/null', {
-      cwd: projectPath,
-      encoding: 'utf-8',
+    const branch = runGit(projectPath, ['rev-parse', '--abbrev-ref', 'HEAD'], {
       timeout: 3000,
     }).trim();
 
     // Get count of uncommitted changes (staged + unstaged + untracked)
-    const status = execSync('git status --porcelain 2>/dev/null', {
-      cwd: projectPath,
-      encoding: 'utf-8',
+    const status = runGit(projectPath, ['status', '--porcelain'], {
       timeout: 3000,
     });
     const uncommitted = status.trim() ? status.trim().split('\n').length : 0;
@@ -83,7 +119,7 @@ export function parseWorktreeList(output) {
   return worktrees;
 }
 
-export function createGitHandler({ readBody, error, json }) {
+export function createGitHandler({ readBody, error, json, invalidField }) {
   return async function handleGit(req, res, url) {
     // GET /git/status?path=... — get git status for a directory
     if (req.method === 'GET' && url.pathname === '/git/status') {
@@ -98,9 +134,7 @@ export function createGitHandler({ readBody, error, json }) {
 
       // Get list of changed files
       try {
-        const statusOutput = execSync('git status --porcelain 2>/dev/null', {
-          cwd: projectPath,
-          encoding: 'utf-8',
+        const statusOutput = runGit(projectPath, ['status', '--porcelain'], {
           timeout: 5000,
         });
 
@@ -127,14 +161,10 @@ export function createGitHandler({ readBody, error, json }) {
       const { path: projectPath, files } = body;
 
       if (!projectPath) return error(res, 'path required');
+      if (rejectInvalidGitFiles({ files, res, invalidField, error })) return true;
 
       try {
-        const filesToStage = files && files.length > 0 ? files.join(' ') : '.';
-        execSync(`git add ${filesToStage}`, {
-          cwd: projectPath,
-          encoding: 'utf-8',
-          timeout: 10000,
-        });
+        runGit(projectPath, ['add', ...gitFileArgs(files)]);
         json(res, { ok: true });
       } catch (err) {
         error(res, err.message || 'Failed to stage files', 500);
@@ -148,14 +178,10 @@ export function createGitHandler({ readBody, error, json }) {
       const { path: projectPath, files } = body;
 
       if (!projectPath) return error(res, 'path required');
+      if (rejectInvalidGitFiles({ files, res, invalidField, error })) return true;
 
       try {
-        const filesToUnstage = files && files.length > 0 ? files.join(' ') : '.';
-        execSync(`git reset HEAD ${filesToUnstage}`, {
-          cwd: projectPath,
-          encoding: 'utf-8',
-          timeout: 10000,
-        });
+        runGit(projectPath, ['reset', 'HEAD', ...gitFileArgs(files)]);
         json(res, { ok: true });
       } catch (err) {
         error(res, err.message || 'Failed to unstage files', 500);
@@ -169,23 +195,13 @@ export function createGitHandler({ readBody, error, json }) {
       const { path: projectPath, files } = body;
 
       if (!projectPath) return error(res, 'path required');
+      if (rejectInvalidGitFiles({ files, res, invalidField, error })) return true;
+      if (rejectMissingDestructiveConfirmation({ body, res, invalidField, error, operation: 'git revert' })) {
+        return true;
+      }
 
       try {
-        if (files && files.length > 0) {
-          // Revert specific files
-          execSync(`git checkout -- ${files.join(' ')}`, {
-            cwd: projectPath,
-            encoding: 'utf-8',
-            timeout: 10000,
-          });
-        } else {
-          // Revert all changes (dangerous - require confirmation from frontend)
-          execSync('git checkout -- .', {
-            cwd: projectPath,
-            encoding: 'utf-8',
-            timeout: 10000,
-          });
-        }
+        runGit(projectPath, ['checkout', ...gitFileArgs(files)]);
         json(res, { ok: true });
       } catch (err) {
         error(res, err.message || 'Failed to revert changes', 500);
@@ -204,22 +220,16 @@ export function createGitHandler({ readBody, error, json }) {
       try {
         // Stage all if requested
         if (all) {
-          execSync('git add -A', {
-            cwd: projectPath,
-            encoding: 'utf-8',
-            timeout: 10000,
-          });
+          runGit(projectPath, ['add', '-A']);
         }
 
         // Build commit command
-        const args = ['git', 'commit'];
+        const args = ['commit'];
         if (amend) args.push('--amend');
         if (message) args.push('-m', message);
         if (amend && !message) args.push('--no-edit');
 
-        const output = execSync(args.map(a => a.includes(' ') ? JSON.stringify(a) : a).join(' '), {
-          cwd: projectPath,
-          encoding: 'utf-8',
+        const output = runGit(projectPath, args, {
           timeout: 30000,
         });
 
@@ -240,9 +250,7 @@ export function createGitHandler({ readBody, error, json }) {
       if (!projectPath) return error(res, 'path required');
 
       try {
-        const output = execSync('git branch --list --no-color', {
-          cwd: projectPath,
-          encoding: 'utf-8',
+        const output = runGit(projectPath, ['branch', '--list', '--no-color'], {
           timeout: 5000,
         });
 
@@ -285,11 +293,7 @@ export function createGitHandler({ readBody, error, json }) {
       if (!name || typeof name !== 'string') return error(res, 'name required');
 
       try {
-        execSync(`git checkout -b ${JSON.stringify(name)}`, {
-          cwd: projectPath,
-          encoding: 'utf-8',
-          timeout: 10000,
-        });
+        runGit(projectPath, ['checkout', '-b', name]);
         json(res, { ok: true, branch: name });
       } catch (err) {
         error(res, err.message || 'Failed to create branch', 500);
@@ -306,11 +310,7 @@ export function createGitHandler({ readBody, error, json }) {
       if (!branch || typeof branch !== 'string') return error(res, 'branch required');
 
       try {
-        execSync(`git checkout ${JSON.stringify(branch)}`, {
-          cwd: projectPath,
-          encoding: 'utf-8',
-          timeout: 10000,
-        });
+        runGit(projectPath, ['checkout', branch]);
         json(res, { ok: true, branch });
       } catch (err) {
         error(res, err.message || 'Failed to checkout branch', 500);
@@ -324,9 +324,7 @@ export function createGitHandler({ readBody, error, json }) {
       if (!projectPath) return error(res, 'path required');
 
       try {
-        const output = execSync('git worktree list --porcelain', {
-          cwd: projectPath,
-          encoding: 'utf-8',
+        const output = runGit(projectPath, ['worktree', 'list', '--porcelain'], {
           timeout: 5000,
         });
 
@@ -349,22 +347,18 @@ export function createGitHandler({ readBody, error, json }) {
       if (!branch) return error(res, 'branch required');
 
       try {
-        // createBranch: true → git worktree add -b <branch> <dir>
-        // createBranch: false → git worktree add <dir> <branch> (existing branch)
-        const cmd = createBranch
-          ? `git worktree add -b ${JSON.stringify(branch)} ${JSON.stringify(directory)}`
-          : `git worktree add ${JSON.stringify(directory)} ${JSON.stringify(branch)}`;
+        // createBranch: true -> git worktree add -b <branch> <dir>
+        // createBranch: false -> git worktree add <dir> <branch> (existing branch)
+        const args = createBranch
+          ? ['worktree', 'add', '-b', branch, directory]
+          : ['worktree', 'add', directory, branch];
 
-        execSync(cmd, {
-          cwd: projectPath,
-          encoding: 'utf-8',
+        runGit(projectPath, args, {
           timeout: 15000,
         });
 
         // Return info about the new worktree
-        const output = execSync('git worktree list --porcelain', {
-          cwd: projectPath,
-          encoding: 'utf-8',
+        const output = runGit(projectPath, ['worktree', 'list', '--porcelain'], {
           timeout: 5000,
         });
         const worktrees = parseWorktreeList(output);
@@ -386,6 +380,9 @@ export function createGitHandler({ readBody, error, json }) {
 
       if (!projectPath) return error(res, 'path required');
       if (!name || typeof name !== 'string') return error(res, 'name required');
+      if (rejectMissingDestructiveConfirmation({ body, res, invalidField, error, operation: 'git branch delete' })) {
+        return true;
+      }
 
       // Prevent deleting main/master
       const protected_branches = ['main', 'master'];
@@ -395,9 +392,7 @@ export function createGitHandler({ readBody, error, json }) {
 
       // Prevent deleting the current branch
       try {
-        const current = execSync('git rev-parse --abbrev-ref HEAD', {
-          cwd: projectPath,
-          encoding: 'utf-8',
+        const current = runGit(projectPath, ['rev-parse', '--abbrev-ref', 'HEAD'], {
           timeout: 3000,
         }).trim();
         if (current === name) {
@@ -409,11 +404,7 @@ export function createGitHandler({ readBody, error, json }) {
 
       try {
         const flag = force ? '-D' : '-d';
-        execSync(`git branch ${flag} ${JSON.stringify(name)}`, {
-          cwd: projectPath,
-          encoding: 'utf-8',
-          timeout: 10000,
-        });
+        runGit(projectPath, ['branch', flag, name]);
         json(res, { ok: true, branch: name });
       } catch (err) {
         const msg = err.message || 'Failed to delete branch';
@@ -433,17 +424,16 @@ export function createGitHandler({ readBody, error, json }) {
 
       if (!projectPath) return error(res, 'path required');
       if (!directory) return error(res, 'directory required');
+      if (rejectMissingDestructiveConfirmation({ body, res, invalidField, error, operation: 'git worktree remove' })) {
+        return true;
+      }
 
       try {
-        const cmd = force
-          ? `git worktree remove --force ${JSON.stringify(directory)}`
-          : `git worktree remove ${JSON.stringify(directory)}`;
+        const args = ['worktree', 'remove'];
+        if (force) args.push('--force');
+        args.push(directory);
 
-        execSync(cmd, {
-          cwd: projectPath,
-          encoding: 'utf-8',
-          timeout: 10000,
-        });
+        runGit(projectPath, args);
         json(res, { ok: true });
       } catch (err) {
         error(res, err.message || 'Failed to remove worktree', 500);
@@ -460,17 +450,9 @@ export function createGitHandler({ readBody, error, json }) {
 
       try {
         if (pop) {
-          execSync('git stash pop', {
-            cwd: projectPath,
-            encoding: 'utf-8',
-            timeout: 10000,
-          });
+          runGit(projectPath, ['stash', 'pop']);
         } else {
-          execSync('git stash', {
-            cwd: projectPath,
-            encoding: 'utf-8',
-            timeout: 10000,
-          });
+          runGit(projectPath, ['stash']);
         }
         json(res, { ok: true });
       } catch (err) {
@@ -487,11 +469,7 @@ export function createGitHandler({ readBody, error, json }) {
       if (!projectPath) return error(res, 'path required');
 
       try {
-        execSync('git init', {
-          cwd: projectPath,
-          encoding: 'utf-8',
-          timeout: 10000,
-        });
+        runGit(projectPath, ['init']);
         json(res, { ok: true });
       } catch (err) {
         error(res, err.message || 'Failed to init repository', 500);

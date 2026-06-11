@@ -50,12 +50,34 @@ test('sidecar OpenAPI spec documents the stabilized sessions and filesystem surf
   assert.ok(committedSpec.paths['/fs/write']);
   assert.ok(committedSpec.paths['/fs/readdir']);
   assert.ok(committedSpec.paths['/fs/stat']);
+  assert.ok(committedSpec.paths['/fs/serve']);
+  assert.ok(committedSpec.paths['/fs/watch']);
+  assert.ok(committedSpec.paths['/fs/unwatch']);
+  assert.equal(
+    committedSpec.paths['/fs/read']?.get?.parameters?.[0]?.schema?.$ref,
+    '#/components/schemas/AbsolutePath',
+  );
+  assert.equal(
+    committedSpec.components?.schemas?.FsWriteRequest?.properties?.path?.$ref,
+    '#/components/schemas/MutableAbsolutePath',
+  );
+  assert.match(
+    committedSpec.components?.schemas?.FsWriteBinaryRequest?.properties?.base64?.pattern,
+    /A-Za-z0-9/,
+  );
 });
 
 test('sidecar OpenAPI spec documents shell and terminal helper routes with explicit caveats', () => {
   assert.ok(committedSpec.paths['/shell/open']?.post?.description.includes('macOS-specific helper'));
   assert.ok(committedSpec.paths['/terminal/open']?.post?.description.includes('@lydell/node-pty'));
   assert.ok(committedSpec.paths['/terminal/close']);
+  assert.deepEqual(committedSpec.components?.schemas?.TerminalShellPath?.enum, [
+    '/bin/zsh',
+    '/bin/bash',
+    '/bin/sh',
+  ]);
+  assert.equal(committedSpec.components?.schemas?.TerminalOpenRequest?.properties?.cols?.maximum, 1000);
+  assert.equal(committedSpec.components?.schemas?.TerminalOpenRequest?.properties?.rows?.default, 24);
 });
 
 test('sidecar OpenAPI spec publishes additive daemon schema components without changing legacy routes', () => {

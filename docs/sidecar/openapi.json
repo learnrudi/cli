@@ -1382,7 +1382,7 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/AbsolutePath"
             }
           }
         ],
@@ -1406,7 +1406,7 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/MissingRequiredFieldError"
+            "$ref": "#/components/responses/ValidationError"
           },
           "401": {
             "$ref": "#/components/responses/UnauthorizedError"
@@ -1459,7 +1459,7 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/MissingRequiredFieldError"
+            "$ref": "#/components/responses/ValidationError"
           },
           "401": {
             "$ref": "#/components/responses/UnauthorizedError"
@@ -1515,7 +1515,7 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/MissingRequiredFieldError"
+            "$ref": "#/components/responses/ValidationError"
           },
           "401": {
             "$ref": "#/components/responses/UnauthorizedError"
@@ -1543,7 +1543,7 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/AbsolutePath"
             }
           },
           {
@@ -1587,7 +1587,7 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/MissingRequiredFieldError"
+            "$ref": "#/components/responses/ValidationError"
           },
           "401": {
             "$ref": "#/components/responses/UnauthorizedError"
@@ -1611,7 +1611,7 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/AbsolutePath"
             }
           }
         ],
@@ -1640,7 +1640,62 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/MissingRequiredFieldError"
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          }
+        }
+      }
+    },
+    "/fs/serve": {
+      "get": {
+        "tags": [
+          "Filesystem"
+        ],
+        "summary": "Serve a binary file",
+        "description": "Streams a local file with a content type inferred from extension. The path must be an absolute local filesystem path.",
+        "operationId": "serveFile",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AbsolutePath"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "File stream",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Cached copy is current",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
           },
           "401": {
             "$ref": "#/components/responses/UnauthorizedError"
@@ -1691,7 +1746,7 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/MissingRequiredFieldError"
+            "$ref": "#/components/responses/ValidationError"
           },
           "401": {
             "$ref": "#/components/responses/UnauthorizedError"
@@ -1714,10 +1769,11 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/FsPathRequest"
+                "$ref": "#/components/schemas/FsDestructivePathRequest"
               },
               "example": {
-                "path": "/Users/hoff/dev/RUDI/tmp/example.txt"
+                "path": "/Users/hoff/dev/RUDI/tmp/example.txt",
+                "confirmDestructive": true
               }
             }
           }
@@ -1742,7 +1798,7 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/MissingRequiredFieldError"
+            "$ref": "#/components/responses/ValidationError"
           },
           "401": {
             "$ref": "#/components/responses/UnauthorizedError"
@@ -1794,13 +1850,114 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/MissingRequiredFieldError"
+            "$ref": "#/components/responses/ValidationError"
           },
           "401": {
             "$ref": "#/components/responses/UnauthorizedError"
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/fs/watch": {
+      "post": {
+        "tags": [
+          "Filesystem"
+        ],
+        "summary": "Watch a filesystem path for sidecar change events",
+        "description": "Registers an in-process filesystem watcher. The path must be absolute and cannot be the filesystem root.",
+        "operationId": "watchPath",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FsPathRequest"
+              },
+              "example": {
+                "path": "/Users/hoff/dev/RUDI/tmp"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Watch registered",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                },
+                "example": {
+                  "ok": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/fs/unwatch": {
+      "post": {
+        "tags": [
+          "Filesystem"
+        ],
+        "summary": "Stop watching a filesystem path",
+        "description": "Unregisters an in-process filesystem watcher. The path must be absolute and cannot be the filesystem root.",
+        "operationId": "unwatchPath",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FsPathRequest"
+              },
+              "example": {
+                "path": "/Users/hoff/dev/RUDI/tmp"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Watch removed",
+            "headers": {
+              "x-rudi-request-id": {
+                "$ref": "#/components/headers/RequestIdHeader"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                },
+                "example": {
+                  "ok": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
           }
         }
       }
@@ -1846,7 +2003,7 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/MissingRequiredFieldError"
+            "$ref": "#/components/responses/ValidationError"
           },
           "401": {
             "$ref": "#/components/responses/UnauthorizedError"
@@ -1896,7 +2053,7 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/InvalidFieldError"
+            "$ref": "#/components/responses/ValidationError"
           },
           "401": {
             "$ref": "#/components/responses/UnauthorizedError"
@@ -1951,7 +2108,7 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/MissingRequiredFieldError"
+            "$ref": "#/components/responses/ValidationError"
           },
           "401": {
             "$ref": "#/components/responses/UnauthorizedError"
@@ -2004,6 +2161,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
           },
           "401": {
             "$ref": "#/components/responses/UnauthorizedError"
@@ -2638,6 +2798,46 @@
                 "expectedType": "string"
               },
               "requestId": "req_example_123"
+            }
+          }
+        }
+      },
+      "ValidationError": {
+        "description": "Missing required field or invalid field value.",
+        "headers": {
+          "x-rudi-request-id": {
+            "$ref": "#/components/headers/RequestIdHeader"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/SidecarError"
+            },
+            "examples": {
+              "missingRequiredField": {
+                "value": {
+                  "error": "path required",
+                  "code": "MISSING_REQUIRED_FIELD",
+                  "details": {
+                    "field": "path",
+                    "location": "body"
+                  },
+                  "requestId": "req_example_123"
+                }
+              },
+              "invalidPath": {
+                "value": {
+                  "error": "path must be an absolute filesystem path",
+                  "code": "INVALID_FIELD",
+                  "details": {
+                    "field": "path",
+                    "location": "body",
+                    "reason": "absolute_path_required"
+                  },
+                  "requestId": "req_example_123"
+                }
+              }
             }
           }
         }
@@ -5007,6 +5207,20 @@
         },
         "additionalProperties": false
       },
+      "AbsolutePath": {
+        "type": "string",
+        "description": "Absolute local filesystem path. Empty, relative, and NUL-containing values are rejected.",
+        "examples": [
+          "/Users/hoff/dev/RUDI/tmp/example.txt"
+        ]
+      },
+      "MutableAbsolutePath": {
+        "type": "string",
+        "description": "Absolute local filesystem path for a mutating sidecar operation. The filesystem root is rejected.",
+        "examples": [
+          "/Users/hoff/dev/RUDI/tmp/example.txt"
+        ]
+      },
       "FsEntry": {
         "type": "object",
         "required": [
@@ -5074,7 +5288,25 @@
         ],
         "properties": {
           "path": {
-            "type": "string"
+            "$ref": "#/components/schemas/MutableAbsolutePath"
+          }
+        },
+        "additionalProperties": false
+      },
+      "FsDestructivePathRequest": {
+        "type": "object",
+        "required": [
+          "path",
+          "confirmDestructive"
+        ],
+        "properties": {
+          "path": {
+            "$ref": "#/components/schemas/MutableAbsolutePath"
+          },
+          "confirmDestructive": {
+            "type": "boolean",
+            "const": true,
+            "description": "Must be true for destructive filesystem operations."
           }
         },
         "additionalProperties": false
@@ -5087,7 +5319,7 @@
         ],
         "properties": {
           "path": {
-            "type": "string"
+            "$ref": "#/components/schemas/MutableAbsolutePath"
           },
           "content": {
             "type": "string"
@@ -5103,10 +5335,12 @@
         ],
         "properties": {
           "path": {
-            "type": "string"
+            "$ref": "#/components/schemas/MutableAbsolutePath"
           },
           "base64": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+            "description": "Strict standard base64 content without whitespace or data URI prefixes."
           }
         },
         "additionalProperties": false
@@ -5119,10 +5353,10 @@
         ],
         "properties": {
           "oldPath": {
-            "type": "string"
+            "$ref": "#/components/schemas/MutableAbsolutePath"
           },
           "newPath": {
-            "type": "string"
+            "$ref": "#/components/schemas/MutableAbsolutePath"
           }
         },
         "additionalProperties": false
@@ -5146,7 +5380,7 @@
         ],
         "properties": {
           "path": {
-            "type": "string"
+            "$ref": "#/components/schemas/AbsolutePath"
           }
         },
         "additionalProperties": false
@@ -5159,13 +5393,22 @@
         ],
         "properties": {
           "path": {
-            "type": "string"
+            "$ref": "#/components/schemas/AbsolutePath"
           },
           "app": {
             "$ref": "#/components/schemas/ShellApp"
           }
         },
         "additionalProperties": false
+      },
+      "TerminalShellPath": {
+        "type": "string",
+        "enum": [
+          "/bin/zsh",
+          "/bin/bash",
+          "/bin/sh"
+        ],
+        "description": "Allowed interactive shell executable for embedded terminal sessions."
       },
       "TerminalSessionKeyRequest": {
         "type": "object",
@@ -5186,18 +5429,22 @@
             "type": "string"
           },
           "cwd": {
-            "type": "string"
+            "$ref": "#/components/schemas/AbsolutePath"
           },
           "shell": {
-            "type": "string"
+            "$ref": "#/components/schemas/TerminalShellPath"
           },
           "cols": {
             "type": "integer",
-            "minimum": 1
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 80
           },
           "rows": {
             "type": "integer",
-            "minimum": 1
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 24
           }
         },
         "additionalProperties": false
@@ -5231,6 +5478,9 @@
       },
       "TerminalWriteRequest": {
         "type": "object",
+        "required": [
+          "data"
+        ],
         "properties": {
           "sessionKey": {
             "type": "string"
@@ -5253,11 +5503,13 @@
           },
           "cols": {
             "type": "integer",
-            "minimum": 1
+            "minimum": 1,
+            "maximum": 1000
           },
           "rows": {
             "type": "integer",
-            "minimum": 1
+            "minimum": 1,
+            "maximum": 1000
           }
         },
         "additionalProperties": false

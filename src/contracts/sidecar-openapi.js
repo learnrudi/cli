@@ -817,14 +817,14 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
               name: 'path',
               in: 'query',
               required: true,
-              schema: { type: 'string' },
+              schema: schemaRef('AbsolutePath'),
             },
           ],
           responses: {
             '200': jsonResponse('File contents', 'FsReadResponse', {
               content: 'hello world',
             }),
-            '400': responseRef('MissingRequiredFieldError'),
+            '400': responseRef('ValidationError'),
             '404': responseRef('NotFoundError'),
             '401': responseRef('UnauthorizedError'),
           },
@@ -850,7 +850,7 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
           },
           responses: {
             '200': jsonResponse('Write complete', 'OkResponse', { ok: true }),
-            '400': responseRef('MissingRequiredFieldError'),
+            '400': responseRef('ValidationError'),
             '413': responseRef('RequestTooLargeError'),
             '500': responseRef('InternalError'),
             '401': responseRef('UnauthorizedError'),
@@ -877,7 +877,7 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
           },
           responses: {
             '200': jsonResponse('Binary write complete', 'OkResponse', { ok: true }),
-            '400': responseRef('MissingRequiredFieldError'),
+            '400': responseRef('ValidationError'),
             '413': responseRef('RequestTooLargeError'),
             '500': responseRef('InternalError'),
             '401': responseRef('UnauthorizedError'),
@@ -895,7 +895,7 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
               name: 'path',
               in: 'query',
               required: true,
-              schema: { type: 'string' },
+              schema: schemaRef('AbsolutePath'),
             },
             {
               name: 'showHidden',
@@ -915,7 +915,7 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
                 mtime: '2026-03-22T12:00:00.000Z',
               }],
             }),
-            '400': responseRef('MissingRequiredFieldError'),
+            '400': responseRef('ValidationError'),
             '404': responseRef('NotFoundError'),
             '401': responseRef('UnauthorizedError'),
           },
@@ -931,7 +931,7 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
               name: 'path',
               in: 'query',
               required: true,
-              schema: { type: 'string' },
+              schema: schemaRef('AbsolutePath'),
             },
           ],
           responses: {
@@ -943,7 +943,49 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
               size: 11,
               mtime: '2026-03-22T12:00:00.000Z',
             }),
-            '400': responseRef('MissingRequiredFieldError'),
+            '400': responseRef('ValidationError'),
+            '404': responseRef('NotFoundError'),
+            '401': responseRef('UnauthorizedError'),
+          },
+        },
+      },
+      '/fs/serve': {
+        get: {
+          tags: ['Filesystem'],
+          summary: 'Serve a binary file',
+          description: 'Streams a local file with a content type inferred from extension. The path must be an absolute local filesystem path.',
+          operationId: 'serveFile',
+          parameters: [
+            {
+              name: 'path',
+              in: 'query',
+              required: true,
+              schema: schemaRef('AbsolutePath'),
+            },
+          ],
+          responses: {
+            '200': {
+              description: 'File stream',
+              headers: {
+                [REQUEST_ID_HEADER]: {
+                  $ref: '#/components/headers/RequestIdHeader',
+                },
+              },
+              content: {
+                'application/octet-stream': {
+                  schema: { type: 'string', format: 'binary' },
+                },
+              },
+            },
+            '304': {
+              description: 'Cached copy is current',
+              headers: {
+                [REQUEST_ID_HEADER]: {
+                  $ref: '#/components/headers/RequestIdHeader',
+                },
+              },
+            },
+            '400': responseRef('ValidationError'),
             '404': responseRef('NotFoundError'),
             '401': responseRef('UnauthorizedError'),
           },
@@ -967,7 +1009,7 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
           },
           responses: {
             '200': jsonResponse('Directory created', 'OkResponse', { ok: true }),
-            '400': responseRef('MissingRequiredFieldError'),
+            '400': responseRef('ValidationError'),
             '500': responseRef('InternalError'),
             '401': responseRef('UnauthorizedError'),
           },
@@ -982,16 +1024,17 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
             required: true,
             content: {
               [JSON_CONTENT_TYPE]: {
-                schema: schemaRef('FsPathRequest'),
+                schema: schemaRef('FsDestructivePathRequest'),
                 example: {
                   path: '/Users/hoff/dev/RUDI/tmp/example.txt',
+                  confirmDestructive: true,
                 },
               },
             },
           },
           responses: {
             '200': jsonResponse('Path removed', 'OkResponse', { ok: true }),
-            '400': responseRef('MissingRequiredFieldError'),
+            '400': responseRef('ValidationError'),
             '500': responseRef('InternalError'),
             '401': responseRef('UnauthorizedError'),
           },
@@ -1016,8 +1059,57 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
           },
           responses: {
             '200': jsonResponse('Path renamed', 'OkResponse', { ok: true }),
-            '400': responseRef('MissingRequiredFieldError'),
+            '400': responseRef('ValidationError'),
             '500': responseRef('InternalError'),
+            '401': responseRef('UnauthorizedError'),
+          },
+        },
+      },
+      '/fs/watch': {
+        post: {
+          tags: ['Filesystem'],
+          summary: 'Watch a filesystem path for sidecar change events',
+          description: 'Registers an in-process filesystem watcher. The path must be absolute and cannot be the filesystem root.',
+          operationId: 'watchPath',
+          requestBody: {
+            required: true,
+            content: {
+              [JSON_CONTENT_TYPE]: {
+                schema: schemaRef('FsPathRequest'),
+                example: {
+                  path: '/Users/hoff/dev/RUDI/tmp',
+                },
+              },
+            },
+          },
+          responses: {
+            '200': jsonResponse('Watch registered', 'OkResponse', { ok: true }),
+            '400': responseRef('ValidationError'),
+            '500': responseRef('InternalError'),
+            '401': responseRef('UnauthorizedError'),
+          },
+        },
+      },
+      '/fs/unwatch': {
+        post: {
+          tags: ['Filesystem'],
+          summary: 'Stop watching a filesystem path',
+          description: 'Unregisters an in-process filesystem watcher. The path must be absolute and cannot be the filesystem root.',
+          operationId: 'unwatchPath',
+          requestBody: {
+            required: true,
+            content: {
+              [JSON_CONTENT_TYPE]: {
+                schema: schemaRef('FsPathRequest'),
+                example: {
+                  path: '/Users/hoff/dev/RUDI/tmp',
+                },
+              },
+            },
+          },
+          responses: {
+            '200': jsonResponse('Watch removed', 'OkResponse', { ok: true }),
+            '400': responseRef('ValidationError'),
             '401': responseRef('UnauthorizedError'),
           },
         },
@@ -1041,7 +1133,7 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
           },
           responses: {
             '200': jsonResponse('Reveal requested', 'OkResponse', { ok: true }),
-            '400': responseRef('MissingRequiredFieldError'),
+            '400': responseRef('ValidationError'),
             '401': responseRef('UnauthorizedError'),
           },
         },
@@ -1066,7 +1158,7 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
           },
           responses: {
             '200': jsonResponse('Open requested', 'OkResponse', { ok: true }),
-            '400': responseRef('InvalidFieldError'),
+            '400': responseRef('ValidationError'),
             '401': responseRef('UnauthorizedError'),
           },
         },
@@ -1098,7 +1190,7 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
               sessionKey: 'global',
               reused: false,
             }),
-            '400': responseRef('MissingRequiredFieldError'),
+            '400': responseRef('ValidationError'),
             '409': responseRef('ConflictError'),
             '503': responseRef('ServiceUnavailableError'),
             '401': responseRef('UnauthorizedError'),
@@ -1124,6 +1216,7 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
           },
           responses: {
             '200': jsonResponse('Terminal write complete', 'OkResponse', { ok: true }),
+            '400': responseRef('ValidationError'),
             '404': responseRef('NotFoundError'),
             '401': responseRef('UnauthorizedError'),
           },
@@ -1434,6 +1527,44 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
           },
           requestId: 'req_example_123',
         }),
+        ValidationError: {
+          description: 'Missing required field or invalid field value.',
+          headers: {
+            [REQUEST_ID_HEADER]: {
+              $ref: '#/components/headers/RequestIdHeader',
+            },
+          },
+          content: {
+            [JSON_CONTENT_TYPE]: {
+              schema: schemaRef('SidecarError'),
+              examples: {
+                missingRequiredField: {
+                  value: {
+                    error: 'path required',
+                    code: SIDECAR_ERROR_CODES.MISSING_REQUIRED_FIELD.code,
+                    details: {
+                      field: 'path',
+                      location: 'body',
+                    },
+                    requestId: 'req_example_123',
+                  },
+                },
+                invalidPath: {
+                  value: {
+                    error: 'path must be an absolute filesystem path',
+                    code: SIDECAR_ERROR_CODES.INVALID_FIELD.code,
+                    details: {
+                      field: 'path',
+                      location: 'body',
+                      reason: 'absolute_path_required',
+                    },
+                    requestId: 'req_example_123',
+                  },
+                },
+              },
+            },
+          },
+        },
         ProjectAlreadyExistsError: errorResponse(SIDECAR_ERROR_CODES.PROJECT_ALREADY_EXISTS, {
           error: 'Project already exists',
           code: SIDECAR_ERROR_CODES.PROJECT_ALREADY_EXISTS.code,
@@ -1856,6 +1987,16 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
           },
           additionalProperties: false,
         },
+        AbsolutePath: {
+          type: 'string',
+          description: 'Absolute local filesystem path. Empty, relative, and NUL-containing values are rejected.',
+          examples: ['/Users/hoff/dev/RUDI/tmp/example.txt'],
+        },
+        MutableAbsolutePath: {
+          type: 'string',
+          description: 'Absolute local filesystem path for a mutating sidecar operation. The filesystem root is rejected.',
+          examples: ['/Users/hoff/dev/RUDI/tmp/example.txt'],
+        },
         FsEntry: {
           type: 'object',
           required: ['name', 'path', 'isDirectory', 'isFile', 'size', 'mtime'],
@@ -1892,7 +2033,20 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
           type: 'object',
           required: ['path'],
           properties: {
-            path: { type: 'string' },
+            path: schemaRef('MutableAbsolutePath'),
+          },
+          additionalProperties: false,
+        },
+        FsDestructivePathRequest: {
+          type: 'object',
+          required: ['path', 'confirmDestructive'],
+          properties: {
+            path: schemaRef('MutableAbsolutePath'),
+            confirmDestructive: {
+              type: 'boolean',
+              const: true,
+              description: 'Must be true for destructive filesystem operations.',
+            },
           },
           additionalProperties: false,
         },
@@ -1900,7 +2054,7 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
           type: 'object',
           required: ['path', 'content'],
           properties: {
-            path: { type: 'string' },
+            path: schemaRef('MutableAbsolutePath'),
             content: { type: 'string' },
           },
           additionalProperties: false,
@@ -1909,8 +2063,12 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
           type: 'object',
           required: ['path', 'base64'],
           properties: {
-            path: { type: 'string' },
-            base64: { type: 'string' },
+            path: schemaRef('MutableAbsolutePath'),
+            base64: {
+              type: 'string',
+              pattern: '^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$',
+              description: 'Strict standard base64 content without whitespace or data URI prefixes.',
+            },
           },
           additionalProperties: false,
         },
@@ -1918,8 +2076,8 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
           type: 'object',
           required: ['oldPath', 'newPath'],
           properties: {
-            oldPath: { type: 'string' },
-            newPath: { type: 'string' },
+            oldPath: schemaRef('MutableAbsolutePath'),
+            newPath: schemaRef('MutableAbsolutePath'),
           },
           additionalProperties: false,
         },
@@ -1931,7 +2089,7 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
           type: 'object',
           required: ['path'],
           properties: {
-            path: { type: 'string' },
+            path: schemaRef('AbsolutePath'),
           },
           additionalProperties: false,
         },
@@ -1939,10 +2097,15 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
           type: 'object',
           required: ['path', 'app'],
           properties: {
-            path: { type: 'string' },
+            path: schemaRef('AbsolutePath'),
             app: schemaRef('ShellApp'),
           },
           additionalProperties: false,
+        },
+        TerminalShellPath: {
+          type: 'string',
+          enum: ['/bin/zsh', '/bin/bash', '/bin/sh'],
+          description: 'Allowed interactive shell executable for embedded terminal sessions.',
         },
         TerminalSessionKeyRequest: {
           type: 'object',
@@ -1956,10 +2119,10 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
           required: ['cwd'],
           properties: {
             sessionKey: { type: 'string' },
-            cwd: { type: 'string' },
-            shell: { type: 'string' },
-            cols: { type: 'integer', minimum: 1 },
-            rows: { type: 'integer', minimum: 1 },
+            cwd: schemaRef('AbsolutePath'),
+            shell: schemaRef('TerminalShellPath'),
+            cols: { type: 'integer', minimum: 1, maximum: 1000, default: 80 },
+            rows: { type: 'integer', minimum: 1, maximum: 1000, default: 24 },
           },
           additionalProperties: false,
         },
@@ -1976,6 +2139,7 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
         },
         TerminalWriteRequest: {
           type: 'object',
+          required: ['data'],
           properties: {
             sessionKey: { type: 'string' },
             data: { type: 'string' },
@@ -1987,8 +2151,8 @@ export function buildSidecarOpenApiSpec({ cliVersion = null } = {}) {
           required: ['cols', 'rows'],
           properties: {
             sessionKey: { type: 'string' },
-            cols: { type: 'integer', minimum: 1 },
-            rows: { type: 'integer', minimum: 1 },
+            cols: { type: 'integer', minimum: 1, maximum: 1000 },
+            rows: { type: 'integer', minimum: 1, maximum: 1000 },
           },
           additionalProperties: false,
         },

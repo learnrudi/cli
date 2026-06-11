@@ -1,11 +1,21 @@
-import { test, describe } from 'node:test';
+import { test, describe, after } from 'node:test';
 import assert from 'node:assert';
+import fs from 'fs';
+import fsp from 'fs/promises';
+import path from 'path';
+import os from 'os';
 import { createMockCtx, createMockRes, createMockReq, parseResBody } from '../helpers/serve-mocks.js';
 import { buildLogsRoutes } from '../../commands/serve/routes/logs.js';
 import { buildShellRoutes } from '../../commands/serve/routes/shell.js';
 import { buildSuggestRoutes } from '../../commands/serve/routes/suggest.js';
 import { buildTerminalRoutes } from '../../commands/serve/routes/terminal.js';
 import { buildProviderRoutes } from '../../commands/serve/routes/providers.js';
+
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'serve-routes-test-'));
+
+after(async () => {
+  await fsp.rm(tmpDir, { recursive: true, force: true });
+});
 
 function assertErrorBody(res, expected) {
   assert.deepStrictEqual(parseResBody(res), expected);
@@ -168,6 +178,39 @@ describe('buildShellRoutes', () => {
     });
   });
 
+  test('POST /shell/open rejects relative path before app validation', async () => {
+    const ctx = createMockCtx();
+    const { handle } = buildShellRoutes(ctx);
+    const { req, url } = createMockReq('POST', '/shell/open', {
+      body: { path: 'relative.txt', app: 'notepad' },
+    });
+    const res = createMockRes();
+    await handle(req, res, url);
+    assert.strictEqual(res.state.statusCode, 400);
+    assertErrorBody(res, {
+      error: 'path must be an absolute filesystem path',
+      code: 'INVALID_FIELD',
+      details: { field: 'path', location: 'body', reason: 'absolute_path_required' },
+    });
+  });
+
+  test('POST /shell/reveal rejects missing filesystem path', async () => {
+    const ctx = createMockCtx();
+    const { handle } = buildShellRoutes(ctx);
+    const missingPath = path.join(tmpDir, 'missing-shell-target');
+    const { req, url } = createMockReq('POST', '/shell/reveal', {
+      body: { path: missingPath },
+    });
+    const res = createMockRes();
+    await handle(req, res, url);
+    assert.strictEqual(res.state.statusCode, 400);
+    assertErrorBody(res, {
+      error: 'path must reference an existing filesystem path',
+      code: 'INVALID_FIELD',
+      details: { field: 'path', location: 'body', reason: 'path_not_found' },
+    });
+  });
+
   test('POST /shell/open unknown app returns error', async () => {
     const ctx = createMockCtx();
     const { handle } = buildShellRoutes(ctx);
@@ -182,6 +225,33 @@ describe('buildShellRoutes', () => {
       code: 'INVALID_FIELD',
       details: { field: 'app', location: 'body', reason: 'unsupported_value', value: 'notepad' },
     });
+  });
+
+  test('POST /shell/open terminal quotes path for shell evaluation', async () => {
+    const ctx = createMockCtx();
+    const spawned = [];
+    const spawn = (command, args) => {
+      spawned.push({ command, args });
+      return {
+        stderr: { on() {} },
+        on() {},
+        unref() {},
+      };
+    };
+    const { handle } = buildShellRoutes(ctx, { spawn });
+    const riskyPath = path.join(tmpDir, 'terminal path $(touch should-not-run)');
+    await fsp.mkdir(riskyPath, { recursive: true });
+    const { req, url } = createMockReq('POST', '/shell/open', {
+      body: { path: riskyPath, app: 'terminal' },
+    });
+    const res = createMockRes();
+    await handle(req, res, url);
+    assert.strictEqual(res.state.statusCode, 200);
+    assert.strictEqual(spawned.length, 1);
+    assert.strictEqual(spawned[0].command, 'osascript');
+    const script = spawned[0].args[1];
+    assert.match(script, /quoted form of POSIX path/);
+    assert.doesNotMatch(script, new RegExp(`cd ${riskyPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
   });
 });
 
@@ -249,6 +319,89 @@ describe('buildTerminalRoutes', () => {
     });
   });
 
+  test('POST /terminal/open rejects relative cwd', async () => {
+    const ctx = createMockCtx();
+    const { handle } = buildTerminalRoutes(ctx);
+    const { req, url } = createMockReq('POST', '/terminal/open', {
+      body: { sessionKey: 'k1', cwd: 'relative-cwd' },
+    });
+    const res = createMockRes();
+    await handle(req, res, url);
+    assert.strictEqual(res.state.statusCode, 400);
+    assertErrorBody(res, {
+      error: 'cwd must be an absolute filesystem path',
+      code: 'INVALID_FIELD',
+      details: { field: 'cwd', location: 'body', reason: 'absolute_path_required' },
+    });
+  });
+
+  test('POST /terminal/open rejects unsupported shell path', async () => {
+    const ctx = createMockCtx();
+    const { handle } = buildTerminalRoutes(ctx);
+    const { req, url } = createMockReq('POST', '/terminal/open', {
+      body: { sessionKey: 'k1', cwd: tmpDir, shell: '/tmp/not-a-rudi-shell' },
+    });
+    const res = createMockRes();
+    await handle(req, res, url);
+    assert.strictEqual(res.state.statusCode, 400);
+    assertErrorBody(res, {
+      error: 'shell must be one of /bin/zsh, /bin/bash, /bin/sh',
+      code: 'INVALID_FIELD',
+      details: {
+        field: 'shell',
+        location: 'body',
+        reason: 'unsupported_value',
+        allowed: ['/bin/zsh', '/bin/bash', '/bin/sh'],
+        value: '/tmp/not-a-rudi-shell',
+      },
+    });
+  });
+
+  test('POST /terminal/open rejects invalid dimensions before PTY spawn', async () => {
+    const ctx = createMockCtx();
+    const spawned = [];
+    const { handle } = buildTerminalRoutes(ctx, {
+      ptyModule: {
+        spawn(...args) {
+          spawned.push(args);
+          return {
+            onData() {},
+            onExit() {},
+            kill() {},
+          };
+        },
+      },
+    });
+    const { req, url } = createMockReq('POST', '/terminal/open', {
+      body: { sessionKey: 'k1', cwd: tmpDir, cols: 'Infinity', rows: 24 },
+    });
+    const res = createMockRes();
+    await handle(req, res, url);
+    assert.strictEqual(res.state.statusCode, 400);
+    assertErrorBody(res, {
+      error: 'cols must be a positive integer',
+      code: 'INVALID_FIELD',
+      details: { field: 'cols', location: 'body', reason: 'invalid_terminal_dimension' },
+    });
+    assert.strictEqual(spawned.length, 0);
+  });
+
+  test('POST /terminal/write rejects non-string data before session lookup', async () => {
+    const ctx = createMockCtx();
+    const { handle } = buildTerminalRoutes(ctx);
+    const { req, url } = createMockReq('POST', '/terminal/write', {
+      body: { sessionKey: 'nope', data: { text: 'ls' } },
+    });
+    const res = createMockRes();
+    await handle(req, res, url);
+    assert.strictEqual(res.state.statusCode, 400);
+    assertErrorBody(res, {
+      error: 'data must be a string',
+      code: 'INVALID_FIELD',
+      details: { field: 'data', location: 'body', reason: 'invalid_type' },
+    });
+  });
+
   test('POST /terminal/write nonexistent session returns 404', async () => {
     const ctx = createMockCtx();
     const { handle } = buildTerminalRoutes(ctx);
@@ -289,6 +442,44 @@ describe('buildTerminalRoutes', () => {
     await handle(req, res, url);
     assert.strictEqual(res.state.statusCode, 200);
     assert.deepStrictEqual(parseResBody(res), { ok: true });
+  });
+
+  test('POST /terminal/close logs process kill failures', async () => {
+    const ctx = createMockCtx();
+    const proc = {
+      onData() {},
+      onExit() {},
+      kill() {
+        throw new Error('kill denied');
+      },
+    };
+    const { handle } = buildTerminalRoutes(ctx, {
+      ptyModule: {
+        spawn() {
+          return proc;
+        },
+      },
+    });
+
+    const open = createMockReq('POST', '/terminal/open', {
+      body: { sessionKey: 'k1', cwd: tmpDir },
+    });
+    const openRes = createMockRes();
+    await handle(open.req, openRes, open.url);
+    assert.strictEqual(openRes.state.statusCode, 200);
+
+    const close = createMockReq('POST', '/terminal/close', {
+      body: { sessionKey: 'k1' },
+    });
+    const closeRes = createMockRes();
+    await handle(close.req, closeRes, close.url);
+    assert.strictEqual(closeRes.state.statusCode, 200);
+    assert.ok(ctx._logs.some((entry) =>
+      entry.source === 'terminal' &&
+      entry.level === 'warn' &&
+      entry.message.includes('session close') &&
+      entry.message.includes('kill denied')
+    ));
   });
 
   test('unmatched path returns false', async () => {

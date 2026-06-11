@@ -40,6 +40,37 @@ describe('buildFsRoutes', () => {
     assert.strictEqual(content, 'hello world');
   });
 
+  test('POST /fs/write rejects non-string path', async () => {
+    const { handle } = makeFsRoute();
+    const { req, url } = createMockReq('POST', '/fs/write', {
+      body: { path: ['not-a-path'], content: 'hello world' },
+    });
+    const res = createMockRes();
+    await handle(req, res, url);
+    assert.strictEqual(res.state.statusCode, 400);
+    assertErrorBody(res, {
+      error: 'path must be an absolute filesystem path',
+      code: 'INVALID_FIELD',
+      details: { field: 'path', location: 'body', reason: 'invalid_type' },
+    });
+  });
+
+  test('POST /fs/write rejects filesystem root path', async () => {
+    const { handle } = makeFsRoute();
+    const rootPath = path.parse(tmpDir).root;
+    const { req, url } = createMockReq('POST', '/fs/write', {
+      body: { path: rootPath, content: 'hello world' },
+    });
+    const res = createMockRes();
+    await handle(req, res, url);
+    assert.strictEqual(res.state.statusCode, 400);
+    assertErrorBody(res, {
+      error: 'path must not be the filesystem root',
+      code: 'INVALID_FIELD',
+      details: { field: 'path', location: 'body', reason: 'filesystem_root_forbidden' },
+    });
+  });
+
   // --- read ---
 
   test('GET /fs/read returns file content', async () => {
@@ -52,6 +83,21 @@ describe('buildFsRoutes', () => {
     assert.strictEqual(res.state.statusCode, 200);
     const body = parseResBody(res);
     assert.strictEqual(body.content, 'read this');
+  });
+
+  test('GET /fs/read rejects relative path', async () => {
+    const { handle } = makeFsRoute();
+    const { req, url } = createMockReq('GET', '/fs/read', {
+      query: 'path=relative.txt',
+    });
+    const res = createMockRes();
+    await handle(req, res, url);
+    assert.strictEqual(res.state.statusCode, 400);
+    assertErrorBody(res, {
+      error: 'path must be an absolute filesystem path',
+      code: 'INVALID_FIELD',
+      details: { field: 'path', location: 'query', reason: 'absolute_path_required' },
+    });
   });
 
   // --- write + read roundtrip ---
@@ -97,6 +143,23 @@ describe('buildFsRoutes', () => {
     // verify on disk
     const disk = await fsp.readFile(filePath);
     assert.ok(original.equals(disk));
+  });
+
+  test('POST /fs/write-binary rejects malformed base64 before writing', async () => {
+    const { handle } = makeFsRoute();
+    const filePath = path.join(tmpDir, 'bad-binary.bin');
+    const { req, url } = createMockReq('POST', '/fs/write-binary', {
+      body: { path: filePath, base64: '@@@not-base64@@@' },
+    });
+    const res = createMockRes();
+    await handle(req, res, url);
+    assert.strictEqual(res.state.statusCode, 400);
+    assertErrorBody(res, {
+      error: 'base64 must be a valid base64 string',
+      code: 'INVALID_FIELD',
+      details: { field: 'base64', location: 'body', reason: 'invalid_base64' },
+    });
+    assert.strictEqual(fs.existsSync(filePath), false);
   });
 
   // --- readdir ---
@@ -198,17 +261,55 @@ describe('buildFsRoutes', () => {
 
   // --- remove ---
 
-  test('POST /fs/remove deletes file', async () => {
+  test('POST /fs/remove requires destructive confirmation', async () => {
     const { handle } = makeFsRoute();
-    const filePath = path.join(tmpDir, 'remove-me.txt');
-    await fsp.writeFile(filePath, 'bye');
+    const filePath = path.join(tmpDir, 'remove-without-confirm.txt');
+    await fsp.writeFile(filePath, 'keep');
     const { req, url } = createMockReq('POST', '/fs/remove', {
       body: { path: filePath },
     });
     const res = createMockRes();
     await handle(req, res, url);
+    assert.strictEqual(res.state.statusCode, 400);
+    assertErrorBody(res, {
+      error: 'confirmDestructive must be true for fs remove',
+      code: 'INVALID_FIELD',
+      details: {
+        field: 'confirmDestructive',
+        location: 'body',
+        reason: 'explicit_confirmation_required',
+        operation: 'fs remove',
+      },
+    });
+    await fsp.access(filePath);
+  });
+
+  test('POST /fs/remove deletes file with destructive confirmation', async () => {
+    const { handle } = makeFsRoute();
+    const filePath = path.join(tmpDir, 'remove-me.txt');
+    await fsp.writeFile(filePath, 'bye');
+    const { req, url } = createMockReq('POST', '/fs/remove', {
+      body: { path: filePath, confirmDestructive: true },
+    });
+    const res = createMockRes();
+    await handle(req, res, url);
     assert.strictEqual(res.state.statusCode, 200);
     await assert.rejects(() => fsp.access(filePath));
+  });
+
+  test('POST /fs/remove rejects relative path before confirmation', async () => {
+    const { handle } = makeFsRoute();
+    const { req, url } = createMockReq('POST', '/fs/remove', {
+      body: { path: 'relative-delete-target.txt', confirmDestructive: true },
+    });
+    const res = createMockRes();
+    await handle(req, res, url);
+    assert.strictEqual(res.state.statusCode, 400);
+    assertErrorBody(res, {
+      error: 'path must be an absolute filesystem path',
+      code: 'INVALID_FIELD',
+      details: { field: 'path', location: 'body', reason: 'absolute_path_required' },
+    });
   });
 
   // --- rename ---

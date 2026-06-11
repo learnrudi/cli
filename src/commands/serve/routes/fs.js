@@ -7,12 +7,14 @@
 import fsSync from 'fs';
 import fsp from 'fs/promises';
 import path from 'path';
+import { rejectInvalidPathField, rejectMissingDestructiveConfirmation } from '../validation.js';
 
 const FS_READDIR_CACHE_TTL_MS = 1200;
 const MAX_FS_WRITE_BODY_SIZE = 50 * 1024 * 1024;
+const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
 export function buildFsRoutes(ctx) {
-  const { json, error, readBody, log, broadcast, requiredField, requiredFields } = ctx;
+  const { json, error, readBody, log, broadcast, requiredField, requiredFields, invalidField } = ctx;
 
   const fsWatchers = new Map(); // path -> { watcher, debounceTimer }
   const fsReaddirCache = new Map(); // key -> { entries, fetchedAt }
@@ -26,6 +28,27 @@ export function buildFsRoutes(ctx) {
 
   function getFsReaddirCacheKey(dirPath, showHidden) {
     return `${showHidden ? '1' : '0'}:${dirPath}`;
+  }
+
+  function rejectFsPath(value, res, options = {}) {
+    return rejectInvalidPathField({
+      value,
+      res,
+      invalidField,
+      error,
+      ...options,
+    });
+  }
+
+  function rejectInvalidBase64(value, res) {
+    if (typeof value !== 'string' || !BASE64_PATTERN.test(value)) {
+      invalidField(res, 'base64', 'base64 must be a valid base64 string', {
+        reason: typeof value === 'string' ? 'invalid_base64' : 'invalid_type',
+      });
+      return true;
+    }
+
+    return false;
   }
 
   async function readDirectoryEntries(dirPath, showHidden) {
@@ -86,6 +109,7 @@ export function buildFsRoutes(ctx) {
     if (req.method === 'GET' && pathname === '/fs/read') {
       const filePath = url.searchParams.get('path');
       if (!filePath) return requiredField(res, 'path', { location: 'query' });
+      if (rejectFsPath(filePath, res, { field: 'path', location: 'query' })) return true;
       try {
         const content = await fsp.readFile(filePath, 'utf-8');
         json(res, { content });
@@ -104,6 +128,7 @@ export function buildFsRoutes(ctx) {
         if (body.content === undefined) missing.push('content');
         return requiredFields(res, missing);
       }
+      if (rejectFsPath(body.path, res, { allowRoot: false })) return true;
       try {
         await fsp.mkdir(path.dirname(body.path), { recursive: true });
         await fsp.writeFile(body.path, body.content, 'utf-8');
@@ -124,6 +149,8 @@ export function buildFsRoutes(ctx) {
         if (body.base64 === undefined) missing.push('base64');
         return requiredFields(res, missing);
       }
+      if (rejectFsPath(body.path, res, { allowRoot: false })) return true;
+      if (rejectInvalidBase64(body.base64, res)) return true;
       try {
         await fsp.mkdir(path.dirname(body.path), { recursive: true });
         const buffer = Buffer.from(body.base64, 'base64');
@@ -140,6 +167,7 @@ export function buildFsRoutes(ctx) {
     if (req.method === 'GET' && pathname === '/fs/readdir') {
       const dirPath = url.searchParams.get('path');
       if (!dirPath) return requiredField(res, 'path', { location: 'query' });
+      if (rejectFsPath(dirPath, res, { field: 'path', location: 'query' })) return true;
       const showHidden = url.searchParams.get('showHidden') === '1';
       try {
         const entries = await readDirectoryEntries(dirPath, showHidden);
@@ -154,6 +182,7 @@ export function buildFsRoutes(ctx) {
     if (req.method === 'GET' && pathname === '/fs/stat') {
       const filePath = url.searchParams.get('path');
       if (!filePath) return requiredField(res, 'path', { location: 'query' });
+      if (rejectFsPath(filePath, res, { field: 'path', location: 'query' })) return true;
       try {
         const stat = await fsp.stat(filePath);
         json(res, {
@@ -174,6 +203,7 @@ export function buildFsRoutes(ctx) {
     if (req.method === 'GET' && pathname === '/fs/serve') {
       const filePath = url.searchParams.get('path');
       if (!filePath) return requiredField(res, 'path', { location: 'query' });
+      if (rejectFsPath(filePath, res, { field: 'path', location: 'query' })) return true;
       try {
         const stat = await fsp.stat(filePath);
         const ext = path.extname(filePath).toLowerCase();
@@ -210,6 +240,7 @@ export function buildFsRoutes(ctx) {
     if (req.method === 'POST' && pathname === '/fs/mkdir') {
       const body = await readBody(req);
       if (!body.path) return requiredField(res, 'path');
+      if (rejectFsPath(body.path, res, { allowRoot: false })) return true;
       try {
         await fsp.mkdir(body.path, { recursive: true });
         invalidateFsReaddirCache();
@@ -224,6 +255,10 @@ export function buildFsRoutes(ctx) {
     if (req.method === 'POST' && pathname === '/fs/remove') {
       const body = await readBody(req);
       if (!body.path) return requiredField(res, 'path');
+      if (rejectFsPath(body.path, res, { allowRoot: false })) return true;
+      if (rejectMissingDestructiveConfirmation({ body, res, invalidField, error, operation: 'fs remove' })) {
+        return true;
+      }
       try {
         await fsp.rm(body.path, { recursive: true });
         invalidateFsReaddirCache();
@@ -243,6 +278,8 @@ export function buildFsRoutes(ctx) {
         if (!body.newPath) missing.push('newPath');
         return requiredFields(res, missing);
       }
+      if (rejectFsPath(body.oldPath, res, { field: 'oldPath', allowRoot: false })) return true;
+      if (rejectFsPath(body.newPath, res, { field: 'newPath', allowRoot: false })) return true;
       try {
         await fsp.rename(body.oldPath, body.newPath);
         invalidateFsReaddirCache();
@@ -257,6 +294,7 @@ export function buildFsRoutes(ctx) {
     if (req.method === 'POST' && pathname === '/fs/watch') {
       const body = await readBody(req);
       if (!body.path) return requiredField(res, 'path');
+      if (rejectFsPath(body.path, res, { allowRoot: false })) return true;
       const watchPath = body.path;
 
       if (fsWatchers.has(watchPath)) {
@@ -280,7 +318,7 @@ export function buildFsRoutes(ctx) {
         });
 
         fsWatchers.set(watchPath, { watcher, debounceTimer: null });
-        log('fs', 'info', `watching ${watchPath}`);
+        log('fs', 'info', 'watching filesystem path');
         json(res, { ok: true });
       } catch (err) {
         error(res, err.message, 500);
@@ -292,12 +330,13 @@ export function buildFsRoutes(ctx) {
     if (req.method === 'POST' && pathname === '/fs/unwatch') {
       const body = await readBody(req);
       if (!body.path) return requiredField(res, 'path');
+      if (rejectFsPath(body.path, res, { allowRoot: false })) return true;
       const entry = fsWatchers.get(body.path);
       if (entry) {
         clearTimeout(entry.debounceTimer);
         entry.watcher.close();
         fsWatchers.delete(body.path);
-        log('fs', 'info', `unwatched ${body.path}`);
+        log('fs', 'info', 'unwatched filesystem path');
       }
       json(res, { ok: true });
       return true;
@@ -311,7 +350,9 @@ export function buildFsRoutes(ctx) {
       try {
         clearTimeout(entry.debounceTimer);
         entry.watcher.close();
-      } catch {}
+      } catch (err) {
+        log('fs', 'warn', `failed to close filesystem watcher during cleanup: ${err.message}`);
+      }
     }
     fsWatchers.clear();
   }

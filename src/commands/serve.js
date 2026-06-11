@@ -220,7 +220,7 @@ export async function cmdServe(args, flags) {
   });
 
   // 8. Previously-extracted handlers (git, agent)
-  const handleGit = createGitHandler({ readBody, error, json });
+  const handleGit = createGitHandler({ readBody, error, json, invalidField });
   const handleAgent = createAgentHandler({
     agentProcesses, resumeSessionIndex,
     readBody, error, json, log, broadcast,
