@@ -301,13 +301,10 @@ export function createInfrastructure() {
   }
 
   function checkAuth(req) {
-    const headerToken = req.headers['x-rudi-token'];
-    if (headerToken === _token) return true;
-
-    const url = new URL(req.url, `http://localhost`);
-    if (url.searchParams.get('token') === _token) return true;
-
-    return false;
+    if (!_token) return false;
+    const headerValue = req?.headers?.['x-rudi-token'];
+    const headerToken = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+    return typeof headerToken === 'string' && headerToken === _token;
   }
 
   return {

@@ -80,6 +80,25 @@ describe('daemon runtime auth middleware', () => {
     assert.deepEqual(requestContext.auth, { required: true, result: 'failed' });
   });
 
+  test('requireAuth rejects URL query token transport', () => {
+    const ctx = createInfrastructure();
+    ctx.setToken('secret-token');
+    const middleware = buildHttpAuthMiddleware(ctx);
+    const { req, url } = createMockReq('GET', '/projects?token=secret-token');
+    const res = createMockRes();
+    const requestContext = ctx.createRequestContext(req);
+    ctx.attachRequestContext(res, requestContext);
+
+    assert.equal(middleware.requireAuth(req, res, url), false);
+    assert.equal(res.state.statusCode, 401);
+    assert.deepEqual(parseResBody(res), {
+      error: 'Unauthorized',
+      code: 'UNAUTHORIZED',
+      requestId: requestContext.requestId,
+    });
+    assert.deepEqual(requestContext.auth, { required: true, result: 'failed' });
+  });
+
   test('requireAuth rejects same-origin token from external browser origins', () => {
     const ctx = createInfrastructure();
     ctx.setToken('secret-token');
@@ -287,8 +306,16 @@ describe('daemon websocket runtime', () => {
     );
     assert.equal(destroyed, true);
 
+    destroyed = false;
     handlers.upgrade(
       { url: '/ws?token=valid-token', headers: { host: 'localhost:8123' } },
+      { destroy: () => { destroyed = true; } },
+      null,
+    );
+    assert.equal(destroyed, true);
+
+    handlers.upgrade(
+      { url: '/ws', headers: { host: 'localhost:8123', 'sec-websocket-protocol': 'rudi-token.valid-token' } },
       { destroy: () => {} },
       null,
     );

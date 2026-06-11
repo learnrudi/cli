@@ -299,12 +299,12 @@ describe('createInfrastructure', () => {
       assert.strictEqual(result, true);
     });
 
-    test('validates query param token', () => {
+    test('rejects query param token', () => {
       const ctx = createInfrastructure();
       const token = ctx.generateToken();
       ctx.setToken(token);
       const result = ctx.checkAuth({ url: `/test?token=${token}`, headers: {} });
-      assert.strictEqual(result, true);
+      assert.strictEqual(result, false);
     });
 
     test('rejects missing token', () => {

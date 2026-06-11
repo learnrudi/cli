@@ -1042,11 +1042,10 @@ Current `rudi serve` bootstrap behavior:
 - The server writes `~/.rudi/.rudi-lite-port` and
   `~/.rudi/.rudi-lite-token` with user-only file permissions.
 - `/health` is unauthenticated. Other HTTP routes require the real daemon token
-  through `x-rudi-token`, or through the legacy query `token` path where that
-  compatibility path is still used.
+  through `x-rudi-token`.
 - WebSocket upgrades require the real daemon token through protocol
-  `rudi-token.<token>` or query `token`; host-based same-origin trust is not
-  authentication.
+  `rudi-token.<token>`; host-based same-origin trust and query-token transport
+  are not authentication.
 - Startup calls `initSchema()`, repairs stale runtime state, refreshes legacy
   run-group aggregates, kills orphan Claude CLI processes from the old
   daemon-owned agent path, and runs conservative orphan worktree cleanup through
@@ -1274,8 +1273,7 @@ Exit gate:
   and listen binding.
 - `src/daemon/runtime/auth.js` owns CORS preflight and HTTP token gating.
   `/health` remains public; other routes require the real daemon token through
-  `x-rudi-token`, or through the legacy query `token` path where that
-  compatibility path is still used.
+  `x-rudi-token`.
 - `src/daemon/runtime/websocket.js` owns WebSocket upgrade auth, accepted
   protocol selection, connection logging, JSON message dispatch, and disconnect
   cleanup.

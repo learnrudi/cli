@@ -58,15 +58,13 @@ export function createWebSocketRuntime({
     server.on('upgrade', (req, socket, head) => {
       const url = new URL(req.url, 'http://localhost');
       const protocolToken = readWsTokenFromProtocolHeader(req.headers['sec-websocket-protocol']);
-      const queryToken = url.searchParams.get('token');
-      const presentedToken = protocolToken ?? queryToken;
       const expectedToken = getToken?.();
 
-      if (presentedToken !== expectedToken) {
+      if (!expectedToken || protocolToken !== expectedToken) {
         log?.('ws', 'warn', 'upgrade auth failed', {
           path: url.pathname,
           hasProtocolToken: !!protocolToken,
-          hasQueryToken: !!queryToken,
+          hasQueryToken: url.searchParams.has('token'),
         });
         socket.destroy();
         return;
