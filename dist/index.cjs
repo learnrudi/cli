@@ -325,6 +325,73 @@ var init_src2 = __esm({
 });
 
 // packages/registry-client/src/index.js
+function assertCommandArg(value, label) {
+  if (typeof value !== "string" || value.length === 0 || value.includes("\0")) {
+    throw new Error(`Invalid command ${label}`);
+  }
+  return value;
+}
+function normalizeCommandPlan(plan) {
+  if (!plan || typeof plan !== "object" || Array.isArray(plan)) {
+    throw new Error("Command plan must be an object");
+  }
+  const command = assertCommandArg(plan.command, "command");
+  const args = Array.isArray(plan.args) ? plan.args.map((arg, index) => assertCommandArg(arg, `arg ${index}`)) : [];
+  return { command, args };
+}
+function runRegistryCommandPlan(plan, options = {}) {
+  const { execFileSync: execFileSync12 = import_child_process.execFileSync, ...execOptions } = options;
+  const { command, args } = normalizeCommandPlan(plan);
+  return execFileSync12(command, args, execOptions);
+}
+function createRegistryArchiveExtractCommand(archiveType, archivePath, destPath, options = {}) {
+  const archive = assertCommandArg(archivePath, "archive path");
+  const dest = assertCommandArg(destPath, "destination path");
+  const stripComponents = Number(options.stripComponents || 0);
+  const withStrip = [];
+  if (!Number.isInteger(stripComponents) || stripComponents < 0) {
+    throw new Error(`Invalid stripComponents: ${options.stripComponents}`);
+  }
+  if (stripComponents > 0) {
+    withStrip.push(`--strip-components=${stripComponents}`);
+  }
+  if (archiveType === "tar.gz" || archiveType === "tgz") {
+    return { command: "tar", args: ["-xzf", archive, "-C", dest, ...withStrip] };
+  }
+  if (archiveType === "tar.xz") {
+    return { command: "tar", args: ["-xJf", archive, "-C", dest, ...withStrip] };
+  }
+  if (archiveType === "zip") {
+    return { command: "unzip", args: ["-o", archive, "-d", dest] };
+  }
+  throw new Error(`Unsupported archive type: ${archiveType}`);
+}
+function installRawBinaryDownload(downloadPath, destPath, binaryName, options = {}) {
+  const source = assertCommandArg(downloadPath, "raw binary download path");
+  const destinationRoot = assertCommandArg(destPath, "raw binary destination");
+  const rawName = assertCommandArg(binaryName, "raw binary name").replaceAll("\\", "/");
+  const finalName = import_path3.default.posix.basename(rawName);
+  if (!finalName || finalName === "." || finalName === "..") {
+    throw new Error(`Invalid raw binary name: ${binaryName}`);
+  }
+  import_fs2.default.mkdirSync(destinationRoot, { recursive: true });
+  const finalPath = import_path3.default.join(destinationRoot, finalName);
+  import_fs2.default.copyFileSync(source, finalPath);
+  if (options.chmod !== false) {
+    import_fs2.default.chmodSync(finalPath, 493);
+  }
+  return finalPath;
+}
+function createCurlDownloadCommand(url, destPath) {
+  const parsed = new URL(assertCommandArg(url, "download URL"));
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new Error(`Unsupported download protocol: ${parsed.protocol}`);
+  }
+  return {
+    command: "curl",
+    args: ["-sL", parsed.toString(), "-o", assertCommandArg(destPath, "download destination")]
+  };
+}
 function getRegistryRootCandidates(startDir) {
   const roots = [];
   let current = import_path3.default.resolve(startDir);
@@ -757,7 +824,6 @@ async function downloadDirectoryFromGitHub(dirUrl, destDir, onProgress) {
 async function downloadRuntime(runtime, version, destPath, options = {}) {
   const { onProgress } = options;
   const platformArch = getPlatformArch2();
-  const { execSync: execSync22 } = await import("child_process");
   const runtimeManifest = await loadRuntimeManifest(runtime);
   const customDownload = runtimeManifest?.download?.[platformArch];
   const tempDir = import_path3.default.join(PATHS2.cache, "downloads");
@@ -783,7 +849,7 @@ async function downloadRuntime(runtime, version, destPath, options = {}) {
   const tempFile = import_path3.default.join(tempDir, `${runtime}-${version}-${platformArch}.download`);
   try {
     if (url.includes("github.com")) {
-      execSync22(`curl -sL "${url}" -o "${tempFile}"`, { stdio: "pipe" });
+      runRegistryCommandPlan(createCurlDownloadCommand(url, tempFile), { stdio: "pipe" });
     } else {
       const response = await fetch(url, {
         headers: {
@@ -804,13 +870,17 @@ async function downloadRuntime(runtime, version, destPath, options = {}) {
       import_fs2.default.renameSync(tempFile, binaryPath);
       import_fs2.default.chmodSync(binaryPath, 493);
     } else if (downloadType === "tar.gz" || downloadType === "tgz") {
-      execSync22(`tar -xzf "${tempFile}" -C "${destPath}" --strip-components=1`, { stdio: "pipe" });
+      runRegistryCommandPlan(createRegistryArchiveExtractCommand(downloadType, tempFile, destPath, {
+        stripComponents: 1
+      }), { stdio: "pipe" });
       import_fs2.default.unlinkSync(tempFile);
     } else if (downloadType === "tar.xz") {
-      execSync22(`tar -xJf "${tempFile}" -C "${destPath}" --strip-components=1`, { stdio: "pipe" });
+      runRegistryCommandPlan(createRegistryArchiveExtractCommand(downloadType, tempFile, destPath, {
+        stripComponents: 1
+      }), { stdio: "pipe" });
       import_fs2.default.unlinkSync(tempFile);
     } else if (downloadType === "zip") {
-      execSync22(`unzip -o "${tempFile}" -d "${destPath}"`, { stdio: "pipe" });
+      runRegistryCommandPlan(createRegistryArchiveExtractCommand(downloadType, tempFile, destPath), { stdio: "pipe" });
       import_fs2.default.unlinkSync(tempFile);
     } else {
       throw new Error(`Unsupported download type: ${downloadType}`);
@@ -851,7 +921,6 @@ async function downloadTool(toolName, destPath, options = {}) {
     import_fs2.default.rmSync(destPath, { recursive: true });
   }
   import_fs2.default.mkdirSync(destPath, { recursive: true });
-  const { execSync: execSync22 } = await import("child_process");
   const downloads = toolManifest.downloads?.[platformArch];
   if (downloads && Array.isArray(downloads)) {
     const downloadedUrls = /* @__PURE__ */ new Set();
@@ -879,16 +948,14 @@ async function downloadTool(toolName, destPath, options = {}) {
         downloadedUrls.add(url);
         onProgress?.({ phase: "extracting", tool: toolName, binary: import_path3.default.basename(binary) });
         const archiveType = type || guessArchiveType(urlFilename);
-        if (archiveType === "zip") {
-          execSync22(`unzip -o "${tempFile}" -d "${destPath}"`, { stdio: "pipe" });
-        } else if (archiveType === "tar.xz") {
-          execSync22(`tar -xJf "${tempFile}" -C "${destPath}"`, { stdio: "pipe" });
-        } else if (archiveType === "tar.gz" || archiveType === "tgz") {
-          execSync22(`tar -xzf "${tempFile}" -C "${destPath}"`, { stdio: "pipe" });
+        if (archiveType === "raw") {
+          installRawBinaryDownload(tempFile, destPath, binary || toolName, { chmod: download.chmod });
         } else {
-          throw new Error(`Unsupported archive type: ${archiveType}`);
+          runRegistryCommandPlan(createRegistryArchiveExtractCommand(archiveType, tempFile, destPath), {
+            stdio: "pipe"
+          });
+          await extractBinaryFromPath(destPath, binary, destPath);
         }
-        await extractBinaryFromPath(destPath, binary, destPath);
         import_fs2.default.unlinkSync(tempFile);
       } catch (error) {
         if (import_fs2.default.existsSync(tempFile)) {
@@ -931,17 +998,16 @@ async function downloadTool(toolName, destPath, options = {}) {
       onProgress?.({ phase: "extracting", tool: toolName });
       const archiveType = extractConfig.type || guessArchiveType(urlFilename);
       const stripComponents = extractConfig.strip || 0;
-      const stripFlag = stripComponents > 0 ? ` --strip-components=${stripComponents}` : "";
-      if (archiveType === "zip") {
-        execSync22(`unzip -o "${tempFile}" -d "${destPath}"`, { stdio: "pipe" });
-      } else if (archiveType === "tar.xz") {
-        execSync22(`tar -xJf "${tempFile}" -C "${destPath}"${stripFlag}`, { stdio: "pipe" });
-      } else if (archiveType === "tar.gz" || archiveType === "tgz") {
-        execSync22(`tar -xzf "${tempFile}" -C "${destPath}"${stripFlag}`, { stdio: "pipe" });
+      if (archiveType === "raw") {
+        installRawBinaryDownload(tempFile, destPath, extractConfig.binary || toolName, {
+          chmod: extractConfig.chmod
+        });
       } else {
-        throw new Error(`Unsupported archive type: ${archiveType}`);
+        runRegistryCommandPlan(createRegistryArchiveExtractCommand(archiveType, tempFile, destPath, {
+          stripComponents
+        }), { stdio: "pipe" });
+        await extractBinaryFromPath(destPath, extractConfig.binary || toolName, destPath);
       }
-      await extractBinaryFromPath(destPath, extractConfig.binary || toolName, destPath);
       const binaries = [toolName, ...toolManifest.additionalBinaries || []];
       for (const bin of binaries) {
         const binPath = import_path3.default.join(destPath, bin);
@@ -1078,12 +1144,13 @@ async function verifyHash(filePath, expectedHash) {
     stream.on("error", reject);
   });
 }
-var import_fs2, import_path3, import_crypto, DEFAULT_REGISTRY_URL, RUNTIMES_DOWNLOAD_BASE, CACHE_TTL, PACKAGE_KINDS2, KIND_PLURALS, GITHUB_RAW_BASE, RUNTIMES_RELEASE_VERSION;
+var import_fs2, import_path3, import_crypto, import_child_process, DEFAULT_REGISTRY_URL, RUNTIMES_DOWNLOAD_BASE, CACHE_TTL, PACKAGE_KINDS2, KIND_PLURALS, GITHUB_RAW_BASE, RUNTIMES_RELEASE_VERSION;
 var init_src3 = __esm({
   "packages/registry-client/src/index.js"() {
     import_fs2 = __toESM(require("fs"), 1);
     import_path3 = __toESM(require("path"), 1);
     import_crypto = __toESM(require("crypto"), 1);
+    import_child_process = require("child_process");
     init_src2();
     DEFAULT_REGISTRY_URL = "https://raw.githubusercontent.com/learnrudi/registry/main/index.json";
     RUNTIMES_DOWNLOAD_BASE = "https://github.com/learnrudi/registry/releases/download";
@@ -1453,17 +1520,17 @@ var require_visit = __commonJS({
     visit.BREAK = BREAK;
     visit.SKIP = SKIP;
     visit.REMOVE = REMOVE;
-    function visit_(key, node, visitor, path76) {
-      const ctrl = callVisitor(key, node, visitor, path76);
+    function visit_(key, node, visitor, path74) {
+      const ctrl = callVisitor(key, node, visitor, path74);
       if (identity.isNode(ctrl) || identity.isPair(ctrl)) {
-        replaceNode(key, path76, ctrl);
-        return visit_(key, ctrl, visitor, path76);
+        replaceNode(key, path74, ctrl);
+        return visit_(key, ctrl, visitor, path74);
       }
       if (typeof ctrl !== "symbol") {
         if (identity.isCollection(node)) {
-          path76 = Object.freeze(path76.concat(node));
+          path74 = Object.freeze(path74.concat(node));
           for (let i2 = 0; i2 < node.items.length; ++i2) {
-            const ci = visit_(i2, node.items[i2], visitor, path76);
+            const ci = visit_(i2, node.items[i2], visitor, path74);
             if (typeof ci === "number")
               i2 = ci - 1;
             else if (ci === BREAK)
@@ -1474,13 +1541,13 @@ var require_visit = __commonJS({
             }
           }
         } else if (identity.isPair(node)) {
-          path76 = Object.freeze(path76.concat(node));
-          const ck = visit_("key", node.key, visitor, path76);
+          path74 = Object.freeze(path74.concat(node));
+          const ck = visit_("key", node.key, visitor, path74);
           if (ck === BREAK)
             return BREAK;
           else if (ck === REMOVE)
             node.key = null;
-          const cv = visit_("value", node.value, visitor, path76);
+          const cv = visit_("value", node.value, visitor, path74);
           if (cv === BREAK)
             return BREAK;
           else if (cv === REMOVE)
@@ -1501,17 +1568,17 @@ var require_visit = __commonJS({
     visitAsync.BREAK = BREAK;
     visitAsync.SKIP = SKIP;
     visitAsync.REMOVE = REMOVE;
-    async function visitAsync_(key, node, visitor, path76) {
-      const ctrl = await callVisitor(key, node, visitor, path76);
+    async function visitAsync_(key, node, visitor, path74) {
+      const ctrl = await callVisitor(key, node, visitor, path74);
       if (identity.isNode(ctrl) || identity.isPair(ctrl)) {
-        replaceNode(key, path76, ctrl);
-        return visitAsync_(key, ctrl, visitor, path76);
+        replaceNode(key, path74, ctrl);
+        return visitAsync_(key, ctrl, visitor, path74);
       }
       if (typeof ctrl !== "symbol") {
         if (identity.isCollection(node)) {
-          path76 = Object.freeze(path76.concat(node));
+          path74 = Object.freeze(path74.concat(node));
           for (let i2 = 0; i2 < node.items.length; ++i2) {
-            const ci = await visitAsync_(i2, node.items[i2], visitor, path76);
+            const ci = await visitAsync_(i2, node.items[i2], visitor, path74);
             if (typeof ci === "number")
               i2 = ci - 1;
             else if (ci === BREAK)
@@ -1522,13 +1589,13 @@ var require_visit = __commonJS({
             }
           }
         } else if (identity.isPair(node)) {
-          path76 = Object.freeze(path76.concat(node));
-          const ck = await visitAsync_("key", node.key, visitor, path76);
+          path74 = Object.freeze(path74.concat(node));
+          const ck = await visitAsync_("key", node.key, visitor, path74);
           if (ck === BREAK)
             return BREAK;
           else if (ck === REMOVE)
             node.key = null;
-          const cv = await visitAsync_("value", node.value, visitor, path76);
+          const cv = await visitAsync_("value", node.value, visitor, path74);
           if (cv === BREAK)
             return BREAK;
           else if (cv === REMOVE)
@@ -1555,23 +1622,23 @@ var require_visit = __commonJS({
       }
       return visitor;
     }
-    function callVisitor(key, node, visitor, path76) {
+    function callVisitor(key, node, visitor, path74) {
       if (typeof visitor === "function")
-        return visitor(key, node, path76);
+        return visitor(key, node, path74);
       if (identity.isMap(node))
-        return visitor.Map?.(key, node, path76);
+        return visitor.Map?.(key, node, path74);
       if (identity.isSeq(node))
-        return visitor.Seq?.(key, node, path76);
+        return visitor.Seq?.(key, node, path74);
       if (identity.isPair(node))
-        return visitor.Pair?.(key, node, path76);
+        return visitor.Pair?.(key, node, path74);
       if (identity.isScalar(node))
-        return visitor.Scalar?.(key, node, path76);
+        return visitor.Scalar?.(key, node, path74);
       if (identity.isAlias(node))
-        return visitor.Alias?.(key, node, path76);
+        return visitor.Alias?.(key, node, path74);
       return void 0;
     }
-    function replaceNode(key, path76, node) {
-      const parent = path76[path76.length - 1];
+    function replaceNode(key, path74, node) {
+      const parent = path74[path74.length - 1];
       if (identity.isCollection(parent)) {
         parent.items[key] = node;
       } else if (identity.isPair(parent)) {
@@ -2179,10 +2246,10 @@ var require_Collection = __commonJS({
     var createNode = require_createNode();
     var identity = require_identity();
     var Node = require_Node();
-    function collectionFromPath(schema, path76, value) {
+    function collectionFromPath(schema, path74, value) {
       let v2 = value;
-      for (let i2 = path76.length - 1; i2 >= 0; --i2) {
-        const k2 = path76[i2];
+      for (let i2 = path74.length - 1; i2 >= 0; --i2) {
+        const k2 = path74[i2];
         if (typeof k2 === "number" && Number.isInteger(k2) && k2 >= 0) {
           const a2 = [];
           a2[k2] = v2;
@@ -2201,7 +2268,7 @@ var require_Collection = __commonJS({
         sourceObjects: /* @__PURE__ */ new Map()
       });
     }
-    var isEmptyPath = (path76) => path76 == null || typeof path76 === "object" && !!path76[Symbol.iterator]().next().done;
+    var isEmptyPath = (path74) => path74 == null || typeof path74 === "object" && !!path74[Symbol.iterator]().next().done;
     var Collection = class extends Node.NodeBase {
       constructor(type, schema) {
         super(type);
@@ -2231,11 +2298,11 @@ var require_Collection = __commonJS({
        * be a Pair instance or a `{ key, value }` object, which may not have a key
        * that already exists in the map.
        */
-      addIn(path76, value) {
-        if (isEmptyPath(path76))
+      addIn(path74, value) {
+        if (isEmptyPath(path74))
           this.add(value);
         else {
-          const [key, ...rest] = path76;
+          const [key, ...rest] = path74;
           const node = this.get(key, true);
           if (identity.isCollection(node))
             node.addIn(rest, value);
@@ -2249,8 +2316,8 @@ var require_Collection = __commonJS({
        * Removes a value from the collection.
        * @returns `true` if the item was found and removed.
        */
-      deleteIn(path76) {
-        const [key, ...rest] = path76;
+      deleteIn(path74) {
+        const [key, ...rest] = path74;
         if (rest.length === 0)
           return this.delete(key);
         const node = this.get(key, true);
@@ -2264,8 +2331,8 @@ var require_Collection = __commonJS({
        * scalar values from their surrounding node; to disable set `keepScalar` to
        * `true` (collections are always returned intact).
        */
-      getIn(path76, keepScalar) {
-        const [key, ...rest] = path76;
+      getIn(path74, keepScalar) {
+        const [key, ...rest] = path74;
         const node = this.get(key, true);
         if (rest.length === 0)
           return !keepScalar && identity.isScalar(node) ? node.value : node;
@@ -2283,8 +2350,8 @@ var require_Collection = __commonJS({
       /**
        * Checks if the collection includes a value with the key `key`.
        */
-      hasIn(path76) {
-        const [key, ...rest] = path76;
+      hasIn(path74) {
+        const [key, ...rest] = path74;
         if (rest.length === 0)
           return this.has(key);
         const node = this.get(key, true);
@@ -2294,8 +2361,8 @@ var require_Collection = __commonJS({
        * Sets a value in this collection. For `!!set`, `value` needs to be a
        * boolean to add/remove the item from the set.
        */
-      setIn(path76, value) {
-        const [key, ...rest] = path76;
+      setIn(path74, value) {
+        const [key, ...rest] = path74;
         if (rest.length === 0) {
           this.set(key, value);
         } else {
@@ -4799,9 +4866,9 @@ var require_Document = __commonJS({
           this.contents.add(value);
       }
       /** Adds a value to the document. */
-      addIn(path76, value) {
+      addIn(path74, value) {
         if (assertCollection(this.contents))
-          this.contents.addIn(path76, value);
+          this.contents.addIn(path74, value);
       }
       /**
        * Create a new `Alias` node, ensuring that the target `node` has the required anchor.
@@ -4876,14 +4943,14 @@ var require_Document = __commonJS({
        * Removes a value from the document.
        * @returns `true` if the item was found and removed.
        */
-      deleteIn(path76) {
-        if (Collection.isEmptyPath(path76)) {
+      deleteIn(path74) {
+        if (Collection.isEmptyPath(path74)) {
           if (this.contents == null)
             return false;
           this.contents = null;
           return true;
         }
-        return assertCollection(this.contents) ? this.contents.deleteIn(path76) : false;
+        return assertCollection(this.contents) ? this.contents.deleteIn(path74) : false;
       }
       /**
        * Returns item at `key`, or `undefined` if not found. By default unwraps
@@ -4898,10 +4965,10 @@ var require_Document = __commonJS({
        * scalar values from their surrounding node; to disable set `keepScalar` to
        * `true` (collections are always returned intact).
        */
-      getIn(path76, keepScalar) {
-        if (Collection.isEmptyPath(path76))
+      getIn(path74, keepScalar) {
+        if (Collection.isEmptyPath(path74))
           return !keepScalar && identity.isScalar(this.contents) ? this.contents.value : this.contents;
-        return identity.isCollection(this.contents) ? this.contents.getIn(path76, keepScalar) : void 0;
+        return identity.isCollection(this.contents) ? this.contents.getIn(path74, keepScalar) : void 0;
       }
       /**
        * Checks if the document includes a value with the key `key`.
@@ -4912,10 +4979,10 @@ var require_Document = __commonJS({
       /**
        * Checks if the document includes a value at `path`.
        */
-      hasIn(path76) {
-        if (Collection.isEmptyPath(path76))
+      hasIn(path74) {
+        if (Collection.isEmptyPath(path74))
           return this.contents !== void 0;
-        return identity.isCollection(this.contents) ? this.contents.hasIn(path76) : false;
+        return identity.isCollection(this.contents) ? this.contents.hasIn(path74) : false;
       }
       /**
        * Sets a value in this document. For `!!set`, `value` needs to be a
@@ -4932,13 +4999,13 @@ var require_Document = __commonJS({
        * Sets a value in this document. For `!!set`, `value` needs to be a
        * boolean to add/remove the item from the set.
        */
-      setIn(path76, value) {
-        if (Collection.isEmptyPath(path76)) {
+      setIn(path74, value) {
+        if (Collection.isEmptyPath(path74)) {
           this.contents = value;
         } else if (this.contents == null) {
-          this.contents = Collection.collectionFromPath(this.schema, Array.from(path76), value);
+          this.contents = Collection.collectionFromPath(this.schema, Array.from(path74), value);
         } else if (assertCollection(this.contents)) {
-          this.contents.setIn(path76, value);
+          this.contents.setIn(path74, value);
         }
       }
       /**
@@ -6890,9 +6957,9 @@ var require_cst_visit = __commonJS({
     visit.BREAK = BREAK;
     visit.SKIP = SKIP;
     visit.REMOVE = REMOVE;
-    visit.itemAtPath = (cst, path76) => {
+    visit.itemAtPath = (cst, path74) => {
       let item = cst;
-      for (const [field, index] of path76) {
+      for (const [field, index] of path74) {
         const tok = item?.[field];
         if (tok && "items" in tok) {
           item = tok.items[index];
@@ -6901,23 +6968,23 @@ var require_cst_visit = __commonJS({
       }
       return item;
     };
-    visit.parentCollection = (cst, path76) => {
-      const parent = visit.itemAtPath(cst, path76.slice(0, -1));
-      const field = path76[path76.length - 1][0];
+    visit.parentCollection = (cst, path74) => {
+      const parent = visit.itemAtPath(cst, path74.slice(0, -1));
+      const field = path74[path74.length - 1][0];
       const coll = parent?.[field];
       if (coll && "items" in coll)
         return coll;
       throw new Error("Parent collection not found");
     };
-    function _visit(path76, item, visitor) {
-      let ctrl = visitor(item, path76);
+    function _visit(path74, item, visitor) {
+      let ctrl = visitor(item, path74);
       if (typeof ctrl === "symbol")
         return ctrl;
       for (const field of ["key", "value"]) {
         const token = item[field];
         if (token && "items" in token) {
           for (let i2 = 0; i2 < token.items.length; ++i2) {
-            const ci = _visit(Object.freeze(path76.concat([[field, i2]])), token.items[i2], visitor);
+            const ci = _visit(Object.freeze(path74.concat([[field, i2]])), token.items[i2], visitor);
             if (typeof ci === "number")
               i2 = ci - 1;
             else if (ci === BREAK)
@@ -6928,10 +6995,10 @@ var require_cst_visit = __commonJS({
             }
           }
           if (typeof ctrl === "function" && field === "key")
-            ctrl = ctrl(item, path76);
+            ctrl = ctrl(item, path74);
         }
       }
-      return typeof ctrl === "function" ? ctrl(item, path76) : ctrl;
+      return typeof ctrl === "function" ? ctrl(item, path74) : ctrl;
     }
     exports2.visit = visit;
   }
@@ -8216,14 +8283,14 @@ var require_parser = __commonJS({
             case "scalar":
             case "single-quoted-scalar":
             case "double-quoted-scalar": {
-              const fs67 = this.flowScalar(this.type);
+              const fs68 = this.flowScalar(this.type);
               if (atNextItem || it2.value) {
-                map.items.push({ start, key: fs67, sep: [] });
+                map.items.push({ start, key: fs68, sep: [] });
                 this.onKeyLine = true;
               } else if (it2.sep) {
-                this.stack.push(fs67);
+                this.stack.push(fs68);
               } else {
-                Object.assign(it2, { key: fs67, sep: [] });
+                Object.assign(it2, { key: fs68, sep: [] });
                 this.onKeyLine = true;
               }
               return;
@@ -8351,13 +8418,13 @@ var require_parser = __commonJS({
             case "scalar":
             case "single-quoted-scalar":
             case "double-quoted-scalar": {
-              const fs67 = this.flowScalar(this.type);
+              const fs68 = this.flowScalar(this.type);
               if (!it2 || it2.value)
-                fc.items.push({ start: [], key: fs67, sep: [] });
+                fc.items.push({ start: [], key: fs68, sep: [] });
               else if (it2.sep)
-                this.stack.push(fs67);
+                this.stack.push(fs68);
               else
-                Object.assign(it2, { key: fs67, sep: [] });
+                Object.assign(it2, { key: fs68, sep: [] });
               return;
             }
             case "flow-map-end":
@@ -8989,6 +9056,161 @@ var init_shims = __esm({
 });
 
 // packages/core/src/installer.js
+function assertCommandArg2(value, label) {
+  if (typeof value !== "string" || value.length === 0 || value.includes("\0")) {
+    throw new Error(`Invalid command ${label}`);
+  }
+  return value;
+}
+function assertNoShellControlSyntax(value, label) {
+  assertCommandArg2(value, label);
+  if (SHELL_CONTROL_PATTERN.test(value)) {
+    throw new Error(`Unsupported ${label}: shell control syntax is not allowed`);
+  }
+  return value;
+}
+function normalizeCommandPlan2(plan) {
+  if (!plan || typeof plan !== "object" || Array.isArray(plan)) {
+    throw new Error("Command plan must be an object");
+  }
+  const command = assertCommandArg2(plan.command, "command");
+  const args = Array.isArray(plan.args) ? plan.args.map((arg, index) => assertCommandArg2(arg, `arg ${index}`)) : [];
+  return { command, args };
+}
+function runCommandPlan(plan, options = {}) {
+  const { execFileSync: execFileSync12 = import_child_process2.execFileSync, ...execOptions } = options;
+  const { command, args } = normalizeCommandPlan2(plan);
+  return execFileSync12(command, args, execOptions);
+}
+function createArchiveExtractCommand(extractType, archivePath, destPath, options = {}) {
+  const archive = assertCommandArg2(archivePath, "archive path");
+  const dest = assertCommandArg2(destPath, "destination path");
+  const stripComponents = Number(options.stripComponents || 0);
+  const withStrip = [];
+  if (!Number.isInteger(stripComponents) || stripComponents < 0) {
+    throw new Error(`Invalid stripComponents: ${options.stripComponents}`);
+  }
+  if (stripComponents > 0) {
+    withStrip.push(`--strip-components=${stripComponents}`);
+  }
+  if (extractType === "tar.gz" || extractType === "tgz") {
+    return { command: "tar", args: ["-xzf", archive, "-C", dest, ...withStrip] };
+  }
+  if (extractType === "tar.xz") {
+    return { command: "tar", args: ["-xJf", archive, "-C", dest, ...withStrip] };
+  }
+  if (extractType === "zip") {
+    return { command: "unzip", args: ["-o", archive, "-d", dest] };
+  }
+  throw new Error(`Unsupported extract type: ${extractType}`);
+}
+function assertNpmPackageName(packageName) {
+  const value = assertCommandArg2(packageName, "npm package name");
+  if (!NPM_PACKAGE_PATTERN.test(value)) {
+    throw new Error(`Invalid npm package name: ${packageName}`);
+  }
+  return value;
+}
+function assertPipPackageSpec(packageSpec) {
+  const value = assertCommandArg2(packageSpec, "pip package spec");
+  if (!PIP_PACKAGE_PATTERN.test(value)) {
+    throw new Error(`Invalid pip package spec: ${packageSpec}`);
+  }
+  return value;
+}
+function createNpmInitCommand(npmCmd) {
+  return { command: assertCommandArg2(npmCmd, "npm command"), args: ["init", "-y"] };
+}
+function createNpmInstallCommand(options = {}) {
+  const command = assertCommandArg2(options.npmCmd, "npm command");
+  const packageName = assertNpmPackageName(options.packageName);
+  const args = ["install"];
+  if (options.global) {
+    args.push("-g");
+  }
+  args.push(packageName);
+  if (options.ignoreScripts) {
+    args.push("--ignore-scripts");
+  }
+  args.push("--no-audit", "--no-fund");
+  if (options.prefix) {
+    args.push("--prefix", assertCommandArg2(options.prefix, "npm prefix"));
+  }
+  return { command, args };
+}
+function createNpmUninstallCommand(options = {}) {
+  const command = assertCommandArg2(options.npmCmd, "npm command");
+  const packageName = assertNpmPackageName(options.packageName);
+  const args = ["uninstall", "-g", packageName, "--no-audit", "--no-fund"];
+  if (options.prefix) {
+    args.push("--prefix", assertCommandArg2(options.prefix, "npm prefix"));
+  }
+  return { command, args };
+}
+function createPipInstallCommand(pipCmd, pipPackage) {
+  return {
+    command: assertCommandArg2(pipCmd, "pip command"),
+    args: ["install", assertPipPackageSpec(pipPackage)]
+  };
+}
+function tokenizeSimpleRegistryCommand(command, label) {
+  let value;
+  try {
+    value = assertNoShellControlSyntax(command, label).trim();
+  } catch {
+    throw new Error(`Unsupported ${label} command`);
+  }
+  if (value.includes('"') || value.includes("'")) {
+    throw new Error(`Unsupported ${label} command`);
+  }
+  return value.split(/\s+/).filter(Boolean);
+}
+function normalizeRegistryArgList(args, label) {
+  if (!Array.isArray(args)) {
+    throw new Error(`${label} args must be an array`);
+  }
+  return args.map((arg, index) => assertNoShellControlSyntax(arg, `${label} arg ${index}`));
+}
+function createPostInstallCommand(postInstall, binDir) {
+  const binRoot = assertCommandArg2(binDir, "postInstall bin directory");
+  if (postInstall && typeof postInstall === "object" && !Array.isArray(postInstall)) {
+    if (postInstall.bin) {
+      return {
+        command: import_path6.default.join(binRoot, assertNoShellControlSyntax(postInstall.bin, "postInstall bin")),
+        args: normalizeRegistryArgList(postInstall.args || [], "postInstall")
+      };
+    }
+    return normalizeCommandPlan2({
+      command: assertNoShellControlSyntax(postInstall.command, "postInstall command"),
+      args: normalizeRegistryArgList(postInstall.args || [], "postInstall")
+    });
+  }
+  const tokens = tokenizeSimpleRegistryCommand(postInstall, "postInstall");
+  if (tokens.length < 2 || tokens[0] !== "npx") {
+    throw new Error("Unsupported postInstall command: expected npx <bin> [args...]");
+  }
+  return {
+    command: import_path6.default.join(binRoot, assertNoShellControlSyntax(tokens[1], "postInstall bin")),
+    args: tokens.slice(2).map((arg, index) => assertNoShellControlSyntax(arg, `postInstall arg ${index}`))
+  };
+}
+function createNativeInstallerCommand(nativeInstaller, platform = process.platform) {
+  const installer = nativeInstaller?.[platform];
+  if (!installer) {
+    throw new Error(`No native installer available for platform: ${platform}`);
+  }
+  if (typeof installer === "string") {
+    throw new Error("Native installer must be explicit argv metadata, not a shell command string");
+  }
+  const rawPlan = Array.isArray(installer) ? { command: installer[0], args: installer.slice(1) } : installer;
+  if (!rawPlan || typeof rawPlan !== "object") {
+    throw new Error("Native installer must be explicit argv metadata");
+  }
+  return normalizeCommandPlan2({
+    command: assertNoShellControlSyntax(rawPlan.command, "native installer command"),
+    args: normalizeRegistryArgList(rawPlan.args || [], "native installer")
+  });
+}
 function normalizeInstalledPackageId(kind2, manifestId, directoryName) {
   const rawId = typeof manifestId === "string" ? manifestId.trim() : "";
   if (!rawId) return `${kind2}:${directoryName}`;
@@ -9014,6 +9236,146 @@ function normalizePreservedStatePaths(paths) {
     }
   }
   return normalized;
+}
+function isSystemBinaryPackage(pkg) {
+  return pkg.kind === "binary" && (pkg.installType === "system" || pkg.managed === false || pkg.install?.source === "system");
+}
+function executableBasename(value) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().replace(/\\/g, "/");
+  if (!normalized) return null;
+  const name = import_path6.default.posix.basename(normalized);
+  return name && name !== "." && name !== ".." ? name : null;
+}
+function normalizeBinaryList(pkg, pkgName) {
+  const candidates = [
+    ...Array.isArray(pkg.bins) ? pkg.bins : [],
+    ...Array.isArray(pkg.binaries) ? pkg.binaries : []
+  ];
+  if (typeof pkg.binary === "string") {
+    candidates.push(pkg.binary);
+  }
+  const bins = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const candidate of candidates) {
+    const name = executableBasename(candidate);
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    bins.push(name);
+  }
+  return bins.length > 0 ? bins : [pkgName];
+}
+function getSystemDetectPlan(pkg, pkgName) {
+  const rawCommand = pkg.checkCommand || pkg.detect?.command || pkg.install?.detect?.command || `${pkgName} --version`;
+  const tokens = tokenizeSimpleRegistryCommand(rawCommand, "system detect");
+  if (tokens.length === 0) {
+    throw new Error(`System binary ${pkg.id} must declare a detect command`);
+  }
+  return { command: tokens[0], args: tokens.slice(1), rawCommand };
+}
+function isExecutableFile(filePath) {
+  try {
+    import_fs5.default.accessSync(filePath, import_fs5.default.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function findExecutableOnPath(command) {
+  if (import_path6.default.isAbsolute(command)) {
+    return isExecutableFile(command) ? command : null;
+  }
+  try {
+    const result = runCommandPlan({ command: "which", args: [command] }, { encoding: "utf8" }).trim();
+    return result && isExecutableFile(result) ? result : null;
+  } catch {
+    return null;
+  }
+}
+function collectSystemExecutableCandidates(command, pkg) {
+  const candidates = [];
+  const addCandidate = (candidate) => {
+    if (typeof candidate === "string" && candidate && !candidates.includes(candidate)) {
+      candidates.push(candidate);
+    }
+  };
+  addCandidate(findExecutableOnPath(command));
+  for (const candidate of pkg.systemPaths || []) {
+    if (typeof candidate !== "string" || !candidate.trim()) continue;
+    const resolved = import_path6.default.resolve(candidate);
+    if (import_fs5.default.existsSync(resolved) && import_fs5.default.statSync(resolved).isFile()) {
+      addCandidate(resolved);
+      continue;
+    }
+    addCandidate(import_path6.default.join(resolved, command));
+  }
+  if (import_path6.default.isAbsolute(command)) {
+    addCandidate(command);
+  }
+  return candidates.filter(Boolean);
+}
+function detectSystemBinary(pkg, pkgName) {
+  const detectPlan = getSystemDetectPlan(pkg, pkgName);
+  const candidates = collectSystemExecutableCandidates(detectPlan.command, pkg);
+  const commandsToTry = candidates.length > 0 ? candidates : [detectPlan.command];
+  for (const command of commandsToTry) {
+    try {
+      runCommandPlan({ command, args: detectPlan.args }, { stdio: "pipe" });
+      const resolvedPath = import_path6.default.isAbsolute(command) ? command : findExecutableOnPath(command);
+      if (resolvedPath && isExecutableFile(resolvedPath)) {
+        return {
+          path: resolvedPath,
+          command: detectPlan.rawCommand
+        };
+      }
+    } catch {
+    }
+  }
+  return null;
+}
+async function installSystemBinaryPackage(pkg, installPath, pkgName, options = {}) {
+  const { withShims = false, onProgress } = options;
+  const bins = normalizeBinaryList(pkg, pkgName);
+  onProgress?.({ phase: "detecting", package: pkg.id });
+  const detected = detectSystemBinary(pkg, bins[0] || pkgName);
+  if (!detected) {
+    const hint = pkg.instructions ? ` ${pkg.instructions}` : "";
+    throw new Error(`System binary ${pkg.id} was not detected.${hint}`);
+  }
+  if (import_fs5.default.existsSync(installPath)) {
+    import_fs5.default.rmSync(installPath, { recursive: true, force: true });
+  }
+  import_fs5.default.mkdirSync(installPath, { recursive: true });
+  const manifest = {
+    id: pkg.id,
+    kind: pkg.kind,
+    name: pkgName,
+    version: pkg.version || "system",
+    installType: "system",
+    managed: false,
+    bins,
+    checkCommand: detected.command,
+    installedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    source: {
+      type: "system",
+      path: detected.path
+    }
+  };
+  import_fs5.default.writeFileSync(
+    import_path6.default.join(installPath, "manifest.json"),
+    JSON.stringify(manifest, null, 2)
+  );
+  if (withShims) {
+    await createShimsForTool({
+      id: pkg.id,
+      installType: "system",
+      installDir: installPath,
+      bins,
+      name: pkgName,
+      source: { path: detected.path }
+    });
+  }
+  return { success: true, id: pkg.id, path: installPath };
 }
 function getMutableStatePaths(pkg, options = {}) {
   const configured = Array.isArray(options.preserveStatePaths) ? options.preserveStatePaths : Array.isArray(pkg?.statePaths) ? pkg.statePaths : Array.isArray(pkg?.preserveStatePaths) ? pkg.preserveStatePaths : Array.isArray(pkg?.mutableStatePaths) ? pkg.mutableStatePaths : null;
@@ -9288,18 +9650,11 @@ async function installBinaryStack(pkg, installPath, options = {}) {
       }
     }
     onProgress?.({ phase: "extracting", package: pkg.id });
-    const { execSync: execSync22 } = await import("child_process");
     if (extractType === "none") {
       const destPath = import_path6.default.join(installPath, binaryName);
       import_fs5.default.copyFileSync(tempFile, destPath);
-    } else if (extractType === "tar.gz" || extractType === "tgz") {
-      execSync22(`tar -xzf "${tempFile}" -C "${installPath}"`, { stdio: "pipe" });
-    } else if (extractType === "tar.xz") {
-      execSync22(`tar -xJf "${tempFile}" -C "${installPath}"`, { stdio: "pipe" });
-    } else if (extractType === "zip") {
-      execSync22(`unzip -o "${tempFile}" -d "${installPath}"`, { stdio: "pipe" });
     } else {
-      throw new Error(`Unsupported extract type: ${extractType}`);
+      runCommandPlan(createArchiveExtractCommand(extractType, tempFile, installPath), { stdio: "pipe" });
     }
     const binaryPath = import_path6.default.join(installPath, binaryName);
     if (!import_fs5.default.existsSync(binaryPath)) {
@@ -9351,8 +9706,8 @@ async function installSinglePackage(pkg, options = {}) {
     let bins = pkg.bins || [];
     if (import_fs5.default.existsSync(manifestPath)) {
       try {
-        const manifest2 = JSON.parse(import_fs5.default.readFileSync(manifestPath, "utf-8"));
-        bins = manifest2.bins || manifest2.binaries || bins;
+        const manifest = JSON.parse(import_fs5.default.readFileSync(manifestPath, "utf-8"));
+        bins = manifest.bins || manifest.binaries || bins;
       } catch {
       }
     }
@@ -9367,7 +9722,6 @@ async function installSinglePackage(pkg, options = {}) {
   if (pkg.kind === "runtime" || pkg.kind === "binary" || pkg.kind === "agent") {
     onProgress?.({ phase: "downloading", package: pkg.id });
     if (pkg.installType === "native-installer" && pkg.nativeInstaller) {
-      const { execSync: execSync22 } = await import("child_process");
       const homedir7 = import_os3.default.homedir();
       const nativeBin = pkg.nativeBinPath ? import_path6.default.join(homedir7, pkg.nativeBinPath) : null;
       if (nativeBin && import_fs5.default.existsSync(nativeBin) && !force) {
@@ -9385,7 +9739,7 @@ async function installSinglePackage(pkg, options = {}) {
       }
       if (!force) {
         try {
-          const which2 = execSync22(`which ${pkgName}`, { encoding: "utf-8" }).trim();
+          const which2 = runCommandPlan({ command: "which", args: [pkgName] }, { encoding: "utf-8" }).trim();
           if (which2 && import_fs5.default.existsSync(which2)) {
             console.log(`  Found ${pkg.name} in PATH: ${which2}`);
             if (!import_fs5.default.existsSync(installPath)) import_fs5.default.mkdirSync(installPath, { recursive: true });
@@ -9408,10 +9762,10 @@ async function installSinglePackage(pkg, options = {}) {
         throw new Error(`No native installer available for platform: ${platform}`);
       }
       console.log(`  Running native installer for ${pkg.name}...`);
-      execSync22(installerCmd, { stdio: "inherit" });
+      runCommandPlan(createNativeInstallerCommand(pkg.nativeInstaller, platform), { stdio: "inherit" });
       const verifyPath = nativeBin && import_fs5.default.existsSync(nativeBin) ? nativeBin : (() => {
         try {
-          return execSync22(`which ${pkgName}`, { encoding: "utf-8" }).trim();
+          return runCommandPlan({ command: "which", args: [pkgName] }, { encoding: "utf-8" }).trim();
         } catch {
           return null;
         }
@@ -9430,9 +9784,14 @@ async function installSinglePackage(pkg, options = {}) {
       }, null, 2));
       return { success: true, id: pkg.id, path: installPath };
     }
+    if (isSystemBinaryPackage(pkg)) {
+      return await installSystemBinaryPackage(pkg, installPath, pkgName, {
+        withShims,
+        onProgress
+      });
+    }
     if (pkg.npmPackage) {
       try {
-        const { execSync: execSync22 } = await import("child_process");
         const npmInstallRoot = isAgentNpm ? getNodeRuntimeRoot() : installPath;
         const npmScope = isAgentNpm ? "global" : "local";
         if (!import_fs5.default.existsSync(installPath)) {
@@ -9445,12 +9804,24 @@ async function installSinglePackage(pkg, options = {}) {
         const resourcesPath = process.env.RESOURCES_PATH;
         const npmCmd = resourcesPath ? import_path6.default.join(resourcesPath, "bundled-runtimes", "node", "bin", "npm") : await findNpmExecutable();
         if (!isAgentNpm && !import_fs5.default.existsSync(import_path6.default.join(installPath, "package.json"))) {
-          execSync22(`"${npmCmd}" init -y`, { cwd: installPath, stdio: "pipe", env: buildNodeToolEnv(npmCmd) });
+          runCommandPlan(createNpmInitCommand(npmCmd), {
+            cwd: installPath,
+            stdio: "pipe",
+            env: buildNodeToolEnv(npmCmd)
+          });
         }
         const shouldIgnoreScripts = pkg.source?.type === "npm" && !allowScripts;
-        const installFlags = shouldIgnoreScripts ? "--ignore-scripts --no-audit --no-fund" : "--no-audit --no-fund";
-        const installCmd = isAgentNpm ? `install -g ${pkg.npmPackage} ${installFlags} --prefix "${npmInstallRoot}"` : `install ${pkg.npmPackage} ${installFlags}`;
-        execSync22(`"${npmCmd}" ${installCmd}`, { cwd: installPath, stdio: "pipe", env: buildNodeToolEnv(npmCmd) });
+        runCommandPlan(createNpmInstallCommand({
+          npmCmd,
+          packageName: pkg.npmPackage,
+          global: isAgentNpm,
+          prefix: isAgentNpm ? npmInstallRoot : null,
+          ignoreScripts: shouldIgnoreScripts
+        }), {
+          cwd: installPath,
+          stdio: "pipe",
+          env: buildNodeToolEnv(npmCmd)
+        });
         let bins = pkg.bins;
         if (!bins || bins.length === 0) {
           bins = discoverNpmBins(npmInstallRoot, pkg.npmPackage, npmScope);
@@ -9468,11 +9839,7 @@ async function installSinglePackage(pkg, options = {}) {
         if (pkg.postInstall) {
           onProgress?.({ phase: "postInstall", package: pkg.id, message: pkg.postInstall });
           const binDir = isAgentNpm ? getNodeRuntimeBinDir() : import_path6.default.join(installPath, "node_modules", ".bin");
-          const postInstallCmd = pkg.postInstall.replace(
-            /^npx\s+(\S+)/,
-            `"${import_path6.default.join(binDir, "$1")}"`
-          );
-          execSync22(postInstallCmd, {
+          runCommandPlan(createPostInstallCommand(pkg.postInstall, binDir), {
             cwd: installPath,
             stdio: "pipe",
             env: {
@@ -9482,7 +9849,7 @@ async function installSinglePackage(pkg, options = {}) {
           });
         }
         const scriptsDetected = hasInstallScripts(npmInstallRoot, pkg.npmPackage, npmScope);
-        const scriptsPolicy = installFlags.includes("--ignore-scripts") ? "ignore" : "allow";
+        const scriptsPolicy = shouldIgnoreScripts ? "ignore" : "allow";
         if (scriptsDetected && scriptsPolicy === "ignore") {
           console.warn(`
 \u26A0\uFE0F  This package defines install scripts that were skipped for security.`);
@@ -9490,7 +9857,7 @@ async function installSinglePackage(pkg, options = {}) {
           console.warn(`   rudi install ${pkg.id} --allow-scripts
 `);
         }
-        const manifest2 = {
+        const manifest = {
           id: pkg.id,
           kind: pkg.kind,
           name: pkgName,
@@ -9507,7 +9874,7 @@ async function installSinglePackage(pkg, options = {}) {
         };
         import_fs5.default.writeFileSync(
           import_path6.default.join(installPath, "manifest.json"),
-          JSON.stringify(manifest2, null, 2)
+          JSON.stringify(manifest, null, 2)
         );
         if (withShims) {
           if (bins && bins.length > 0) {
@@ -9542,7 +9909,7 @@ async function installSinglePackage(pkg, options = {}) {
         const { usedUv } = await installPythonPackage(installPath, pkg.pipPackage, (p2) => {
           onProgress?.({ ...p2, package: pkg.id });
         });
-        const manifest2 = {
+        const manifest = {
           id: pkg.id,
           kind: pkg.kind,
           name: pkgName,
@@ -9554,7 +9921,7 @@ async function installSinglePackage(pkg, options = {}) {
         };
         import_fs5.default.writeFileSync(
           import_path6.default.join(installPath, "manifest.json"),
-          JSON.stringify(manifest2, null, 2)
+          JSON.stringify(manifest, null, 2)
         );
         if (withShims) {
           await createShimsForTool({
@@ -9577,13 +9944,13 @@ async function installSinglePackage(pkg, options = {}) {
           onProgress: (p2) => onProgress?.({ ...p2, package: pkg.id })
         });
         const manifestPath = import_path6.default.join(installPath, "manifest.json");
-        const manifest2 = JSON.parse(import_fs5.default.readFileSync(manifestPath, "utf-8"));
+        const manifest = JSON.parse(import_fs5.default.readFileSync(manifestPath, "utf-8"));
         if (withShims) {
           await createShimsForTool({
             id: pkg.id,
             installType: "binary",
             installDir: installPath,
-            bins: manifest2.bins || manifest2.binaries || pkg.bins || [pkgName],
+            bins: manifest.bins || manifest.binaries || pkg.bins || [pkgName],
             name: pkgName
           });
         }
@@ -9594,24 +9961,11 @@ async function installSinglePackage(pkg, options = {}) {
       }
       return { success: true, id: pkg.id, path: installPath };
     } catch (error) {
-      console.warn(`Package download failed: ${error.message}`);
-      console.warn(`Creating placeholder for ${pkg.id}`);
-      if (!import_fs5.default.existsSync(installPath)) {
-        import_fs5.default.mkdirSync(installPath, { recursive: true });
+      try {
+        import_fs5.default.rmSync(installPath, { recursive: true, force: true });
+      } catch {
       }
-      import_fs5.default.writeFileSync(
-        import_path6.default.join(installPath, "manifest.json"),
-        JSON.stringify({
-          id: pkg.id,
-          kind: pkg.kind,
-          name: pkg.name,
-          version: pkg.version,
-          installedAt: (/* @__PURE__ */ new Date()).toISOString(),
-          source: "placeholder",
-          error: error.message
-        }, null, 2)
-      );
-      return { success: true, id: pkg.id, path: installPath, placeholder: true };
+      throw new Error(`Failed to install ${pkg.id}: ${error.message}`);
     }
   }
   if (pkg.runtime === "binary" && pkg.binary?.platforms) {
@@ -9682,29 +10036,8 @@ async function installSinglePackage(pkg, options = {}) {
       throw new Error(`Failed to install ${pkg.id}: ${error.message}`);
     }
   }
-  if (SINGLE_FILE_KINDS2.has(pkg.kind)) {
-    const label = pkg.kind.charAt(0).toUpperCase() + pkg.kind.slice(1);
-    throw new Error(`${label} ${pkg.id} not found in registry`);
-  }
-  if (import_fs5.default.existsSync(installPath)) {
-    import_fs5.default.rmSync(installPath, { recursive: true });
-  }
-  import_fs5.default.mkdirSync(installPath, { recursive: true });
-  const manifest = {
-    id: pkg.id,
-    kind: pkg.kind,
-    name: pkg.name,
-    version: pkg.version,
-    description: pkg.description,
-    installedAt: (/* @__PURE__ */ new Date()).toISOString(),
-    source: "registry"
-  };
-  import_fs5.default.writeFileSync(
-    import_path6.default.join(installPath, "manifest.json"),
-    JSON.stringify(manifest, null, 2)
-  );
-  onProgress?.({ phase: "installed", package: pkg.id });
-  return { success: true, id: pkg.id, path: installPath };
+  const label = pkg.kind.charAt(0).toUpperCase() + pkg.kind.slice(1);
+  throw new Error(`${label} ${pkg.id} has no install source`);
 }
 async function uninstallPackage(id) {
   const installPath = getPackagePath(id);
@@ -9728,10 +10061,13 @@ async function uninstallPackage(id) {
     }
     if (kind2 === "agent" && manifest?.npmPackage) {
       try {
-        const { execSync: execSync22 } = await import("child_process");
         const npmCmd = await findNpmExecutable();
         const npmPrefix = getNodeRuntimeRoot();
-        execSync22(`"${npmCmd}" uninstall -g ${manifest.npmPackage} --prefix "${npmPrefix}" --no-audit --no-fund`, {
+        runCommandPlan(createNpmUninstallCommand({
+          npmCmd,
+          packageName: manifest.npmPackage,
+          prefix: npmPrefix
+        }), {
           stdio: "pipe",
           env: buildNodeToolEnv(npmCmd)
         });
@@ -9963,7 +10299,6 @@ async function updateAll(options = {}) {
   return results;
 }
 async function installStackDependencies(stackPath, onProgress) {
-  const { execSync: execSync22 } = await import("child_process");
   const nodeDepsPaths = [
     stackPath,
     // Flat layout: package.json at stack root
@@ -9980,7 +10315,10 @@ async function installStackDependencies(stackPath, onProgress) {
       if (pnpmCmd) {
         const pnpmStore = import_path6.default.join(PATHS.cache, "pnpm");
         import_fs5.default.mkdirSync(pnpmStore, { recursive: true });
-        execSync22(`"${pnpmCmd}" install --store-dir "${pnpmStore}" --prefer-frozen-lockfile`, {
+        runCommandPlan({
+          command: pnpmCmd,
+          args: ["install", "--store-dir", pnpmStore, "--prefer-frozen-lockfile"]
+        }, {
           cwd: nodePath,
           stdio: "pipe",
           env: buildNodeToolEnv(pnpmCmd)
@@ -9994,7 +10332,11 @@ async function installStackDependencies(stackPath, onProgress) {
     if (!installedWithPnpm) {
       try {
         const npmCmd = await findNpmExecutable();
-        execSync22(`"${npmCmd}" install`, { cwd: nodePath, stdio: "pipe", env: buildNodeToolEnv(npmCmd) });
+        runCommandPlan({ command: npmCmd, args: ["install"] }, {
+          cwd: nodePath,
+          stdio: "pipe",
+          env: buildNodeToolEnv(npmCmd)
+        });
         onProgress?.({ phase: "installing-deps", message: "Dependencies installed with npm" });
       } catch (error) {
         console.warn(`Warning: Failed to install Node.js dependencies: ${error.message}`);
@@ -10062,8 +10404,7 @@ async function findPnpmExecutable() {
     return flatPnpm;
   }
   try {
-    const { execSync: execSync22 } = await import("child_process");
-    execSync22("pnpm --version", { stdio: "pipe" });
+    runCommandPlan({ command: "pnpm", args: ["--version"] }, { stdio: "pipe" });
     return "pnpm";
   } catch {
     return null;
@@ -10093,8 +10434,7 @@ function findUvExecutable() {
     return uvPath;
   }
   try {
-    const { execSync: execSync22 } = require("child_process");
-    execSync22("uv --version", { stdio: "pipe" });
+    runCommandPlan({ command: "uv", args: ["--version"] }, { stdio: "pipe" });
     return "uv";
   } catch {
     return null;
@@ -10118,46 +10458,61 @@ async function ensureUv(onProgress) {
   return null;
 }
 async function installPythonPackage(installPath, pipPackage, onProgress) {
-  const { execSync: execSync22 } = await import("child_process");
   const uvCmd = findUvExecutable();
+  const validatedPipPackage = assertPipPackageSpec(pipPackage);
   if (uvCmd) {
     onProgress?.({ phase: "installing", message: `uv pip install ${pipPackage}` });
-    execSync22(`"${uvCmd}" venv "${installPath}/venv"`, { stdio: "pipe" });
-    execSync22(`"${uvCmd}" pip install --python "${installPath}/venv/bin/python" ${pipPackage}`, { stdio: "pipe" });
+    runCommandPlan({ command: uvCmd, args: ["venv", import_path6.default.join(installPath, "venv")] }, { stdio: "pipe" });
+    runCommandPlan({
+      command: uvCmd,
+      args: ["pip", "install", "--python", import_path6.default.join(installPath, "venv", "bin", "python"), validatedPipPackage]
+    }, { stdio: "pipe" });
     return { usedUv: true };
   } else {
     onProgress?.({ phase: "installing", message: `pip install ${pipPackage}` });
     const pythonCmd = await findPythonExecutable();
-    execSync22(`"${pythonCmd}" -m venv "${installPath}/venv"`, { stdio: "pipe" });
-    execSync22(`"${installPath}/venv/bin/pip" install ${pipPackage}`, { stdio: "pipe" });
+    runCommandPlan({ command: pythonCmd, args: ["-m", "venv", import_path6.default.join(installPath, "venv")] }, { stdio: "pipe" });
+    runCommandPlan(createPipInstallCommand(import_path6.default.join(installPath, "venv", "bin", "pip"), validatedPipPackage), { stdio: "pipe" });
     return { usedUv: false };
   }
 }
 async function installPythonRequirements(pythonPath, onProgress) {
-  const { execSync: execSync22 } = await import("child_process");
   const uvCmd = findUvExecutable();
   const isWindows = process.platform === "win32";
   const venvPython = isWindows ? import_path6.default.join(pythonPath, "venv", "Scripts", "python.exe") : import_path6.default.join(pythonPath, "venv", "bin", "python");
   if (uvCmd) {
     onProgress?.({ phase: "installing-deps", message: "Installing Python dependencies with uv..." });
-    execSync22(`"${uvCmd}" venv "${pythonPath}/venv"`, { cwd: pythonPath, stdio: "pipe" });
-    execSync22(`"${uvCmd}" pip install --python "${venvPython}" -r requirements.txt`, { cwd: pythonPath, stdio: "pipe" });
+    runCommandPlan({ command: uvCmd, args: ["venv", import_path6.default.join(pythonPath, "venv")] }, {
+      cwd: pythonPath,
+      stdio: "pipe"
+    });
+    runCommandPlan({
+      command: uvCmd,
+      args: ["pip", "install", "--python", venvPython, "-r", "requirements.txt"]
+    }, { cwd: pythonPath, stdio: "pipe" });
     return { usedUv: true };
   } else {
     onProgress?.({ phase: "installing-deps", message: "Installing Python dependencies..." });
     const pythonCmd = await findPythonExecutable();
-    execSync22(`"${pythonCmd}" -m venv venv`, { cwd: pythonPath, stdio: "pipe" });
+    runCommandPlan({ command: pythonCmd, args: ["-m", "venv", "venv"] }, {
+      cwd: pythonPath,
+      stdio: "pipe"
+    });
     const pipCmd = isWindows ? ".\\venv\\Scripts\\pip" : "./venv/bin/pip";
-    execSync22(`${pipCmd} install -r requirements.txt`, { cwd: pythonPath, stdio: "pipe" });
+    runCommandPlan({ command: pipCmd, args: ["install", "-r", "requirements.txt"] }, {
+      cwd: pythonPath,
+      stdio: "pipe"
+    });
     return { usedUv: false };
   }
 }
-var import_fs5, import_os3, import_path6, import_promises, import_fs6, SINGLE_FILE_KINDS2, WORKFLOW_EXTENSIONS, DEFAULT_STACK_STATE_PATHS;
+var import_fs5, import_os3, import_path6, import_child_process2, import_promises, import_fs6, SINGLE_FILE_KINDS2, WORKFLOW_EXTENSIONS, DEFAULT_STACK_STATE_PATHS, NPM_PACKAGE_PATTERN, PIP_PACKAGE_PATTERN, SHELL_CONTROL_PATTERN;
 var init_installer = __esm({
   "packages/core/src/installer.js"() {
     import_fs5 = __toESM(require("fs"), 1);
     import_os3 = __toESM(require("os"), 1);
     import_path6 = __toESM(require("path"), 1);
+    import_child_process2 = require("child_process");
     import_promises = require("stream/promises");
     import_fs6 = require("fs");
     init_src();
@@ -10168,6 +10523,9 @@ var init_installer = __esm({
     SINGLE_FILE_KINDS2 = /* @__PURE__ */ new Set(["skill", "prompt", "workflow"]);
     WORKFLOW_EXTENSIONS = [".yaml", ".yml", ".json"];
     DEFAULT_STACK_STATE_PATHS = ["runs"];
+    NPM_PACKAGE_PATTERN = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*(?:@[a-zA-Z0-9._~^>=<:+-][a-zA-Z0-9._~^>=<:+-]*)?$/;
+    PIP_PACKAGE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*(?:\[[A-Za-z0-9_,.-]+])?(?:[<>=!~]=?[A-Za-z0-9.*+!_~:-]+)?$/;
+    SHELL_CONTROL_PATTERN = /[|&;<>()`$\\\n\r]/;
   }
 });
 
@@ -10291,7 +10649,7 @@ function getSystemCommand(name) {
 }
 function which(cmd) {
   try {
-    const result = (0, import_child_process.execSync)(`which ${cmd} 2>/dev/null`, { encoding: "utf-8" });
+    const result = (0, import_child_process3.execFileSync)("which", [cmd], { encoding: "utf-8" });
     return result.trim();
   } catch {
     return null;
@@ -10313,12 +10671,21 @@ function getVersion(binPath, name) {
   };
   const flag = versionFlags[name] || "--version";
   try {
-    const output = (0, import_child_process.execSync)(`"${binPath}" ${flag} 2>&1`, { encoding: "utf-8" });
-    const match = output.match(/(\d+\.\d+(?:\.\d+)?)/);
-    return match ? match[1] : output.split("\n")[0].trim();
-  } catch {
+    const output = (0, import_child_process3.execFileSync)(binPath, [flag], {
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"]
+    });
+    return parseVersionOutput(output);
+  } catch (error) {
+    const output = `${error.stdout?.toString() || ""}
+${error.stderr?.toString() || ""}`.trim();
+    if (output) return parseVersionOutput(output);
     return null;
   }
+}
+function parseVersionOutput(output) {
+  const match = output.match(/(\d+\.\d+(?:\.\d+)?)/);
+  return match ? match[1] : output.split("\n")[0].trim();
 }
 function getAvailableDeps() {
   const installedRuntimes = scanDirectory(PATHS.runtimes);
@@ -10372,12 +10739,12 @@ async function getAllDepsFromRegistry() {
   });
   return { runtimes, binaries };
 }
-var import_fs7, import_path7, import_child_process;
+var import_fs7, import_path7, import_child_process3;
 var init_deps = __esm({
   "packages/core/src/deps.js"() {
     import_fs7 = __toESM(require("fs"), 1);
     import_path7 = __toESM(require("path"), 1);
-    import_child_process = require("child_process");
+    import_child_process3 = require("child_process");
     init_src();
     init_src3();
   }
@@ -10658,6 +11025,39 @@ function getStackSecrets(stackConfig) {
   }
   return { secrets, missing };
 }
+function existingDirectory(dirPath) {
+  return typeof dirPath === "string" && fs8.existsSync(dirPath) && fs8.statSync(dirPath).isDirectory();
+}
+function getRudiExecutionPathEntries() {
+  const entries = [PATHS.bins];
+  for (const runtimeBin of [
+    path9.join(RUDI_HOME, "runtimes", "node", "bin"),
+    path9.join(RUDI_HOME, "runtimes", "python", "bin")
+  ]) {
+    if (existingDirectory(runtimeBin)) {
+      entries.push(runtimeBin);
+    }
+  }
+  const binariesRoot = path9.join(RUDI_HOME, "binaries");
+  if (existingDirectory(binariesRoot)) {
+    for (const entry of fs8.readdirSync(binariesRoot, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        entries.push(path9.join(binariesRoot, entry.name));
+      }
+    }
+  }
+  return entries;
+}
+function prependRudiExecutionPath(env) {
+  const seen = /* @__PURE__ */ new Set();
+  const entries = [];
+  for (const entry of [...getRudiExecutionPathEntries(), ...(env.PATH || "").split(path9.delimiter)]) {
+    if (!entry || seen.has(entry)) continue;
+    seen.add(entry);
+    entries.push(entry);
+  }
+  env.PATH = entries.join(path9.delimiter);
+}
 async function discoverStackTools(stackId, stackConfig, options = {}) {
   const { timeout = REQUEST_TIMEOUT_MS, log = () => {
   } } = options;
@@ -10678,14 +11078,7 @@ async function discoverStackTools(stackId, stackConfig, options = {}) {
     };
   }
   const env = { ...process.env, ...secrets };
-  const nodeBin = path9.join(RUDI_HOME, "runtimes", "node", "bin");
-  const pythonBin = path9.join(RUDI_HOME, "runtimes", "python", "bin");
-  const runtimePaths = [];
-  if (fs8.existsSync(nodeBin)) runtimePaths.push(nodeBin);
-  if (fs8.existsSync(pythonBin)) runtimePaths.push(pythonBin);
-  if (runtimePaths.length > 0) {
-    env.PATH = runtimePaths.join(path9.delimiter) + path9.delimiter + (env.PATH || "");
-  }
+  prependRudiExecutionPath(env);
   log(`  Spawning ${stackId}...`);
   return new Promise((resolve) => {
     let resolved = false;
@@ -10707,7 +11100,7 @@ async function discoverStackTools(stackId, stackConfig, options = {}) {
       }
     }, timeout);
     try {
-      childProcess = (0, import_child_process2.spawn)(launch.bin, launch.args || [], {
+      childProcess = (0, import_child_process4.spawn)(launch.bin, launch.args || [], {
         cwd: launch.cwd || stackConfig.path,
         stdio: ["pipe", "pipe", "pipe"],
         env
@@ -10903,10 +11296,10 @@ async function indexAllStacks(options = {}) {
   writeToolIndex(index);
   return { indexed, failed, index };
 }
-var import_child_process2, fs8, path9, readline, TOOL_INDEX_PATH, TOOL_INDEX_TMP, SECRETS_PATH, REQUEST_TIMEOUT_MS, PROTOCOL_VERSION;
+var import_child_process4, fs8, path9, readline, TOOL_INDEX_PATH, TOOL_INDEX_TMP, SECRETS_PATH, REQUEST_TIMEOUT_MS, PROTOCOL_VERSION;
 var init_tool_index = __esm({
   "packages/core/src/tool-index.js"() {
-    import_child_process2 = require("child_process");
+    import_child_process4 = require("child_process");
     fs8 = __toESM(require("fs"), 1);
     path9 = __toESM(require("path"), 1);
     readline = __toESM(require("readline"), 1);
@@ -10934,7 +11327,7 @@ async function registerSystemBinary(name, options = {}) {
     };
   }
   try {
-    (0, import_child_process3.execSync)(`"${systemPath}" --version`, { stdio: "pipe" });
+    (0, import_child_process5.execFileSync)(systemPath, ["--version"], { stdio: "pipe" });
   } catch (error) {
     return {
       success: false,
@@ -11052,12 +11445,12 @@ function getSystemBinaryInfo(name) {
     return null;
   }
 }
-var import_fs8, import_path8, import_child_process3;
+var import_fs8, import_path8, import_child_process5;
 var init_system_registry = __esm({
   "packages/core/src/system-registry.js"() {
     import_fs8 = __toESM(require("fs"), 1);
     import_path8 = __toESM(require("path"), 1);
-    import_child_process3 = require("child_process");
+    import_child_process5 = require("child_process");
     init_src();
     init_shims();
   }
@@ -11158,6 +11551,9 @@ function getStorageInfo() {
     file: getSecretsFilePath(),
     permissions: "0600 (owner read/write only)"
   };
+}
+function getAllSecrets() {
+  return loadSecrets2();
 }
 var fs10, path11, SECRETS_FILE;
 var init_src4 = __esm({
@@ -11497,8 +11893,15 @@ __export(src_exports, {
   checkStackLifecycle: () => checkStackLifecycle,
   cleanOrphanedLockfiles: () => cleanOrphanedLockfiles,
   clearCache: () => clearCache,
+  createArchiveExtractCommand: () => createArchiveExtractCommand,
   createLaunchConfig: () => createLaunchConfig,
+  createNativeInstallerCommand: () => createNativeInstallerCommand,
+  createNpmInitCommand: () => createNpmInitCommand,
+  createNpmInstallCommand: () => createNpmInstallCommand,
+  createNpmUninstallCommand: () => createNpmUninstallCommand,
   createPackageId: () => createPackageId,
+  createPipInstallCommand: () => createPipInstallCommand,
+  createPostInstallCommand: () => createPostInstallCommand,
   createRudiConfig: () => createRudiConfig,
   createShimsForTool: () => createShimsForTool,
   createToolIndex: () => createToolIndex,
@@ -11547,6 +11950,7 @@ __export(src_exports, {
   resolvePackage: () => resolvePackage,
   resolvePackages: () => resolvePackages,
   rudiConfigExists: () => rudiConfigExists,
+  runCommandPlan: () => runCommandPlan,
   satisfiesVersion: () => satisfiesVersion,
   searchPackages: () => searchPackages,
   uninstallPackage: () => uninstallPackage,
@@ -11576,78 +11980,6 @@ var init_src5 = __esm({
     init_shims();
     init_system_registry();
     init_stack_lifecycle();
-  }
-});
-
-// node_modules/.pnpm/@learnrudi+env@1.0.1/node_modules/@learnrudi/env/src/index.js
-function parsePackageId2(id) {
-  const match = id.match(/^(stack|prompt|runtime|binary|agent|npm):(.+)$/);
-  if (!match) {
-    throw new Error(`Invalid package ID: ${id} (expected format: kind:name, where kind is one of: ${PACKAGE_KINDS3.join(", ")}, npm)`);
-  }
-  return [match[1], match[2]];
-}
-function getPackagePath2(id) {
-  const [kind2, name] = parsePackageId2(id);
-  switch (kind2) {
-    case "stack":
-      return import_path10.default.join(PATHS3.stacks, name);
-    case "prompt":
-      return import_path10.default.join(PATHS3.prompts, `${name}.md`);
-    case "runtime":
-      return import_path10.default.join(PATHS3.runtimes, name);
-    case "binary":
-      return import_path10.default.join(PATHS3.binaries, name);
-    case "agent":
-      return import_path10.default.join(PATHS3.agents, name);
-    case "npm":
-      const sanitized = name.replace(/\//g, "__").replace(/^@/, "");
-      return import_path10.default.join(PATHS3.binaries, "npm", sanitized);
-    default:
-      throw new Error(`Unknown package kind: ${kind2}`);
-  }
-}
-var import_path10, import_os5, RUDI_HOME3, PATHS3, PACKAGE_KINDS3;
-var init_src6 = __esm({
-  "node_modules/.pnpm/@learnrudi+env@1.0.1/node_modules/@learnrudi/env/src/index.js"() {
-    import_path10 = __toESM(require("path"), 1);
-    import_os5 = __toESM(require("os"), 1);
-    RUDI_HOME3 = import_path10.default.join(import_os5.default.homedir(), ".rudi");
-    PATHS3 = {
-      // Root
-      home: RUDI_HOME3,
-      // Installed packages - shared with Studio for unified discovery
-      packages: import_path10.default.join(RUDI_HOME3, "packages"),
-      stacks: import_path10.default.join(RUDI_HOME3, "stacks"),
-      // Shared with Studio
-      prompts: import_path10.default.join(RUDI_HOME3, "prompts"),
-      // Shared with Studio
-      // Runtimes (interpreters: node, python, deno, bun)
-      runtimes: import_path10.default.join(RUDI_HOME3, "runtimes"),
-      // Binaries (utility CLIs: ffmpeg, imagemagick, ripgrep, etc.)
-      binaries: import_path10.default.join(RUDI_HOME3, "binaries"),
-      // Agents (AI CLI tools: claude, codex, gemini, copilot, ollama)
-      agents: import_path10.default.join(RUDI_HOME3, "agents"),
-      // Runtime binaries (content-addressed)
-      store: import_path10.default.join(RUDI_HOME3, "store"),
-      // Shims (symlinks to store/)
-      bins: import_path10.default.join(RUDI_HOME3, "bins"),
-      // Lockfiles
-      locks: import_path10.default.join(RUDI_HOME3, "locks"),
-      // Secrets (OS Keychain preferred, encrypted file fallback)
-      vault: import_path10.default.join(RUDI_HOME3, "vault"),
-      // Database (shared with Studio)
-      db: RUDI_HOME3,
-      dbFile: import_path10.default.join(RUDI_HOME3, "rudi.db"),
-      // Cache
-      cache: import_path10.default.join(RUDI_HOME3, "cache"),
-      registryCache: import_path10.default.join(RUDI_HOME3, "cache", "registry.json"),
-      // Config
-      config: import_path10.default.join(RUDI_HOME3, "config.json"),
-      // Logs
-      logs: import_path10.default.join(RUDI_HOME3, "logs")
-    };
-    PACKAGE_KINDS3 = ["stack", "prompt", "runtime", "binary", "agent"];
   }
 });
 
@@ -14844,8 +15176,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path76) {
-      let input = path76;
+    function removeDotSegments(path74) {
+      let input = path74;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -15044,8 +15376,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path76, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path76 && path76 !== "/" ? path76 : void 0;
+        const [path74, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path74 && path74 !== "/" ? path74 : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -18398,12 +18730,12 @@ var require_dist2 = __commonJS({
         throw new Error(`Unknown format "${name}"`);
       return f2;
     };
-    function addFormats2(ajv2, list, fs67, exportName) {
+    function addFormats2(ajv2, list, fs68, exportName) {
       var _a2;
       var _b;
       (_a2 = (_b = ajv2.opts.code).formats) !== null && _a2 !== void 0 ? _a2 : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
       for (const f2 of list)
-        ajv2.addFormat(f2, fs67[f2]);
+        ajv2.addFormat(f2, fs68[f2]);
     }
     module2.exports = exports2 = formatsPlugin;
     Object.defineProperty(exports2, "__esModule", { value: true });
@@ -18459,6 +18791,50 @@ function bufferToFloat32(buf) {
 }
 var init_vector = __esm({
   "packages/embeddings/src/utils/vector.js"() {
+  }
+});
+
+// node_modules/.pnpm/@learnrudi+env@1.0.1/node_modules/@learnrudi/env/src/index.js
+var import_path15, import_os5, RUDI_HOME4, PATHS3;
+var init_src6 = __esm({
+  "node_modules/.pnpm/@learnrudi+env@1.0.1/node_modules/@learnrudi/env/src/index.js"() {
+    import_path15 = __toESM(require("path"), 1);
+    import_os5 = __toESM(require("os"), 1);
+    RUDI_HOME4 = import_path15.default.join(import_os5.default.homedir(), ".rudi");
+    PATHS3 = {
+      // Root
+      home: RUDI_HOME4,
+      // Installed packages - shared with Studio for unified discovery
+      packages: import_path15.default.join(RUDI_HOME4, "packages"),
+      stacks: import_path15.default.join(RUDI_HOME4, "stacks"),
+      // Shared with Studio
+      prompts: import_path15.default.join(RUDI_HOME4, "prompts"),
+      // Shared with Studio
+      // Runtimes (interpreters: node, python, deno, bun)
+      runtimes: import_path15.default.join(RUDI_HOME4, "runtimes"),
+      // Binaries (utility CLIs: ffmpeg, imagemagick, ripgrep, etc.)
+      binaries: import_path15.default.join(RUDI_HOME4, "binaries"),
+      // Agents (AI CLI tools: claude, codex, gemini, copilot, ollama)
+      agents: import_path15.default.join(RUDI_HOME4, "agents"),
+      // Runtime binaries (content-addressed)
+      store: import_path15.default.join(RUDI_HOME4, "store"),
+      // Shims (symlinks to store/)
+      bins: import_path15.default.join(RUDI_HOME4, "bins"),
+      // Lockfiles
+      locks: import_path15.default.join(RUDI_HOME4, "locks"),
+      // Secrets (OS Keychain preferred, encrypted file fallback)
+      vault: import_path15.default.join(RUDI_HOME4, "vault"),
+      // Database (shared with Studio)
+      db: RUDI_HOME4,
+      dbFile: import_path15.default.join(RUDI_HOME4, "rudi.db"),
+      // Cache
+      cache: import_path15.default.join(RUDI_HOME4, "cache"),
+      registryCache: import_path15.default.join(RUDI_HOME4, "cache", "registry.json"),
+      // Config
+      config: import_path15.default.join(RUDI_HOME4, "config.json"),
+      // Logs
+      logs: import_path15.default.join(RUDI_HOME4, "logs")
+    };
   }
 });
 
@@ -20103,14 +20479,14 @@ var require_url_state_machine = __commonJS({
       return url.replace(/\u0009|\u000A|\u000D/g, "");
     }
     function shortenPath(url) {
-      const path76 = url.path;
-      if (path76.length === 0) {
+      const path74 = url.path;
+      if (path74.length === 0) {
         return;
       }
-      if (url.scheme === "file" && path76.length === 1 && isNormalizedWindowsDriveLetter(path76[0])) {
+      if (url.scheme === "file" && path74.length === 1 && isNormalizedWindowsDriveLetter(path74[0])) {
         return;
       }
-      path76.pop();
+      path74.pop();
     }
     function includesCredentials(url) {
       return url.username !== "" || url.password !== "";
@@ -26094,14 +26470,14 @@ __export(fileFromPath_exports, {
   fileFromPathSync: () => fileFromPathSync,
   isFile: () => isFile
 });
-function createFileFromPath(path76, { mtimeMs, size }, filenameOrOptions, options = {}) {
+function createFileFromPath(path74, { mtimeMs, size }, filenameOrOptions, options = {}) {
   let filename;
   if (isPlainObject_default2(filenameOrOptions)) {
     [options, filename] = [filenameOrOptions, void 0];
   } else {
     filename = filenameOrOptions;
   }
-  const file = new FileFromPath({ path: path76, size, lastModified: mtimeMs });
+  const file = new FileFromPath({ path: path74, size, lastModified: mtimeMs });
   if (!filename) {
     filename = file.name;
   }
@@ -26110,13 +26486,13 @@ function createFileFromPath(path76, { mtimeMs, size }, filenameOrOptions, option
     lastModified: file.lastModified
   });
 }
-function fileFromPathSync(path76, filenameOrOptions, options = {}) {
-  const stats = (0, import_fs16.statSync)(path76);
-  return createFileFromPath(path76, stats, filenameOrOptions, options);
+function fileFromPathSync(path74, filenameOrOptions, options = {}) {
+  const stats = (0, import_fs16.statSync)(path74);
+  return createFileFromPath(path74, stats, filenameOrOptions, options);
 }
-async function fileFromPath2(path76, filenameOrOptions, options) {
-  const stats = await import_fs16.promises.stat(path76);
-  return createFileFromPath(path76, stats, filenameOrOptions, options);
+async function fileFromPath2(path74, filenameOrOptions, options) {
+  const stats = await import_fs16.promises.stat(path74);
+  return createFileFromPath(path74, stats, filenameOrOptions, options);
 }
 var import_fs16, import_path17, import_node_domexception, __classPrivateFieldSet4, __classPrivateFieldGet5, _FileFromPath_path, _FileFromPath_start, MESSAGE, FileFromPath;
 var init_fileFromPath = __esm({
@@ -26177,13 +26553,13 @@ var init_fileFromPath = __esm({
 });
 
 // node_modules/.pnpm/openai@4.104.0_ws@8.19.0/node_modules/openai/_shims/node-runtime.mjs
-async function fileFromPath3(path76, ...args) {
+async function fileFromPath3(path74, ...args) {
   const { fileFromPath: _fileFromPath } = await Promise.resolve().then(() => (init_fileFromPath(), fileFromPath_exports));
   if (!fileFromPathWarned) {
-    console.warn(`fileFromPath is deprecated; use fs.createReadStream(${JSON.stringify(path76)}) instead`);
+    console.warn(`fileFromPath is deprecated; use fs.createReadStream(${JSON.stringify(path74)}) instead`);
     fileFromPathWarned = true;
   }
-  return await _fileFromPath(path76, ...args);
+  return await _fileFromPath(path74, ...args);
 }
 async function getMultipartRequestOptions2(form, opts) {
   const encoder = new FormDataEncoder(form);
@@ -26558,10 +26934,10 @@ async function* iterSSEChunks(iterator) {
     yield data;
   }
 }
-function partition(str2, delimiter4) {
-  const index = str2.indexOf(delimiter4);
+function partition(str2, delimiter3) {
+  const index = str2.indexOf(delimiter3);
   if (index !== -1) {
-    return [str2.substring(0, index), delimiter4, str2.substring(index + delimiter4.length)];
+    return [str2.substring(0, index), delimiter3, str2.substring(index + delimiter3.length)];
   }
   return [str2, "", ""];
 }
@@ -27116,29 +27492,29 @@ var init_core = __esm({
       defaultIdempotencyKey() {
         return `stainless-node-retry-${uuid4()}`;
       }
-      get(path76, opts) {
-        return this.methodRequest("get", path76, opts);
+      get(path74, opts) {
+        return this.methodRequest("get", path74, opts);
       }
-      post(path76, opts) {
-        return this.methodRequest("post", path76, opts);
+      post(path74, opts) {
+        return this.methodRequest("post", path74, opts);
       }
-      patch(path76, opts) {
-        return this.methodRequest("patch", path76, opts);
+      patch(path74, opts) {
+        return this.methodRequest("patch", path74, opts);
       }
-      put(path76, opts) {
-        return this.methodRequest("put", path76, opts);
+      put(path74, opts) {
+        return this.methodRequest("put", path74, opts);
       }
-      delete(path76, opts) {
-        return this.methodRequest("delete", path76, opts);
+      delete(path74, opts) {
+        return this.methodRequest("delete", path74, opts);
       }
-      methodRequest(method, path76, opts) {
+      methodRequest(method, path74, opts) {
         return this.request(Promise.resolve(opts).then(async (opts2) => {
           const body = opts2 && isBlobLike(opts2?.body) ? new DataView(await opts2.body.arrayBuffer()) : opts2?.body instanceof DataView ? opts2.body : opts2?.body instanceof ArrayBuffer ? new DataView(opts2.body) : opts2 && ArrayBuffer.isView(opts2?.body) ? new DataView(opts2.body.buffer) : opts2?.body;
-          return { method, path: path76, ...opts2, body };
+          return { method, path: path74, ...opts2, body };
         }));
       }
-      getAPIList(path76, Page2, opts) {
-        return this.requestAPIList(Page2, { method: "get", path: path76, ...opts });
+      getAPIList(path74, Page2, opts) {
+        return this.requestAPIList(Page2, { method: "get", path: path74, ...opts });
       }
       calculateContentLength(body) {
         if (typeof body === "string") {
@@ -27157,10 +27533,10 @@ var init_core = __esm({
       }
       buildRequest(inputOptions, { retryCount = 0 } = {}) {
         const options = { ...inputOptions };
-        const { method, path: path76, query, headers = {} } = options;
+        const { method, path: path74, query, headers = {} } = options;
         const body = ArrayBuffer.isView(options.body) || options.__binaryRequest && typeof options.body === "string" ? options.body : isMultipartBody(options.body) ? options.body.body : options.body ? JSON.stringify(options.body, null, 2) : null;
         const contentLength = this.calculateContentLength(body);
-        const url = this.buildURL(path76, query);
+        const url = this.buildURL(path74, query);
         if ("timeout" in options)
           validatePositiveInteger("timeout", options.timeout);
         options.timeout = options.timeout ?? this.timeout;
@@ -27276,8 +27652,8 @@ var init_core = __esm({
         const request = this.makeRequest(options, null);
         return new PagePromise(this, request, Page2);
       }
-      buildURL(path76, query) {
-        const url = isAbsoluteURL(path76) ? new URL(path76) : new URL(this.baseURL + (this.baseURL.endsWith("/") && path76.startsWith("/") ? path76.slice(1) : path76));
+      buildURL(path74, query) {
+        const url = isAbsoluteURL(path74) ? new URL(path74) : new URL(this.baseURL + (this.baseURL.endsWith("/") && path74.startsWith("/") ? path74.slice(1) : path74));
         const defaultQuery = this.defaultQuery();
         if (!isEmptyObj(defaultQuery)) {
           query = { ...defaultQuery, ...query };
@@ -32882,9 +33258,8 @@ async function checkProviderStatus() {
     }
   };
   try {
-    const { execSync: execSync22 } = await import("child_process");
     try {
-      execSync22("which ollama", { stdio: "pipe" });
+      (0, import_child_process7.execFileSync)("which", ["ollama"], { stdio: "pipe" });
       status.ollama.installed = true;
     } catch {
     }
@@ -32960,17 +33335,17 @@ async function autoSetupOllama() {
     };
   }
   try {
-    const { execSync: execSync22 } = await import("child_process");
     console.log("Pulling nomic-embed-text model...");
-    execSync22("ollama pull nomic-embed-text", { stdio: "inherit" });
+    (0, import_child_process7.execFileSync)("ollama", ["pull", "nomic-embed-text"], { stdio: "inherit" });
     return { success: true, message: "Ollama configured with nomic-embed-text" };
   } catch (err) {
     return { success: false, message: `Failed to pull model: ${err.message}` };
   }
 }
-var EMBEDDING_MODELS;
+var import_child_process7, EMBEDDING_MODELS;
 var init_setup = __esm({
   "packages/embeddings/src/setup.js"() {
+    import_child_process7 = require("child_process");
     init_ollama();
     EMBEDDING_MODELS = [
       "nomic-embed-text",
@@ -37404,7 +37779,6 @@ Total: ${totalCount} package(s) available`);
 var fs14 = __toESM(require("fs/promises"), 1);
 var fsSync = __toESM(require("fs"), 1);
 var path15 = __toESM(require("path"), 1);
-var import_child_process4 = require("child_process");
 init_src5();
 init_src4();
 
@@ -37838,6 +38212,45 @@ async function unregisterMcpAll(stackId, targetAgents = null) {
   return results;
 }
 
+// src/utils/subprocess.js
+var import_node_child_process = require("node:child_process");
+function assertCommandValue(value, label) {
+  if (typeof value !== "string" || value.length === 0 || value.includes("\0")) {
+    throw new Error(`Invalid command ${label}`);
+  }
+  return value;
+}
+function createCommandPlan(command, args = []) {
+  return {
+    command: assertCommandValue(command, "name"),
+    args: Array.isArray(args) ? args.map((arg, index) => assertCommandValue(arg, `arg ${index}`)) : []
+  };
+}
+function createWhichCommand(commandName) {
+  return createCommandPlan("which", [commandName]);
+}
+function createGitCommand(cwd, args = []) {
+  return {
+    ...createCommandPlan("git", args),
+    cwd: assertCommandValue(cwd, "cwd")
+  };
+}
+function runCommand(command, args = [], options = {}) {
+  const { execFileSync: execFileSync12 = import_node_child_process.execFileSync, ...execOptions } = options;
+  const plan = createCommandPlan(command, args);
+  return execFileSync12(plan.command, plan.args, execOptions);
+}
+function runCommandPlan2(plan, options = {}) {
+  const { execFileSync: execFileSync12 = import_node_child_process.execFileSync, ...execOptions } = options;
+  const normalized = createCommandPlan(plan?.command, plan?.args || []);
+  const mergedOptions = plan?.cwd ? { cwd: assertCommandValue(plan.cwd, "cwd"), ...execOptions } : execOptions;
+  return execFileSync12(normalized.command, normalized.args, mergedOptions);
+}
+function runGit(cwd, args = [], options = {}) {
+  const plan = createGitCommand(cwd, args);
+  return runCommandPlan2(plan, options);
+}
+
 // src/commands/install.js
 async function loadManifest(installPath) {
   const manifestPath = path15.join(installPath, "manifest.json");
@@ -37917,8 +38330,8 @@ async function installDependencies(stackPath, manifest, options = {}) {
       }
       const npmCmd = getBundledBinary("node", "npm");
       console.log(`  Installing npm dependencies...`);
-      const installArgs = includeDevDeps ? "install" : "install --production";
-      (0, import_child_process4.execSync)(`"${npmCmd}" ${installArgs}`, {
+      const installArgs = includeDevDeps ? ["install"] : ["install", "--production"];
+      runCommand(npmCmd, installArgs, {
         cwd: project.root,
         stdio: "pipe"
       });
@@ -37940,7 +38353,7 @@ async function installDependencies(stackPath, manifest, options = {}) {
       const pipCmd = getBundledBinary("python", "pip");
       console.log(`  Installing pip dependencies...`);
       try {
-        (0, import_child_process4.execSync)(`"${pipCmd}" install -r requirements.txt`, {
+        runCommand(pipCmd, ["install", "-r", "requirements.txt"], {
           cwd: reqCwd,
           stdio: "pipe"
         });
@@ -38143,7 +38556,7 @@ async function buildStackIfNeeded(stackPath, manifest, options = {}) {
   const npmCmd = getBundledBinary("node", "npm");
   console.log(`  Building stack...`);
   try {
-    (0, import_child_process4.execSync)(`"${npmCmd}" run build`, {
+    runCommand(npmCmd, ["run", "build"], {
       cwd: project.root,
       stdio: verbose ? "inherit" : "pipe"
     });
@@ -38481,43 +38894,10 @@ Next steps:`);
 init_src5();
 
 // packages/runner/src/spawn.js
-var import_child_process5 = require("child_process");
-var import_path11 = __toESM(require("path"), 1);
+var import_child_process6 = require("child_process");
+var import_path10 = __toESM(require("path"), 1);
 var import_fs10 = __toESM(require("fs"), 1);
-
-// node_modules/.pnpm/@learnrudi+core@1.0.2/node_modules/@learnrudi/core/src/index.js
-init_src6();
-
-// node_modules/.pnpm/@learnrudi+registry-client@1.0.5/node_modules/@learnrudi/registry-client/src/index.js
-init_src6();
-var CACHE_TTL2 = 24 * 60 * 60 * 1e3;
-
-// node_modules/.pnpm/@learnrudi+core@1.0.2/node_modules/@learnrudi/core/src/resolver.js
-init_src6();
-
-// node_modules/.pnpm/@learnrudi+core@1.0.2/node_modules/@learnrudi/core/src/installer.js
-init_src6();
-
-// node_modules/.pnpm/@learnrudi+core@1.0.2/node_modules/@learnrudi/core/src/lockfile.js
-var import_yaml2 = __toESM(require_dist(), 1);
-init_src6();
-
-// node_modules/.pnpm/@learnrudi+core@1.0.2/node_modules/@learnrudi/core/src/deps.js
-init_src6();
-
-// node_modules/.pnpm/@learnrudi+core@1.0.2/node_modules/@learnrudi/core/src/rudi-config.js
-var path17 = __toESM(require("path"), 1);
-init_src6();
-var RUDI_JSON_PATH2 = path17.join(RUDI_HOME3, "rudi.json");
-var RUDI_JSON_TMP2 = path17.join(RUDI_HOME3, "rudi.json.tmp");
-var RUDI_JSON_LOCK2 = path17.join(RUDI_HOME3, "rudi.json.lock");
-
-// node_modules/.pnpm/@learnrudi+core@1.0.2/node_modules/@learnrudi/core/src/tool-index.js
-var path18 = __toESM(require("path"), 1);
-init_src6();
-var TOOL_INDEX_PATH2 = path18.join(RUDI_HOME3, "cache", "tool-index.json");
-var TOOL_INDEX_TMP2 = path18.join(RUDI_HOME3, "cache", "tool-index.json.tmp");
-var SECRETS_PATH2 = path18.join(RUDI_HOME3, "secrets.json");
+init_src();
 
 // packages/runner/src/secrets.js
 init_src4();
@@ -38570,27 +38950,77 @@ function redactSecrets(text, secrets) {
 }
 
 // packages/runner/src/spawn.js
-async function runStack(id, options = {}) {
-  const { inputs = {}, cwd, env = {}, onStdout, onStderr, onExit, signal } = options;
-  const startTime = Date.now();
-  const packagePath = getPackagePath2(id);
-  const manifestPath = import_path11.default.join(packagePath, "manifest.json");
-  const { default: fs67 } = await import("fs");
-  if (!fs67.existsSync(manifestPath)) {
-    throw new Error(`Stack manifest not found: ${id}`);
+function existingDirectory2(dirPath) {
+  return typeof dirPath === "string" && import_fs10.default.existsSync(dirPath) && import_fs10.default.statSync(dirPath).isDirectory();
+}
+function getRudiPathEntries() {
+  const entries = [PATHS.bins];
+  for (const runtimeBin of [
+    import_path10.default.join(PATHS.runtimes, "node", "bin"),
+    import_path10.default.join(PATHS.runtimes, "python", "bin")
+  ]) {
+    if (existingDirectory2(runtimeBin)) {
+      entries.push(runtimeBin);
+    }
   }
-  const manifest = JSON.parse(fs67.readFileSync(manifestPath, "utf-8"));
-  const { command, args } = resolveCommandFromManifest(manifest, packagePath);
-  const secrets = await getSecrets(manifest.requires?.secrets || []);
-  const runEnv = {
-    ...process.env,
+  if (existingDirectory2(PATHS.binaries)) {
+    for (const entry of import_fs10.default.readdirSync(PATHS.binaries, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        entries.push(import_path10.default.join(PATHS.binaries, entry.name));
+      }
+    }
+  }
+  return entries;
+}
+function mergePathEntries(preferredEntries, inheritedPath) {
+  const merged = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const entry of [...preferredEntries, ...(inheritedPath || "").split(import_path10.default.delimiter)]) {
+    if (!entry || seen.has(entry)) continue;
+    seen.add(entry);
+    merged.push(entry);
+  }
+  return merged.join(import_path10.default.delimiter);
+}
+function buildStackRunEnv({
+  baseEnv = process.env,
+  env = {},
+  secrets = {},
+  inputs = {},
+  id,
+  packagePath
+} = {}) {
+  const inheritedPath = env.PATH || baseEnv.PATH || "";
+  return {
+    ...baseEnv,
     ...env,
     ...secrets,
+    PATH: mergePathEntries(getRudiPathEntries(), inheritedPath),
     RUDI_INPUTS: JSON.stringify(inputs),
     RUDI_PACKAGE_ID: id,
     RUDI_PACKAGE_PATH: packagePath
   };
-  const proc = (0, import_child_process5.spawn)(command, args, {
+}
+async function runStack(id, options = {}) {
+  const { inputs = {}, cwd, env = {}, onStdout, onStderr, onExit, signal } = options;
+  const startTime = Date.now();
+  const packagePath = getPackagePath(id);
+  const manifestPath = import_path10.default.join(packagePath, "manifest.json");
+  const { default: fs68 } = await import("fs");
+  if (!fs68.existsSync(manifestPath)) {
+    throw new Error(`Stack manifest not found: ${id}`);
+  }
+  const manifest = JSON.parse(fs68.readFileSync(manifestPath, "utf-8"));
+  const { command, args } = resolveCommandFromManifest(manifest, packagePath);
+  const secrets = await getSecrets(manifest.requires?.secrets || []);
+  const runEnv = buildStackRunEnv({
+    env,
+    secrets,
+    inputs,
+    id,
+    packagePath
+  });
+  const proc = (0, import_child_process6.spawn)(command, args, {
     cwd: cwd || packagePath,
     env: runEnv,
     stdio: ["pipe", "pipe", "pipe"],
@@ -38635,12 +39065,12 @@ async function runStack(id, options = {}) {
 }
 function getCommand(runtime) {
   const runtimeName2 = runtime.replace("runtime:", "");
-  const runtimePath = import_path11.default.join(PATHS3.runtimes, runtimeName2);
+  const runtimePath = import_path10.default.join(PATHS.runtimes, runtimeName2);
   const binaryPaths = [
-    import_path11.default.join(runtimePath, "bin", runtimeName2 === "python" ? "python3" : runtimeName2),
-    import_path11.default.join(runtimePath, "bin", runtimeName2),
-    import_path11.default.join(runtimePath, runtimeName2 === "python" ? "python3" : runtimeName2),
-    import_path11.default.join(runtimePath, runtimeName2)
+    import_path10.default.join(runtimePath, "bin", runtimeName2 === "python" ? "python3" : runtimeName2),
+    import_path10.default.join(runtimePath, "bin", runtimeName2),
+    import_path10.default.join(runtimePath, runtimeName2 === "python" ? "python3" : runtimeName2),
+    import_path10.default.join(runtimePath, runtimeName2)
   ];
   for (const binPath of binaryPaths) {
     if (import_fs10.default.existsSync(binPath)) {
@@ -38667,7 +39097,7 @@ function resolveCommandFromManifest(manifest, packagePath) {
     return { command: command2, args };
   }
   const entry = manifest.entry || "index.js";
-  const entryPath = import_path11.default.join(packagePath, entry);
+  const entryPath = import_path10.default.join(packagePath, entry);
   const runtime = manifest.runtime || "runtime:node";
   const command = getCommand(runtime);
   return { command, args: [entryPath] };
@@ -38676,25 +39106,25 @@ function resolveRelativePath(value, basePath) {
   if (typeof value !== "string" || value.startsWith("-")) {
     return value;
   }
-  if (import_path11.default.isAbsolute(value)) {
+  if (import_path10.default.isAbsolute(value)) {
     return value;
   }
   if (value.includes("/") || value.startsWith(".")) {
-    return import_path11.default.join(basePath, value);
+    return import_path10.default.join(basePath, value);
   }
   return value;
 }
 
 // packages/manifest/src/stack.js
-var import_yaml3 = __toESM(require_dist(), 1);
+var import_yaml2 = __toESM(require_dist(), 1);
 var import_fs11 = __toESM(require("fs"), 1);
-var import_path12 = __toESM(require("path"), 1);
+var import_path11 = __toESM(require("path"), 1);
 function parseStackManifest(filePath) {
   const content = import_fs11.default.readFileSync(filePath, "utf-8");
   return parseStackYaml(content, filePath);
 }
 function parseStackYaml(content, source = "stack.yaml") {
-  const raw = (0, import_yaml3.parse)(content);
+  const raw = (0, import_yaml2.parse)(content);
   if (!raw || typeof raw !== "object") {
     throw new Error(`Invalid stack manifest in ${source}: expected object`);
   }
@@ -38808,7 +39238,7 @@ function validateStackManifest(manifest, source) {
 function findStackManifest(dir) {
   const candidates = ["stack.yaml", "stack.yml", "manifest.yaml", "manifest.yml"];
   for (const filename of candidates) {
-    const filePath = import_path12.default.join(dir, filename);
+    const filePath = import_path11.default.join(dir, filename);
     if (import_fs11.default.existsSync(filePath)) {
       return filePath;
     }
@@ -38817,13 +39247,13 @@ function findStackManifest(dir) {
 }
 
 // packages/manifest/src/skill.js
-var import_yaml4 = __toESM(require_dist(), 1);
+var import_yaml3 = __toESM(require_dist(), 1);
 
 // packages/manifest/src/prompt.js
-var import_yaml5 = __toESM(require_dist(), 1);
+var import_yaml4 = __toESM(require_dist(), 1);
 
 // packages/manifest/src/runtime.js
-var import_yaml6 = __toESM(require_dist(), 1);
+var import_yaml5 = __toESM(require_dist(), 1);
 
 // packages/manifest/src/validate.js
 var import_ajv = __toESM(require_ajv(), 1);
@@ -39087,7 +39517,7 @@ var validateRuntimeInternal = ajv.compile(runtimeSchema);
 
 // src/commands/run.js
 var import_fs12 = __toESM(require("fs"), 1);
-var import_path13 = __toESM(require("path"), 1);
+var import_path12 = __toESM(require("path"), 1);
 async function cmdRun(args, flags) {
   const stackId = args[0];
   if (!stackId) {
@@ -39108,7 +39538,7 @@ async function cmdRun(args, flags) {
     if (manifestPath) {
       manifest = parseStackManifest(manifestPath);
     } else {
-      const jsonPath = import_path13.default.join(packagePath, "manifest.json");
+      const jsonPath = import_path12.default.join(packagePath, "manifest.json");
       if (import_fs12.default.existsSync(jsonPath)) {
         manifest = JSON.parse(import_fs12.default.readFileSync(jsonPath, "utf-8"));
       }
@@ -39793,11 +40223,11 @@ function promptSecret(prompt) {
 
 // src/commands/db.js
 var import_fs14 = require("fs");
-var import_path15 = require("path");
+var import_path14 = require("path");
 
 // packages/db/src/index.js
 var import_better_sqlite3 = __toESM(require("better-sqlite3"), 1);
-var import_path14 = __toESM(require("path"), 1);
+var import_path13 = __toESM(require("path"), 1);
 var import_fs13 = __toESM(require("fs"), 1);
 init_src2();
 
@@ -42713,14 +43143,14 @@ function resolveSessionRowIdentity(db3, provider, providerSessionId, options = {
 }
 
 // packages/db/src/import.js
-var RUDI_HOME4 = PATHS2.home;
+var RUDI_HOME3 = PATHS2.home;
 
 // packages/db/src/index.js
 var DB_PATH = PATHS2.dbFile;
 var db = null;
 function getDb(options = {}) {
   if (!db) {
-    const dbDir = import_path14.default.dirname(DB_PATH);
+    const dbDir = import_path13.default.dirname(DB_PATH);
     if (!import_fs13.default.existsSync(dbDir)) {
       import_fs13.default.mkdirSync(dbDir, { recursive: true });
     }
@@ -43016,10 +43446,10 @@ function dbBackup(args, flags) {
   let backupPath = args[0];
   if (!backupPath) {
     const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    backupPath = (0, import_path15.join)((0, import_path15.dirname)(dbPath), `rudi-backup-${timestamp}.db`);
+    backupPath = (0, import_path14.join)((0, import_path14.dirname)(dbPath), `rudi-backup-${timestamp}.db`);
   }
   if (backupPath.startsWith("~")) {
-    backupPath = (0, import_path15.join)(process.env.HOME || "", backupPath.slice(1));
+    backupPath = (0, import_path14.join)(process.env.HOME || "", backupPath.slice(1));
   }
   if ((0, import_fs14.existsSync)(backupPath) && !flags.force) {
     console.error(`Backup file already exists: ${backupPath}`);
@@ -43210,8 +43640,8 @@ async function ensureEmbeddingProvider(preferredProvider = "auto", options = {})
     });
     console.log("\r  \u2713 Ollama installed     ");
     console.log("  Starting ollama serve...");
-    const { spawn: spawn12 } = await import("child_process");
-    const server = spawn12("ollama", ["serve"], {
+    const { spawn: spawn11 } = await import("child_process");
+    const server = spawn11("ollama", ["serve"], {
       detached: true,
       stdio: "ignore",
       env: { ...process.env, HOME: process.env.HOME }
@@ -43219,8 +43649,7 @@ async function ensureEmbeddingProvider(preferredProvider = "auto", options = {})
     server.unref();
     await new Promise((r2) => setTimeout(r2, 2e3));
     console.log("  Pulling nomic-embed-text model (274MB)...");
-    const { execSync: execSync22 } = await import("child_process");
-    execSync22("ollama pull nomic-embed-text", { stdio: "inherit" });
+    runCommand("ollama", ["pull", "nomic-embed-text"], { stdio: "inherit" });
     console.log("  \u2713 Model ready\n");
     return await getProvider2("ollama");
   } catch (err) {
@@ -43664,9 +44093,9 @@ async function sessionExport(args, flags) {
   };
   const json = JSON.stringify(exportData, null, 2);
   if (flags.output || flags.o) {
-    const fs67 = await import("fs");
+    const fs68 = await import("fs");
     const outputFile = flags.output || flags.o;
-    fs67.writeFileSync(outputFile, json);
+    fs68.writeFileSync(outputFile, json);
     console.log(`\u2713 Exported session to: ${outputFile}`);
   } else {
     console.log(json);
@@ -46528,7 +46957,6 @@ var import_fs21 = __toESM(require("fs"), 1);
 var import_path21 = __toESM(require("path"), 1);
 var import_promises2 = require("stream/promises");
 var import_fs22 = require("fs");
-var import_child_process6 = require("child_process");
 init_src();
 init_src3();
 var RELEASES_BASE = "https://github.com/learnrudi/registry/releases/download/v1.0.0";
@@ -46590,7 +47018,7 @@ async function cmdInit(args, flags) {
         continue;
       }
       try {
-        await downloadRuntime3(runtime, runtimeName2, destPath, platform);
+        await downloadRuntime2(runtime, runtimeName2, destPath, platform);
         actions.created.push(`runtime:${runtimeName2}`);
         if (!quiet) console.log(`   + ${runtimeName2}: installed`);
       } catch (error) {
@@ -46685,7 +47113,7 @@ async function cmdInit(args, flags) {
   }
   return actions;
 }
-async function downloadRuntime3(runtime, name, destPath, platform) {
+async function downloadRuntime2(runtime, name, destPath, platform) {
   let url;
   if (runtime.upstream?.[platform]) {
     url = runtime.upstream[platform];
@@ -46719,11 +47147,11 @@ async function downloadAndExtract(url, destPath, name, extractConfig) {
   const fileStream = (0, import_fs22.createWriteStream)(tempFile);
   await (0, import_promises2.pipeline)(response.body, fileStream);
   try {
-    (0, import_child_process6.execSync)(`tar -xzf "${tempFile}" -C "${destPath}" --strip-components=1`, {
+    runCommand("tar", ["-xzf", tempFile, "-C", destPath, "--strip-components=1"], {
       stdio: "pipe"
     });
   } catch {
-    (0, import_child_process6.execSync)(`tar -xzf "${tempFile}" -C "${destPath}"`, { stdio: "pipe" });
+    runCommand("tar", ["-xzf", tempFile, "-C", destPath], { stdio: "pipe" });
   }
   import_fs21.default.unlinkSync(tempFile);
 }
@@ -46828,7 +47256,7 @@ function isTruthyFlag(value) {
 function shouldPreserveInstallState(flags = {}) {
   return isTruthyFlag(flags["preserve-state"]) || isTruthyFlag(flags.preserveState);
 }
-async function getInstalledPackages3(deps) {
+async function getInstalledPackages2(deps) {
   const installed = await deps.listInstalled();
   return Array.isArray(installed) ? installed.filter((pkg) => typeof pkg?.id === "string") : [];
 }
@@ -46838,7 +47266,7 @@ async function resolveUpdateTarget(rawTarget, deps = defaultDependencies) {
     throw new Error("Package id is required");
   }
   assertKnownPackagePrefix(target);
-  const installed = await getInstalledPackages3(deps);
+  const installed = await getInstalledPackages2(deps);
   if (hasKnownPackagePrefix(target)) {
     const match = installed.find((pkg) => pkg.id === target);
     if (!match) {
@@ -46891,7 +47319,7 @@ async function runUpdate(args = [], flags = {}, deps = defaultDependencies) {
   if (pkgId) {
     target = await resolveUpdateTarget(pkgId, deps);
   } else {
-    installed = await getInstalledPackages3(deps);
+    installed = await getInstalledPackages2(deps);
   }
   deps.log("Refreshing registry...");
   await deps.fetchIndex({ force: true });
@@ -47174,8 +47602,7 @@ async function handleLogsCommand(args, flags) {
 
 // src/commands/which.js
 var fs26 = __toESM(require("fs/promises"), 1);
-var path27 = __toESM(require("path"), 1);
-var import_child_process7 = require("child_process");
+var path25 = __toESM(require("path"), 1);
 init_src5();
 init_src();
 async function cmdWhich(args, flags) {
@@ -47252,7 +47679,7 @@ Installed stacks:`);
     if (runtimeInfo.entry) {
       console.log("");
       console.log("Run MCP server directly:");
-      const entryPath = path27.join(stackPath, runtimeInfo.entry);
+      const entryPath = path25.join(stackPath, runtimeInfo.entry);
       if (runtimeInfo.runtime === "node") {
         console.log(`  echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | node ${entryPath}`);
       } else if (runtimeInfo.runtime === "python") {
@@ -47270,8 +47697,8 @@ Installed stacks:`);
 }
 async function detectRuntime(stackPath) {
   const layouts = [
-    { runtime: "node", runtimePath: path27.join(stackPath, "node"), entryPrefix: "node/", explicit: true },
-    { runtime: "python", runtimePath: path27.join(stackPath, "python"), entryPrefix: "python/", explicit: true },
+    { runtime: "node", runtimePath: path25.join(stackPath, "node"), entryPrefix: "node/", explicit: true },
+    { runtime: "python", runtimePath: path25.join(stackPath, "python"), entryPrefix: "python/", explicit: true },
     { runtime: "node", runtimePath: stackPath, entryPrefix: "", explicit: false },
     { runtime: "python", runtimePath: stackPath, entryPrefix: "", explicit: false }
   ];
@@ -47279,8 +47706,8 @@ async function detectRuntime(stackPath) {
     try {
       await fs26.access(runtimePath);
       if (runtime === "node") {
-        const distEntry = path27.join(runtimePath, "dist", "index.js");
-        const srcEntry = path27.join(runtimePath, "src", "index.ts");
+        const distEntry = path25.join(runtimePath, "dist", "index.js");
+        const srcEntry = path25.join(runtimePath, "src", "index.ts");
         try {
           await fs26.access(distEntry);
           return { runtime: "node", entry: `${entryPrefix}dist/index.js` };
@@ -47293,7 +47720,7 @@ async function detectRuntime(stackPath) {
           }
         }
       } else if (runtime === "python") {
-        const entry = path27.join(runtimePath, "src", "index.py");
+        const entry = path25.join(runtimePath, "src", "index.py");
         try {
           await fs26.access(entry);
           return { runtime: "python", entry: `${entryPrefix}src/index.py` };
@@ -47315,16 +47742,16 @@ async function checkAuth(stackPath, runtime, options = {}) {
     if (!rootPath || checkedRoots.has(rootPath)) return;
     checkedRoots.add(rootPath);
     try {
-      await fs26.access(path27.join(rootPath, "token.json"));
+      await fs26.access(path25.join(rootPath, "token.json"));
       authFiles.push(labelPrefix ? `${labelPrefix}/token.json` : "token.json");
       configured = true;
     } catch {
-      const accountsPath = path27.join(rootPath, "accounts");
+      const accountsPath = path25.join(rootPath, "accounts");
       try {
         const accounts = await fs26.readdir(accountsPath);
         for (const account of accounts) {
           if (account.startsWith(".")) continue;
-          const accountTokenPath = path27.join(accountsPath, account, "token.json");
+          const accountTokenPath = path25.join(accountsPath, account, "token.json");
           try {
             await fs26.access(accountTokenPath);
             const label = labelPrefix ? `${labelPrefix}/accounts/${account}/token.json` : `accounts/${account}/token.json`;
@@ -47338,16 +47765,16 @@ async function checkAuth(stackPath, runtime, options = {}) {
     }
   }
   if (runtime === "node" || runtime === "python") {
-    await scanAuthRoot(path27.join(stackPath, runtime), runtime);
+    await scanAuthRoot(path25.join(stackPath, runtime), runtime);
     await scanAuthRoot(stackPath, "");
   }
-  const stackName = options.stackName || path27.basename(stackPath);
+  const stackName = options.stackName || path25.basename(stackPath);
   const rudiHome = options.rudiHome || PATHS.home;
   await scanAuthRoot(
-    path27.join(rudiHome, "state", "stacks", stackName),
+    path25.join(rudiHome, "state", "stacks", stackName),
     `state/stacks/${stackName}`
   );
-  const envPath = path27.join(stackPath, ".env");
+  const envPath = path25.join(stackPath, ".env");
   try {
     const envContent = await fs26.readFile(envPath, "utf-8");
     const hasValues = envContent.split("\n").some((line) => {
@@ -47376,17 +47803,20 @@ async function checkAuth(stackPath, runtime, options = {}) {
     };
   }
 }
-function checkIfRunning(stackName) {
+function isStackProcessLine(line, stackName) {
+  return Boolean(
+    line && typeof stackName === "string" && stackName.length > 0 && line.includes(stackName) && (line.includes("index.ts") || line.includes("index.js") || line.includes("index.py"))
+  );
+}
+function checkIfRunning(stackName, options = {}) {
+  const runCommand2 = options.runCommand || runCommand;
   try {
-    const result = (0, import_child_process7.execSync)(`ps aux | grep "${stackName}" | grep -v grep || true`, {
+    const result = runCommand2("ps", ["aux"], {
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "ignore"]
       // Suppress stderr
     });
-    const lines = result.trim().split("\n").filter((line) => {
-      return line && line.includes("index.ts") || line.includes("index.js") || line.includes("index.py");
-    });
-    return lines.length > 0;
+    return result.trim().split("\n").some((line) => isStackProcessLine(line, stackName));
   } catch {
     return false;
   }
@@ -47394,10 +47824,9 @@ function checkIfRunning(stackName) {
 
 // src/commands/auth.js
 var fs27 = __toESM(require("fs/promises"), 1);
-var path28 = __toESM(require("path"), 1);
+var path26 = __toESM(require("path"), 1);
 var import_child_process8 = require("child_process");
 init_src5();
-init_src();
 var net = __toESM(require("net"), 1);
 async function findAvailablePort(basePort = 3456) {
   for (let port = basePort; port < basePort + 10; port++) {
@@ -47426,17 +47855,17 @@ function isPortAvailable(port) {
 }
 async function detectRuntime2(stackPath) {
   const layouts = [
-    { runtime: "node", runtimePath: path28.join(stackPath, "node") },
+    { runtime: "node", runtimePath: path26.join(stackPath, "node") },
     { runtime: "node", runtimePath: stackPath },
-    { runtime: "python", runtimePath: path28.join(stackPath, "python") },
+    { runtime: "python", runtimePath: path26.join(stackPath, "python") },
     { runtime: "python", runtimePath: stackPath }
   ];
   for (const { runtime, runtimePath } of layouts) {
     try {
       await fs27.access(runtimePath);
       if (runtime === "node") {
-        const authTs = path28.join(runtimePath, "src", "auth.ts");
-        const authJs = path28.join(runtimePath, "dist", "auth.js");
+        const authTs = path26.join(runtimePath, "src", "auth.ts");
+        const authJs = path26.join(runtimePath, "dist", "auth.js");
         try {
           await fs27.access(authTs);
           return { runtime: "node", authScript: authTs, useTsx: true };
@@ -47448,7 +47877,7 @@ async function detectRuntime2(stackPath) {
           }
         }
       } else if (runtime === "python") {
-        const authPy = path28.join(runtimePath, "src", "auth.py");
+        const authPy = path26.join(runtimePath, "src", "auth.py");
         try {
           await fs27.access(authPy);
           return { runtime: "python", authScript: authPy, useTsx: false };
@@ -47460,6 +47889,50 @@ async function detectRuntime2(stackPath) {
     }
   }
   return null;
+}
+function requireSubprocessArg(value, name) {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`${name} must be a non-empty string`);
+  }
+  if (value.includes("\0")) {
+    throw new Error(`${name} must not contain NUL bytes`);
+  }
+  return value;
+}
+function accountArg(accountEmail) {
+  if (accountEmail === void 0 || accountEmail === null || accountEmail === "") {
+    return [];
+  }
+  return [requireSubprocessArg(accountEmail, "account email")];
+}
+function createAuthSubprocess({
+  runtime,
+  scriptPath,
+  useTsx = false,
+  accountEmail
+}) {
+  const safeScriptPath = requireSubprocessArg(scriptPath, "auth script path");
+  const accountArgs = accountArg(accountEmail);
+  if (runtime === "node") {
+    if (useTsx) {
+      return { command: "npx", args: ["tsx", safeScriptPath, ...accountArgs] };
+    }
+    return { command: "node", args: [safeScriptPath, ...accountArgs] };
+  }
+  if (runtime === "python") {
+    return { command: "python3", args: [safeScriptPath, ...accountArgs] };
+  }
+  throw new Error(`Unsupported auth runtime: ${runtime}`);
+}
+function runAuthSubprocess(plan, options = {}) {
+  const execFileSync12 = options.execFileSync || import_child_process8.execFileSync;
+  const command = requireSubprocessArg(plan?.command, "auth command");
+  const args = Array.isArray(plan?.args) ? plan.args.map((arg, index) => requireSubprocessArg(arg, `auth arg ${index}`)) : [];
+  execFileSync12(command, args, {
+    cwd: options.cwd,
+    stdio: options.stdio || "inherit",
+    ...options.env ? { env: options.env } : {}
+  });
 }
 async function cmdAuth(args, flags) {
   const stackId = args[0];
@@ -47499,10 +47972,9 @@ Installed stacks:`);
     const port = await findAvailablePort(3456);
     console.log(`Using port: ${port}`);
     console.log("");
-    let cmd;
-    const cwd = path28.dirname(authInfo.authScript);
+    const cwd = path26.dirname(authInfo.authScript);
     if (authInfo.runtime === "node") {
-      const distAuth = path28.join(cwd, "..", "dist", "auth.js");
+      const distAuth = path26.join(cwd, "..", "dist", "auth.js");
       let useBuiltInPort = false;
       let tempAuthScript = null;
       try {
@@ -47510,7 +47982,6 @@ Installed stacks:`);
         const distContent = await fs27.readFile(distAuth, "utf-8");
         if (distContent.includes("findAvailablePort")) {
           console.log("Using compiled authentication script...");
-          cmd = `node ${distAuth}${accountEmail ? ` ${accountEmail}` : ""}`;
           useBuiltInPort = true;
         }
       } catch {
@@ -47518,19 +47989,20 @@ Installed stacks:`);
       if (!useBuiltInPort) {
         const authContent = await fs27.readFile(authInfo.authScript, "utf-8");
         const tempExt = authInfo.useTsx ? ".ts" : ".mjs";
-        tempAuthScript = path28.join(cwd, "..", `auth-temp${tempExt}`);
+        tempAuthScript = path26.join(cwd, "..", `auth-temp${tempExt}`);
         const modifiedContent = authContent.replace(/localhost:3456/g, `localhost:${port}`).replace(/server\.listen\(3456/g, `server.listen(${port}`);
         await fs27.writeFile(tempAuthScript, modifiedContent);
-        if (authInfo.useTsx) {
-          cmd = `npx tsx ${tempAuthScript}${accountEmail ? ` ${accountEmail}` : ""}`;
-        } else {
-          cmd = `node ${tempAuthScript}${accountEmail ? ` ${accountEmail}` : ""}`;
-        }
       }
       console.log("Starting OAuth flow...");
       console.log("");
       try {
-        (0, import_child_process8.execSync)(cmd, {
+        const plan = createAuthSubprocess({
+          runtime: "node",
+          scriptPath: useBuiltInPort ? distAuth : tempAuthScript,
+          useTsx: useBuiltInPort ? false : authInfo.useTsx,
+          accountEmail
+        });
+        runAuthSubprocess(plan, {
           cwd,
           stdio: "inherit"
         });
@@ -47547,10 +48019,14 @@ Installed stacks:`);
         throw error;
       }
     } else if (authInfo.runtime === "python") {
-      cmd = `python3 ${authInfo.authScript}${accountEmail ? ` ${accountEmail}` : ""}`;
       console.log("Starting OAuth flow...");
       console.log("");
-      (0, import_child_process8.execSync)(cmd, {
+      const plan = createAuthSubprocess({
+        runtime: "python",
+        scriptPath: authInfo.authScript,
+        accountEmail
+      });
+      runAuthSubprocess(plan, {
         cwd,
         stdio: "inherit",
         env: {
@@ -47573,20 +48049,20 @@ Installed stacks:`);
 
 // src/commands/mcp.js
 var fs28 = __toESM(require("fs"), 1);
-var path29 = __toESM(require("path"), 1);
+var path27 = __toESM(require("path"), 1);
 var import_child_process9 = require("child_process");
 init_src();
 init_src4();
 function getBundledRuntime(runtime) {
   const platform = process.platform;
   if (runtime === "node") {
-    const nodePath = platform === "win32" ? path29.join(PATHS.runtimes, "node", "node.exe") : path29.join(PATHS.runtimes, "node", "bin", "node");
+    const nodePath = platform === "win32" ? path27.join(PATHS.runtimes, "node", "node.exe") : path27.join(PATHS.runtimes, "node", "bin", "node");
     if (fs28.existsSync(nodePath)) {
       return nodePath;
     }
   }
   if (runtime === "python") {
-    const pythonPath = platform === "win32" ? path29.join(PATHS.runtimes, "python", "python.exe") : path29.join(PATHS.runtimes, "python", "bin", "python3");
+    const pythonPath = platform === "win32" ? path27.join(PATHS.runtimes, "python", "python.exe") : path27.join(PATHS.runtimes, "python", "bin", "python3");
     if (fs28.existsSync(pythonPath)) {
       return pythonPath;
     }
@@ -47595,14 +48071,14 @@ function getBundledRuntime(runtime) {
 }
 function getBundledNpx() {
   const platform = process.platform;
-  const npxPath = platform === "win32" ? path29.join(PATHS.runtimes, "node", "npx.cmd") : path29.join(PATHS.runtimes, "node", "bin", "npx");
+  const npxPath = platform === "win32" ? path27.join(PATHS.runtimes, "node", "npx.cmd") : path27.join(PATHS.runtimes, "node", "bin", "npx");
   if (fs28.existsSync(npxPath)) {
     return npxPath;
   }
   return null;
 }
 function loadManifest2(stackPath) {
-  const manifestPath = path29.join(stackPath, "manifest.json");
+  const manifestPath = path27.join(stackPath, "manifest.json");
   if (!fs28.existsSync(manifestPath)) {
     return null;
   }
@@ -47639,7 +48115,7 @@ async function cmdMcp(args, flags) {
     console.error("Example: rudi mcp slack");
     process.exit(1);
   }
-  const stackPath = path29.join(PATHS.stacks, stackName);
+  const stackPath = path27.join(PATHS.stacks, stackName);
   if (!fs28.existsSync(stackPath)) {
     console.error(`Stack not found: ${stackName}`);
     console.error(`Expected at: ${stackPath}`);
@@ -47689,8 +48165,8 @@ async function cmdMcp(args, flags) {
       }
       return part;
     }
-    if (part.startsWith("./") || part.startsWith("../") || !path29.isAbsolute(part)) {
-      const resolved = path29.join(stackPath, part);
+    if (part.startsWith("./") || part.startsWith("../") || !path27.isAbsolute(part)) {
+      const resolved = path27.join(stackPath, part);
       if (fs28.existsSync(resolved)) {
         return resolved;
       }
@@ -47698,13 +48174,13 @@ async function cmdMcp(args, flags) {
     return part;
   });
   const [cmd, ...cmdArgs] = resolvedCommand;
-  const bundledNodeBin = path29.join(PATHS.runtimes, "node", "bin");
-  const bundledPythonBin = path29.join(PATHS.runtimes, "python", "bin");
+  const bundledNodeBin = path27.join(PATHS.runtimes, "node", "bin");
+  const bundledPythonBin = path27.join(PATHS.runtimes, "python", "bin");
   if (fs28.existsSync(bundledNodeBin) || fs28.existsSync(bundledPythonBin)) {
     const runtimePaths = [];
     if (fs28.existsSync(bundledNodeBin)) runtimePaths.push(bundledNodeBin);
     if (fs28.existsSync(bundledPythonBin)) runtimePaths.push(bundledPythonBin);
-    env.PATH = runtimePaths.join(path29.delimiter) + path29.delimiter + (env.PATH || "");
+    env.PATH = runtimePaths.join(path27.delimiter) + path27.delimiter + (env.PATH || "");
   }
   if (flags.debug) {
     console.error(`[rudi mcp] Stack: ${stackName}`);
@@ -47735,12 +48211,12 @@ async function cmdMcp(args, flags) {
 
 // src/commands/integrate.js
 var fs29 = __toESM(require("fs"), 1);
-var path30 = __toESM(require("path"), 1);
+var path28 = __toESM(require("path"), 1);
 var import_os7 = __toESM(require("os"), 1);
 init_src();
 var HOME2 = import_os7.default.homedir();
-var ROUTER_SHIM_PATH = path30.join(PATHS.bins, "rudi-router");
-var LEGACY_ROUTER_SHIM_PATH = path30.join(PATHS.home, "shims", "rudi-router");
+var ROUTER_SHIM_PATH = path28.join(PATHS.bins, "rudi-router");
+var LEGACY_ROUTER_SHIM_PATH = path28.join(PATHS.home, "shims", "rudi-router");
 function checkRouterShim() {
   if (fs29.existsSync(ROUTER_SHIM_PATH)) return ROUTER_SHIM_PATH;
   if (fs29.existsSync(LEGACY_ROUTER_SHIM_PATH)) return LEGACY_ROUTER_SHIM_PATH;
@@ -47766,7 +48242,7 @@ function readJsonConfig(configPath) {
   }
 }
 function writeJsonConfig(configPath, config) {
-  const dir = path30.dirname(configPath);
+  const dir = path28.dirname(configPath);
   if (!fs29.existsSync(dir)) {
     fs29.mkdirSync(dir, { recursive: true });
   }
@@ -47774,7 +48250,7 @@ function writeJsonConfig(configPath, config) {
 }
 function getAgentTargetPath(agentConfig) {
   const configPath = findAgentConfig(agentConfig);
-  return configPath || path30.join(HOME2, agentConfig.paths[process.platform]?.[0] || agentConfig.paths.darwin[0]);
+  return configPath || path28.join(HOME2, agentConfig.paths[process.platform]?.[0] || agentConfig.paths.darwin[0]);
 }
 function tomlString(value) {
   return `"${String(value).replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
@@ -47813,9 +48289,9 @@ function buildCodexRouterTomlBlock(routerPath) {
   ].join("\n");
 }
 function patchCodexTomlRouter(content, routerPath, options = {}) {
-  const rudiMcpShimPath = options.rudiMcpShimPath || path30.join(PATHS.bins, "rudi-mcp");
-  const legacyMcpShimPath = options.legacyMcpShimPath || path30.join(PATHS.home, "shims", "rudi-mcp");
-  const rudiStacksPath = options.rudiStacksPath || path30.join(PATHS.home, "stacks");
+  const rudiMcpShimPath = options.rudiMcpShimPath || path28.join(PATHS.bins, "rudi-mcp");
+  const legacyMcpShimPath = options.legacyMcpShimPath || path28.join(PATHS.home, "shims", "rudi-mcp");
+  const rudiStacksPath = options.rudiStacksPath || path28.join(PATHS.home, "stacks");
   const blocks = splitTomlBlocks(content || "");
   const removedEntries = [];
   const removedServers = /* @__PURE__ */ new Set();
@@ -47876,7 +48352,7 @@ ${agentConfig.name}:`);
     console.log(`  Removed old entries: ${result.removed.join(", ")}`);
   }
   if (result.action !== "none" || result.removed.length > 0) {
-    const dir = path30.dirname(targetPath);
+    const dir = path28.dirname(targetPath);
     if (!fs29.existsSync(dir)) {
       fs29.mkdirSync(dir, { recursive: true });
     }
@@ -47944,9 +48420,9 @@ ${agentConfig.name}:`);
   if (!config[key]) {
     config[key] = {};
   }
-  const rudiMcpShimPath = path30.join(PATHS.bins, "rudi-mcp");
-  const legacyMcpShimPath = path30.join(PATHS.home, "shims", "rudi-mcp");
-  const rudiStacksPath = path30.join(PATHS.home, "stacks");
+  const rudiMcpShimPath = path28.join(PATHS.bins, "rudi-mcp");
+  const legacyMcpShimPath = path28.join(PATHS.home, "shims", "rudi-mcp");
+  const rudiStacksPath = path28.join(PATHS.home, "stacks");
   const removedEntries = [];
   for (const [serverName, serverConfig] of Object.entries(config[key])) {
     if (serverName === "rudi") continue;
@@ -48702,7 +49178,7 @@ function validateLocalLlmEnvExport(value) {
 }
 
 // src/daemon/schemas/packages.js
-var PACKAGE_KINDS4 = Object.freeze([
+var PACKAGE_KINDS3 = Object.freeze([
   "agent",
   "binary",
   "prompt",
@@ -48746,7 +49222,7 @@ var PackageDescriptorSchema = deepFreezeSchema({
   required: ["id", "kind", "name"],
   properties: {
     id: { type: "string", minLength: 1 },
-    kind: { type: "string", enum: PACKAGE_KINDS4 },
+    kind: { type: "string", enum: PACKAGE_KINDS3 },
     name: { type: "string", minLength: 1 },
     description: { type: "string" },
     version: { type: ["string", "null"] },
@@ -48774,7 +49250,7 @@ var PackageStatusSchema = deepFreezeSchema({
   required: ["id", "kind", "name", "installed", "secrets", "problems"],
   properties: {
     id: { type: "string", minLength: 1 },
-    kind: { type: "string", enum: PACKAGE_KINDS4 },
+    kind: { type: "string", enum: PACKAGE_KINDS3 },
     name: { type: "string", minLength: 1 },
     version: { type: ["string", "null"] },
     installed: { type: "boolean" },
@@ -49382,7 +49858,6 @@ After configuring secrets, run: rudi index`);
 
 // src/commands/status.js
 init_src5();
-var import_child_process10 = require("child_process");
 var import_fs25 = __toESM(require("fs"), 1);
 var import_path23 = __toESM(require("path"), 1);
 var import_os8 = __toESM(require("os"), 1);
@@ -49436,7 +49911,7 @@ function fileExists(filePath) {
 function checkKeychain(service) {
   if (process.platform !== "darwin") return false;
   try {
-    (0, import_child_process10.execSync)(`security find-generic-password -s "${service}"`, {
+    runCommand("security", ["find-generic-password", "-s", service], {
       stdio: ["pipe", "pipe", "pipe"]
     });
     return true;
@@ -49446,13 +49921,29 @@ function checkKeychain(service) {
 }
 function getVersion2(command, versionFlag) {
   try {
-    const output = (0, import_child_process10.execSync)(`${command} ${versionFlag} 2>&1`, {
+    const output = runCommand(command, [versionFlag], {
       encoding: "utf-8",
       timeout: 5e3,
       stdio: ["pipe", "pipe", "pipe"]
     });
     const match = output.match(/(\d+\.\d+\.?\d*)/);
     return match ? match[1] : output.trim().split("\n")[0].slice(0, 50);
+  } catch (error) {
+    const output = `${error.stdout?.toString() || ""}
+${error.stderr?.toString() || ""}`.trim();
+    if (output) {
+      const match = output.match(/(\d+\.\d+\.?\d*)/);
+      return match ? match[1] : output.split("\n")[0].trim().slice(0, 50);
+    }
+    return null;
+  }
+}
+function findGlobalBinary(command, options = {}) {
+  try {
+    return runCommandPlan2(createWhichCommand(command), {
+      encoding: "utf-8",
+      timeout: options.timeout || 3e3
+    }).trim();
   } catch {
     return null;
   }
@@ -49490,16 +49981,9 @@ function findBinary(command, kind2 = "binary") {
       return { found: true, path: p2, source: "rudi" };
     }
   }
-  try {
-    const output = (0, import_child_process10.execSync)(`which ${command} 2>/dev/null`, {
-      encoding: "utf-8",
-      timeout: 3e3
-    });
-    const globalPath = output.trim();
-    if (globalPath) {
-      return { found: true, path: globalPath, source: "global" };
-    }
-  } catch {
+  const globalPath = findGlobalBinary(command);
+  if (globalPath) {
+    return { found: true, path: globalPath, source: "global" };
   }
   return { found: false, path: null, source: null };
 }
@@ -49509,13 +49993,10 @@ function getAgentStatus(agent) {
   let globalPath = null;
   let globalInstalled = false;
   if (!rudiInstalled) {
-    try {
-      const which2 = (0, import_child_process10.execSync)(`which ${agent.id} 2>/dev/null`, { encoding: "utf-8" }).trim();
-      if (which2 && !which2.includes(".rudi/bins") && !which2.includes(".rudi/shims")) {
-        globalPath = which2;
-        globalInstalled = true;
-      }
-    } catch {
+    const which2 = findGlobalBinary(agent.id);
+    if (which2 && !which2.includes(".rudi/bins") && !which2.includes(".rudi/shims")) {
+      globalPath = which2;
+      globalInstalled = true;
     }
   }
   const installed = rudiInstalled || globalInstalled;
@@ -49756,7 +50237,6 @@ async function cmdStatus(args, flags) {
 
 // src/commands/check.js
 init_src5();
-var import_child_process11 = require("child_process");
 var import_fs26 = __toESM(require("fs"), 1);
 var import_path24 = __toESM(require("path"), 1);
 var import_os9 = __toESM(require("os"), 1);
@@ -49773,7 +50253,7 @@ function fileExists2(filePath) {
 function checkKeychain2(service) {
   if (process.platform !== "darwin") return false;
   try {
-    (0, import_child_process11.execSync)(`security find-generic-password -s "${service}"`, {
+    runCommand("security", ["find-generic-password", "-s", service], {
       stdio: ["pipe", "pipe", "pipe"]
     });
     return true;
@@ -49783,12 +50263,29 @@ function checkKeychain2(service) {
 }
 function getVersion3(binaryPath, versionFlag = "--version") {
   try {
-    const output = (0, import_child_process11.execSync)(`"${binaryPath}" ${versionFlag} 2>&1`, {
+    const output = runCommand(binaryPath, [versionFlag], {
       encoding: "utf-8",
-      timeout: 5e3
+      timeout: 5e3,
+      stdio: ["pipe", "pipe", "pipe"]
     });
     const match = output.match(/(\d+\.\d+\.?\d*)/);
     return match ? match[1] : null;
+  } catch (error) {
+    const output = `${error.stdout?.toString() || ""}
+${error.stderr?.toString() || ""}`.trim();
+    if (output) {
+      const match = output.match(/(\d+\.\d+\.?\d*)/);
+      return match ? match[1] : null;
+    }
+    return null;
+  }
+}
+function findGlobalBinary2(name) {
+  try {
+    return runCommandPlan2(createWhichCommand(name), {
+      encoding: "utf-8",
+      timeout: 3e3
+    }).trim();
   } catch {
     return null;
   }
@@ -49824,15 +50321,12 @@ function detectKindFromFilesystem(name) {
   if (import_fs26.default.existsSync(binaryPath) || import_fs26.default.existsSync(binaryPath2)) return "binary";
   const stackPath = import_path24.default.join(PATHS.stacks, name);
   if (import_fs26.default.existsSync(stackPath)) return "stack";
-  try {
-    const globalPath = (0, import_child_process11.execSync)(`which ${name} 2>/dev/null`, { encoding: "utf-8" }).trim();
-    if (globalPath) {
-      if (globalPath.includes("/node") || globalPath.includes("/python") || globalPath.includes("/deno") || globalPath.includes("/bun")) {
-        return "runtime";
-      }
-      return "binary";
+  const globalPath = findGlobalBinary2(name);
+  if (globalPath) {
+    if (globalPath.includes("/node") || globalPath.includes("/python") || globalPath.includes("/deno") || globalPath.includes("/bun")) {
+      return "runtime";
     }
-  } catch {
+    return "binary";
   }
   return "stack";
 }
@@ -49874,13 +50368,10 @@ async function cmdCheck(args, flags) {
       let globalPath = null;
       let globalInstalled = false;
       if (!rudiInstalled) {
-        try {
-          const which2 = (0, import_child_process11.execSync)(`which ${name} 2>/dev/null`, { encoding: "utf-8" }).trim();
-          if (which2 && !which2.includes(".rudi/bins") && !which2.includes(".rudi/shims")) {
-            globalPath = which2;
-            globalInstalled = true;
-          }
-        } catch {
+        const which2 = findGlobalBinary2(name);
+        if (which2 && !which2.includes(".rudi/bins") && !which2.includes(".rudi/shims")) {
+          globalPath = which2;
+          globalInstalled = true;
         }
       }
       result.installed = rudiInstalled || globalInstalled;
@@ -49907,14 +50398,11 @@ async function cmdCheck(args, flags) {
         result.path = rudiPath;
         result.version = getVersion3(rudiPath);
       } else {
-        try {
-          const globalPath = (0, import_child_process11.execSync)(`which ${name} 2>/dev/null`, { encoding: "utf-8" }).trim();
-          if (globalPath) {
-            result.installed = true;
-            result.path = globalPath;
-            result.version = getVersion3(globalPath);
-          }
-        } catch {
+        const globalPath = findGlobalBinary2(name);
+        if (globalPath) {
+          result.installed = true;
+          result.path = globalPath;
+          result.version = getVersion3(globalPath);
         }
       }
       result.ready = result.installed;
@@ -49926,13 +50414,10 @@ async function cmdCheck(args, flags) {
         result.installed = true;
         result.path = rudiPath;
       } else {
-        try {
-          const globalPath = (0, import_child_process11.execSync)(`which ${name} 2>/dev/null`, { encoding: "utf-8" }).trim();
-          if (globalPath) {
-            result.installed = true;
-            result.path = globalPath;
-          }
-        } catch {
+        const globalPath = findGlobalBinary2(name);
+        if (globalPath) {
+          result.installed = true;
+          result.path = globalPath;
         }
       }
       result.ready = result.installed;
@@ -50911,7 +51396,7 @@ Project deleted: ${project.name}`);
 var import_fs30 = __toESM(require("fs"), 1);
 var import_path28 = __toESM(require("path"), 1);
 var import_os11 = __toESM(require("os"), 1);
-var import_child_process12 = require("child_process");
+var import_child_process10 = require("child_process");
 var STUDIO_WEBSITE = "https://learnrudi.com";
 var STUDIO_PATHS = {
   darwin: [
@@ -50955,9 +51440,10 @@ function findStudioPath() {
   }
   if (platform === "darwin") {
     try {
-      const result = (0, import_child_process12.execSync)(`mdfind "kMDItemCFBundleIdentifier == 'com.rudi.studio'" 2>/dev/null`, {
+      const result = runCommand("mdfind", ["kMDItemCFBundleIdentifier == 'com.rudi.studio'"], {
         encoding: "utf-8",
-        timeout: 5e3
+        timeout: 5e3,
+        stdio: ["pipe", "pipe", "ignore"]
       }).trim();
       if (result) {
         const foundPath = result.split("\n")[0];
@@ -50965,9 +51451,10 @@ function findStudioPath() {
           return foundPath;
         }
       }
-      const nameResult = (0, import_child_process12.execSync)(`mdfind "kMDItemDisplayName == 'RUDI Studio' && kMDItemContentType == 'com.apple.application-bundle'" 2>/dev/null`, {
+      const nameResult = runCommand("mdfind", ["kMDItemDisplayName == 'RUDI Studio' && kMDItemContentType == 'com.apple.application-bundle'"], {
         encoding: "utf-8",
-        timeout: 5e3
+        timeout: 5e3,
+        stdio: ["pipe", "pipe", "ignore"]
       }).trim();
       if (nameResult) {
         const foundPath = nameResult.split("\n")[0];
@@ -51015,7 +51502,7 @@ function openUrl(url) {
     cmd = "xdg-open";
     args = [url];
   }
-  (0, import_child_process12.spawn)(cmd, args, { detached: true, stdio: "ignore" }).unref();
+  (0, import_child_process10.spawn)(cmd, args, { detached: true, stdio: "ignore" }).unref();
 }
 async function studioOpen() {
   console.log(`Opening ${STUDIO_WEBSITE}...`);
@@ -51143,27 +51630,230 @@ async function cmdStudio(args, flags) {
 
 // src/commands/serve.js
 var import_http = __toESM(require("http"), 1);
-var import_fs57 = __toESM(require("fs"), 1);
+var import_fs58 = __toESM(require("fs"), 1);
 var import_path61 = __toESM(require("path"), 1);
 var import_url4 = require("url");
 
 // src/commands/serve/git.js
 var import_fs31 = __toESM(require("fs"), 1);
+var import_path30 = __toESM(require("path"), 1);
+var import_child_process11 = require("child_process");
+
+// src/commands/serve/validation.js
 var import_path29 = __toESM(require("path"), 1);
-var import_child_process13 = require("child_process");
+
+// src/commands/serve/error-codes.js
+function defineError(code, status, defaultMessage) {
+  return Object.freeze({ code, status, defaultMessage });
+}
+var SIDECAR_ERROR_CODES = Object.freeze({
+  BAD_REQUEST: defineError("BAD_REQUEST", 400, "Bad request"),
+  UNAUTHORIZED: defineError("UNAUTHORIZED", 401, "Unauthorized"),
+  FORBIDDEN: defineError("FORBIDDEN", 403, "Forbidden"),
+  NOT_FOUND: defineError("NOT_FOUND", 404, "Not found"),
+  REQUEST_TIMEOUT: defineError("REQUEST_TIMEOUT", 408, "Request timed out"),
+  CONFLICT: defineError("CONFLICT", 409, "Conflict"),
+  GONE: defineError("GONE", 410, "Resource no longer available"),
+  REQUEST_TOO_LARGE: defineError("REQUEST_TOO_LARGE", 413, "Request body too large"),
+  RATE_LIMITED: defineError("RATE_LIMITED", 429, "Rate limited"),
+  INTERNAL_ERROR: defineError("INTERNAL_ERROR", 500, "Internal server error"),
+  SERVICE_UNAVAILABLE: defineError("SERVICE_UNAVAILABLE", 503, "Service unavailable"),
+  MISSING_REQUIRED_FIELD: defineError("MISSING_REQUIRED_FIELD", 400, "Required field missing"),
+  INVALID_FIELD: defineError("INVALID_FIELD", 400, "Invalid field value"),
+  DATABASE_NOT_INITIALIZED: defineError("DATABASE_NOT_INITIALIZED", 503, "Database not initialized"),
+  SSE_CLIENT_CAP_REACHED: defineError("SSE_CLIENT_CAP_REACHED", 429, "Too many SSE clients"),
+  PROJECT_NOT_FOUND: defineError("PROJECT_NOT_FOUND", 404, "Project not found"),
+  PROJECT_ALREADY_EXISTS: defineError("PROJECT_ALREADY_EXISTS", 409, "Project already exists"),
+  NOTE_NOT_FOUND: defineError("NOTE_NOT_FOUND", 404, "Note not found"),
+  RUN_GROUP_NOT_FOUND: defineError("RUN_GROUP_NOT_FOUND", 404, "Run group not found")
+});
+var DEFAULT_ERROR_CODE_BY_STATUS = Object.freeze({
+  400: SIDECAR_ERROR_CODES.BAD_REQUEST,
+  401: SIDECAR_ERROR_CODES.UNAUTHORIZED,
+  403: SIDECAR_ERROR_CODES.FORBIDDEN,
+  404: SIDECAR_ERROR_CODES.NOT_FOUND,
+  408: SIDECAR_ERROR_CODES.REQUEST_TIMEOUT,
+  409: SIDECAR_ERROR_CODES.CONFLICT,
+  410: SIDECAR_ERROR_CODES.GONE,
+  413: SIDECAR_ERROR_CODES.REQUEST_TOO_LARGE,
+  429: SIDECAR_ERROR_CODES.RATE_LIMITED,
+  500: SIDECAR_ERROR_CODES.INTERNAL_ERROR,
+  503: SIDECAR_ERROR_CODES.SERVICE_UNAVAILABLE
+});
+function resolveSidecarErrorDefinition(input, fallbackStatus = 500) {
+  if (!input) {
+    return DEFAULT_ERROR_CODE_BY_STATUS[fallbackStatus] || null;
+  }
+  if (typeof input === "string") {
+    return SIDECAR_ERROR_CODES[input] || defineError(input, fallbackStatus, null);
+  }
+  if (typeof input === "object" && typeof input.code === "string") {
+    return defineError(
+      input.code,
+      Number.isFinite(input.status) ? input.status : fallbackStatus,
+      input.defaultMessage ?? null
+    );
+  }
+  return null;
+}
+
+// src/commands/serve/validation.js
+var DESTRUCTIVE_CONFIRMATION_FIELD = "confirmDestructive";
+var EXPLICIT_CONFIRMATION_REQUIRED = "explicit_confirmation_required";
+var ABSOLUTE_PATH_REQUIRED = "absolute_path_required";
+var FILESYSTEM_ROOT_FORBIDDEN = "filesystem_root_forbidden";
+var INVALID_TYPE = "invalid_type";
+function rejectInvalidField({
+  res,
+  invalidField: invalidField2,
+  error,
+  field,
+  location = "body",
+  message,
+  reason,
+  details = {}
+}) {
+  if (typeof invalidField2 === "function") {
+    invalidField2(res, field, message, {
+      location,
+      reason,
+      details
+    });
+    return true;
+  }
+  error(res, message, 400, {
+    code: SIDECAR_ERROR_CODES.INVALID_FIELD,
+    details: {
+      field,
+      location,
+      reason,
+      ...details
+    }
+  });
+  return true;
+}
+function hasDestructiveConfirmation(body) {
+  return body?.[DESTRUCTIVE_CONFIRMATION_FIELD] === true;
+}
+function rejectMissingDestructiveConfirmation({
+  body,
+  res,
+  invalidField: invalidField2,
+  error,
+  operation
+}) {
+  if (hasDestructiveConfirmation(body)) return false;
+  const message = `${DESTRUCTIVE_CONFIRMATION_FIELD} must be true for ${operation}`;
+  const details = { operation };
+  if (typeof invalidField2 === "function") {
+    invalidField2(res, DESTRUCTIVE_CONFIRMATION_FIELD, message, {
+      reason: EXPLICIT_CONFIRMATION_REQUIRED,
+      details
+    });
+    return true;
+  }
+  error(res, message, 400, {
+    code: SIDECAR_ERROR_CODES.INVALID_FIELD,
+    details: {
+      field: DESTRUCTIVE_CONFIRMATION_FIELD,
+      location: "body",
+      reason: EXPLICIT_CONFIRMATION_REQUIRED,
+      ...details
+    }
+  });
+  return true;
+}
+function rejectInvalidPathField({
+  value,
+  field = "path",
+  location = "body",
+  res,
+  invalidField: invalidField2,
+  error,
+  allowRoot = true
+}) {
+  const absolutePathMessage = `${field} must be an absolute filesystem path`;
+  if (typeof value !== "string") {
+    return rejectInvalidField({
+      res,
+      invalidField: invalidField2,
+      error,
+      field,
+      location,
+      message: absolutePathMessage,
+      reason: INVALID_TYPE
+    });
+  }
+  if (value.trim() === "" || value.includes("\0") || !import_path29.default.isAbsolute(value)) {
+    return rejectInvalidField({
+      res,
+      invalidField: invalidField2,
+      error,
+      field,
+      location,
+      message: absolutePathMessage,
+      reason: ABSOLUTE_PATH_REQUIRED
+    });
+  }
+  const resolvedPath = import_path29.default.resolve(value);
+  if (!allowRoot && resolvedPath === import_path29.default.parse(resolvedPath).root) {
+    return rejectInvalidField({
+      res,
+      invalidField: invalidField2,
+      error,
+      field,
+      location,
+      message: `${field} must not be the filesystem root`,
+      reason: FILESYSTEM_ROOT_FORBIDDEN
+    });
+  }
+  return false;
+}
+
+// src/commands/serve/git.js
+function runGit2(projectPath, args, options = {}) {
+  return (0, import_child_process11.execFileSync)("git", args, {
+    cwd: projectPath,
+    encoding: "utf-8",
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: options.timeout || 1e4
+  });
+}
+function rejectInvalidGitFiles({ files, res, invalidField: invalidField2, error }) {
+  if (files === void 0 || files === null) return false;
+  if (!Array.isArray(files)) {
+    if (typeof invalidField2 === "function") {
+      return invalidField2(res, "files", "files must be an array of file paths", {
+        reason: "invalid_type"
+      });
+    }
+    return error(res, "files must be an array of file paths", 400);
+  }
+  const invalidIndex = files.findIndex((file) => typeof file !== "string" || file.length === 0);
+  if (invalidIndex !== -1) {
+    if (typeof invalidField2 === "function") {
+      return invalidField2(res, "files", "files must contain only non-empty strings", {
+        reason: "invalid_item",
+        details: { index: invalidIndex }
+      });
+    }
+    return error(res, "files must contain only non-empty strings", 400);
+  }
+  return false;
+}
+function gitFileArgs(files) {
+  const targets = Array.isArray(files) && files.length > 0 ? files : ["."];
+  return ["--", ...targets];
+}
 function getProjectGitStatus(projectPath) {
   if (!projectPath) return null;
   try {
-    const gitDir = import_path29.default.join(projectPath, ".git");
+    const gitDir = import_path30.default.join(projectPath, ".git");
     if (!import_fs31.default.existsSync(gitDir)) return null;
-    const branch = (0, import_child_process13.execSync)("git rev-parse --abbrev-ref HEAD 2>/dev/null", {
-      cwd: projectPath,
-      encoding: "utf-8",
+    const branch = runGit2(projectPath, ["rev-parse", "--abbrev-ref", "HEAD"], {
       timeout: 3e3
     }).trim();
-    const status = (0, import_child_process13.execSync)("git status --porcelain 2>/dev/null", {
-      cwd: projectPath,
-      encoding: "utf-8",
+    const status = runGit2(projectPath, ["status", "--porcelain"], {
       timeout: 3e3
     });
     const uncommitted = status.trim() ? status.trim().split("\n").length : 0;
@@ -51199,7 +51889,7 @@ function parseWorktreeList(output) {
   }
   return worktrees;
 }
-function createGitHandler({ readBody, error, json }) {
+function createGitHandler({ readBody, error, json, invalidField: invalidField2 }) {
   return async function handleGit(req, res, url) {
     if (req.method === "GET" && url.pathname === "/git/status") {
       const projectPath = url.searchParams.get("path");
@@ -51210,9 +51900,7 @@ function createGitHandler({ readBody, error, json }) {
         return true;
       }
       try {
-        const statusOutput = (0, import_child_process13.execSync)("git status --porcelain 2>/dev/null", {
-          cwd: projectPath,
-          encoding: "utf-8",
+        const statusOutput = runGit2(projectPath, ["status", "--porcelain"], {
           timeout: 5e3
         });
         const files = statusOutput.trim().split("\n").filter(Boolean).map((line) => ({
@@ -51234,13 +51922,9 @@ function createGitHandler({ readBody, error, json }) {
       const body = await readBody(req);
       const { path: projectPath, files } = body;
       if (!projectPath) return error(res, "path required");
+      if (rejectInvalidGitFiles({ files, res, invalidField: invalidField2, error })) return true;
       try {
-        const filesToStage = files && files.length > 0 ? files.join(" ") : ".";
-        (0, import_child_process13.execSync)(`git add ${filesToStage}`, {
-          cwd: projectPath,
-          encoding: "utf-8",
-          timeout: 1e4
-        });
+        runGit2(projectPath, ["add", ...gitFileArgs(files)]);
         json(res, { ok: true });
       } catch (err) {
         error(res, err.message || "Failed to stage files", 500);
@@ -51251,13 +51935,9 @@ function createGitHandler({ readBody, error, json }) {
       const body = await readBody(req);
       const { path: projectPath, files } = body;
       if (!projectPath) return error(res, "path required");
+      if (rejectInvalidGitFiles({ files, res, invalidField: invalidField2, error })) return true;
       try {
-        const filesToUnstage = files && files.length > 0 ? files.join(" ") : ".";
-        (0, import_child_process13.execSync)(`git reset HEAD ${filesToUnstage}`, {
-          cwd: projectPath,
-          encoding: "utf-8",
-          timeout: 1e4
-        });
+        runGit2(projectPath, ["reset", "HEAD", ...gitFileArgs(files)]);
         json(res, { ok: true });
       } catch (err) {
         error(res, err.message || "Failed to unstage files", 500);
@@ -51268,20 +51948,12 @@ function createGitHandler({ readBody, error, json }) {
       const body = await readBody(req);
       const { path: projectPath, files } = body;
       if (!projectPath) return error(res, "path required");
+      if (rejectInvalidGitFiles({ files, res, invalidField: invalidField2, error })) return true;
+      if (rejectMissingDestructiveConfirmation({ body, res, invalidField: invalidField2, error, operation: "git revert" })) {
+        return true;
+      }
       try {
-        if (files && files.length > 0) {
-          (0, import_child_process13.execSync)(`git checkout -- ${files.join(" ")}`, {
-            cwd: projectPath,
-            encoding: "utf-8",
-            timeout: 1e4
-          });
-        } else {
-          (0, import_child_process13.execSync)("git checkout -- .", {
-            cwd: projectPath,
-            encoding: "utf-8",
-            timeout: 1e4
-          });
-        }
+        runGit2(projectPath, ["checkout", ...gitFileArgs(files)]);
         json(res, { ok: true });
       } catch (err) {
         error(res, err.message || "Failed to revert changes", 500);
@@ -51295,19 +51967,13 @@ function createGitHandler({ readBody, error, json }) {
       if (!message && !amend) return error(res, "message required");
       try {
         if (all) {
-          (0, import_child_process13.execSync)("git add -A", {
-            cwd: projectPath,
-            encoding: "utf-8",
-            timeout: 1e4
-          });
+          runGit2(projectPath, ["add", "-A"]);
         }
-        const args = ["git", "commit"];
+        const args = ["commit"];
         if (amend) args.push("--amend");
         if (message) args.push("-m", message);
         if (amend && !message) args.push("--no-edit");
-        const output = (0, import_child_process13.execSync)(args.map((a2) => a2.includes(" ") ? JSON.stringify(a2) : a2).join(" "), {
-          cwd: projectPath,
-          encoding: "utf-8",
+        const output = runGit2(projectPath, args, {
           timeout: 3e4
         });
         const hashMatch = output.match(/\[[\w/.-]+ ([a-f0-9]+)\]/);
@@ -51322,9 +51988,7 @@ function createGitHandler({ readBody, error, json }) {
       const projectPath = url.searchParams.get("path");
       if (!projectPath) return error(res, "path required");
       try {
-        const output = (0, import_child_process13.execSync)("git branch --list --no-color", {
-          cwd: projectPath,
-          encoding: "utf-8",
+        const output = runGit2(projectPath, ["branch", "--list", "--no-color"], {
           timeout: 5e3
         });
         const branches = [];
@@ -51354,11 +52018,7 @@ function createGitHandler({ readBody, error, json }) {
       if (!projectPath) return error(res, "path required");
       if (!name || typeof name !== "string") return error(res, "name required");
       try {
-        (0, import_child_process13.execSync)(`git checkout -b ${JSON.stringify(name)}`, {
-          cwd: projectPath,
-          encoding: "utf-8",
-          timeout: 1e4
-        });
+        runGit2(projectPath, ["checkout", "-b", name]);
         json(res, { ok: true, branch: name });
       } catch (err) {
         error(res, err.message || "Failed to create branch", 500);
@@ -51371,11 +52031,7 @@ function createGitHandler({ readBody, error, json }) {
       if (!projectPath) return error(res, "path required");
       if (!branch || typeof branch !== "string") return error(res, "branch required");
       try {
-        (0, import_child_process13.execSync)(`git checkout ${JSON.stringify(branch)}`, {
-          cwd: projectPath,
-          encoding: "utf-8",
-          timeout: 1e4
-        });
+        runGit2(projectPath, ["checkout", branch]);
         json(res, { ok: true, branch });
       } catch (err) {
         error(res, err.message || "Failed to checkout branch", 500);
@@ -51386,9 +52042,7 @@ function createGitHandler({ readBody, error, json }) {
       const projectPath = url.searchParams.get("path");
       if (!projectPath) return error(res, "path required");
       try {
-        const output = (0, import_child_process13.execSync)("git worktree list --porcelain", {
-          cwd: projectPath,
-          encoding: "utf-8",
+        const output = runGit2(projectPath, ["worktree", "list", "--porcelain"], {
           timeout: 5e3
         });
         const worktrees = parseWorktreeList(output);
@@ -51405,20 +52059,16 @@ function createGitHandler({ readBody, error, json }) {
       if (!directory) return error(res, "directory required");
       if (!branch) return error(res, "branch required");
       try {
-        const cmd = createBranch ? `git worktree add -b ${JSON.stringify(branch)} ${JSON.stringify(directory)}` : `git worktree add ${JSON.stringify(directory)} ${JSON.stringify(branch)}`;
-        (0, import_child_process13.execSync)(cmd, {
-          cwd: projectPath,
-          encoding: "utf-8",
+        const args = createBranch ? ["worktree", "add", "-b", branch, directory] : ["worktree", "add", directory, branch];
+        runGit2(projectPath, args, {
           timeout: 15e3
         });
-        const output = (0, import_child_process13.execSync)("git worktree list --porcelain", {
-          cwd: projectPath,
-          encoding: "utf-8",
+        const output = runGit2(projectPath, ["worktree", "list", "--porcelain"], {
           timeout: 5e3
         });
         const worktrees = parseWorktreeList(output);
         const created = worktrees.find(
-          (w2) => w2.path === directory || w2.path === import_path29.default.resolve(projectPath, directory)
+          (w2) => w2.path === directory || w2.path === import_path30.default.resolve(projectPath, directory)
         );
         json(res, { ok: true, worktree: created || null });
       } catch (err) {
@@ -51431,14 +52081,15 @@ function createGitHandler({ readBody, error, json }) {
       const { path: projectPath, name, force } = body;
       if (!projectPath) return error(res, "path required");
       if (!name || typeof name !== "string") return error(res, "name required");
+      if (rejectMissingDestructiveConfirmation({ body, res, invalidField: invalidField2, error, operation: "git branch delete" })) {
+        return true;
+      }
       const protected_branches = ["main", "master"];
       if (protected_branches.includes(name)) {
         return error(res, `Cannot delete protected branch '${name}'`, 400);
       }
       try {
-        const current = (0, import_child_process13.execSync)("git rev-parse --abbrev-ref HEAD", {
-          cwd: projectPath,
-          encoding: "utf-8",
+        const current = runGit2(projectPath, ["rev-parse", "--abbrev-ref", "HEAD"], {
           timeout: 3e3
         }).trim();
         if (current === name) {
@@ -51448,11 +52099,7 @@ function createGitHandler({ readBody, error, json }) {
       }
       try {
         const flag = force ? "-D" : "-d";
-        (0, import_child_process13.execSync)(`git branch ${flag} ${JSON.stringify(name)}`, {
-          cwd: projectPath,
-          encoding: "utf-8",
-          timeout: 1e4
-        });
+        runGit2(projectPath, ["branch", flag, name]);
         json(res, { ok: true, branch: name });
       } catch (err) {
         const msg = err.message || "Failed to delete branch";
@@ -51468,13 +52115,14 @@ function createGitHandler({ readBody, error, json }) {
       const { path: projectPath, directory, force } = body;
       if (!projectPath) return error(res, "path required");
       if (!directory) return error(res, "directory required");
+      if (rejectMissingDestructiveConfirmation({ body, res, invalidField: invalidField2, error, operation: "git worktree remove" })) {
+        return true;
+      }
       try {
-        const cmd = force ? `git worktree remove --force ${JSON.stringify(directory)}` : `git worktree remove ${JSON.stringify(directory)}`;
-        (0, import_child_process13.execSync)(cmd, {
-          cwd: projectPath,
-          encoding: "utf-8",
-          timeout: 1e4
-        });
+        const args = ["worktree", "remove"];
+        if (force) args.push("--force");
+        args.push(directory);
+        runGit2(projectPath, args);
         json(res, { ok: true });
       } catch (err) {
         error(res, err.message || "Failed to remove worktree", 500);
@@ -51487,17 +52135,9 @@ function createGitHandler({ readBody, error, json }) {
       if (!projectPath) return error(res, "path required");
       try {
         if (pop) {
-          (0, import_child_process13.execSync)("git stash pop", {
-            cwd: projectPath,
-            encoding: "utf-8",
-            timeout: 1e4
-          });
+          runGit2(projectPath, ["stash", "pop"]);
         } else {
-          (0, import_child_process13.execSync)("git stash", {
-            cwd: projectPath,
-            encoding: "utf-8",
-            timeout: 1e4
-          });
+          runGit2(projectPath, ["stash"]);
         }
         json(res, { ok: true });
       } catch (err) {
@@ -51510,11 +52150,7 @@ function createGitHandler({ readBody, error, json }) {
       const { path: projectPath } = body;
       if (!projectPath) return error(res, "path required");
       try {
-        (0, import_child_process13.execSync)("git init", {
-          cwd: projectPath,
-          encoding: "utf-8",
-          timeout: 1e4
-        });
+        runGit2(projectPath, ["init"]);
         json(res, { ok: true });
       } catch (err) {
         error(res, err.message || "Failed to init repository", 500);
@@ -51528,7 +52164,7 @@ function createGitHandler({ readBody, error, json }) {
 // src/commands/agent/permissions.js
 var import_os12 = __toESM(require("os"), 1);
 var import_fs32 = __toESM(require("fs"), 1);
-var import_path30 = __toESM(require("path"), 1);
+var import_path31 = __toESM(require("path"), 1);
 init_src();
 function deriveBatchId(rudiSessionId, toolName, createdAt) {
   const bucket = Math.floor(createdAt / 500);
@@ -51549,7 +52185,7 @@ function resolvePermission(reqId, entry, decision) {
 }
 function loadProjectPermissions(projectCwd) {
   try {
-    const settingsPath = import_path30.default.join(projectCwd, ".claude", "settings.local.json");
+    const settingsPath = import_path31.default.join(projectCwd, ".claude", "settings.local.json");
     if (!import_fs32.default.existsSync(settingsPath)) return [];
     const settings = JSON.parse(import_fs32.default.readFileSync(settingsPath, "utf-8"));
     return settings?.permissions?.allow || [];
@@ -51590,7 +52226,7 @@ function generatePermissionPattern(toolName, toolInput) {
 }
 function saveToolPermission(projectCwd, pattern, log) {
   try {
-    const settingsPath = import_path30.default.join(projectCwd, ".claude", "settings.local.json");
+    const settingsPath = import_path31.default.join(projectCwd, ".claude", "settings.local.json");
     let settings = {};
     if (import_fs32.default.existsSync(settingsPath)) {
       settings = JSON.parse(import_fs32.default.readFileSync(settingsPath, "utf-8"));
@@ -51599,7 +52235,7 @@ function saveToolPermission(projectCwd, pattern, log) {
     if (!Array.isArray(settings.permissions.allow)) settings.permissions.allow = [];
     if (settings.permissions.allow.includes(pattern)) return;
     settings.permissions.allow.push(pattern);
-    import_fs32.default.mkdirSync(import_path30.default.dirname(settingsPath), { recursive: true });
+    import_fs32.default.mkdirSync(import_path31.default.dirname(settingsPath), { recursive: true });
     import_fs32.default.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
     log("agent", "info", "saved tool permission to settings.local.json", { pattern, path: settingsPath });
   } catch (err) {
@@ -51607,11 +52243,11 @@ function saveToolPermission(projectCwd, pattern, log) {
   }
 }
 function ensurePermissionHook(log) {
-  const hookBinPath = import_path30.default.join(PATHS.home, "bins", "permission-hook");
-  const hookScriptPath = import_path30.default.join(PATHS.home, "router", "permission-hook.js");
-  const settingsPath = import_path30.default.join(import_os12.default.homedir(), ".claude", "settings.json");
+  const hookBinPath = import_path31.default.join(PATHS.home, "bins", "permission-hook");
+  const hookScriptPath = import_path31.default.join(PATHS.home, "router", "permission-hook.js");
+  const settingsPath = import_path31.default.join(import_os12.default.homedir(), ".claude", "settings.json");
   if (!import_fs32.default.existsSync(hookBinPath)) {
-    const nodeBin = import_path30.default.join(PATHS.home, "runtimes", "node", "bin", "node");
+    const nodeBin = import_path31.default.join(PATHS.home, "runtimes", "node", "bin", "node");
     const shim = [
       "#!/bin/sh",
       "# RUDI Permission Hook - Routes CLI tool approvals through RUDI sidecar",
@@ -51652,7 +52288,7 @@ function ensurePermissionHook(log) {
           }]
         }
       ];
-      import_fs32.default.mkdirSync(import_path30.default.dirname(settingsPath), { recursive: true });
+      import_fs32.default.mkdirSync(import_path31.default.dirname(settingsPath), { recursive: true });
       import_fs32.default.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
       log("agent", "info", "installed PreToolUse hook in Claude settings", { path: settingsPath });
       log("agent", "warn", "Permission hook installed \u2014 you may need to approve it via /hooks in Claude CLI on first use");
@@ -51922,16 +52558,14 @@ function buildPermissionRoutes(ctx) {
 
 // src/commands/agent/routes/start.js
 var import_os16 = __toESM(require("os"), 1);
-var import_fs40 = __toESM(require("fs"), 1);
+var import_fs39 = __toESM(require("fs"), 1);
 var import_path38 = __toESM(require("path"), 1);
 var import_crypto6 = __toESM(require("crypto"), 1);
-var import_child_process19 = require("child_process");
 init_src();
 
 // src/commands/agent/providers/index.js
 var import_node_fs3 = require("node:fs");
 var import_node_os = require("node:os");
-var import_node_child_process = require("node:child_process");
 
 // src/commands/agent/providers/claude.json
 var claude_default = {
@@ -52691,7 +53325,7 @@ function resolveProviderBinary(config) {
   }
   if (config.binary.fallback === "which") {
     try {
-      return (0, import_node_child_process.execSync)(`which ${config.binary.name}`, { encoding: "utf-8" }).trim();
+      return runCommandPlan2(createWhichCommand(config.binary.name), { encoding: "utf-8" }).trim();
     } catch {
     }
   }
@@ -52754,7 +53388,7 @@ function expandTemplate(str2, options) {
 
 // src/commands/agent/prompts.js
 var import_fs33 = __toESM(require("fs"), 1);
-var import_path31 = __toESM(require("path"), 1);
+var import_path32 = __toESM(require("path"), 1);
 init_src();
 var RUDI_BASE_PROMPT = `You are working inside RUDI, an AI-powered development environment.
 
@@ -52914,7 +53548,7 @@ function buildOrchestratorPrompt(userPrompt) {
 ${userPrompt}`);
   return parts.join("\n\n---\n\n");
 }
-var USER_PROMPT_PATH = import_path31.default.join(PATHS.home, "system-prompt.md");
+var USER_PROMPT_PATH = import_path32.default.join(PATHS.home, "system-prompt.md");
 var _cachedUserPrompt = null;
 var _userPromptMtime = 0;
 function loadUserPrompt() {
@@ -53051,13 +53685,12 @@ When complete, write findings to ${outputFile} and stop.`;
 
 // src/commands/agent/db.js
 var import_path35 = __toESM(require("path"), 1);
-var import_child_process16 = require("child_process");
+var import_child_process12 = require("child_process");
 
 // src/commands/agent/auth.js
 var import_os14 = __toESM(require("os"), 1);
-var import_fs36 = __toESM(require("fs"), 1);
+var import_fs35 = __toESM(require("fs"), 1);
 var import_path34 = __toESM(require("path"), 1);
-var import_child_process15 = require("child_process");
 init_src();
 
 // src/commands/agent/auth/claude.js
@@ -53068,9 +53701,14 @@ __export(claude_exports, {
 });
 var import_os13 = __toESM(require("os"), 1);
 var import_fs34 = __toESM(require("fs"), 1);
-var import_path32 = __toESM(require("path"), 1);
-var import_child_process14 = require("child_process");
-init_src();
+var import_path33 = __toESM(require("path"), 1);
+init_src4();
+var CLAUDE_API_KEY_SECRET = "ANTHROPIC_API_KEY";
+var CLAUDE_OAUTH_SECRET = "CLAUDE_CODE_OAUTH_TOKEN";
+function readStringSecret(secrets, name) {
+  const value = secrets?.[name];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
 function checkClaudeCredential() {
   if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
     return { authenticated: true, method: "oauth-token" };
@@ -53079,32 +53717,31 @@ function checkClaudeCredential() {
     return { authenticated: true, method: "api-key" };
   }
   try {
-    const envPath = import_path32.default.join(PATHS.home, ".env");
-    if (import_fs34.default.existsSync(envPath)) {
-      const content = import_fs34.default.readFileSync(envPath, "utf-8");
-      const oauthMatch = content.match(/^CLAUDE_CODE_OAUTH_TOKEN=(.+)$/m);
-      if (oauthMatch && oauthMatch[1].trim()) {
-        process.env.CLAUDE_CODE_OAUTH_TOKEN = oauthMatch[1].trim();
-        return { authenticated: true, method: "oauth-token" };
-      }
-      const apiMatch = content.match(/^ANTHROPIC_API_KEY=(.+)$/m);
-      if (apiMatch && apiMatch[1].trim()) {
-        process.env.ANTHROPIC_API_KEY = apiMatch[1].trim();
-        return { authenticated: true, method: "api-key" };
-      }
+    const secrets = getAllSecrets();
+    const oauthToken = readStringSecret(secrets, CLAUDE_OAUTH_SECRET);
+    if (oauthToken) {
+      process.env.CLAUDE_CODE_OAUTH_TOKEN = oauthToken;
+      return { authenticated: true, method: "oauth-token" };
+    }
+    const apiKey = readStringSecret(secrets, CLAUDE_API_KEY_SECRET);
+    if (apiKey) {
+      process.env.ANTHROPIC_API_KEY = apiKey;
+      return { authenticated: true, method: "api-key" };
     }
   } catch {
   }
   if (import_os13.default.platform() === "darwin") {
     try {
-      (0, import_child_process14.execSync)('security find-generic-password -s "Claude Code-credentials"', { stdio: "pipe" });
+      runCommand("security", ["find-generic-password", "-s", "Claude Code-credentials"], {
+        stdio: "pipe"
+      });
       return { authenticated: true, method: "keychain" };
     } catch {
     }
   }
   const credPaths = [
-    import_path32.default.join(import_os13.default.homedir(), ".claude", "credentials.json"),
-    import_path32.default.join(import_os13.default.homedir(), ".claude", ".credentials.json")
+    import_path33.default.join(import_os13.default.homedir(), ".claude", "credentials.json"),
+    import_path33.default.join(import_os13.default.homedir(), ".claude", ".credentials.json")
   ];
   for (const p2 of credPaths) {
     if (import_fs34.default.existsSync(p2)) {
@@ -53146,22 +53783,31 @@ __export(codex_exports, {
   checkAuth: () => checkAuth3,
   checkCodexCredential: () => checkCodexCredential
 });
-var import_fs35 = __toESM(require("fs"), 1);
-var import_path33 = __toESM(require("path"), 1);
-init_src();
+init_src4();
+var CODEX_API_KEY_SECRET = "CODEX_API_KEY";
+var OPENAI_API_KEY_SECRET = "OPENAI_API_KEY";
+function readStringSecret2(secrets, name) {
+  const value = secrets?.[name];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
 function checkCodexCredential() {
+  if (process.env.CODEX_API_KEY) {
+    return { authenticated: true, method: "api-key" };
+  }
   if (process.env.OPENAI_API_KEY) {
     return { authenticated: true, method: "api-key" };
   }
   try {
-    const envPath = import_path33.default.join(PATHS.home, ".env");
-    if (import_fs35.default.existsSync(envPath)) {
-      const content = import_fs35.default.readFileSync(envPath, "utf-8");
-      const apiMatch = content.match(/^OPENAI_API_KEY=(.+)$/m);
-      if (apiMatch && apiMatch[1].trim()) {
-        process.env.OPENAI_API_KEY = apiMatch[1].trim();
-        return { authenticated: true, method: "api-key" };
-      }
+    const secrets = getAllSecrets();
+    const codexApiKey = readStringSecret2(secrets, CODEX_API_KEY_SECRET);
+    if (codexApiKey) {
+      process.env.CODEX_API_KEY = codexApiKey;
+      return { authenticated: true, method: "api-key" };
+    }
+    const openAiApiKey = readStringSecret2(secrets, OPENAI_API_KEY_SECRET);
+    if (openAiApiKey) {
+      process.env.OPENAI_API_KEY = openAiApiKey;
+      return { authenticated: true, method: "api-key" };
     }
   } catch {
   }
@@ -53181,8 +53827,8 @@ async function checkAuth3(providerConfig, binaryPath) {
   } else if (!credential.authenticated) {
     action = {
       type: "login",
-      message: "OPENAI_API_KEY not found. Set it in ~/.rudi/.env or export it",
-      command: 'echo "OPENAI_API_KEY=sk-..." >> ~/.rudi/.env'
+      message: "OPENAI_API_KEY not found. Set it with: rudi secrets set OPENAI_API_KEY",
+      command: "rudi secrets set OPENAI_API_KEY"
     };
   }
   return {
@@ -53203,7 +53849,7 @@ var _cachedClaudeBinary = null;
 function resolveClaudeBinary() {
   if (_cachedClaudeBinary) return _cachedClaudeBinary;
   const nativePath = import_path34.default.join(import_os14.default.homedir(), ".local", "bin", "claude");
-  if (import_fs36.default.existsSync(nativePath)) {
+  if (import_fs35.default.existsSync(nativePath)) {
     _cachedClaudeBinary = nativePath;
     return nativePath;
   }
@@ -53214,14 +53860,14 @@ function resolveClaudeBinary() {
     import_path34.default.join(nodeRoot, "bin", "claude")
   ];
   for (const p2 of candidates) {
-    if (import_fs36.default.existsSync(p2)) {
+    if (import_fs35.default.existsSync(p2)) {
       _cachedClaudeBinary = p2;
       return p2;
     }
   }
   try {
-    const which2 = (0, import_child_process15.execSync)("which claude", { encoding: "utf-8" }).trim();
-    if (which2 && import_fs36.default.existsSync(which2)) {
+    const which2 = runCommandPlan2(createWhichCommand("claude"), { encoding: "utf-8" }).trim();
+    if (which2 && import_fs35.default.existsSync(which2)) {
       _cachedClaudeBinary = which2;
       return which2;
     }
@@ -53412,7 +54058,7 @@ function autoNameSession(entry, providerSessionId, firstMessage, cwd, broadcast,
 
 Project: ${projectName}
 User request: ${(firstMessage || "").slice(0, 1e3)}`;
-      const child = (0, import_child_process16.spawn)(binaryPath, [
+      const child = (0, import_child_process12.spawn)(binaryPath, [
         "-p",
         prompt,
         "--model",
@@ -53463,7 +54109,7 @@ User request: ${(firstMessage || "").slice(0, 1e3)}`;
 
 // src/commands/agent/helpers.js
 var import_os15 = __toESM(require("os"), 1);
-var import_fs37 = __toESM(require("fs"), 1);
+var import_fs36 = __toESM(require("fs"), 1);
 var import_path36 = __toESM(require("path"), 1);
 var import_crypto4 = __toESM(require("crypto"), 1);
 function dropResumeMappingsForSession(targetSessionId, resumeSessionIndex) {
@@ -53514,13 +54160,13 @@ function normalizeHeader(val) {
 function buildUserContent(text, images, cwd, log) {
   if (!images || images.length === 0) return text;
   const imgDir = import_path36.default.join(cwd || import_os15.default.homedir(), ".rudi", "images");
-  import_fs37.default.mkdirSync(imgDir, { recursive: true });
+  import_fs36.default.mkdirSync(imgDir, { recursive: true });
   const paths = [];
   for (const img of images) {
     const ext = img.mediaType === "image/jpeg" ? ".jpg" : img.mediaType === "image/gif" ? ".gif" : img.mediaType === "image/webp" ? ".webp" : ".png";
     const filename = `paste-${Date.now()}-${import_crypto4.default.randomUUID().slice(0, 8)}${ext}`;
     const filePath = import_path36.default.join(imgDir, filename);
-    import_fs37.default.writeFileSync(filePath, Buffer.from(img.data, "base64"));
+    import_fs36.default.writeFileSync(filePath, Buffer.from(img.data, "base64"));
     paths.push(filePath);
     log("agent", "info", `saved pasted image to ${filePath}`, { size: img.data.length, mediaType: img.mediaType });
   }
@@ -53545,12 +54191,12 @@ function buildUserInputEvent(text, images, cwd, log) {
 }
 
 // src/commands/agent/worktree.js
-var import_fs38 = __toESM(require("fs"), 1);
+var import_fs37 = __toESM(require("fs"), 1);
 var import_path37 = __toESM(require("path"), 1);
 var import_crypto5 = __toESM(require("crypto"), 1);
-var import_child_process17 = require("child_process");
+var import_child_process13 = require("child_process");
 function getRepoRoot(cwd) {
-  const gitCommonDir = (0, import_child_process17.execFileSync)("git", ["rev-parse", "--git-common-dir"], {
+  const gitCommonDir = (0, import_child_process13.execFileSync)("git", ["rev-parse", "--git-common-dir"], {
     cwd,
     stdio: "pipe"
   }).toString().trim();
@@ -53561,34 +54207,28 @@ function createSessionWorktree({ repoRoot, currentBranch, shortId, log }) {
   const safeBranchDir = (currentBranch || "detached").replace(/\//g, "-");
   const worktreesBase = import_path37.default.join(repoRoot, ".rudi", "worktrees");
   let worktreeDir = import_path37.default.join(worktreesBase, safeBranchDir);
-  if (import_fs38.default.existsSync(worktreeDir)) {
+  if (import_fs37.default.existsSync(worktreeDir)) {
     let suffix = 2;
-    while (import_fs38.default.existsSync(import_path37.default.join(worktreesBase, `${safeBranchDir}-${suffix}`))) suffix++;
+    while (import_fs37.default.existsSync(import_path37.default.join(worktreesBase, `${safeBranchDir}-${suffix}`))) suffix++;
     worktreeDir = import_path37.default.join(worktreesBase, `${safeBranchDir}-${suffix}`);
   }
   try {
-    import_fs38.default.mkdirSync(worktreesBase, { recursive: true });
+    import_fs37.default.mkdirSync(worktreesBase, { recursive: true });
     let branchName = currentBranch;
     try {
-      (0, import_child_process17.execSync)(
-        `git worktree add ${JSON.stringify(worktreeDir)} ${branchName}`,
-        { cwd: repoRoot, stdio: "pipe" }
-      );
+      runGit(repoRoot, ["worktree", "add", worktreeDir, branchName], { stdio: "pipe" });
     } catch {
       try {
-        import_fs38.default.rmSync(worktreeDir, { recursive: true, force: true });
+        import_fs37.default.rmSync(worktreeDir, { recursive: true, force: true });
       } catch {
       }
       const safeBase = currentBranch.replace(/\//g, "-");
       branchName = `${safeBase}-session-${shortId}`;
-      (0, import_child_process17.execSync)(
-        `git worktree add -b ${branchName} ${JSON.stringify(worktreeDir)}`,
-        { cwd: repoRoot, stdio: "pipe" }
-      );
+      runGit(repoRoot, ["worktree", "add", "-b", branchName, worktreeDir], { stdio: "pipe" });
     }
     let worktreePath = null;
     let worktreeBranch = null;
-    if (import_fs38.default.existsSync(worktreeDir)) {
+    if (import_fs37.default.existsSync(worktreeDir)) {
       worktreePath = worktreeDir;
       worktreeBranch = branchName;
     } else {
@@ -53598,7 +54238,7 @@ function createSessionWorktree({ repoRoot, currentBranch, shortId, log }) {
     let gitignoreWarning = false;
     try {
       const gitignorePath = import_path37.default.join(repoRoot, ".gitignore");
-      const gitignoreContent = import_fs38.default.existsSync(gitignorePath) ? import_fs38.default.readFileSync(gitignorePath, "utf-8") : "";
+      const gitignoreContent = import_fs37.default.existsSync(gitignorePath) ? import_fs37.default.readFileSync(gitignorePath, "utf-8") : "";
       if (!gitignoreContent.split("\n").some((line) => line.trim() === ".rudi/" || line.trim() === ".rudi")) {
         gitignoreWarning = true;
       }
@@ -53617,7 +54257,7 @@ function restoreSessionWorktree({ resumeSessionId, repoRoot, currentBranch, shor
     const row = db3.prepare(
       "SELECT worktree_path, worktree_branch, base_branch FROM session_runtime_state WHERE session_id = ? OR resume_session_id = ?"
     ).get(resumeSessionId, resumeSessionId);
-    if (row?.worktree_path && import_fs38.default.existsSync(row.worktree_path)) {
+    if (row?.worktree_path && import_fs37.default.existsSync(row.worktree_path)) {
       log("agent", "info", `resumed into existing worktree: ${row.worktree_path}`, { sessionId: shortId });
       return {
         worktreePath: row.worktree_path,
@@ -53629,11 +54269,8 @@ function restoreSessionWorktree({ resumeSessionId, repoRoot, currentBranch, shor
       const recreateName = row.worktree_branch.replace(/\//g, "-");
       const worktreeDir = import_path37.default.join(repoRoot, ".rudi", "worktrees", recreateName);
       try {
-        import_fs38.default.mkdirSync(import_path37.default.join(repoRoot, ".rudi", "worktrees"), { recursive: true });
-        (0, import_child_process17.execSync)(
-          `git worktree add ${JSON.stringify(worktreeDir)} ${row.worktree_branch}`,
-          { cwd: repoRoot, stdio: "pipe" }
-        );
+        import_fs37.default.mkdirSync(import_path37.default.join(repoRoot, ".rudi", "worktrees"), { recursive: true });
+        runGit(repoRoot, ["worktree", "add", worktreeDir, row.worktree_branch], { stdio: "pipe" });
         log("agent", "info", `recreated worktree from existing branch: ${worktreeDir}`, { sessionId: shortId });
         return {
           worktreePath: worktreeDir,
@@ -53651,24 +54288,24 @@ function restoreSessionWorktree({ resumeSessionId, repoRoot, currentBranch, shor
 }
 function createChildWorktree({ parentRepoRoot, sanitizedDesc, resolvedBaseRef, shortId, log }) {
   const worktreesBase = import_path37.default.join(parentRepoRoot, ".rudi", "worktrees");
-  import_fs38.default.mkdirSync(worktreesBase, { recursive: true });
+  import_fs37.default.mkdirSync(worktreesBase, { recursive: true });
   for (let attempt = 0; attempt < 5; attempt++) {
     const suffix = import_crypto5.default.randomUUID().slice(0, 8);
     const branchName = `child-${sanitizedDesc}-${suffix}`;
     const wtDir = import_path37.default.join(worktreesBase, branchName);
     try {
-      (0, import_child_process17.execFileSync)("git", ["worktree", "add", "-b", branchName, wtDir, resolvedBaseRef], {
+      (0, import_child_process13.execFileSync)("git", ["worktree", "add", "-b", branchName, wtDir, resolvedBaseRef], {
         cwd: parentRepoRoot,
         stdio: "pipe"
       });
       return { worktreePath: wtDir, worktreeBranch: branchName };
     } catch (wtErr) {
       try {
-        import_fs38.default.rmSync(wtDir, { recursive: true, force: true });
+        import_fs37.default.rmSync(wtDir, { recursive: true, force: true });
       } catch {
       }
       try {
-        (0, import_child_process17.execFileSync)("git", ["branch", "-D", "--", branchName], { cwd: parentRepoRoot, stdio: "pipe" });
+        (0, import_child_process13.execFileSync)("git", ["branch", "-D", "--", branchName], { cwd: parentRepoRoot, stdio: "pipe" });
       } catch {
       }
       if (attempt === 4) {
@@ -53680,8 +54317,8 @@ function createChildWorktree({ parentRepoRoot, sanitizedDesc, resolvedBaseRef, s
 }
 
 // src/commands/agent/spawn-process.js
-var import_fs39 = __toESM(require("fs"), 1);
-var import_child_process18 = require("child_process");
+var import_fs38 = __toESM(require("fs"), 1);
+var import_child_process14 = require("child_process");
 
 // src/commands/agent/normalizers/claude.js
 var claude_exports2 = {};
@@ -55090,7 +55727,7 @@ function createRunGroupSessionActivityEvent({
 function unlinkQuiet(filePath) {
   if (!filePath) return;
   try {
-    import_fs39.default.unlinkSync(filePath);
+    import_fs38.default.unlinkSync(filePath);
   } catch {
   }
 }
@@ -55140,7 +55777,7 @@ function respawnFromRetryContext(ctx, sessionId, entry) {
     entry._stderrText = "";
     entry._lastErrorContext = null;
     entry.stdoutBuffer = "";
-    const proc = (0, import_child_process18.spawn)(rc.binaryPath, rc.spawnArgs, {
+    const proc = (0, import_child_process14.spawn)(rc.binaryPath, rc.spawnArgs, {
       cwd: rc.spawnCwd,
       env: rc.spawnEnv,
       stdio: ["pipe", "pipe", "pipe"]
@@ -55403,7 +56040,7 @@ function spawnAgentProcess(ctx, options) {
     mcpConfigCleaned = true;
     unlinkQuiet(mcpConfigPath);
   };
-  const proc = (0, import_child_process18.spawn)(binaryPath, args, {
+  const proc = (0, import_child_process14.spawn)(binaryPath, args, {
     cwd: spawnCwd,
     env,
     stdio: ["pipe", "pipe", "pipe"]
@@ -56019,12 +56656,12 @@ function buildStartRoute(ctx) {
     if (canSpawnChildren && hasCapability(providerConfig, "mcpConfig")) {
       const spawnShimPath = import_path38.default.join(PATHS.home, "bins", "rudi-spawn");
       const routerShimPath = import_path38.default.join(PATHS.home, "bins", "rudi-router");
-      if (import_fs40.default.existsSync(spawnShimPath)) {
+      if (import_fs39.default.existsSync(spawnShimPath)) {
         try {
           let existingMcpServers = {};
           const claudeJsonPath = import_path38.default.join(import_os16.default.homedir(), ".claude.json");
           try {
-            const claudeJson = JSON.parse(import_fs40.default.readFileSync(claudeJsonPath, "utf-8"));
+            const claudeJson = JSON.parse(import_fs39.default.readFileSync(claudeJsonPath, "utf-8"));
             existingMcpServers = claudeJson.mcpServers || {};
           } catch {
           }
@@ -56032,13 +56669,13 @@ function buildStartRoute(ctx) {
             mcpServers: {
               ...existingMcpServers,
               "rudi-spawn": { command: spawnShimPath, args: [] },
-              ...import_fs40.default.existsSync(routerShimPath) ? { "rudi": { command: routerShimPath, args: [] } } : {}
+              ...import_fs39.default.existsSync(routerShimPath) ? { "rudi": { command: routerShimPath, args: [] } } : {}
             }
           };
           const tmpDir = import_path38.default.join(PATHS.home, "tmp");
-          import_fs40.default.mkdirSync(tmpDir, { recursive: true });
+          import_fs39.default.mkdirSync(tmpDir, { recursive: true });
           mcpConfigPath = import_path38.default.join(tmpDir, `spawn-mcp-${shortId}.json`);
-          import_fs40.default.writeFileSync(mcpConfigPath, JSON.stringify(mergedConfig, null, 2), { mode: 384 });
+          import_fs39.default.writeFileSync(mcpConfigPath, JSON.stringify(mergedConfig, null, 2), { mode: 384 });
           args.push(
             ...expandConditional(providerConfig, "mcpConfig", mcpConfigPath),
             ...expandConditional(providerConfig, "strictMcpConfig", true)
@@ -56066,9 +56703,9 @@ function buildStartRoute(ctx) {
     let repoRoot = null;
     let isGitRepo = false;
     try {
-      (0, import_child_process19.execSync)("git rev-parse --is-inside-work-tree", { cwd: workingDir, stdio: "pipe" });
+      runGit(workingDir, ["rev-parse", "--is-inside-work-tree"], { stdio: "pipe" });
       repoRoot = getRepoRoot(workingDir);
-      currentBranch = (0, import_child_process19.execSync)("git rev-parse --abbrev-ref HEAD", { cwd: workingDir, stdio: "pipe" }).toString().trim();
+      currentBranch = runGit(workingDir, ["rev-parse", "--abbrev-ref", "HEAD"], { stdio: "pipe" }).toString().trim();
       isGitRepo = true;
     } catch {
       isGitRepo = false;
@@ -56104,13 +56741,13 @@ function buildStartRoute(ctx) {
     const resolvedUseWorktree = Boolean(worktreePath);
     let spawnCwd = effectiveCwd;
     try {
-      const st2 = import_fs40.default.statSync(spawnCwd);
+      const st2 = import_fs39.default.statSync(spawnCwd);
       if (!st2.isDirectory()) throw new Error("not_a_directory");
     } catch {
       const cwdFallbacks = [workingDir, repoRoot, process.env.HOME, import_os16.default.homedir()].filter((p2) => typeof p2 === "string" && p2.length > 0);
       const fallback = cwdFallbacks.find((p2) => {
         try {
-          return import_fs40.default.statSync(p2).isDirectory();
+          return import_fs39.default.statSync(p2).isDirectory();
         } catch {
           return false;
         }
@@ -56417,10 +57054,10 @@ function buildLifecycleRoutes(ctx) {
 
 // src/commands/agent/routes/spawn-child.js
 var import_os17 = __toESM(require("os"), 1);
-var import_fs41 = __toESM(require("fs"), 1);
+var import_fs40 = __toESM(require("fs"), 1);
 var import_path39 = __toESM(require("path"), 1);
 var import_crypto7 = __toESM(require("crypto"), 1);
-var import_child_process20 = require("child_process");
+var import_child_process15 = require("child_process");
 init_src();
 function reserveRetryDelay2(entry) {
   const delay = getNextDelay(entry._retryState);
@@ -56452,7 +57089,7 @@ function buildSpawnChildRoutes(ctx) {
           clearTimeout(entry._retryTimer);
           entry._retryTimer = null;
         }
-        const proc = (0, import_child_process20.spawn)(binaryPath, childArgs, {
+        const proc = (0, import_child_process15.spawn)(binaryPath, childArgs, {
           cwd: worktreePath,
           env: childEnv,
           stdio: ["pipe", "pipe", "pipe"]
@@ -56807,7 +57444,7 @@ function buildSpawnChildRoutes(ctx) {
       let resolvedBaseRef = baseRef || null;
       if (!resolvedBaseRef) {
         try {
-          resolvedBaseRef = (0, import_child_process20.execFileSync)("git", ["rev-parse", "HEAD"], { cwd: parentCwd, stdio: "pipe" }).toString().trim();
+          resolvedBaseRef = (0, import_child_process15.execFileSync)("git", ["rev-parse", "HEAD"], { cwd: parentCwd, stdio: "pipe" }).toString().trim();
         } catch {
           resolvedBaseRef = "HEAD";
         }
@@ -56819,7 +57456,7 @@ function buildSpawnChildRoutes(ctx) {
         return json(res, { error: "INVALID_BASE_REF", message: "baseRef contains invalid characters" }, 400);
       }
       try {
-        (0, import_child_process20.execFileSync)("git", ["rev-parse", "--verify", `${resolvedBaseRef}^{commit}`], { cwd: parentRepoRoot, stdio: "pipe" });
+        (0, import_child_process15.execFileSync)("git", ["rev-parse", "--verify", `${resolvedBaseRef}^{commit}`], { cwd: parentRepoRoot, stdio: "pipe" });
       } catch {
         return json(res, { error: "INVALID_BASE_REF", message: `baseRef '${resolvedBaseRef}' does not resolve to a valid commit` }, 400);
       }
@@ -56881,8 +57518,8 @@ function buildSpawnChildRoutes(ctx) {
       if (autoKey) childArgs.push(...getPermissionArgs(providerConfig, autoKey));
       if (hasCapability(providerConfig, "mcpConfig")) {
         const emptyMcpPath = import_path39.default.join(import_os17.default.tmpdir(), "rudi-empty-mcp.json");
-        if (!import_fs41.default.existsSync(emptyMcpPath)) {
-          import_fs41.default.writeFileSync(emptyMcpPath, '{"mcpServers":{}}', { mode: 384 });
+        if (!import_fs40.default.existsSync(emptyMcpPath)) {
+          import_fs40.default.writeFileSync(emptyMcpPath, '{"mcpServers":{}}', { mode: 384 });
         }
         childArgs.push(
           ...expandConditional(providerConfig, "mcpConfig", emptyMcpPath),
@@ -56985,9 +57622,9 @@ function buildSpawnChildRoutes(ctx) {
       } catch (spawnErr) {
         log("agent", "error", `child spawn failed: ${spawnErr.message}`, { sessionId: shortId });
         try {
-          (0, import_child_process20.execFileSync)("git", ["worktree", "remove", "--force", worktreePath], { cwd: parentRepoRoot, stdio: "pipe" });
+          (0, import_child_process15.execFileSync)("git", ["worktree", "remove", "--force", worktreePath], { cwd: parentRepoRoot, stdio: "pipe" });
           try {
-            (0, import_child_process20.execFileSync)("git", ["branch", "-D", "--", worktreeBranch], { cwd: parentRepoRoot, stdio: "pipe" });
+            (0, import_child_process15.execFileSync)("git", ["branch", "-D", "--", worktreeBranch], { cwd: parentRepoRoot, stdio: "pipe" });
           } catch {
           }
         } catch {
@@ -57062,8 +57699,8 @@ function buildSpawnChildRoutes(ctx) {
 }
 
 // src/commands/agent/routes/worktree-routes.js
-var import_fs42 = __toESM(require("fs"), 1);
-var import_child_process21 = require("child_process");
+var import_fs41 = __toESM(require("fs"), 1);
+var import_child_process16 = require("child_process");
 var import_path40 = __toESM(require("path"), 1);
 function buildWorktreeRoutes(ctx) {
   const { json, error, readBody, log } = ctx;
@@ -57079,20 +57716,20 @@ function buildWorktreeRoutes(ctx) {
         if (!row?.worktree_path) {
           return json(res, { ok: false, reason: "no_worktree", details: "No worktree associated with this session" });
         }
-        if (!import_fs42.default.existsSync(row.worktree_path)) {
+        if (!import_fs41.default.existsSync(row.worktree_path)) {
           db3.prepare("UPDATE session_runtime_state SET worktree_path = NULL WHERE session_id = ?").run(body.sessionId);
           return json(res, { ok: true });
         }
         const repoDir = row.project_root || import_path40.default.dirname(import_path40.default.dirname(import_path40.default.dirname(row.worktree_path)));
         let uncommitted = "";
         try {
-          uncommitted = (0, import_child_process21.execFileSync)("git", ["status", "--porcelain"], { cwd: row.worktree_path, stdio: "pipe" }).toString().trim();
+          uncommitted = (0, import_child_process16.execFileSync)("git", ["status", "--porcelain"], { cwd: row.worktree_path, stdio: "pipe" }).toString().trim();
         } catch {
         }
         let unmerged = "";
         if (row.worktree_branch && row.base_branch) {
           try {
-            unmerged = (0, import_child_process21.execFileSync)(
+            unmerged = (0, import_child_process16.execFileSync)(
               "git",
               ["log", `${row.base_branch}..${row.worktree_branch}`, "--oneline"],
               { cwd: repoDir, stdio: "pipe" }
@@ -57109,14 +57746,14 @@ ${unmerged}`;
         }
         try {
           const removeArgs = body.force ? ["worktree", "remove", "--force", row.worktree_path] : ["worktree", "remove", row.worktree_path];
-          (0, import_child_process21.execFileSync)("git", removeArgs, { cwd: repoDir, stdio: "pipe" });
+          (0, import_child_process16.execFileSync)("git", removeArgs, { cwd: repoDir, stdio: "pipe" });
         } catch (wtErr) {
           return json(res, { ok: false, reason: "remove_failed", details: wtErr.message });
         }
         let branchRetained = false;
         if (row.worktree_branch && !row.worktree_branch.startsWith("-") && !body.force) {
           try {
-            (0, import_child_process21.execFileSync)("git", ["branch", "-d", "--", row.worktree_branch], { cwd: repoDir, stdio: "pipe" });
+            (0, import_child_process16.execFileSync)("git", ["branch", "-d", "--", row.worktree_branch], { cwd: repoDir, stdio: "pipe" });
           } catch {
             branchRetained = true;
           }
@@ -57150,7 +57787,7 @@ ${unmerged}`;
           if (row.worktree_branch.startsWith("-")) {
             return json(res, { ok: false, reason: "invalid_branch", details: "Branch name starts with dash" });
           }
-          (0, import_child_process21.execFileSync)("git", ["branch", "-d", "--", row.worktree_branch], { cwd: repoDir, stdio: "pipe" });
+          (0, import_child_process16.execFileSync)("git", ["branch", "-d", "--", row.worktree_branch], { cwd: repoDir, stdio: "pipe" });
         } catch (brErr) {
           return json(res, { ok: false, reason: "branch_unmerged", details: brErr.message });
         }
@@ -57166,7 +57803,7 @@ ${unmerged}`;
       const repoPath = url.searchParams.get("path");
       if (!repoPath) return error(res, "path query param required", 400);
       try {
-        const rawList = (0, import_child_process21.execFileSync)("git", ["worktree", "list", "--porcelain"], {
+        const rawList = (0, import_child_process16.execFileSync)("git", ["worktree", "list", "--porcelain"], {
           cwd: repoPath,
           stdio: "pipe"
         }).toString();
@@ -57208,7 +57845,7 @@ ${unmerged}`;
             continue;
           }
           try {
-            const status = (0, import_child_process21.execFileSync)("git", ["status", "--porcelain"], {
+            const status = (0, import_child_process16.execFileSync)("git", ["status", "--porcelain"], {
               cwd: wt2.path,
               stdio: "pipe"
             }).toString().trim();
@@ -57223,7 +57860,7 @@ ${unmerged}`;
           }
           if (wt2.branch) {
             try {
-              const revList = (0, import_child_process21.execFileSync)(
+              const revList = (0, import_child_process16.execFileSync)(
                 "git",
                 ["rev-list", "--left-right", "--count", `${wt2.branch}...origin/${wt2.branch}`],
                 { cwd: wt2.path, stdio: "pipe" }
@@ -57239,7 +57876,7 @@ ${unmerged}`;
                   "SELECT base_branch FROM session_runtime_state WHERE worktree_branch = ? LIMIT 1"
                 ).get(wt2.branch);
                 const base = srs?.base_branch || "main";
-                const revList = (0, import_child_process21.execFileSync)(
+                const revList = (0, import_child_process16.execFileSync)(
                   "git",
                   ["rev-list", "--left-right", "--count", `${wt2.branch}...${base}`],
                   { cwd: repoPath, stdio: "pipe" }
@@ -57278,14 +57915,14 @@ ${unmerged}`;
       const base = url.searchParams.get("base") || "main";
       if (!repoPath) return error(res, "path query param required", 400);
       try {
-        const diff = (0, import_child_process21.execFileSync)(
+        const diff = (0, import_child_process16.execFileSync)(
           "git",
           ["diff", `${base}...${branch}`],
           { cwd: repoPath, stdio: "pipe", maxBuffer: 5 * 1024 * 1024 }
         ).toString();
         let stat = "";
         try {
-          stat = (0, import_child_process21.execFileSync)(
+          stat = (0, import_child_process16.execFileSync)(
             "git",
             ["diff", "--stat", `${base}...${branch}`],
             { cwd: repoPath, stdio: "pipe" }
@@ -57304,10 +57941,10 @@ ${unmerged}`;
 
 // src/commands/agent/routes/run-group.js
 var import_os18 = __toESM(require("os"), 1);
-var import_fs44 = __toESM(require("fs"), 1);
+var import_fs43 = __toESM(require("fs"), 1);
 var import_path42 = __toESM(require("path"), 1);
 var import_crypto9 = __toESM(require("crypto"), 1);
-var import_child_process23 = require("child_process");
+var import_child_process18 = require("child_process");
 init_src();
 
 // src/commands/agent/group-spec.js
@@ -57358,11 +57995,11 @@ function normalizeIoSpecArray(value) {
   for (const entry of value) {
     if (!entry || typeof entry !== "object") continue;
     const type = trimOrNull(entry.type);
-    const path76 = trimOrNull(entry.path);
-    if (!type || !path76 || !IO_TYPES.has(type)) continue;
+    const path74 = trimOrNull(entry.path);
+    if (!type || !path74 || !IO_TYPES.has(type)) continue;
     normalized.push({
       type,
-      path: path76,
+      path: path74,
       optional: entry.optional === true
     });
   }
@@ -57372,13 +58009,13 @@ function normalizeEvidenceSpec(value) {
   if (!value || typeof value !== "object") return null;
   const type = trimOrNull(value.type);
   if (!type || !EVIDENCE_TYPES.has(type)) return null;
-  const path76 = trimOrNull(value.path);
+  const path74 = trimOrNull(value.path);
   const command = normalizeCommandSpec(value.command ?? value.argv);
-  if ((type === "artifact_exists" || type === "json_file") && !path76) return null;
+  if ((type === "artifact_exists" || type === "json_file") && !path74) return null;
   if (type === "command" && command.length === 0) return null;
   return {
     type,
-    path: path76,
+    path: path74,
     command
   };
 }
@@ -57599,10 +58236,10 @@ function buildPhasePlan(tasks, sequentialPhases) {
 }
 
 // src/commands/agent/contract-validator.js
-var import_fs43 = __toESM(require("fs"), 1);
+var import_fs42 = __toESM(require("fs"), 1);
 var import_path41 = __toESM(require("path"), 1);
 var import_crypto8 = __toESM(require("crypto"), 1);
-var import_child_process22 = require("child_process");
+var import_child_process17 = require("child_process");
 
 // src/daemon/operations/artifacts.js
 var import_node_fs4 = __toESM(require("node:fs"), 1);
@@ -57698,7 +58335,7 @@ function buildValidationEnv(baseEnv = process.env) {
 }
 function execFileAsync(file, args, options) {
   return new Promise((resolve, reject) => {
-    (0, import_child_process22.execFile)(file, args, options, (error, stdout, stderr) => {
+    (0, import_child_process17.execFile)(file, args, options, (error, stdout, stderr) => {
       if (error) {
         error.stdout = stdout;
         error.stderr = stderr;
@@ -57818,10 +58455,10 @@ async function validateTaskContract({
     if (task?.evidence?.type === "artifact_exists" || task?.evidence?.type === "json_file") {
       try {
         const evidencePath = resolveArtifactPath(cwd, task.evidence.path);
-        if (!import_fs43.default.existsSync(evidencePath)) {
+        if (!import_fs42.default.existsSync(evidencePath)) {
           errors.push(`evidence missing: ${task.evidence.path}`);
         } else if (task.evidence.type === "json_file") {
-          const raw = import_fs43.default.readFileSync(evidencePath, "utf-8");
+          const raw = import_fs42.default.readFileSync(evidencePath, "utf-8");
           JSON.parse(raw);
         }
       } catch (error) {
@@ -57931,61 +58568,6 @@ function getDependencyArtifacts(db3, runGroupId, dependency) {
   return projectDependencyArtifactRows(rows);
 }
 
-// src/commands/serve/error-codes.js
-function defineError(code, status, defaultMessage) {
-  return Object.freeze({ code, status, defaultMessage });
-}
-var SIDECAR_ERROR_CODES = Object.freeze({
-  BAD_REQUEST: defineError("BAD_REQUEST", 400, "Bad request"),
-  UNAUTHORIZED: defineError("UNAUTHORIZED", 401, "Unauthorized"),
-  FORBIDDEN: defineError("FORBIDDEN", 403, "Forbidden"),
-  NOT_FOUND: defineError("NOT_FOUND", 404, "Not found"),
-  REQUEST_TIMEOUT: defineError("REQUEST_TIMEOUT", 408, "Request timed out"),
-  CONFLICT: defineError("CONFLICT", 409, "Conflict"),
-  GONE: defineError("GONE", 410, "Resource no longer available"),
-  REQUEST_TOO_LARGE: defineError("REQUEST_TOO_LARGE", 413, "Request body too large"),
-  RATE_LIMITED: defineError("RATE_LIMITED", 429, "Rate limited"),
-  INTERNAL_ERROR: defineError("INTERNAL_ERROR", 500, "Internal server error"),
-  SERVICE_UNAVAILABLE: defineError("SERVICE_UNAVAILABLE", 503, "Service unavailable"),
-  MISSING_REQUIRED_FIELD: defineError("MISSING_REQUIRED_FIELD", 400, "Required field missing"),
-  INVALID_FIELD: defineError("INVALID_FIELD", 400, "Invalid field value"),
-  DATABASE_NOT_INITIALIZED: defineError("DATABASE_NOT_INITIALIZED", 503, "Database not initialized"),
-  SSE_CLIENT_CAP_REACHED: defineError("SSE_CLIENT_CAP_REACHED", 429, "Too many SSE clients"),
-  PROJECT_NOT_FOUND: defineError("PROJECT_NOT_FOUND", 404, "Project not found"),
-  PROJECT_ALREADY_EXISTS: defineError("PROJECT_ALREADY_EXISTS", 409, "Project already exists"),
-  NOTE_NOT_FOUND: defineError("NOTE_NOT_FOUND", 404, "Note not found"),
-  RUN_GROUP_NOT_FOUND: defineError("RUN_GROUP_NOT_FOUND", 404, "Run group not found")
-});
-var DEFAULT_ERROR_CODE_BY_STATUS = Object.freeze({
-  400: SIDECAR_ERROR_CODES.BAD_REQUEST,
-  401: SIDECAR_ERROR_CODES.UNAUTHORIZED,
-  403: SIDECAR_ERROR_CODES.FORBIDDEN,
-  404: SIDECAR_ERROR_CODES.NOT_FOUND,
-  408: SIDECAR_ERROR_CODES.REQUEST_TIMEOUT,
-  409: SIDECAR_ERROR_CODES.CONFLICT,
-  410: SIDECAR_ERROR_CODES.GONE,
-  413: SIDECAR_ERROR_CODES.REQUEST_TOO_LARGE,
-  429: SIDECAR_ERROR_CODES.RATE_LIMITED,
-  500: SIDECAR_ERROR_CODES.INTERNAL_ERROR,
-  503: SIDECAR_ERROR_CODES.SERVICE_UNAVAILABLE
-});
-function resolveSidecarErrorDefinition(input, fallbackStatus = 500) {
-  if (!input) {
-    return DEFAULT_ERROR_CODE_BY_STATUS[fallbackStatus] || null;
-  }
-  if (typeof input === "string") {
-    return SIDECAR_ERROR_CODES[input] || defineError(input, fallbackStatus, null);
-  }
-  if (typeof input === "object" && typeof input.code === "string") {
-    return defineError(
-      input.code,
-      Number.isFinite(input.status) ? input.status : fallbackStatus,
-      input.defaultMessage ?? null
-    );
-  }
-  return null;
-}
-
 // src/daemon/operations/run-groups.js
 function parseJsonArray(value) {
   return value ? JSON.parse(value) : [];
@@ -58066,11 +58648,11 @@ var SPAWN_CHILD_ALLOWED_TOOLS2 = [
 ];
 function detectGitContext(workingDir) {
   try {
-    (0, import_child_process23.execSync)("git rev-parse --is-inside-work-tree", { cwd: workingDir, stdio: "pipe" });
+    runGit(workingDir, ["rev-parse", "--is-inside-work-tree"], { stdio: "pipe" });
     return {
       isGitRepo: true,
       repoRoot: getRepoRoot(workingDir),
-      currentBranch: (0, import_child_process23.execSync)("git rev-parse --abbrev-ref HEAD", { cwd: workingDir, stdio: "pipe" }).toString().trim()
+      currentBranch: runGit(workingDir, ["rev-parse", "--abbrev-ref", "HEAD"], { stdio: "pipe" }).toString().trim()
     };
   } catch {
     return {
@@ -58109,11 +58691,11 @@ function resolveInputPaths(inputSpecs, workingDir) {
   const contextPaths = [];
   for (const input of Array.isArray(inputSpecs) ? inputSpecs : []) {
     const resolvedPath = import_path42.default.isAbsolute(input.path) ? input.path : import_path42.default.resolve(workingDir, input.path);
-    if (!import_fs44.default.existsSync(resolvedPath)) {
+    if (!import_fs43.default.existsSync(resolvedPath)) {
       if (input.optional) continue;
       throw new Error(`input missing: ${input.path}`);
     }
-    const stat = import_fs44.default.statSync(resolvedPath);
+    const stat = import_fs43.default.statSync(resolvedPath);
     if (input.type === "directory" && !stat.isDirectory()) {
       throw new Error(`input is not a directory: ${input.path}`);
     }
@@ -58381,7 +58963,7 @@ function launchRunGroupTask(ctx, group, task, settledFn) {
       }
     }
     try {
-      const st2 = import_fs44.default.statSync(spawnCwd);
+      const st2 = import_fs43.default.statSync(spawnCwd);
       if (!st2.isDirectory()) throw new Error("not_a_directory");
     } catch {
       spawnCwd = workingDir;
@@ -58472,11 +59054,11 @@ function launchRunGroupTask(ctx, group, task, settledFn) {
     if (canSpawnChildren && hasCapability(providerConfig, "mcpConfig")) {
       const spawnShimPath = import_path42.default.join(PATHS.home, "bins", "rudi-spawn");
       const routerShimPath = import_path42.default.join(PATHS.home, "bins", "rudi-router");
-      if (import_fs44.default.existsSync(spawnShimPath)) {
+      if (import_fs43.default.existsSync(spawnShimPath)) {
         let existingMcpServers = {};
         const claudeJsonPath = import_path42.default.join(import_os18.default.homedir(), ".claude.json");
         try {
-          const claudeJson = JSON.parse(import_fs44.default.readFileSync(claudeJsonPath, "utf-8"));
+          const claudeJson = JSON.parse(import_fs43.default.readFileSync(claudeJsonPath, "utf-8"));
           existingMcpServers = claudeJson.mcpServers || {};
         } catch {
         }
@@ -58484,13 +59066,13 @@ function launchRunGroupTask(ctx, group, task, settledFn) {
           mcpServers: {
             ...existingMcpServers,
             "rudi-spawn": { command: spawnShimPath, args: [] },
-            ...import_fs44.default.existsSync(routerShimPath) ? { "rudi": { command: routerShimPath, args: [] } } : {}
+            ...import_fs43.default.existsSync(routerShimPath) ? { "rudi": { command: routerShimPath, args: [] } } : {}
           }
         };
         const tmpDir = import_path42.default.join(PATHS.home, "tmp");
-        import_fs44.default.mkdirSync(tmpDir, { recursive: true });
+        import_fs43.default.mkdirSync(tmpDir, { recursive: true });
         mcpConfigPath = import_path42.default.join(tmpDir, `run-group-mcp-${shortId}.json`);
-        import_fs44.default.writeFileSync(mcpConfigPath, JSON.stringify(mergedConfig, null, 2), { mode: 384 });
+        import_fs43.default.writeFileSync(mcpConfigPath, JSON.stringify(mergedConfig, null, 2), { mode: 384 });
         args.push(
           ...expandConditional(providerConfig, "mcpConfig", mcpConfigPath),
           ...expandConditional(providerConfig, "strictMcpConfig", true)
@@ -58571,7 +59153,7 @@ function launchRunGroupTask(ctx, group, task, settledFn) {
     `).run(spawnErr.message, errIso, sessionId);
     if (mcpConfigPath) {
       try {
-        import_fs44.default.unlinkSync(mcpConfigPath);
+        import_fs43.default.unlinkSync(mcpConfigPath);
       } catch {
       }
     }
@@ -59187,7 +59769,7 @@ function buildRunGroupRoutes(ctx) {
           continue;
         }
         try {
-          const stat = (0, import_child_process23.execFileSync)(
+          const stat = (0, import_child_process18.execFileSync)(
             "git",
             ["diff", "--stat", `${row.base_branch}...${row.worktree_branch}`],
             { cwd: row.project_root, stdio: "pipe" }
@@ -59254,8 +59836,8 @@ function buildRunGroupRoutes(ctx) {
           continue;
         }
         try {
-          (0, import_child_process23.execFileSync)("git", ["checkout", mergeTo], { cwd: row.project_root, stdio: "pipe" });
-          (0, import_child_process23.execFileSync)(
+          (0, import_child_process18.execFileSync)("git", ["checkout", mergeTo], { cwd: row.project_root, stdio: "pipe" });
+          (0, import_child_process18.execFileSync)(
             "git",
             ["merge", "--no-ff", "-m", `Merge run-group session ${sessionId.slice(0, 8)} (${row.worktree_branch})`, row.worktree_branch],
             { cwd: row.project_root, stdio: "pipe" }
@@ -59268,12 +59850,12 @@ function buildRunGroupRoutes(ctx) {
         } catch (mergeErr) {
           let conflictFiles = [];
           try {
-            const status = (0, import_child_process23.execFileSync)("git", ["status", "--porcelain"], { cwd: row.project_root, stdio: "pipe" }).toString();
+            const status = (0, import_child_process18.execFileSync)("git", ["status", "--porcelain"], { cwd: row.project_root, stdio: "pipe" }).toString();
             conflictFiles = status.split("\n").filter((line) => line.startsWith("UU") || line.startsWith("AA") || line.startsWith("DD")).map((line) => line.slice(3).trim());
           } catch {
           }
           try {
-            (0, import_child_process23.execFileSync)("git", ["merge", "--abort"], { cwd: row.project_root, stdio: "pipe" });
+            (0, import_child_process18.execFileSync)("git", ["merge", "--abort"], { cwd: row.project_root, stdio: "pipe" });
           } catch {
           }
           results.push({
@@ -59319,15 +59901,15 @@ function buildRunGroupRoutes(ctx) {
         if (!row.worktree_path) continue;
         try {
           const repoDir = row.project_root || import_path42.default.dirname(import_path42.default.dirname(import_path42.default.dirname(row.worktree_path)));
-          if (import_fs44.default.existsSync(row.worktree_path)) {
-            (0, import_child_process23.execFileSync)("git", ["worktree", "remove", "--force", row.worktree_path], {
+          if (import_fs43.default.existsSync(row.worktree_path)) {
+            (0, import_child_process18.execFileSync)("git", ["worktree", "remove", "--force", row.worktree_path], {
               cwd: repoDir,
               stdio: "pipe"
             });
           }
           if (deleteBranches && row.worktree_branch && !row.worktree_branch.startsWith("-")) {
             try {
-              (0, import_child_process23.execFileSync)("git", ["branch", "-D", "--", row.worktree_branch], {
+              (0, import_child_process18.execFileSync)("git", ["branch", "-D", "--", row.worktree_branch], {
                 cwd: repoDir,
                 stdio: "pipe"
               });
@@ -59353,12 +59935,12 @@ function buildRunGroupRoutes(ctx) {
 
 // src/commands/agent/routes/orchestrate.js
 var import_crypto10 = __toESM(require("crypto"), 1);
-var import_fs46 = __toESM(require("fs"), 1);
+var import_fs45 = __toESM(require("fs"), 1);
 var import_path44 = __toESM(require("path"), 1);
 init_src();
 
 // src/commands/agent/orchestrate-synthesis.js
-var import_fs45 = __toESM(require("fs"), 1);
+var import_fs44 = __toESM(require("fs"), 1);
 var import_path43 = __toESM(require("path"), 1);
 function synthesizeCodebaseMap(artifactDir) {
   const structurePath = import_path43.default.join(artifactDir, "structure.md");
@@ -59403,7 +59985,7 @@ function synthesizeCodebaseMap(artifactDir) {
 }
 function readFileOrDefault(filePath, defaultContent) {
   try {
-    return import_fs45.default.readFileSync(filePath, "utf-8");
+    return import_fs44.default.readFileSync(filePath, "utf-8");
   } catch (err) {
     return defaultContent;
   }
@@ -59590,7 +60172,7 @@ function buildOrchestrateRoutes(ctx) {
     });
     const codebaseMapContent = synthesizeCodebaseMap(artifactDir);
     const codebaseMapPath = import_path44.default.join(artifactDir, "codebase-map.md");
-    import_fs46.default.writeFileSync(codebaseMapPath, codebaseMapContent, "utf-8");
+    import_fs45.default.writeFileSync(codebaseMapPath, codebaseMapContent, "utf-8");
     log("agent", "info", "Codebase map synthesized", {
       orchestrationId: orchestrationId.slice(0, 8),
       path: codebaseMapPath
@@ -59638,7 +60220,7 @@ function buildOrchestrateRoutes(ctx) {
       );
       const artifactDir = import_path44.default.join(PATHS.home, ".rudi", "tmp", `orchestration-${orchestrationId}`);
       try {
-        import_fs46.default.mkdirSync(artifactDir, { recursive: true });
+        import_fs45.default.mkdirSync(artifactDir, { recursive: true });
       } catch (mkdirErr) {
         return error(res, `Failed to create artifact directory: ${mkdirErr.message}`, 500);
       }
@@ -59889,7 +60471,7 @@ function buildOrchestrateRoutes(ctx) {
       `).run(execNow, id);
       const artifactDir = import_path44.default.join(PATHS.home, ".rudi", "tmp", `orchestration-${id}`);
       const codebaseMapPath = import_path44.default.join(artifactDir, "codebase-map.md");
-      const hasCodebaseMap = import_fs46.default.existsSync(codebaseMapPath);
+      const hasCodebaseMap = import_fs45.default.existsSync(codebaseMapPath);
       const runGroupBody = {
         name: `Orchestration: ${row.prompt.slice(0, 60)}`,
         provider: row.provider || "claude",
@@ -60062,11 +60644,11 @@ function createIdleReaper({
 }
 
 // src/commands/serve/sessions.js
-var import_fs50 = __toESM(require("fs"), 1);
+var import_fs49 = __toESM(require("fs"), 1);
 var import_promises11 = __toESM(require("fs/promises"), 1);
 var import_path53 = __toESM(require("path"), 1);
 var import_os21 = __toESM(require("os"), 1);
-var import_child_process25 = require("child_process");
+var import_child_process20 = require("child_process");
 
 // src/commands/sessions/providers/common.js
 function stripSystemXml(text) {
@@ -60497,7 +61079,7 @@ function cacheSessionFileHint(sessionId, provider, filePath) {
 }
 
 // src/commands/sessions/providers/codex/discovery.js
-var import_fs47 = __toESM(require("fs"), 1);
+var import_fs46 = __toESM(require("fs"), 1);
 var import_promises3 = __toESM(require("fs/promises"), 1);
 var import_path46 = __toESM(require("path"), 1);
 var import_readline3 = require("readline");
@@ -60526,7 +61108,7 @@ async function readCodexSessionMeta(filePath, maxLines = CODEX_META_SCAN_LINES) 
   let rl = null;
   let linesRead = 0;
   try {
-    stream = import_fs47.default.createReadStream(filePath, { encoding: "utf-8" });
+    stream = import_fs46.default.createReadStream(filePath, { encoding: "utf-8" });
     rl = (0, import_readline3.createInterface)({ input: stream, crlfDelay: Infinity });
     for await (const line of rl) {
       linesRead += 1;
@@ -62031,7 +62613,7 @@ function createSessionsDbModule({ log, resolveDb: resolveDb2, caches, onProjects
 }
 
 // src/commands/sessions/tail.js
-var import_fs48 = __toESM(require("fs"), 1);
+var import_fs47 = __toESM(require("fs"), 1);
 var import_promises7 = __toESM(require("fs/promises"), 1);
 var MAX_FOLLOWED_SESSIONS = 10;
 var TAIL_FALLBACK_INTERVAL_MS = 5e3;
@@ -62387,7 +62969,7 @@ function createSessionsTailModule({ log, broadcast, findSessionFile }) {
   }
   function startFileWatcher(entry) {
     try {
-      entry.watcher = import_fs48.default.watch(entry.filePath, () => {
+      entry.watcher = import_fs47.default.watch(entry.filePath, () => {
         setImmediate(() => tailSession(entry));
       });
       entry.watcher.on("error", () => {
@@ -62607,7 +63189,7 @@ async function readByteRange(filePath, startByte, endByte) {
 }
 
 // src/commands/sessions/ingester.js
-var import_fs49 = __toESM(require("fs"), 1);
+var import_fs48 = __toESM(require("fs"), 1);
 var import_promises9 = __toESM(require("fs/promises"), 1);
 var import_path50 = __toESM(require("path"), 1);
 var import_crypto11 = __toESM(require("crypto"), 1);
@@ -63255,7 +63837,7 @@ function createSessionsIngesterModule({
   };
   async function _collectFiles() {
     const files = [];
-    if (import_fs49.default.existsSync(dirs.claudeProjectsDir)) {
+    if (import_fs48.default.existsSync(dirs.claudeProjectsDir)) {
       const claudeFiles = await collectJsonlFiles(dirs.claudeProjectsDir, 4);
       for (const filePath of claudeFiles) {
         files.push({
@@ -63265,7 +63847,7 @@ function createSessionsIngesterModule({
         });
       }
     }
-    if (import_fs49.default.existsSync(dirs.codexSessionsDir)) {
+    if (import_fs48.default.existsSync(dirs.codexSessionsDir)) {
       const codexFiles = await collectJsonlFiles(dirs.codexSessionsDir, 6);
       for (const filePath of codexFiles) {
         const fname = import_path50.default.basename(filePath);
@@ -63889,7 +64471,7 @@ function createSessionsIngesterModule({
 
 // src/commands/sessions/title-backfill.js
 var import_path51 = __toESM(require("path"), 1);
-var import_child_process24 = require("child_process");
+var import_child_process19 = require("child_process");
 var DEFAULT_MAX_LLM_CONCURRENCY = 5;
 var DEFAULT_LLM_TIMEOUT_MS = 45e3;
 var DEFAULT_LLM_DELAY_MS = 500;
@@ -64358,7 +64940,7 @@ async function _runClaudeEnrichment(prompt, { timeoutMs }, log) {
     return { enrichment: null, failureType: "missing_binary" };
   }
   return new Promise((resolve) => {
-    const child = (0, import_child_process24.spawn)(binaryPath, [
+    const child = (0, import_child_process19.spawn)(binaryPath, [
       "-p",
       prompt,
       "--model",
@@ -65940,11 +66522,11 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
       if (!projectPath) return resolve(null);
       const gitDir = import_path53.default.join(projectPath, ".git");
       try {
-        if (!import_fs50.default.existsSync(gitDir)) return resolve(null);
+        if (!import_fs49.default.existsSync(gitDir)) return resolve(null);
       } catch {
         return resolve(null);
       }
-      (0, import_child_process25.execFile)("git", ["status", "--porcelain=v2", "--branch"], {
+      (0, import_child_process20.execFile)("git", ["status", "--porcelain=v2", "--branch"], {
         cwd: projectPath,
         encoding: "utf-8",
         timeout: 2e3,
@@ -66105,14 +66687,14 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
   function startSessionsWatcher() {
     if (sessionsWatcher) return;
     const watcherSpecs = [];
-    if (import_fs50.default.existsSync(CLAUDE_PROJECTS_DIR)) {
+    if (import_fs49.default.existsSync(CLAUDE_PROJECTS_DIR)) {
       watcherSpecs.push({ provider: "claude", rootPath: CLAUDE_PROJECTS_DIR });
-    } else if (import_fs50.default.existsSync(CLAUDE_ROOT_DIR)) {
+    } else if (import_fs49.default.existsSync(CLAUDE_ROOT_DIR)) {
       watcherSpecs.push({ provider: "claude", rootPath: CLAUDE_ROOT_DIR });
     }
-    if (import_fs50.default.existsSync(CODEX_SESSIONS_DIR)) {
+    if (import_fs49.default.existsSync(CODEX_SESSIONS_DIR)) {
       watcherSpecs.push({ provider: "codex", rootPath: CODEX_SESSIONS_DIR });
-    } else if (import_fs50.default.existsSync(CODEX_ROOT_DIR)) {
+    } else if (import_fs49.default.existsSync(CODEX_ROOT_DIR)) {
       watcherSpecs.push({ provider: "codex", rootPath: CODEX_ROOT_DIR });
     }
     if (watcherSpecs.length === 0) {
@@ -66129,7 +66711,7 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
     for (const spec of watcherSpecs) {
       const { provider, rootPath } = spec;
       try {
-        const watcher = import_fs50.default.watch(rootPath, { recursive: true }, (eventType, filename) => {
+        const watcher = import_fs49.default.watch(rootPath, { recursive: true }, (eventType, filename) => {
           const relPath = typeof filename === "string" ? filename : "";
           if (!relPath) {
             queueSessionsUpdated({
@@ -66223,7 +66805,7 @@ function createSessionsModule({ log, broadcast, json, error, readBody, getProjec
   function normalizePath(p2) {
     if (!p2) return p2;
     try {
-      return import_fs50.default.realpathSync(p2);
+      return import_fs49.default.realpathSync(p2);
     } catch {
       return p2;
     }
@@ -67059,7 +67641,7 @@ function createInfrastructure() {
       }
     });
   }
-  function invalidField(res, field, message, options = {}) {
+  function invalidField2(res, field, message, options = {}) {
     return error(res, message, options.status || 400, {
       ...options,
       code: options.code || SIDECAR_ERROR_CODES.INVALID_FIELD,
@@ -67134,11 +67716,10 @@ function createInfrastructure() {
     return import_crypto12.default.randomBytes(32).toString("hex");
   }
   function checkAuth4(req) {
-    const headerToken = req.headers["x-rudi-token"];
-    if (headerToken === _token) return true;
-    const url = new import_url.URL(req.url, `http://localhost`);
-    if (url.searchParams.get("token") === _token) return true;
-    return false;
+    if (!_token) return false;
+    const headerValue = req?.headers?.["x-rudi-token"];
+    const headerToken = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+    return typeof headerToken === "string" && headerToken === _token;
   }
   return {
     // State accessors
@@ -67160,7 +67741,7 @@ function createInfrastructure() {
     errorCode,
     requiredField,
     requiredFields,
-    invalidField,
+    invalidField: invalidField2,
     readBody,
     generateToken,
     checkAuth: checkAuth4,
@@ -67171,9 +67752,8 @@ function createInfrastructure() {
 }
 
 // src/commands/serve/startup.js
-var import_fs51 = __toESM(require("fs"), 1);
+var import_fs50 = __toESM(require("fs"), 1);
 var import_path54 = __toESM(require("path"), 1);
-var import_child_process26 = require("child_process");
 function runStartupTasks({ log }) {
   try {
     initSchema();
@@ -67237,7 +67817,7 @@ function runStartupTasks({ log }) {
     console.warn("[serve] Failed to sweep stale sessions:", err.message);
   }
   try {
-    const psOutput = (0, import_child_process26.execSync)("ps -axo pid=,ppid=,command=", {
+    const psOutput = runCommand("ps", ["-axo", "pid=,ppid=,command="], {
       encoding: "utf-8",
       timeout: 3e3
     });
@@ -67260,7 +67840,7 @@ function runStartupTasks({ log }) {
       }
       for (const pid of orphanPids) {
         try {
-          const alive = (0, import_child_process26.execSync)(`ps -p ${pid} -o pid=`, {
+          const alive = runCommand("ps", ["-p", String(pid), "-o", "pid="], {
             encoding: "utf-8",
             timeout: 500
           }).trim();
@@ -67285,12 +67865,12 @@ function runStartupTasks({ log }) {
         AND status IN ('completed', 'error', 'stopped', 'crashed')
     `).all();
     for (const row of orphans) {
-      if (!row.worktree_path || !import_fs51.default.existsSync(row.worktree_path)) {
+      if (!row.worktree_path || !import_fs50.default.existsSync(row.worktree_path)) {
         db3.prepare("UPDATE session_runtime_state SET worktree_path = NULL WHERE session_id = ?").run(row.session_id);
         continue;
       }
       try {
-        const uncommitted = (0, import_child_process26.execSync)("git status --porcelain", { cwd: row.worktree_path, stdio: "pipe" }).toString().trim();
+        const uncommitted = runGit(row.worktree_path, ["status", "--porcelain"], { stdio: "pipe" }).toString().trim();
         if (uncommitted) {
           log("serve", "warn", `orphan worktree has uncommitted changes, skipping: ${row.worktree_path}`);
           continue;
@@ -67298,10 +67878,9 @@ function runStartupTasks({ log }) {
         let unmerged = "";
         if (row.worktree_branch && row.base_branch && row.project_root) {
           try {
-            unmerged = (0, import_child_process26.execSync)(
-              `git log ${row.base_branch}..${row.worktree_branch} --oneline`,
-              { cwd: row.project_root, stdio: "pipe" }
-            ).toString().trim();
+            unmerged = runGit(row.project_root, ["log", `${row.base_branch}..${row.worktree_branch}`, "--oneline"], {
+              stdio: "pipe"
+            }).toString().trim();
           } catch {
           }
         }
@@ -67310,10 +67889,10 @@ function runStartupTasks({ log }) {
           continue;
         }
         const repoDir = row.project_root || import_path54.default.dirname(import_path54.default.dirname(import_path54.default.dirname(row.worktree_path)));
-        (0, import_child_process26.execSync)(`git worktree remove ${JSON.stringify(row.worktree_path)}`, { cwd: repoDir, stdio: "pipe" });
+        runGit(repoDir, ["worktree", "remove", row.worktree_path], { stdio: "pipe" });
         if (row.worktree_branch) {
           try {
-            (0, import_child_process26.execSync)(`git branch -d ${row.worktree_branch}`, { cwd: repoDir, stdio: "pipe" });
+            runGit(repoDir, ["branch", "-d", "--", row.worktree_branch], { stdio: "pipe" });
           } catch {
           }
         }
@@ -68005,7 +68584,7 @@ function buildLocalLlmRoutes(ctx, deps = {}) {
 }
 
 // src/commands/serve/routes/analytics.js
-var import_fs52 = require("fs");
+var import_fs51 = require("fs");
 var import_path55 = require("path");
 var import_os22 = require("os");
 function buildAnalyticsRoutes(ctx) {
@@ -68311,11 +68890,11 @@ function buildAnalyticsRoutes(ctx) {
     }
     if (url.pathname === "/analytics/stats-cache") {
       const cachePath = (0, import_path55.join)((0, import_os22.homedir)(), ".claude", "stats-cache.json");
-      if (!(0, import_fs52.existsSync)(cachePath)) {
+      if (!(0, import_fs51.existsSync)(cachePath)) {
         return error(res, "Stats cache not found", 404), true;
       }
       try {
-        const data = JSON.parse((0, import_fs52.readFileSync)(cachePath, "utf-8"));
+        const data = JSON.parse((0, import_fs51.readFileSync)(cachePath, "utf-8"));
         json(res, data);
       } catch (e2) {
         return error(res, "Failed to read stats cache", 500), true;
@@ -68328,11 +68907,33 @@ function buildAnalyticsRoutes(ctx) {
 }
 
 // src/commands/serve/routes/auth.js
-var import_fs53 = __toESM(require("fs"), 1);
+var import_fs52 = __toESM(require("fs"), 1);
 var import_path56 = __toESM(require("path"), 1);
 var import_os23 = __toESM(require("os"), 1);
-var import_child_process27 = require("child_process");
+var import_child_process21 = require("child_process");
 init_src();
+init_src4();
+var CLAUDE_API_KEY_SECRET2 = "ANTHROPIC_API_KEY";
+var CLAUDE_OAUTH_SECRET2 = "CLAUDE_CODE_OAUTH_TOKEN";
+var CODEX_API_KEY_SECRET2 = "OPENAI_API_KEY";
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+function appleScriptString(value) {
+  return `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+async function saveCredential(name, value) {
+  await setSecret(name, value);
+  process.env[name] = value;
+}
+function normalizeAuthProvider(provider) {
+  return typeof provider === "string" && provider.trim() ? provider.trim().toLowerCase() : "claude";
+}
+function getApiKeySecretForProvider(provider) {
+  if (provider === "claude") return CLAUDE_API_KEY_SECRET2;
+  if (provider === "codex") return CODEX_API_KEY_SECRET2;
+  return null;
+}
 function buildAuthRoutes(ctx) {
   const { json, error, readBody, log } = ctx;
   async function handle(req, res, url) {
@@ -68354,64 +68955,70 @@ function buildAuthRoutes(ctx) {
     }
     if (req.method === "POST" && url.pathname === "/auth/login") {
       const body = await readBody(req);
+      const provider = normalizeAuthProvider(body.provider);
       if (body.apiKey || body.oauthToken) {
+        if (body.oauthToken && provider !== "claude") {
+          return error(res, "oauthToken is only supported for Claude auth", 400);
+        }
+        const apiKeySecret = body.apiKey ? getApiKeySecretForProvider(provider) : null;
+        if (body.apiKey && !apiKeySecret) {
+          return error(res, `Unsupported auth provider '${provider}'`, 400);
+        }
         try {
-          const envPath = import_path56.default.join(PATHS.home, ".env");
-          let content = "";
-          if (import_fs53.default.existsSync(envPath)) {
-            content = import_fs53.default.readFileSync(envPath, "utf-8");
-          }
           if (body.oauthToken) {
-            content = content.replace(/^CLAUDE_CODE_OAUTH_TOKEN=.*$/m, "").trim();
-            content += `
-CLAUDE_CODE_OAUTH_TOKEN=${body.oauthToken}
-`;
-            process.env.CLAUDE_CODE_OAUTH_TOKEN = body.oauthToken;
-            log("auth", "info", "OAuth token saved to .env");
+            await saveCredential(CLAUDE_OAUTH_SECRET2, body.oauthToken);
+            log("auth", "info", "OAuth token saved to RUDI secrets store");
           } else {
-            content = content.replace(/^ANTHROPIC_API_KEY=.*$/m, "").trim();
-            content += `
-ANTHROPIC_API_KEY=${body.apiKey}
-`;
-            process.env.ANTHROPIC_API_KEY = body.apiKey;
-            log("auth", "info", "API key saved to .env");
+            await saveCredential(apiKeySecret, body.apiKey);
+            log("auth", "info", `${provider} API key saved to RUDI secrets store`);
           }
-          import_fs53.default.writeFileSync(envPath, content.trim() + "\n");
           json(res, { ok: true });
         } catch (err) {
           log("auth", "error", `Failed to save credential: ${err.message}`);
           error(res, `Failed to save credential: ${err.message}`, 500);
         }
       } else {
+        if (provider === "codex") {
+          json(res, { ok: true, message: `Run 'codex login' in a terminal to authenticate` });
+          return true;
+        }
         const binaryPath = resolveClaudeBinary();
         if (binaryPath && import_os23.default.platform() === "darwin") {
           try {
+            import_fs52.default.mkdirSync(PATHS.home, { recursive: true });
             const helperPath = import_path56.default.join(PATHS.home, ".login-helper.sh");
-            const envPath = import_path56.default.join(PATHS.home, ".env");
             const captureFile = import_path56.default.join(PATHS.home, ".setup-token-output");
+            const cliEntryPath = process.argv[1];
+            if (!cliEntryPath) {
+              throw new Error("Unable to resolve RUDI CLI entrypoint for login helper");
+            }
             const script = [
               "#!/bin/bash",
-              `CAPTURE="${captureFile}"`,
-              `ENV_FILE="${envPath}"`,
-              `script -q "$CAPTURE" "${binaryPath}" setup-token`,
+              "set -euo pipefail",
+              `CAPTURE=${shellQuote(captureFile)}`,
+              `CLAUDE_BIN=${shellQuote(binaryPath)}`,
+              `NODE_BIN=${shellQuote(process.execPath)}`,
+              `RUDI_CLI=${shellQuote(cliEntryPath)}`,
+              `script -q "$CAPTURE" "$CLAUDE_BIN" setup-token`,
               `CLEAN=$(sed 's/\\x1b\\[[0-9;]*[a-zA-Z]//g; s/\\x1b\\[[?][0-9]*[a-z]//g' "$CAPTURE" | tr -d '\\r')`,
               `TOKEN=$(echo "$CLEAN" | sed -n '/^sk-ant-oat/{N;s/\\n//;p;}' | grep -oE 'sk-ant-oat[A-Za-z0-9_-]+' | head -1)`,
               "# Reject placeholders and short matches (real tokens are 80+ chars)",
               'if [ -n "$TOKEN" ] && [ ${#TOKEN} -gt 30 ]; then',
-              '  touch "$ENV_FILE"',
-              `  sed -i '' '/^CLAUDE_CODE_OAUTH_TOKEN=/d' "$ENV_FILE"`,
-              '  echo "CLAUDE_CODE_OAUTH_TOKEN=$TOKEN" >> "$ENV_FILE"',
+              `  "$NODE_BIN" "$RUDI_CLI" secrets set ${CLAUDE_OAUTH_SECRET2} "$TOKEN" >/dev/null`,
               '  rm -f "$CAPTURE"',
               '  echo ""',
-              '  echo "\u2713 Token saved to RUDI. You can close this window."',
+              '  echo "Token saved to RUDI. You can close this window."',
               "else",
+              '  rm -f "$CAPTURE"',
               '  echo ""',
-              '  echo "Could not detect a valid token. Capture file kept for debugging:"',
-              '  echo "  $CAPTURE"',
+              '  echo "Could not detect a valid token."',
               "fi"
             ].join("\n");
-            import_fs53.default.writeFileSync(helperPath, script, { mode: 493 });
-            (0, import_child_process27.execSync)(`osascript -e 'tell application "Terminal" to do script "${helperPath}"'`, { stdio: "pipe" });
+            import_fs52.default.writeFileSync(helperPath, script, { mode: 493 });
+            (0, import_child_process21.execFileSync)("osascript", [
+              "-e",
+              `tell application "Terminal" to do script ${appleScriptString(helperPath)}`
+            ], { stdio: "pipe" });
             log("auth", "info", "Launched login helper in Terminal.app");
             json(res, { ok: true, launched: true });
           } catch (err) {
@@ -68430,13 +69037,14 @@ ANTHROPIC_API_KEY=${body.apiKey}
 }
 
 // src/commands/serve/routes/fs.js
-var import_fs54 = __toESM(require("fs"), 1);
+var import_fs53 = __toESM(require("fs"), 1);
 var import_promises12 = __toESM(require("fs/promises"), 1);
 var import_path57 = __toESM(require("path"), 1);
 var FS_READDIR_CACHE_TTL_MS = 1200;
 var MAX_FS_WRITE_BODY_SIZE = 50 * 1024 * 1024;
+var BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 function buildFsRoutes(ctx) {
-  const { json, error, readBody, log, broadcast, requiredField, requiredFields } = ctx;
+  const { json, error, readBody, log, broadcast, requiredField, requiredFields, invalidField: invalidField2 } = ctx;
   const fsWatchers = /* @__PURE__ */ new Map();
   const fsReaddirCache = /* @__PURE__ */ new Map();
   const fsReaddirInFlight = /* @__PURE__ */ new Map();
@@ -68447,6 +69055,24 @@ function buildFsRoutes(ctx) {
   }
   function getFsReaddirCacheKey(dirPath, showHidden) {
     return `${showHidden ? "1" : "0"}:${dirPath}`;
+  }
+  function rejectFsPath(value, res, options = {}) {
+    return rejectInvalidPathField({
+      value,
+      res,
+      invalidField: invalidField2,
+      error,
+      ...options
+    });
+  }
+  function rejectInvalidBase64(value, res) {
+    if (typeof value !== "string" || !BASE64_PATTERN.test(value)) {
+      invalidField2(res, "base64", "base64 must be a valid base64 string", {
+        reason: typeof value === "string" ? "invalid_base64" : "invalid_type"
+      });
+      return true;
+    }
+    return false;
   }
   async function readDirectoryEntries(dirPath, showHidden) {
     const cacheKey = getFsReaddirCacheKey(dirPath, showHidden);
@@ -68498,6 +69124,7 @@ function buildFsRoutes(ctx) {
     if (req.method === "GET" && pathname === "/fs/read") {
       const filePath = url.searchParams.get("path");
       if (!filePath) return requiredField(res, "path", { location: "query" });
+      if (rejectFsPath(filePath, res, { field: "path", location: "query" })) return true;
       try {
         const content = await import_promises12.default.readFile(filePath, "utf-8");
         json(res, { content });
@@ -68514,6 +69141,7 @@ function buildFsRoutes(ctx) {
         if (body.content === void 0) missing.push("content");
         return requiredFields(res, missing);
       }
+      if (rejectFsPath(body.path, res, { allowRoot: false })) return true;
       try {
         await import_promises12.default.mkdir(import_path57.default.dirname(body.path), { recursive: true });
         await import_promises12.default.writeFile(body.path, body.content, "utf-8");
@@ -68532,6 +69160,8 @@ function buildFsRoutes(ctx) {
         if (body.base64 === void 0) missing.push("base64");
         return requiredFields(res, missing);
       }
+      if (rejectFsPath(body.path, res, { allowRoot: false })) return true;
+      if (rejectInvalidBase64(body.base64, res)) return true;
       try {
         await import_promises12.default.mkdir(import_path57.default.dirname(body.path), { recursive: true });
         const buffer = Buffer.from(body.base64, "base64");
@@ -68546,6 +69176,7 @@ function buildFsRoutes(ctx) {
     if (req.method === "GET" && pathname === "/fs/readdir") {
       const dirPath = url.searchParams.get("path");
       if (!dirPath) return requiredField(res, "path", { location: "query" });
+      if (rejectFsPath(dirPath, res, { field: "path", location: "query" })) return true;
       const showHidden = url.searchParams.get("showHidden") === "1";
       try {
         const entries = await readDirectoryEntries(dirPath, showHidden);
@@ -68558,6 +69189,7 @@ function buildFsRoutes(ctx) {
     if (req.method === "GET" && pathname === "/fs/stat") {
       const filePath = url.searchParams.get("path");
       if (!filePath) return requiredField(res, "path", { location: "query" });
+      if (rejectFsPath(filePath, res, { field: "path", location: "query" })) return true;
       try {
         const stat = await import_promises12.default.stat(filePath);
         json(res, {
@@ -68576,6 +69208,7 @@ function buildFsRoutes(ctx) {
     if (req.method === "GET" && pathname === "/fs/serve") {
       const filePath = url.searchParams.get("path");
       if (!filePath) return requiredField(res, "path", { location: "query" });
+      if (rejectFsPath(filePath, res, { field: "path", location: "query" })) return true;
       try {
         const stat = await import_promises12.default.stat(filePath);
         const ext = import_path57.default.extname(filePath).toLowerCase();
@@ -68610,7 +69243,7 @@ function buildFsRoutes(ctx) {
           "Cache-Control": "public, max-age=5",
           "ETag": etag
         });
-        import_fs54.default.createReadStream(filePath).pipe(res);
+        import_fs53.default.createReadStream(filePath).pipe(res);
       } catch (err) {
         error(res, err.message, 404);
       }
@@ -68619,6 +69252,7 @@ function buildFsRoutes(ctx) {
     if (req.method === "POST" && pathname === "/fs/mkdir") {
       const body = await readBody(req);
       if (!body.path) return requiredField(res, "path");
+      if (rejectFsPath(body.path, res, { allowRoot: false })) return true;
       try {
         await import_promises12.default.mkdir(body.path, { recursive: true });
         invalidateFsReaddirCache();
@@ -68631,6 +69265,10 @@ function buildFsRoutes(ctx) {
     if (req.method === "POST" && pathname === "/fs/remove") {
       const body = await readBody(req);
       if (!body.path) return requiredField(res, "path");
+      if (rejectFsPath(body.path, res, { allowRoot: false })) return true;
+      if (rejectMissingDestructiveConfirmation({ body, res, invalidField: invalidField2, error, operation: "fs remove" })) {
+        return true;
+      }
       try {
         await import_promises12.default.rm(body.path, { recursive: true });
         invalidateFsReaddirCache();
@@ -68648,6 +69286,8 @@ function buildFsRoutes(ctx) {
         if (!body.newPath) missing.push("newPath");
         return requiredFields(res, missing);
       }
+      if (rejectFsPath(body.oldPath, res, { field: "oldPath", allowRoot: false })) return true;
+      if (rejectFsPath(body.newPath, res, { field: "newPath", allowRoot: false })) return true;
       try {
         await import_promises12.default.rename(body.oldPath, body.newPath);
         invalidateFsReaddirCache();
@@ -68660,13 +69300,14 @@ function buildFsRoutes(ctx) {
     if (req.method === "POST" && pathname === "/fs/watch") {
       const body = await readBody(req);
       if (!body.path) return requiredField(res, "path");
+      if (rejectFsPath(body.path, res, { allowRoot: false })) return true;
       const watchPath = body.path;
       if (fsWatchers.has(watchPath)) {
         json(res, { ok: true, already: true });
         return true;
       }
       try {
-        const watcher = import_fs54.default.watch(watchPath, { recursive: true }, (eventType, filename) => {
+        const watcher = import_fs53.default.watch(watchPath, { recursive: true }, (eventType, filename) => {
           if (!filename) return;
           const entry = fsWatchers.get(watchPath);
           if (!entry) return;
@@ -68679,7 +69320,7 @@ function buildFsRoutes(ctx) {
           }, 100);
         });
         fsWatchers.set(watchPath, { watcher, debounceTimer: null });
-        log("fs", "info", `watching ${watchPath}`);
+        log("fs", "info", "watching filesystem path");
         json(res, { ok: true });
       } catch (err) {
         error(res, err.message, 500);
@@ -68689,12 +69330,13 @@ function buildFsRoutes(ctx) {
     if (req.method === "POST" && pathname === "/fs/unwatch") {
       const body = await readBody(req);
       if (!body.path) return requiredField(res, "path");
+      if (rejectFsPath(body.path, res, { allowRoot: false })) return true;
       const entry = fsWatchers.get(body.path);
       if (entry) {
         clearTimeout(entry.debounceTimer);
         entry.watcher.close();
         fsWatchers.delete(body.path);
-        log("fs", "info", `unwatched ${body.path}`);
+        log("fs", "info", "unwatched filesystem path");
       }
       json(res, { ok: true });
       return true;
@@ -68706,7 +69348,8 @@ function buildFsRoutes(ctx) {
       try {
         clearTimeout(entry.debounceTimer);
         entry.watcher.close();
-      } catch {
+      } catch (err) {
+        log("fs", "warn", `failed to close filesystem watcher during cleanup: ${err.message}`);
       }
     }
     fsWatchers.clear();
@@ -68775,7 +69418,7 @@ function normalizeTitle(value) {
   return value.trim();
 }
 function buildNotesRoutes(ctx, deps = {}) {
-  const { json, error, errorCode, readBody, requiredField, invalidField } = ctx;
+  const { json, error, errorCode, readBody, requiredField, invalidField: invalidField2 } = ctx;
   const fsImpl = deps.fsPromises || import_promises13.default;
   const notesDir = deps.notesDir || NOTES_DIR;
   const generateId = deps.generateId || (() => import_crypto13.default.randomUUID());
@@ -68803,14 +69446,14 @@ function buildNotesRoutes(ctx, deps = {}) {
       if (body.title == null) return requiredField(res, "title");
       const title = normalizeTitle(body.title);
       if (title === null) {
-        return invalidField(res, "title", "title must be a string", {
+        return invalidField2(res, "title", "title must be a string", {
           reason: "invalid_type",
           details: { expectedType: "string" }
         });
       }
       if (title === "") return requiredField(res, "title");
       if (body.content !== void 0 && body.content !== null && typeof body.content !== "string") {
-        return invalidField(res, "content", "content must be a string", {
+        return invalidField2(res, "content", "content must be a string", {
           reason: "invalid_type",
           details: { expectedType: "string" }
         });
@@ -68842,20 +69485,20 @@ function buildNotesRoutes(ctx, deps = {}) {
           if (body.title !== void 0) {
             const title = normalizeTitle(body.title);
             if (title === null) {
-              return invalidField(res, "title", "title must be a string", {
+              return invalidField2(res, "title", "title must be a string", {
                 reason: "invalid_type",
                 details: { expectedType: "string" }
               });
             }
             if (title === "") {
-              return invalidField(res, "title", "title must be a non-empty string", {
+              return invalidField2(res, "title", "title must be a non-empty string", {
                 reason: "empty_string"
               });
             }
             body.title = title;
           }
           if (body.content !== void 0 && body.content !== null && typeof body.content !== "string") {
-            return invalidField(res, "content", "content must be a string", {
+            return invalidField2(res, "content", "content must be a string", {
               reason: "invalid_type",
               details: { expectedType: "string" }
             });
@@ -68890,10 +69533,9 @@ function buildNotesRoutes(ctx, deps = {}) {
 
 // src/commands/serve/routes/packages.js
 var import_crypto14 = __toESM(require("crypto"), 1);
-var fs59 = __toESM(require("fs/promises"), 1);
+var fs58 = __toESM(require("fs/promises"), 1);
 var fsSync3 = __toESM(require("fs"), 1);
 var import_path59 = __toESM(require("path"), 1);
-var import_child_process28 = require("child_process");
 init_src5();
 init_src4();
 
@@ -68901,7 +69543,7 @@ init_src4();
 function normalizePackageKind(rawKind, options = {}) {
   const kind2 = typeof rawKind === "string" ? rawKind.trim() : "";
   if (!kind2) return null;
-  const allowed = options.routeOnly === false ? PACKAGE_KINDS4 : PACKAGE_ROUTE_KINDS;
+  const allowed = options.routeOnly === false ? PACKAGE_KINDS3 : PACKAGE_ROUTE_KINDS;
   return allowed.includes(kind2) ? kind2 : null;
 }
 function projectPackageDescriptor(pkg, fallbackKind = null) {
@@ -68963,7 +69605,7 @@ var defaultDeps = {
 async function loadManifest3(installPath) {
   const manifestPath = import_path59.default.join(installPath, "manifest.json");
   try {
-    const content = await fs59.readFile(manifestPath, "utf-8");
+    const content = await fs58.readFile(manifestPath, "utf-8");
     return JSON.parse(content);
   } catch {
     return null;
@@ -69076,7 +69718,7 @@ async function buildStackIfNeeded2(stackPath, manifest, onProgress) {
   onProgress?.({ phase: "building" });
   const npmCmd = getBundledBinary2("node", "npm");
   try {
-    (0, import_child_process28.execSync)(`"${npmCmd}" run build`, {
+    runCommand(npmCmd, ["run", "build"], {
       cwd: project.root,
       stdio: "pipe"
     });
@@ -69108,7 +69750,7 @@ async function checkSecrets3(manifest, deps) {
 async function parseEnvExample2(installPath) {
   const examplePath = import_path59.default.join(installPath, ".env.example");
   try {
-    const content = await fs59.readFile(examplePath, "utf-8");
+    const content = await fs58.readFile(examplePath, "utf-8");
     const keys = [];
     for (const line of content.split("\n")) {
       const trimmed = line.trim();
@@ -69124,7 +69766,7 @@ async function parseEnvExample2(installPath) {
 async function cleanupFailedStackInstall2(stackId, stackPath, removeConfig, deps) {
   if (stackPath) {
     try {
-      await fs59.rm(stackPath, { recursive: true, force: true });
+      await fs58.rm(stackPath, { recursive: true, force: true });
     } catch {
     }
   }
@@ -69218,7 +69860,7 @@ async function defaultInstallAndRegisterPackage({ id, force, onProgress }, deps)
   }
 }
 function buildPackageRoutes(ctx, overrides = {}) {
-  const { json, error, readBody, log, broadcast, requiredField, invalidField } = ctx;
+  const { json, error, readBody, log, broadcast, requiredField, invalidField: invalidField2 } = ctx;
   const deps = { ...defaultDeps, ...overrides };
   if (!overrides.installAndRegisterPackage) {
     deps.installAndRegisterPackage = (options) => defaultInstallAndRegisterPackage(options, deps);
@@ -69266,7 +69908,7 @@ function buildPackageRoutes(ctx, overrides = {}) {
       const rawKind = url.searchParams.get("kind");
       const kind2 = rawKind == null ? null : normalizePackageKind(rawKind);
       if (rawKind != null && !kind2) {
-        return invalidField(res, "kind", "invalid kind", {
+        return invalidField2(res, "kind", "invalid kind", {
           location: "query",
           reason: "unsupported_value",
           details: { value: rawKind }
@@ -69284,7 +69926,7 @@ function buildPackageRoutes(ctx, overrides = {}) {
     if (req.method === "GET" && url.pathname === "/packages/list") {
       const kind2 = normalizePackageKind(url.searchParams.get("kind"));
       if (!kind2) {
-        return invalidField(res, "kind", "valid kind required", {
+        return invalidField2(res, "kind", "valid kind required", {
           location: "query",
           reason: "required_supported_value"
         });
@@ -69420,7 +70062,7 @@ function buildPackageRoutes(ctx, overrides = {}) {
       const name = typeof body.name === "string" ? body.name.trim() : "";
       const value = typeof body.value === "string" ? body.value : null;
       if (!SECRET_NAME_RE2.test(name)) {
-        return invalidField(res, "name", "secret name must be UPPER_SNAKE_CASE", {
+        return invalidField2(res, "name", "secret name must be UPPER_SNAKE_CASE", {
           reason: "pattern_mismatch"
         });
       }
@@ -69442,7 +70084,7 @@ function buildPackageRoutes(ctx, overrides = {}) {
     if (req.method === "DELETE" && secretDeleteMatch) {
       const name = decodeURIComponent(secretDeleteMatch[1]).trim();
       if (!SECRET_NAME_RE2.test(name)) {
-        return invalidField(res, "name", "secret name must be UPPER_SNAKE_CASE", {
+        return invalidField2(res, "name", "secret name must be UPPER_SNAKE_CASE", {
           location: "path",
           reason: "pattern_mismatch"
         });
@@ -69561,7 +70203,7 @@ function projectSlugFromName(name) {
   return name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
 }
 function buildProjectRoutes(ctx, deps = {}) {
-  const { json, error, errorCode, readBody, requiredField, invalidField } = ctx;
+  const { json, error, errorCode, readBody, requiredField, invalidField: invalidField2 } = ctx;
   const getDbImpl = deps.getDb || getDb;
   const isDatabaseInitializedImpl = deps.isDatabaseInitialized || isDatabaseInitialized;
   async function handle(req, res, url) {
@@ -69595,7 +70237,7 @@ function buildProjectRoutes(ctx, deps = {}) {
       if (body.name == null) return requiredField(res, "name");
       const normalizedName = normalizeProjectName(body.name);
       if (normalizedName === null) {
-        return invalidField(res, "name", "name must be a string", {
+        return invalidField2(res, "name", "name must be a string", {
           reason: "invalid_type",
           details: { expectedType: "string" }
         });
@@ -69604,14 +70246,14 @@ function buildProjectRoutes(ctx, deps = {}) {
         return requiredField(res, "name");
       }
       if (body.path !== void 0 && body.path !== null && typeof body.path !== "string") {
-        return invalidField(res, "path", "path must be a string", {
+        return invalidField2(res, "path", "path must be a string", {
           reason: "invalid_type",
           details: { expectedType: "string" }
         });
       }
       const slug = projectSlugFromName(normalizedName);
       if (!slug) {
-        return invalidField(res, "name", "name must include letters or numbers", {
+        return invalidField2(res, "name", "name must include letters or numbers", {
           reason: "invalid_format"
         });
       }
@@ -69647,13 +70289,13 @@ function buildProjectRoutes(ctx, deps = {}) {
         if (body.name !== void 0) {
           const normalizedName = normalizeProjectName(body.name);
           if (normalizedName === null) {
-            return invalidField(res, "name", "name must be a string", {
+            return invalidField2(res, "name", "name must be a string", {
               reason: "invalid_type",
               details: { expectedType: "string" }
             });
           }
           if (normalizedName === "") {
-            return invalidField(res, "name", "name must be a non-empty string", {
+            return invalidField2(res, "name", "name must be a non-empty string", {
               reason: "empty_string"
             });
           }
@@ -69662,7 +70304,7 @@ function buildProjectRoutes(ctx, deps = {}) {
         }
         if (body.color !== void 0) {
           if (body.color !== null && typeof body.color !== "string") {
-            return invalidField(res, "color", "color must be a string", {
+            return invalidField2(res, "color", "color must be a string", {
               reason: "invalid_type",
               details: { expectedType: "string" }
             });
@@ -69719,9 +70361,46 @@ function buildProviderRoutes(ctx) {
 }
 
 // src/commands/serve/routes/shell.js
-var import_child_process29 = require("child_process");
-function buildShellRoutes(ctx) {
-  const { json, error, readBody, requiredField, invalidField } = ctx;
+var import_fs54 = __toESM(require("fs"), 1);
+var import_child_process22 = require("child_process");
+function appleScriptString2(value) {
+  return `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+function buildTerminalOpenScript(targetPath) {
+  return [
+    'tell application "Terminal"',
+    "  activate",
+    `  do script "cd " & quoted form of POSIX path of (POSIX file ${appleScriptString2(targetPath)})`,
+    "end tell"
+  ].join("\n");
+}
+function buildShellRoutes(ctx, deps = {}) {
+  const { json, error, readBody, requiredField, invalidField: invalidField2, log } = ctx;
+  const spawnProcess = deps.spawn || import_child_process22.spawn;
+  function rejectShellPath(value, res) {
+    if (rejectInvalidPathField({ value, res, invalidField: invalidField2, error })) {
+      return true;
+    }
+    if (!import_fs54.default.existsSync(value)) {
+      invalidField2(res, "path", "path must reference an existing filesystem path", {
+        reason: "path_not_found"
+      });
+      return true;
+    }
+    return false;
+  }
+  function spawnDetached(command, args, app) {
+    const child = spawnProcess(command, args, { detached: true, stdio: "ignore" });
+    if (typeof child?.on === "function") {
+      child.on("error", (err) => {
+        log?.("shell", "error", "failed to open host application", {
+          app,
+          message: err?.message || "spawn failed"
+        });
+      });
+    }
+    child?.unref?.();
+  }
   async function handle(req, res, url) {
     if (req.method === "POST" && url.pathname === "/shell/reveal") {
       const body = await readBody(req);
@@ -69729,8 +70408,8 @@ function buildShellRoutes(ctx) {
         requiredField(res, "path");
         return true;
       }
-      const child = (0, import_child_process29.spawn)("open", ["-R", body.path], { detached: true, stdio: "ignore" });
-      child.unref();
+      if (rejectShellPath(body.path, res)) return true;
+      spawnDetached("open", ["-R", body.path], "finder");
       json(res, { ok: true });
       return true;
     }
@@ -69744,6 +70423,7 @@ function buildShellRoutes(ctx) {
         requiredField(res, "app");
         return true;
       }
+      if (rejectShellPath(body.path, res)) return true;
       const p2 = body.path;
       let cmd, args;
       switch (body.app) {
@@ -69772,28 +70452,20 @@ function buildShellRoutes(ctx) {
           args = ["-a", "Warp", p2];
           break;
         case "terminal": {
-          const script = [
-            'tell application "Terminal"',
-            "  activate",
-            `  do script "cd ${p2.replace(/"/g, '\\"')}"`,
-            "end tell"
-          ].join("\n");
+          const script = buildTerminalOpenScript(p2);
           cmd = "osascript";
           args = ["-e", script];
           break;
         }
         default:
-          invalidField(res, "app", `unknown app: ${body.app}`, {
+          invalidField2(res, "app", `unknown app: ${body.app}`, {
             reason: "unsupported_value",
             details: { value: body.app }
           });
           return true;
       }
-      console.log(`[shell/open] ${cmd} ${args.join(" ")}`);
-      const child = (0, import_child_process29.spawn)(cmd, args, { detached: true, stdio: "pipe" });
-      child.stderr.on("data", (d2) => console.error(`[shell/open] stderr: ${d2}`));
-      child.on("error", (err) => console.error(`[shell/open] spawn error:`, err));
-      child.unref();
+      log?.("shell", "info", "opening host application", { app: body.app });
+      spawnDetached(cmd, args, body.app);
       json(res, { ok: true });
       return true;
     }
@@ -69804,7 +70476,7 @@ function buildShellRoutes(ctx) {
 
 // src/commands/serve/routes/suggest.js
 var import_os24 = __toESM(require("os"), 1);
-var import_child_process30 = require("child_process");
+var import_child_process23 = require("child_process");
 function buildSuggestRoutes(ctx) {
   const { json, error, readBody, log } = ctx;
   let _activeSuggestProcess = null;
@@ -69832,9 +70504,10 @@ function buildSuggestRoutes(ctx) {
     const cwd = typeof body.cwd === "string" ? body.cwd : null;
     if (cwd) {
       try {
-        const statusOut = (0, import_child_process30.execSync)("git status --porcelain", { cwd, stdio: "pipe", timeout: 3e3 }).toString().trim();
-        const logOut = (0, import_child_process30.execSync)("git log --oneline -5 2>/dev/null", { cwd, stdio: "pipe", timeout: 3e3 }).toString().trim();
-        const branchOut = (0, import_child_process30.execSync)("git branch --show-current 2>/dev/null", { cwd, stdio: "pipe", timeout: 3e3 }).toString().trim();
+        const gitOptions = { stdio: "pipe", timeout: 3e3 };
+        const statusOut = runGit(cwd, ["status", "--porcelain"], gitOptions).toString().trim();
+        const logOut = runGit(cwd, ["log", "--oneline", "-5"], gitOptions).toString().trim();
+        const branchOut = runGit(cwd, ["branch", "--show-current"], gitOptions).toString().trim();
         const parts = [];
         if (branchOut) parts.push(`Branch: ${branchOut}`);
         if (statusOut) parts.push(`Uncommitted changes:
@@ -69854,7 +70527,7 @@ ${parts.join("\n")}`;
 Assistant message:
 ${lastMessage}${gitContext}`;
     try {
-      const child = (0, import_child_process30.spawn)(binaryPath, [
+      const child = (0, import_child_process23.spawn)(binaryPath, [
         "-p",
         prompt,
         "--model",
@@ -69932,7 +70605,7 @@ User request: ${firstMessage}
 
 Title:`;
     try {
-      const child = (0, import_child_process30.spawn)(binaryPath, [
+      const child = (0, import_child_process23.spawn)(binaryPath, [
         "-p",
         prompt,
         "--model",
@@ -69998,7 +70671,7 @@ Task: ${prompt}
 
 Branch name:`;
     try {
-      const child = (0, import_child_process30.spawn)(binaryPath, [
+      const child = (0, import_child_process23.spawn)(binaryPath, [
         "-p",
         systemPrompt,
         "--model",
@@ -70070,8 +70743,13 @@ Branch name:`;
 }
 
 // src/commands/serve/routes/terminal.js
-function buildTerminalRoutes(ctx) {
-  const { json, error, readBody, broadcast, requiredField, requiredFields } = ctx;
+var import_fs55 = __toESM(require("fs"), 1);
+var DEFAULT_TERMINAL_SHELL = "/bin/zsh";
+var ALLOWED_TERMINAL_SHELLS = ["/bin/zsh", "/bin/bash", "/bin/sh"];
+var ALLOWED_TERMINAL_SHELL_SET = new Set(ALLOWED_TERMINAL_SHELLS);
+var MAX_TERMINAL_DIMENSION = 1e3;
+function buildTerminalRoutes(ctx, deps = {}) {
+  const { json, error, readBody, broadcast, requiredField, requiredFields, invalidField: invalidField2, log } = ctx;
   const terminalSessions = /* @__PURE__ */ new Map();
   const pendingTerminalOpens = /* @__PURE__ */ new Set();
   let ptyModulePromise = null;
@@ -70095,18 +70773,85 @@ function buildTerminalRoutes(ctx) {
     }
   }
   async function getPtyModule() {
+    if (Object.prototype.hasOwnProperty.call(deps, "ptyModule")) {
+      return deps.ptyModule;
+    }
     if (!ptyModulePromise) {
       ptyModulePromise = import("@lydell/node-pty").then((mod) => mod?.spawn ? mod : mod?.default?.spawn ? mod.default : null).catch(() => null);
     }
     return ptyModulePromise;
+  }
+  function rejectTerminalCwd(cwd, res) {
+    if (!cwd || typeof cwd !== "string") {
+      return requiredField(res, "cwd");
+    }
+    if (rejectInvalidPathField({
+      value: cwd,
+      field: "cwd",
+      res,
+      invalidField: invalidField2,
+      error
+    })) {
+      return true;
+    }
+    let stat;
+    try {
+      stat = import_fs55.default.statSync(cwd);
+    } catch {
+      invalidField2(res, "cwd", "cwd must reference an existing directory", {
+        reason: "path_not_found"
+      });
+      return true;
+    }
+    if (!stat.isDirectory()) {
+      invalidField2(res, "cwd", "cwd must reference an existing directory", {
+        reason: "not_directory"
+      });
+      return true;
+    }
+    return false;
+  }
+  function rejectTerminalShell(shellPath, res) {
+    if (typeof shellPath !== "string" || !ALLOWED_TERMINAL_SHELL_SET.has(shellPath)) {
+      invalidField2(res, "shell", `shell must be one of ${ALLOWED_TERMINAL_SHELLS.join(", ")}`, {
+        reason: "unsupported_value",
+        details: {
+          allowed: ALLOWED_TERMINAL_SHELLS,
+          value: shellPath
+        }
+      });
+      return true;
+    }
+    return false;
+  }
+  function parseTerminalDimension(value, field, fallback, res) {
+    if (value === void 0 || value === null || value === "") {
+      return fallback;
+    }
+    const dimension = Number(value);
+    if (!Number.isInteger(dimension) || dimension <= 0 || dimension > MAX_TERMINAL_DIMENSION) {
+      invalidField2(res, field, `${field} must be a positive integer`, {
+        reason: "invalid_terminal_dimension"
+      });
+      return null;
+    }
+    return dimension;
+  }
+  function killTerminalProcess(proc, reason) {
+    try {
+      proc.kill();
+    } catch (err) {
+      log?.("terminal", "warn", `failed to kill terminal process during ${reason}: ${err.message}`);
+    }
   }
   async function handle(req, res, url) {
     if (req.method === "POST" && url.pathname === "/terminal/open") {
       const body = await readBody(req);
       const sessionKey = String(body.sessionKey || "global");
       const cwd = body.cwd;
-      const shellPath = body.shell || "/bin/zsh";
-      if (!cwd || typeof cwd !== "string") return requiredField(res, "cwd");
+      const shellPath = body.shell === void 0 ? DEFAULT_TERMINAL_SHELL : body.shell;
+      if (rejectTerminalCwd(cwd, res)) return true;
+      if (rejectTerminalShell(shellPath, res)) return true;
       if (pendingTerminalOpens.has(sessionKey)) {
         return error(res, "Terminal open already in progress for this key", 409);
       }
@@ -70115,20 +70860,19 @@ function buildTerminalRoutes(ctx) {
         if (existing.cwd === cwd) {
           return json(res, { ok: true, sessionKey, reused: true, buffer: existing.buffer.getAll() });
         }
-        try {
-          existing.proc.kill();
-        } catch {
-        }
+        killTerminalProcess(existing.proc, "session replacement");
         terminalSessions.delete(sessionKey);
       }
       const nodePty = await getPtyModule();
       if (!nodePty?.spawn) {
         return error(res, "Real PTY backend unavailable: install @lydell/node-pty in cli workspace", 503);
       }
+      const cols = parseTerminalDimension(body.cols, "cols", 80, res);
+      if (cols === null) return true;
+      const rows = parseTerminalDimension(body.rows, "rows", 24, res);
+      if (rows === null) return true;
       pendingTerminalOpens.add(sessionKey);
       try {
-        const cols = Number(body.cols) || 80;
-        const rows = Number(body.rows) || 24;
         const proc = nodePty.spawn(shellPath, ["-il"], {
           name: "xterm-256color",
           cols,
@@ -70159,7 +70903,13 @@ function buildTerminalRoutes(ctx) {
     if (req.method === "POST" && url.pathname === "/terminal/write") {
       const body = await readBody(req);
       const sessionKey = String(body.sessionKey || "global");
-      const data = typeof body.data === "string" ? body.data : "";
+      if (body.data === void 0) return requiredField(res, "data");
+      if (typeof body.data !== "string") {
+        return invalidField2(res, "data", "data must be a string", {
+          reason: "invalid_type"
+        });
+      }
+      const data = body.data;
       const entry = terminalSessions.get(sessionKey);
       if (!entry) return error(res, "terminal session not found", 404);
       try {
@@ -70191,10 +70941,7 @@ function buildTerminalRoutes(ctx) {
       const sessionKey = String(body.sessionKey || "global");
       const entry = terminalSessions.get(sessionKey);
       if (!entry) return json(res, { ok: true });
-      try {
-        entry.proc.kill();
-      } catch {
-      }
+      killTerminalProcess(entry.proc, "session close");
       terminalSessions.delete(sessionKey);
       return json(res, { ok: true });
     }
@@ -70202,10 +70949,7 @@ function buildTerminalRoutes(ctx) {
   }
   function cleanup() {
     for (const [, { proc }] of terminalSessions) {
-      try {
-        proc.kill();
-      } catch {
-      }
+      killTerminalProcess(proc, "route cleanup");
     }
     terminalSessions.clear();
   }
@@ -70257,7 +71001,7 @@ function buildHttpAuthMiddleware(ctx) {
 }
 
 // src/daemon/runtime/bootstrap.js
-var import_fs56 = __toESM(require("fs"), 1);
+var import_fs57 = __toESM(require("fs"), 1);
 var import_path60 = __toESM(require("path"), 1);
 init_src();
 var PORT_FILE = import_path60.default.join(PATHS.home, ".rudi-lite-port");
@@ -70268,7 +71012,7 @@ function parseRequestedPort(flags = {}) {
 function resolveWebRoot(flags = {}) {
   const webRoot = flags["web-root"] ? import_path60.default.resolve(flags["web-root"]) : null;
   if (!webRoot) return null;
-  if (!import_fs56.default.existsSync(import_path60.default.join(webRoot, "index.html"))) {
+  if (!import_fs57.default.existsSync(import_path60.default.join(webRoot, "index.html"))) {
     const err = new Error(`No index.html found in ${webRoot}`);
     err.code = "RUDI_WEB_ROOT_INDEX_MISSING";
     err.webRoot = webRoot;
@@ -70277,17 +71021,17 @@ function resolveWebRoot(flags = {}) {
   return webRoot;
 }
 function writeConnectionFiles({ port, token, portFile = PORT_FILE, tokenFile = TOKEN_FILE }) {
-  import_fs56.default.mkdirSync(PATHS.home, { recursive: true });
-  import_fs56.default.writeFileSync(portFile, String(port), { mode: 384 });
-  import_fs56.default.writeFileSync(tokenFile, token, { mode: 384 });
+  import_fs57.default.mkdirSync(PATHS.home, { recursive: true });
+  import_fs57.default.writeFileSync(portFile, String(port), { mode: 384 });
+  import_fs57.default.writeFileSync(tokenFile, token, { mode: 384 });
 }
 function removeConnectionFiles({ portFile = PORT_FILE, tokenFile = TOKEN_FILE } = {}) {
   try {
-    import_fs56.default.unlinkSync(portFile);
+    import_fs57.default.unlinkSync(portFile);
   } catch {
   }
   try {
-    import_fs56.default.unlinkSync(tokenFile);
+    import_fs57.default.unlinkSync(tokenFile);
   } catch {
   }
 }
@@ -70514,14 +71258,12 @@ function createWebSocketRuntime({
     server.on("upgrade", (req, socket, head) => {
       const url = new import_url3.URL(req.url, "http://localhost");
       const protocolToken = readWsTokenFromProtocolHeader(req.headers["sec-websocket-protocol"]);
-      const queryToken = url.searchParams.get("token");
-      const presentedToken = protocolToken ?? queryToken;
       const expectedToken = getToken?.();
-      if (presentedToken !== expectedToken) {
+      if (!expectedToken || protocolToken !== expectedToken) {
         log?.("ws", "warn", "upgrade auth failed", {
           path: url.pathname,
           hasProtocolToken: !!protocolToken,
-          hasQueryToken: !!queryToken
+          hasQueryToken: url.searchParams.has("token")
         });
         socket.destroy();
         return;
@@ -70698,7 +71440,7 @@ async function cmdServe(args, flags) {
     getTurnIngestStats,
     repairNoTextSessionTurnsToDb
   });
-  const handleGit = createGitHandler({ readBody, error, json });
+  const handleGit = createGitHandler({ readBody, error, json, invalidField });
   const handleAgent = createAgentHandler({
     agentProcesses,
     resumeSessionIndex,
@@ -70783,13 +71525,13 @@ async function cmdServe(args, flags) {
         let filePath = import_path61.default.join(webRoot, safePath);
         let stat = null;
         try {
-          stat = import_fs57.default.statSync(filePath);
+          stat = import_fs58.default.statSync(filePath);
         } catch {
         }
         if (!stat || stat.isDirectory()) {
           filePath = import_path61.default.join(webRoot, "index.html");
           try {
-            stat = import_fs57.default.statSync(filePath);
+            stat = import_fs58.default.statSync(filePath);
           } catch {
             stat = null;
           }
@@ -70802,7 +71544,7 @@ async function cmdServe(args, flags) {
             "Content-Length": stat.size,
             "Cache-Control": ext === ".html" ? "no-cache" : "public, max-age=31536000, immutable"
           });
-          import_fs57.default.createReadStream(filePath).pipe(res);
+          import_fs58.default.createReadStream(filePath).pipe(res);
           return;
         }
       }
@@ -70936,7 +71678,7 @@ async function cmdServe(args, flags) {
 }
 
 // src/commands/agent/templates.js
-var import_fs58 = __toESM(require("fs"), 1);
+var import_fs59 = __toESM(require("fs"), 1);
 var import_path62 = __toESM(require("path"), 1);
 var import_os25 = __toESM(require("os"), 1);
 var USER_TEMPLATE_DIR = import_path62.default.join(import_os25.default.homedir(), ".rudi", "templates");
@@ -70963,7 +71705,7 @@ function getTemplateDirectories() {
   return Array.from(candidates);
 }
 function readTemplateFile(filePath) {
-  const raw = import_fs58.default.readFileSync(filePath, "utf-8");
+  const raw = import_fs59.default.readFileSync(filePath, "utf-8");
   const parsed = JSON.parse(raw);
   if (!parsed || typeof parsed !== "object") {
     throw new Error(`Invalid template: ${filePath}`);
@@ -70973,8 +71715,8 @@ function readTemplateFile(filePath) {
 function listRunGroupTemplates() {
   const deduped = /* @__PURE__ */ new Map();
   for (const dir of getTemplateDirectories()) {
-    if (!import_fs58.default.existsSync(dir)) continue;
-    const entries = import_fs58.default.readdirSync(dir, { withFileTypes: true });
+    if (!import_fs59.default.existsSync(dir)) continue;
+    const entries = import_fs59.default.readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
       const name = entry.name.replace(/\.json$/i, "");
@@ -71008,7 +71750,7 @@ function loadRunGroupTemplate(name) {
   for (const dir of getTemplateDirectories()) {
     for (const candidate of candidates) {
       const filePath = import_path62.default.join(dir, candidate);
-      if (!import_fs58.default.existsSync(filePath)) continue;
+      if (!import_fs59.default.existsSync(filePath)) continue;
       const template = readTemplateFile(filePath);
       return {
         ...template,
@@ -71474,9 +72216,9 @@ async function cmdRunGroup(args, flags) {
 }
 
 // src/commands/lanes.js
-var import_fs59 = __toESM(require("fs"), 1);
+var import_fs60 = __toESM(require("fs"), 1);
 var import_path63 = __toESM(require("path"), 1);
-var import_child_process31 = require("child_process");
+var import_child_process24 = require("child_process");
 function printLanesHelp() {
   console.log(`
 rudi lanes - Manage the local main/dev lane layout for solo-dev parallel work
@@ -71505,7 +72247,7 @@ function printJson2(data) {
   console.log(JSON.stringify(data, null, 2));
 }
 function execGit(cwd, args) {
-  return (0, import_child_process31.execFileSync)("git", args, {
+  return (0, import_child_process24.execFileSync)("git", args, {
     cwd,
     encoding: "utf-8",
     stdio: ["ignore", "pipe", "pipe"]
@@ -71548,7 +72290,7 @@ function ensureOnBranch(cwd, expectedBranch, label) {
 }
 function localBranchExists(repoRoot, branch) {
   try {
-    (0, import_child_process31.execFileSync)("git", ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], {
+    (0, import_child_process24.execFileSync)("git", ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], {
       cwd: repoRoot,
       stdio: "pipe"
     });
@@ -71559,7 +72301,7 @@ function localBranchExists(repoRoot, branch) {
 }
 function remoteBranchExists(repoRoot, remote, branch) {
   try {
-    (0, import_child_process31.execFileSync)("git", ["show-ref", "--verify", "--quiet", `refs/remotes/${remote}/${branch}`], {
+    (0, import_child_process24.execFileSync)("git", ["show-ref", "--verify", "--quiet", `refs/remotes/${remote}/${branch}`], {
       cwd: repoRoot,
       stdio: "pipe"
     });
@@ -71603,13 +72345,13 @@ function ensureDevBranch(repoRoot, mainBranch, devBranch) {
     return { createdBranch: false, sourceRef: devBranch };
   }
   if (remoteBranchExists(repoRoot, "origin", devBranch)) {
-    (0, import_child_process31.execFileSync)("git", ["branch", "--track", devBranch, `origin/${devBranch}`], {
+    (0, import_child_process24.execFileSync)("git", ["branch", "--track", devBranch, `origin/${devBranch}`], {
       cwd: repoRoot,
       stdio: "pipe"
     });
     return { createdBranch: true, sourceRef: `origin/${devBranch}` };
   }
-  (0, import_child_process31.execFileSync)("git", ["branch", devBranch, mainBranch], {
+  (0, import_child_process24.execFileSync)("git", ["branch", devBranch, mainBranch], {
     cwd: repoRoot,
     stdio: "pipe"
   });
@@ -71624,10 +72366,10 @@ function ensureDevWorktree(repoRoot, devBranch, requestedDevPath) {
       devPath: existing.path
     };
   }
-  if (import_fs59.default.existsSync(requestedDevPath)) {
+  if (import_fs60.default.existsSync(requestedDevPath)) {
     throw new Error(`Dev worktree path already exists but is not registered: ${requestedDevPath}`);
   }
-  (0, import_child_process31.execFileSync)("git", ["worktree", "add", requestedDevPath, devBranch], {
+  (0, import_child_process24.execFileSync)("git", ["worktree", "add", requestedDevPath, devBranch], {
     cwd: repoRoot,
     stdio: "pipe"
   });
@@ -71642,7 +72384,7 @@ async function lanesInit(flags) {
   const repoRoot = getRepoRoot(cwd);
   ensureOnBranch(repoRoot, mainBranch, "Repo worktree");
   if (remoteExists(repoRoot, "origin")) {
-    (0, import_child_process31.execFileSync)("git", ["fetch", "origin"], {
+    (0, import_child_process24.execFileSync)("git", ["fetch", "origin"], {
       cwd: repoRoot,
       stdio: "pipe"
     });
@@ -71674,7 +72416,7 @@ async function lanesInit(flags) {
 }
 function fastForwardLane(cwd, upstreamRef) {
   const before = getHeadSha(cwd);
-  (0, import_child_process31.execFileSync)("git", ["merge", "--ff-only", upstreamRef], {
+  (0, import_child_process24.execFileSync)("git", ["merge", "--ff-only", upstreamRef], {
     cwd,
     stdio: "pipe"
   });
@@ -71700,7 +72442,7 @@ async function lanesSync(flags) {
   ensureCleanWorktree(devPath, "Dev worktree");
   const notices = [];
   if (remoteExists(repoRoot, "origin")) {
-    (0, import_child_process31.execFileSync)("git", ["fetch", "origin"], {
+    (0, import_child_process24.execFileSync)("git", ["fetch", "origin"], {
       cwd: repoRoot,
       stdio: "pipe"
     });
@@ -71991,16 +72733,16 @@ async function cmdRuntime(args, flags) {
 }
 
 // src/commands/daemon.js
-var import_fs61 = __toESM(require("fs"), 1);
+var import_fs62 = __toESM(require("fs"), 1);
 var import_path65 = __toESM(require("path"), 1);
-var import_child_process33 = require("child_process");
+var import_child_process26 = require("child_process");
 init_src();
 
 // src/daemon/runtime/launch-agent.js
-var import_fs60 = __toESM(require("fs"), 1);
+var import_fs61 = __toESM(require("fs"), 1);
 var import_os26 = __toESM(require("os"), 1);
 var import_path64 = __toESM(require("path"), 1);
-var import_child_process32 = require("child_process");
+var import_child_process25 = require("child_process");
 init_src();
 var LAUNCH_AGENT_LABEL = "com.learnrudi.daemon";
 var LEGACY_LAUNCH_AGENT_LABELS = ["com.rudi.sidecar"];
@@ -72138,7 +72880,7 @@ function getLaunchctlCommands({
 }
 function runLaunchctl(args, {
   allowFailure = false,
-  execFileImpl = import_child_process32.execFileSync
+  execFileImpl = import_child_process25.execFileSync
 } = {}) {
   try {
     const output = execFileImpl("launchctl", args, {
@@ -72180,7 +72922,7 @@ function getLaunchAgentStatus(options = {}) {
     label,
     logsDir: options.logsDir
   });
-  const fsImpl = options.fsImpl || import_fs60.default;
+  const fsImpl = options.fsImpl || import_fs61.default;
   if (platform !== "darwin") {
     return {
       domain: null,
@@ -72199,7 +72941,7 @@ function getLaunchAgentStatus(options = {}) {
   const commands = getLaunchctlCommands({ label, plistPath: paths.plistPath, uid });
   const installed = fsImpl.existsSync(paths.plistPath);
   try {
-    const output = (options.execFileImpl || import_child_process32.execFileSync)("launchctl", commands.print, {
+    const output = (options.execFileImpl || import_child_process25.execFileSync)("launchctl", commands.print, {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"]
     });
@@ -72297,7 +73039,7 @@ function installLaunchAgent(options = {}) {
   const platform = options.platform || process.platform;
   const uid = options.uid ?? getUid();
   assertCanManageLaunchAgent({ platform, uid });
-  const fsImpl = options.fsImpl || import_fs60.default;
+  const fsImpl = options.fsImpl || import_fs61.default;
   const plan = buildLaunchAgentPlan(options);
   const paths = getLaunchAgentPaths({
     homeDir: options.homeDir,
@@ -72401,7 +73143,7 @@ function uninstallLaunchAgent(options = {}) {
   const platform = options.platform || process.platform;
   const uid = options.uid ?? getUid();
   assertCanManageLaunchAgent({ platform, uid });
-  const fsImpl = options.fsImpl || import_fs60.default;
+  const fsImpl = options.fsImpl || import_fs61.default;
   const status = options.launchAgentStatus || getLaunchAgentStatus(options);
   const commands = getLaunchctlCommands({
     label: status.label,
@@ -72470,11 +73212,11 @@ function removeDaemonConnectionFiles({
   tokenFile = SIDECAR_TOKEN_FILE
 } = {}) {
   try {
-    import_fs61.default.unlinkSync(portFile);
+    import_fs62.default.unlinkSync(portFile);
   } catch {
   }
   try {
-    import_fs61.default.unlinkSync(tokenFile);
+    import_fs62.default.unlinkSync(tokenFile);
   } catch {
   }
 }
@@ -72498,13 +73240,13 @@ function spawnDaemonProcess({
   logsDir = PATHS.logs,
   nodePath = process.execPath,
   serveArgs = ["serve"],
-  spawnImpl = import_child_process33.spawn
+  spawnImpl = import_child_process26.spawn
 } = {}) {
-  import_fs61.default.mkdirSync(logsDir, { recursive: true });
+  import_fs62.default.mkdirSync(logsDir, { recursive: true });
   const stdoutPath = import_path65.default.join(logsDir, "daemon.out.log");
   const stderrPath = import_path65.default.join(logsDir, "daemon.err.log");
-  const stdoutFd = import_fs61.default.openSync(stdoutPath, "a");
-  const stderrFd = import_fs61.default.openSync(stderrPath, "a");
+  const stdoutFd = import_fs62.default.openSync(stdoutPath, "a");
+  const stderrFd = import_fs62.default.openSync(stderrPath, "a");
   try {
     const child = spawnImpl(nodePath, [entrypoint, ...serveArgs], {
       detached: true,
@@ -72519,11 +73261,11 @@ function spawnDaemonProcess({
     };
   } finally {
     try {
-      import_fs61.default.closeSync(stdoutFd);
+      import_fs62.default.closeSync(stdoutFd);
     } catch {
     }
     try {
-      import_fs61.default.closeSync(stderrFd);
+      import_fs62.default.closeSync(stderrFd);
     } catch {
     }
   }
@@ -72896,7 +73638,7 @@ async function cmdDaemon(args, flags) {
 }
 
 // src/commands/instructions.js
-var import_fs62 = __toESM(require("fs"), 1);
+var import_fs63 = __toESM(require("fs"), 1);
 var import_path66 = __toESM(require("path"), 1);
 var import_os27 = __toESM(require("os"), 1);
 var RUDI_INSTRUCTIONS_BEGIN = "<!-- RUDI BEGIN -->";
@@ -73024,9 +73766,9 @@ function resolveInstructionTarget(agent = "generic", flags = {}, env = {}) {
   return import_path66.default.join(home, normalizedAgent === "claude" ? ".claude" : ".codex", fileName);
 }
 function backupInstructionFile(targetPath) {
-  if (!import_fs62.default.existsSync(targetPath)) return null;
+  if (!import_fs63.default.existsSync(targetPath)) return null;
   const backupPath = `${targetPath}.backup.${Date.now()}`;
-  import_fs62.default.copyFileSync(targetPath, backupPath);
+  import_fs63.default.copyFileSync(targetPath, backupPath);
   return backupPath;
 }
 function printInstructionsHelp() {
@@ -73087,13 +73829,13 @@ async function cmdInstructions(args, flags) {
   if (!targetPath) {
     throw new Error("Generic instructions need --path when using --install or --remove");
   }
-  const existing = import_fs62.default.existsSync(targetPath) ? import_fs62.default.readFileSync(targetPath, "utf-8") : "";
+  const existing = import_fs63.default.existsSync(targetPath) ? import_fs63.default.readFileSync(targetPath, "utf-8") : "";
   const result = shouldRemove ? removeManagedInstructionBlock(existing) : patchManagedInstructionBlock(existing, block);
   let backupPath = null;
   if (result.changed && !dryRun) {
-    import_fs62.default.mkdirSync(import_path66.default.dirname(targetPath), { recursive: true });
+    import_fs63.default.mkdirSync(import_path66.default.dirname(targetPath), { recursive: true });
     backupPath = backupInstructionFile(targetPath);
-    import_fs62.default.writeFileSync(targetPath, result.content);
+    import_fs63.default.writeFileSync(targetPath, result.content);
   }
   const payload = {
     agent,
