@@ -5,7 +5,7 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
-import { PATHS, getPackagePath, isPackageInstalled } from '@learnrudi/core';
+import { PATHS, getPackagePath, isPackageInstalled } from '@learnrudi/env';
 import { getSecrets, redactSecrets } from './secrets.js';
 
 /**
@@ -27,6 +27,66 @@ import { getSecrets, redactSecrets } from './secrets.js';
  * @property {number} durationMs
  * @property {Object} [outputs] - Parsed outputs
  */
+
+function existingDirectory(dirPath) {
+  return typeof dirPath === 'string' && fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory();
+}
+
+function getRudiPathEntries() {
+  const entries = [PATHS.bins];
+
+  for (const runtimeBin of [
+    path.join(PATHS.runtimes, 'node', 'bin'),
+    path.join(PATHS.runtimes, 'python', 'bin'),
+  ]) {
+    if (existingDirectory(runtimeBin)) {
+      entries.push(runtimeBin);
+    }
+  }
+
+  if (existingDirectory(PATHS.binaries)) {
+    for (const entry of fs.readdirSync(PATHS.binaries, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        entries.push(path.join(PATHS.binaries, entry.name));
+      }
+    }
+  }
+
+  return entries;
+}
+
+function mergePathEntries(preferredEntries, inheritedPath) {
+  const merged = [];
+  const seen = new Set();
+
+  for (const entry of [...preferredEntries, ...(inheritedPath || '').split(path.delimiter)]) {
+    if (!entry || seen.has(entry)) continue;
+    seen.add(entry);
+    merged.push(entry);
+  }
+
+  return merged.join(path.delimiter);
+}
+
+export function buildStackRunEnv({
+  baseEnv = process.env,
+  env = {},
+  secrets = {},
+  inputs = {},
+  id,
+  packagePath,
+} = {}) {
+  const inheritedPath = env.PATH || baseEnv.PATH || '';
+  return {
+    ...baseEnv,
+    ...env,
+    ...secrets,
+    PATH: mergePathEntries(getRudiPathEntries(), inheritedPath),
+    RUDI_INPUTS: JSON.stringify(inputs),
+    RUDI_PACKAGE_ID: id,
+    RUDI_PACKAGE_PATH: packagePath,
+  };
+}
 
 /**
  * Run a stack
@@ -57,14 +117,13 @@ export async function runStack(id, options = {}) {
   const secrets = await getSecrets(manifest.requires?.secrets || []);
 
   // Build environment
-  const runEnv = {
-    ...process.env,
-    ...env,
-    ...secrets,
-    RUDI_INPUTS: JSON.stringify(inputs),
-    RUDI_PACKAGE_ID: id,
-    RUDI_PACKAGE_PATH: packagePath
-  };
+  const runEnv = buildStackRunEnv({
+    env,
+    secrets,
+    inputs,
+    id,
+    packagePath,
+  });
 
   // Spawn process
   const proc = spawn(command, args, {

@@ -15,7 +15,7 @@
     "test": "node ../../scripts/run-tests.js src/__tests__/"
   },
   "dependencies": {
-    "@learnrudi/core": "^1.0.0",
+    "@learnrudi/env": "workspace:*",
     "@learnrudi/db": "^1.0.0",
     "@learnrudi/manifest": "^1.0.0",
     "@learnrudi/secrets": "workspace:*"

@@ -132,6 +132,45 @@ function hasProcessExited(proc) {
   return proc.exitCode !== null || proc.signalCode !== null;
 }
 
+function existingDirectory(dirPath) {
+  return typeof dirPath === 'string' && fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory();
+}
+
+function getRudiExecutionPathEntries() {
+  const entries = [path.join(RUDI_HOME, 'bins')];
+
+  for (const runtimeBin of [
+    path.join(RUDI_HOME, 'runtimes', 'node', 'bin'),
+    path.join(RUDI_HOME, 'runtimes', 'python', 'bin'),
+  ]) {
+    if (existingDirectory(runtimeBin)) {
+      entries.push(runtimeBin);
+    }
+  }
+
+  const binariesRoot = path.join(RUDI_HOME, 'binaries');
+  if (existingDirectory(binariesRoot)) {
+    for (const entry of fs.readdirSync(binariesRoot, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        entries.push(path.join(binariesRoot, entry.name));
+      }
+    }
+  }
+
+  return entries;
+}
+
+function prependRudiExecutionPath(env) {
+  const seen = new Set();
+  const entries = [];
+  for (const entry of [...getRudiExecutionPathEntries(), ...(env.PATH || '').split(path.delimiter)]) {
+    if (!entry || seen.has(entry)) continue;
+    seen.add(entry);
+    entries.push(entry);
+  }
+  env.PATH = entries.join(path.delimiter);
+}
+
 function isProcessUsable(proc) {
   return proc && !hasProcessExited(proc) && !proc.killed;
 }
@@ -297,16 +336,7 @@ function spawnStackServer(stackId, stackConfig) {
 
   const secrets = getStackSecrets(stackId);
   const env = { ...process.env, ...secrets };
-
-  // Add bundled runtimes to PATH
-  const nodeBin = path.join(RUDI_HOME, 'runtimes', 'node', 'bin');
-  const pythonBin = path.join(RUDI_HOME, 'runtimes', 'python', 'bin');
-  if (fs.existsSync(nodeBin) || fs.existsSync(pythonBin)) {
-    const runtimePaths = [];
-    if (fs.existsSync(nodeBin)) runtimePaths.push(nodeBin);
-    if (fs.existsSync(pythonBin)) runtimePaths.push(pythonBin);
-    env.PATH = runtimePaths.join(path.delimiter) + path.delimiter + (env.PATH || '');
-  }
+  prependRudiExecutionPath(env);
 
   debug(`Spawning stack ${stackId}: ${launch.bin} ${launch.args?.join(' ')}`);
 
