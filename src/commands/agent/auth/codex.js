@@ -1,32 +1,45 @@
 /**
  * Codex-specific auth checking.
- * Handles OPENAI_API_KEY env var and ~/.rudi/.env file.
+ * Handles Codex/OpenAI API keys from environment and RUDI secrets.
  */
 
-import fs from 'fs';
-import path from 'path';
-import { PATHS } from '@learnrudi/env';
+import { getAllSecrets } from '@learnrudi/secrets';
+
+const CODEX_API_KEY_SECRET = 'CODEX_API_KEY';
+const OPENAI_API_KEY_SECRET = 'OPENAI_API_KEY';
+
+function readStringSecret(secrets, name) {
+  const value = secrets?.[name];
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
 
 /**
  * Check if Codex/OpenAI credentials exist.
  * Returns: { authenticated: boolean, method: string }
  */
 export function checkCodexCredential() {
-  // 1. OPENAI_API_KEY env var
+  // 1. Codex/OpenAI API key env vars
+  if (process.env.CODEX_API_KEY) {
+    return { authenticated: true, method: 'api-key' };
+  }
+
   if (process.env.OPENAI_API_KEY) {
     return { authenticated: true, method: 'api-key' };
   }
 
-  // 2. ~/.rudi/.env file (load and inject into process.env)
+  // 2. RUDI secrets store
   try {
-    const envPath = path.join(PATHS.home, '.env');
-    if (fs.existsSync(envPath)) {
-      const content = fs.readFileSync(envPath, 'utf-8');
-      const apiMatch = content.match(/^OPENAI_API_KEY=(.+)$/m);
-      if (apiMatch && apiMatch[1].trim()) {
-        process.env.OPENAI_API_KEY = apiMatch[1].trim();
-        return { authenticated: true, method: 'api-key' };
-      }
+    const secrets = getAllSecrets();
+    const codexApiKey = readStringSecret(secrets, CODEX_API_KEY_SECRET);
+    if (codexApiKey) {
+      process.env.CODEX_API_KEY = codexApiKey;
+      return { authenticated: true, method: 'api-key' };
+    }
+
+    const openAiApiKey = readStringSecret(secrets, OPENAI_API_KEY_SECRET);
+    if (openAiApiKey) {
+      process.env.OPENAI_API_KEY = openAiApiKey;
+      return { authenticated: true, method: 'api-key' };
     }
   } catch {
     // ignore read errors
@@ -54,8 +67,8 @@ export async function checkAuth(providerConfig, binaryPath) {
   } else if (!credential.authenticated) {
     action = {
       type: 'login',
-      message: 'OPENAI_API_KEY not found. Set it in ~/.rudi/.env or export it',
-      command: 'echo "OPENAI_API_KEY=sk-..." >> ~/.rudi/.env',
+      message: 'OPENAI_API_KEY not found. Set it with: rudi secrets set OPENAI_API_KEY',
+      command: 'rudi secrets set OPENAI_API_KEY',
     };
   }
 

@@ -5,9 +5,39 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { PATHS } from '@learnrudi/env';
+import { setSecret } from '@learnrudi/secrets';
 import { resolveClaudeBinary, checkProviderAuth } from '../agent.js';
+
+const CLAUDE_API_KEY_SECRET = 'ANTHROPIC_API_KEY';
+const CLAUDE_OAUTH_SECRET = 'CLAUDE_CODE_OAUTH_TOKEN';
+const CODEX_API_KEY_SECRET = 'OPENAI_API_KEY';
+
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+function appleScriptString(value) {
+  return `"${String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+async function saveCredential(name, value) {
+  await setSecret(name, value);
+  process.env[name] = value;
+}
+
+function normalizeAuthProvider(provider) {
+  return typeof provider === 'string' && provider.trim()
+    ? provider.trim().toLowerCase()
+    : 'claude';
+}
+
+function getApiKeySecretForProvider(provider) {
+  if (provider === 'claude') return CLAUDE_API_KEY_SECRET;
+  if (provider === 'codex') return CODEX_API_KEY_SECRET;
+  return null;
+}
 
 export function buildAuthRoutes(ctx) {
   const { json, error, readBody, log } = ctx;
@@ -34,62 +64,75 @@ export function buildAuthRoutes(ctx) {
     // POST /auth/login {provider, apiKey?}
     if (req.method === 'POST' && url.pathname === '/auth/login') {
       const body = await readBody(req);
+      const provider = normalizeAuthProvider(body.provider);
 
       if (body.apiKey || body.oauthToken) {
+        if (body.oauthToken && provider !== 'claude') {
+          return error(res, 'oauthToken is only supported for Claude auth', 400);
+        }
+
+        const apiKeySecret = body.apiKey ? getApiKeySecretForProvider(provider) : null;
+        if (body.apiKey && !apiKeySecret) {
+          return error(res, `Unsupported auth provider '${provider}'`, 400);
+        }
+
         try {
-          const envPath = path.join(PATHS.home, '.env');
-          let content = '';
-          if (fs.existsSync(envPath)) {
-            content = fs.readFileSync(envPath, 'utf-8');
-          }
           if (body.oauthToken) {
-            content = content.replace(/^CLAUDE_CODE_OAUTH_TOKEN=.*$/m, '').trim();
-            content += `\nCLAUDE_CODE_OAUTH_TOKEN=${body.oauthToken}\n`;
-            process.env.CLAUDE_CODE_OAUTH_TOKEN = body.oauthToken;
-            log('auth', 'info', 'OAuth token saved to .env');
+            await saveCredential(CLAUDE_OAUTH_SECRET, body.oauthToken);
+            log('auth', 'info', 'OAuth token saved to RUDI secrets store');
           } else {
-            content = content.replace(/^ANTHROPIC_API_KEY=.*$/m, '').trim();
-            content += `\nANTHROPIC_API_KEY=${body.apiKey}\n`;
-            process.env.ANTHROPIC_API_KEY = body.apiKey;
-            log('auth', 'info', 'API key saved to .env');
+            await saveCredential(apiKeySecret, body.apiKey);
+            log('auth', 'info', `${provider} API key saved to RUDI secrets store`);
           }
-          fs.writeFileSync(envPath, content.trim() + '\n');
           json(res, { ok: true });
         } catch (err) {
           log('auth', 'error', `Failed to save credential: ${err.message}`);
           error(res, `Failed to save credential: ${err.message}`, 500);
         }
       } else {
+        if (provider === 'codex') {
+          json(res, { ok: true, message: `Run 'codex login' in a terminal to authenticate` });
+          return true;
+        }
+
         const binaryPath = resolveClaudeBinary();
         if (binaryPath && os.platform() === 'darwin') {
           try {
+            fs.mkdirSync(PATHS.home, { recursive: true });
             const helperPath = path.join(PATHS.home, '.login-helper.sh');
-            const envPath = path.join(PATHS.home, '.env');
             const captureFile = path.join(PATHS.home, '.setup-token-output');
+            const cliEntryPath = process.argv[1];
+            if (!cliEntryPath) {
+              throw new Error('Unable to resolve RUDI CLI entrypoint for login helper');
+            }
             const script = [
               '#!/bin/bash',
-              `CAPTURE="${captureFile}"`,
-              `ENV_FILE="${envPath}"`,
-              `script -q "$CAPTURE" "${binaryPath}" setup-token`,
+              'set -euo pipefail',
+              `CAPTURE=${shellQuote(captureFile)}`,
+              `CLAUDE_BIN=${shellQuote(binaryPath)}`,
+              `NODE_BIN=${shellQuote(process.execPath)}`,
+              `RUDI_CLI=${shellQuote(cliEntryPath)}`,
+              `script -q "$CAPTURE" "$CLAUDE_BIN" setup-token`,
               `CLEAN=$(sed 's/\\x1b\\[[0-9;]*[a-zA-Z]//g; s/\\x1b\\[[?][0-9]*[a-z]//g' "$CAPTURE" | tr -d '\\r')`,
               `TOKEN=$(echo "$CLEAN" | sed -n '/^sk-ant-oat/{N;s/\\n//;p;}' | grep -oE 'sk-ant-oat[A-Za-z0-9_-]+' | head -1)`,
               '# Reject placeholders and short matches (real tokens are 80+ chars)',
               'if [ -n "$TOKEN" ] && [ ${#TOKEN} -gt 30 ]; then',
-              '  touch "$ENV_FILE"',
-              '  sed -i \'\' \'/^CLAUDE_CODE_OAUTH_TOKEN=/d\' "$ENV_FILE"',
-              '  echo "CLAUDE_CODE_OAUTH_TOKEN=$TOKEN" >> "$ENV_FILE"',
+              `  "$NODE_BIN" "$RUDI_CLI" secrets set ${CLAUDE_OAUTH_SECRET} "$TOKEN" >/dev/null`,
               '  rm -f "$CAPTURE"',
               '  echo ""',
-              '  echo "✓ Token saved to RUDI. You can close this window."',
+              '  echo "Token saved to RUDI. You can close this window."',
               'else',
+              '  rm -f "$CAPTURE"',
               '  echo ""',
-              '  echo "Could not detect a valid token. Capture file kept for debugging:"',
-              '  echo "  $CAPTURE"',
+              '  echo "Could not detect a valid token."',
               'fi',
             ].join('\n');
             fs.writeFileSync(helperPath, script, { mode: 0o755 });
 
-            execSync(`osascript -e 'tell application "Terminal" to do script "${helperPath}"'`, { stdio: 'pipe' });
+            execFileSync('osascript', [
+              '-e',
+              `tell application "Terminal" to do script ${appleScriptString(helperPath)}`,
+            ], { stdio: 'pipe' });
             log('auth', 'info', 'Launched login helper in Terminal.app');
             json(res, { ok: true, launched: true });
           } catch (err) {

@@ -6,8 +6,16 @@
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
-import { PATHS } from '@learnrudi/env';
+import { getAllSecrets } from '@learnrudi/secrets';
+import { runCommand } from '../../../utils/subprocess.js';
+
+const CLAUDE_API_KEY_SECRET = 'ANTHROPIC_API_KEY';
+const CLAUDE_OAUTH_SECRET = 'CLAUDE_CODE_OAUTH_TOKEN';
+
+function readStringSecret(secrets, name) {
+  const value = secrets?.[name];
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
 
 /**
  * Check if Claude credentials exist.
@@ -24,21 +32,19 @@ export function checkClaudeCredential() {
     return { authenticated: true, method: 'api-key' };
   }
 
-  // 3. ~/.rudi/.env file (load and inject into process.env)
+  // 3. RUDI secrets store
   try {
-    const envPath = path.join(PATHS.home, '.env');
-    if (fs.existsSync(envPath)) {
-      const content = fs.readFileSync(envPath, 'utf-8');
-      const oauthMatch = content.match(/^CLAUDE_CODE_OAUTH_TOKEN=(.+)$/m);
-      if (oauthMatch && oauthMatch[1].trim()) {
-        process.env.CLAUDE_CODE_OAUTH_TOKEN = oauthMatch[1].trim();
-        return { authenticated: true, method: 'oauth-token' };
-      }
-      const apiMatch = content.match(/^ANTHROPIC_API_KEY=(.+)$/m);
-      if (apiMatch && apiMatch[1].trim()) {
-        process.env.ANTHROPIC_API_KEY = apiMatch[1].trim();
-        return { authenticated: true, method: 'api-key' };
-      }
+    const secrets = getAllSecrets();
+    const oauthToken = readStringSecret(secrets, CLAUDE_OAUTH_SECRET);
+    if (oauthToken) {
+      process.env.CLAUDE_CODE_OAUTH_TOKEN = oauthToken;
+      return { authenticated: true, method: 'oauth-token' };
+    }
+
+    const apiKey = readStringSecret(secrets, CLAUDE_API_KEY_SECRET);
+    if (apiKey) {
+      process.env.ANTHROPIC_API_KEY = apiKey;
+      return { authenticated: true, method: 'api-key' };
     }
   } catch {
     // ignore read errors
@@ -47,7 +53,9 @@ export function checkClaudeCredential() {
   // 4. macOS keychain (Claude Code stores credentials here)
   if (os.platform() === 'darwin') {
     try {
-      execSync('security find-generic-password -s "Claude Code-credentials"', { stdio: 'pipe' });
+      runCommand('security', ['find-generic-password', '-s', 'Claude Code-credentials'], {
+        stdio: 'pipe',
+      });
       return { authenticated: true, method: 'keychain' };
     } catch {
       // not in keychain
