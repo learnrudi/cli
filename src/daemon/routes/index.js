@@ -1,20 +1,40 @@
-export {
+import {
   buildDaemonHealthRoutes,
   createHealthResponse,
 } from './health.js';
-export { buildEnvRoutes } from './env.js';
-export { buildAdminRoutes } from './admin.js';
-export { buildLocalLlmRoutes } from './local-llm.js';
+import { buildEnvRoutes } from './env.js';
+import { buildAdminRoutes } from './admin.js';
+import { buildLocalLlmRoutes } from './local-llm.js';
 
-export { buildAnalyticsRoutes } from '../../commands/serve/routes/analytics.js';
-export { buildAuthRoutes } from '../../commands/serve/routes/auth.js';
-export { buildFsRoutes } from '../../commands/serve/routes/fs.js';
-export { buildLogsRoutes } from '../../commands/serve/routes/logs.js';
-export { buildNotesRoutes } from '../../commands/serve/routes/notes.js';
-export { buildPackageRoutes } from '../../commands/serve/routes/packages.js';
-export { buildPlansRoutes } from '../../commands/serve/routes/plans.js';
-export { buildProjectRoutes } from '../../commands/serve/routes/projects.js';
-export { buildProviderRoutes } from '../../commands/serve/routes/providers.js';
-export { buildShellRoutes } from '../../commands/serve/routes/shell.js';
-export { buildSuggestRoutes } from '../../commands/serve/routes/suggest.js';
-export { buildTerminalRoutes } from '../../commands/serve/routes/terminal.js';
+import { buildAnalyticsRoutes } from '../../commands/serve/routes/analytics.js';
+import { buildAuthRoutes } from '../../commands/serve/routes/auth.js';
+import { buildFsRoutes } from '../../commands/serve/routes/fs.js';
+import { buildLogsRoutes } from '../../commands/serve/routes/logs.js';
+import { buildNotesRoutes } from '../../commands/serve/routes/notes.js';
+import { buildPackageRoutes } from '../../commands/serve/routes/packages.js';
+import { buildPlansRoutes } from '../../commands/serve/routes/plans.js';
+import { buildProjectRoutes } from '../../commands/serve/routes/projects.js';
+import { buildProviderRoutes } from '../../commands/serve/routes/providers.js';
+import { buildShellRoutes } from '../../commands/serve/routes/shell.js';
+import { buildSuggestRoutes } from '../../commands/serve/routes/suggest.js';
+import { buildTerminalRoutes } from '../../commands/serve/routes/terminal.js';
+
+export {
+  buildAdminRoutes,
+  buildAnalyticsRoutes,
+  buildAuthRoutes,
+  buildDaemonHealthRoutes,
+  buildEnvRoutes,
+  buildFsRoutes,
+  buildLocalLlmRoutes,
+  buildLogsRoutes,
+  buildNotesRoutes,
+  buildPackageRoutes,
+  buildPlansRoutes,
+  buildProjectRoutes,
+  buildProviderRoutes,
+  buildShellRoutes,
+  buildSuggestRoutes,
+  buildTerminalRoutes,
+  createHealthResponse,
+};

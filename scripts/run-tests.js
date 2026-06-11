@@ -15,6 +15,7 @@ const DEFAULT_TEST_ARGS = [
   '--test',
   'src/__tests__/unit/*.test.js',
   'src/__tests__/e2e/*.test.js',
+  'packages/*/src/__tests__/unit/*.test.js',
 ];
 
 const BUNDLED_NODE_PATH = process.env.RUDI_CLI_TEST_NODE
@@ -29,19 +30,49 @@ function globToRegExp(pattern) {
 function expandTestArg(arg) {
   if (!/[*?]/.test(arg)) return [arg];
 
-  const dir = path.resolve(WORKDIR, path.dirname(arg));
-  const basePattern = path.basename(arg);
-  let entries;
-  try {
-    entries = fs.readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return [arg];
+  const segments = arg.split(/[\\/]+/).filter(Boolean);
+  let candidates = [''];
+
+  for (const [index, segment] of segments.entries()) {
+    const isLast = index === segments.length - 1;
+    const nextCandidates = [];
+    const hasGlob = /[*?]/.test(segment);
+
+    for (const candidate of candidates) {
+      if (!hasGlob) {
+        nextCandidates.push(path.join(candidate, segment));
+        continue;
+      }
+
+      const dir = path.resolve(WORKDIR, candidate || '.');
+      let entries;
+      try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+
+      const matcher = globToRegExp(segment);
+      for (const entry of entries) {
+        if (!matcher.test(entry.name)) continue;
+        if (!isLast && !entry.isDirectory()) continue;
+        if (isLast && !entry.isFile()) continue;
+        nextCandidates.push(path.join(candidate, entry.name));
+      }
+    }
+
+    candidates = nextCandidates;
+    if (candidates.length === 0) return [arg];
   }
 
-  const matcher = globToRegExp(basePattern);
-  const matches = entries
-    .filter((entry) => entry.isFile() && matcher.test(entry.name))
-    .map((entry) => path.relative(WORKDIR, path.join(dir, entry.name)))
+  const matches = candidates
+    .filter((candidate) => {
+      try {
+        return fs.statSync(path.resolve(WORKDIR, candidate)).isFile();
+      } catch {
+        return false;
+      }
+    })
     .sort();
 
   return matches.length > 0 ? matches : [arg];

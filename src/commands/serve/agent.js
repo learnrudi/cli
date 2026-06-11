@@ -1,10 +1,17 @@
 /**
- * Agent route handler — barrel re-exporter.
+ * Agent route handler bridge.
  *
- * serve.js imports { createAgentHandler, createIdleReaper, resolveClaudeBinary, checkProviderAuth }
- * from this file. We re-export from the modular agent/ directory.
+ * keep explicit imports so ownership scanners can follow the modular agent
+ * tree from serve.js.
  */
 
-export { createAgentHandler } from '../agent/index.js';
-export { createIdleReaper } from '../agent/idle-reaper.js';
-export { resolveClaudeBinary, checkProviderAuth } from '../agent/auth.js';
+import { createAgentHandler } from '../agent/index.js';
+import { createIdleReaper } from '../agent/idle-reaper.js';
+import { resolveClaudeBinary, checkProviderAuth } from '../agent/auth.js';
+
+export {
+  createAgentHandler,
+  createIdleReaper,
+  resolveClaudeBinary,
+  checkProviderAuth,
+};

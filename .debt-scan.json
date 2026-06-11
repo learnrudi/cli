@@ -4,7 +4,9 @@
     "_archive",
     "tmp",
     "templates",
-    ".rudi"
+    ".rudi",
+    "node_modules",
+    ".ignored"
   ],
   "publicAPI": [
     "packages/core/src/deps.js",
@@ -79,6 +81,9 @@
     "orphans": {
       "paths": [
         "src/commands/serve/routes/packages.js",
+        "packages/utils/src/__tests__/unit/args.test.js",
+        "src/__tests__/helpers/serve-mocks.js",
+        "src/commands/serve/routes/*.js",
         "src/commands/agent/contract-validator.js",
         "src/commands/agent/helpers.js",
         "src/commands/agent/routes/lifecycle.js",
@@ -107,7 +112,10 @@
     },
     "boundaries": {
       "paths": [
-        "src/__tests__/unit/*-contract.test.js"
+        "src/__tests__/unit/*-contract.test.js",
+        "src/__tests__/unit/packages-routes.test.js",
+        "src/__tests__/unit/run-group-observability.test.js",
+        "src/__tests__/unit/spawn-retry-integration.test.js"
       ]
     }
   },
