@@ -48072,6 +48072,10 @@ function runAuthSubprocess(plan, options = {}) {
     ...options.env ? { env: options.env } : {}
   });
 }
+function getTempAuthScriptPath(authScript, useTsx) {
+  const tempExt = useTsx ? ".ts" : ".mjs";
+  return path26.join(path26.dirname(authScript), `auth-temp${tempExt}`);
+}
 async function cmdAuth(args, flags) {
   const stackId = args[0];
   const accountEmail = args[1];
@@ -48127,8 +48131,7 @@ Installed stacks:`);
       }
       if (!useBuiltInPort) {
         const authContent = await fs27.readFile(authInfo.authScript, "utf-8");
-        const tempExt = authInfo.useTsx ? ".ts" : ".mjs";
-        tempAuthScript = path26.join(cwd, "..", `auth-temp${tempExt}`);
+        tempAuthScript = getTempAuthScriptPath(authInfo.authScript, authInfo.useTsx);
         const modifiedContent = authContent.replace(/localhost:3456/g, `localhost:${port}`).replace(/server\.listen\(3456/g, `server.listen(${port}`);
         await fs27.writeFile(tempAuthScript, modifiedContent);
       }

@@ -171,6 +171,11 @@ export function runAuthSubprocess(plan, options = {}) {
   });
 }
 
+export function getTempAuthScriptPath(authScript, useTsx) {
+  const tempExt = useTsx ? '.ts' : '.mjs';
+  return path.join(path.dirname(authScript), `auth-temp${tempExt}`);
+}
+
 /**
  * Run authentication for a stack
  */
@@ -250,10 +255,7 @@ export async function cmdAuth(args, flags) {
       if (!useBuiltInPort) {
         // Fallback: Create temporary script with dynamic port
         const authContent = await fs.readFile(authInfo.authScript, 'utf-8');
-
-        // Determine file extension based on whether we're using tsx
-        const tempExt = authInfo.useTsx ? '.ts' : '.mjs';
-        tempAuthScript = path.join(cwd, '..', `auth-temp${tempExt}`);
+        tempAuthScript = getTempAuthScriptPath(authInfo.authScript, authInfo.useTsx);
 
         // Replace hardcoded port with dynamic port
         const modifiedContent = authContent

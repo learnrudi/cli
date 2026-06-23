@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   createAuthSubprocess,
+  getTempAuthScriptPath,
   runAuthSubprocess,
 } from '../../commands/auth.js';
 
@@ -49,6 +50,17 @@ test('createAuthSubprocess rejects NUL bytes in account input', () => {
       accountEmail: 'user@example.com\0--flag',
     }),
     /account email must not contain NUL bytes/,
+  );
+});
+
+test('getTempAuthScriptPath keeps generated auth script beside source script', () => {
+  assert.equal(
+    getTempAuthScriptPath('/tmp/google-workspace/src/auth.ts', true),
+    '/tmp/google-workspace/src/auth-temp.ts',
+  );
+  assert.equal(
+    getTempAuthScriptPath('/tmp/google-workspace/dist/auth.js', false),
+    '/tmp/google-workspace/dist/auth-temp.mjs',
   );
 });
 
