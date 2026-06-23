@@ -510,6 +510,7 @@ WHAT IT DOES
   2. Creates backup before modifying
   3. Adds RUDI router entry (single MCP server for all stacks)
   4. Cleans up old direct stack entries
+  5. For Codex, creates or updates ~/.codex/AGENTS.md
 
 EXAMPLES
   rudi integrate claude

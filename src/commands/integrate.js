@@ -6,6 +6,7 @@
  * - Creates backup before modifying
  * - Patches idempotently (won't duplicate entries)
  * - Registers the rudi-router (single entry, all stacks)
+ * - Installs agent instruction blocks where the agent supports them
  *
  * Usage:
  *   rudi integrate claude      Wire up Claude Desktop/Code
@@ -19,6 +20,11 @@ import * as path from 'path';
 import os from 'os';
 import { PATHS } from '@learnrudi/env';
 import { AGENT_CONFIGS, findAgentConfig, getInstalledAgents } from '@learnrudi/mcp';
+import {
+  buildRudiInstructionBlock,
+  patchManagedInstructionBlock,
+  resolveInstructionTarget,
+} from './instructions.js';
 
 const HOME = os.homedir();
 const ROUTER_SHIM_PATH = path.join(PATHS.bins, 'rudi-router');
@@ -45,6 +51,48 @@ function backupConfig(configPath) {
   const backupPath = configPath + '.backup.' + Date.now();
   fs.copyFileSync(configPath, backupPath);
   return backupPath;
+}
+
+export function installCodexGlobalInstructions(flags = {}, env = {}) {
+  const dryRun = flags['dry-run'] === true || flags.dryRun === true;
+  const targetPath = resolveInstructionTarget('codex', { global: true }, env);
+  const existing = fs.existsSync(targetPath)
+    ? fs.readFileSync(targetPath, 'utf-8')
+    : '';
+  const result = patchManagedInstructionBlock(existing, buildRudiInstructionBlock('codex'));
+
+  let backupPath = null;
+  if (result.changed && !dryRun) {
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    backupPath = backupConfig(targetPath);
+    fs.writeFileSync(targetPath, result.content);
+  }
+
+  return {
+    targetPath,
+    action: dryRun && result.changed ? `would_${result.action}` : result.action,
+    changed: result.changed,
+    dryRun,
+    backupPath,
+  };
+}
+
+function logCodexInstructionResult(result, flags = {}) {
+  if (result.backupPath && flags.verbose) {
+    console.log(`  Instructions backup: ${result.backupPath}`);
+  }
+
+  if (!result.changed) {
+    console.log(`  ✓ Instructions already current: ${result.targetPath}`);
+    return;
+  }
+
+  if (result.dryRun) {
+    console.log(`  Would ${result.action.replace(/^would_/, '')} RUDI instructions: ${result.targetPath}`);
+    return;
+  }
+
+  console.log(`  ✓ ${result.action === 'added' ? 'Added' : 'Updated'} RUDI instructions: ${result.targetPath}`);
 }
 
 /**
@@ -225,10 +273,18 @@ async function integrateCodexAgent(agentConfig, targetPath, flags) {
     console.log(`  ✓ Already configured`);
   }
 
-  return { success: true, action: result.action, removed: result.removed };
+  const instructions = installCodexGlobalInstructions(flags);
+  logCodexInstructionResult(instructions, flags);
+
+  return {
+    success: true,
+    action: result.action,
+    removed: result.removed,
+    instructionsAction: instructions.action,
+  };
 }
 
-async function dryRunIntegrateAgent(agentId) {
+async function dryRunIntegrateAgent(agentId, flags = {}) {
   const agentConfig = AGENT_CONFIGS.find(a => a.id === agentId);
   if (!agentConfig) {
     console.log(`\n${agentId}:`);
@@ -258,7 +314,15 @@ async function dryRunIntegrateAgent(agentId) {
       console.log('  ✓ Already configured');
     }
 
-    return { success: true, action: result.action, removed: result.removed };
+    const instructions = installCodexGlobalInstructions({ ...flags, 'dry-run': true });
+    logCodexInstructionResult(instructions, { ...flags, 'dry-run': true });
+
+    return {
+      success: true,
+      action: result.action,
+      removed: result.removed,
+      instructionsAction: instructions.action,
+    };
   }
 
   console.log('  Would add or update rudi router');
@@ -413,6 +477,11 @@ OPTIONS
   --verbose    Show detailed output
   --dry-run    Show what would be done without making changes
 
+WHAT IT DOES
+  1. Adds RUDI router entry (single MCP server for all stacks)
+  2. Cleans up old direct stack entries
+  3. For Codex, creates or updates ~/.codex/AGENTS.md
+
 EXAMPLES
   rudi integrate claude
   rudi integrate all
@@ -468,7 +537,7 @@ EXAMPLES
   if (flags['dry-run']) {
     console.log('\nDry run:');
     for (const agentId of targetAgents) {
-      await dryRunIntegrateAgent(agentId);
+      await dryRunIntegrateAgent(agentId, flags);
     }
     return;
   }

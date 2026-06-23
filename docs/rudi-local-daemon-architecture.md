@@ -999,7 +999,7 @@ Checklist:
 | DAEMON-DEBT-020 | Legacy LaunchAgent migration | Open | P2 | A legacy `com.rudi.sidecar` LaunchAgent can run a second `rudi serve` alongside `com.learnrudi.daemon`, causing port-file and SQLite contention. The new install path stops legacy labels and this machine's legacy plist was disabled, but migration still needs a doctor check/release note. | Add `rudi doctor` detection and a documented cleanup path for legacy LaunchAgents. |
 | DAEMON-DEBT-021 | Legacy agent deployment retirement | Open | P1 | Existing `/agent/*`, run-group, spawn-child, orchestration, and active-session routes reflect the older RUDI-as-agent-runner direction. Target architecture delegates live agent execution to Claude, Codex, Gemini, and other agent hosts. | Classify each route/CLI command as retire, read-only/import, or compatibility; stop adding daemon-owned agent launch features. |
 | DAEMON-DEBT-022 | Storage boundary hardening | Open | P1 | Storage health, session import/search, and repair concerns are currently interleaved with daemon startup and readiness. Target architecture keeps storage as a separate layer used by the daemon, not owned by daemon lifecycle. | Define storage owner modules, health contract, repair commands, and startup isolation tests. |
-| DAEMON-DEBT-023 | Agent onboarding wrapper | Open | P2 | `rudi integrate <agent>` now owns MCP router config and `rudi instructions <agent>` owns the managed instruction block, but a new user still needs to know the sequence. | Add `rudi connect <agent>` or installer onboarding that performs integration, instruction install/print, daemon status, router smoke, and restart guidance. |
+| DAEMON-DEBT-023 | Agent onboarding wrapper | Open | P2 | `rudi integrate codex` now owns both MCP router config and the global `~/.codex/AGENTS.md` managed instruction block, but other agents and first-run onboarding still need a single polished path. | Add `rudi connect <agent>` or installer onboarding that performs integration, instruction install/print where supported, daemon status, router smoke, and restart guidance. |
 
 Debt tracking rule:
 
@@ -1398,12 +1398,12 @@ Exit gate:
 - The macOS Codex desktop app still needs a real smoke test. It is tracked as
   `DAEMON-DEBT-017` until verified against the app itself.
 
-#### Agent Instruction Registration (2026-05-18)
+#### Agent Instruction Registration (2026-05-18, updated 2026-06-23)
 
 - Added `rudi instructions <agent>` as the upstream source for the agent
-  instruction layer. It is intentionally separate from `rudi integrate`:
-  integration registers tools through MCP config, while instructions tell the
-  agent how to reason about RUDI once those tools are visible.
+  instruction layer. Codex integration now calls that layer automatically:
+  `rudi integrate codex` wires MCP config and creates or updates the managed
+  RUDI block in `~/.codex/AGENTS.md`.
 - The command supports `claude`, `codex`, and `generic`; aliases such as
   `claude-code` normalize to `claude` and `openai` normalizes to `codex`.
 - Default behavior prints a pasteable managed block. Writes require

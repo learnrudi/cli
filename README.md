@@ -103,12 +103,12 @@ rudi secrets remove SLACK_BOT_TOKEN    # Remove a secret
 ```bash
 rudi shims rebuild     # Create rudi-router and rudi-mcp shims (opt-in)
 rudi integrate claude    # Add stacks to Claude Desktop config
-rudi integrate codex     # Add stacks to Codex config
+rudi integrate codex     # Add router config and ~/.codex/AGENTS.md guidance
 rudi integrate gemini    # Add stacks to Gemini config
 rudi integrate all       # Add to all detected agents
 ```
 
-This modifies the agent's MCP configuration file (e.g., `~/Library/Application Support/Claude/claude_desktop_config.json`) to include your installed stacks with proper secret injection.
+This modifies the agent's MCP configuration file (e.g., `~/Library/Application Support/Claude/claude_desktop_config.json`) to route installed stacks through RUDI with proper secret injection. For Codex, it also creates or appends the managed RUDI block in `~/.codex/AGENTS.md`.
 
 ### Inspecting Packages
 

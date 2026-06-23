@@ -1,7 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
-import { patchCodexTomlRouter } from '../../commands/integrate.js';
+import {
+  installCodexGlobalInstructions,
+  patchCodexTomlRouter,
+} from '../../commands/integrate.js';
 
 test('patchCodexTomlRouter adds rudi router to Codex config.toml', () => {
   const result = patchCodexTomlRouter('model = "gpt-5.3-codex"\n', '/Users/test/.rudi/bins/rudi-router', {
@@ -89,4 +95,44 @@ test('patchCodexTomlRouter leaves matching rudi router entry unchanged', () => {
   assert.equal(result.action, 'none');
   assert.deepEqual(result.removed, []);
   assert.equal(result.content, input);
+});
+
+test('installCodexGlobalInstructions creates missing global AGENTS.md', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rudi-codex-instructions-'));
+
+  try {
+    const result = installCodexGlobalInstructions({}, { home: tmp, cwd: tmp });
+    const targetPath = path.join(tmp, '.codex', 'AGENTS.md');
+
+    assert.equal(result.action, 'added');
+    assert.equal(result.changed, true);
+    assert.equal(result.targetPath, targetPath);
+    assert.equal(result.backupPath, null);
+    assert.match(fs.readFileSync(targetPath, 'utf-8'), /RUDI Local Capabilities/);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('installCodexGlobalInstructions appends to existing global AGENTS.md', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rudi-codex-instructions-'));
+
+  try {
+    const targetPath = path.join(tmp, '.codex', 'AGENTS.md');
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    fs.writeFileSync(targetPath, '# Existing Codex Instructions\n\nKeep this line.\n');
+
+    const result = installCodexGlobalInstructions({}, { home: tmp, cwd: tmp });
+    const content = fs.readFileSync(targetPath, 'utf-8');
+
+    assert.equal(result.action, 'added');
+    assert.equal(result.changed, true);
+    assert.match(content, /# Existing Codex Instructions/);
+    assert.match(content, /Keep this line\./);
+    assert.match(content, /RUDI Local Capabilities/);
+    assert.ok(result.backupPath);
+    assert.equal(fs.existsSync(result.backupPath), true);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 });
