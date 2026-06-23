@@ -118,12 +118,12 @@ importers:
 
   packages/runner:
     dependencies:
-      '@learnrudi/core':
-        specifier: ^1.0.0
-        version: 1.0.2
       '@learnrudi/db':
         specifier: ^1.0.0
         version: 1.0.2
+      '@learnrudi/env':
+        specifier: workspace:*
+        version: link:../env
       '@learnrudi/manifest':
         specifier: ^1.0.0
         version: 1.0.0
@@ -297,10 +297,6 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@learnrudi/core@1.0.2':
-    resolution: {integrity: sha512-WkpYNqunnA2dksn3X/DtLh61piH69QVt+h6CAuY364k+1y7G++wPKeEQIJ5aJ+3kyObGTm6YLRA3GNX5GDMA9g==}
-    engines: {node: '>=18.0.0'}
-
   '@learnrudi/db@1.0.2':
     resolution: {integrity: sha512-2+deWBFX/6qY35w2Nf42bC0NqSakfpC9241PzE5xaMk8Cq/kiYbQkAU32AawhK3/wabE3zahqNj7GYHzrjEfVQ==}
     engines: {node: '>=18.0.0'}
@@ -315,10 +311,6 @@ packages:
 
   '@learnrudi/manifest@1.0.0':
     resolution: {integrity: sha512-HimnqHunAfpSMvKu0F7RJg+IixOfrpeYo6MwGqMlhl/7nduXcrLU37BrDMbgIlgl5EXHNoQIN3e+BTMrM77emw==}
-    engines: {node: '>=18.0.0'}
-
-  '@learnrudi/registry-client@1.0.5':
-    resolution: {integrity: sha512-LzBcX7mvnn3h/Nxu4kqkZ9+2oJeM/T47BX5IolF9Thgg221PLKG27T41AJMoFI4P4YVpd30vq72FsZS3U6zVtg==}
     engines: {node: '>=18.0.0'}
 
   '@lydell/node-pty-darwin-arm64@1.1.0':
@@ -872,13 +864,6 @@ snapshots:
   '@esbuild/win32-x64@0.27.2':
     optional: true
 
-  '@learnrudi/core@1.0.2':
-    dependencies:
-      '@learnrudi/env': 1.0.1
-      '@learnrudi/manifest': 1.0.0
-      '@learnrudi/registry-client': 1.0.5
-      yaml: 2.8.2
-
   '@learnrudi/db@1.0.2':
     dependencies:
       '@learnrudi/env': 1.0.1
@@ -894,10 +879,6 @@ snapshots:
       ajv: 8.17.1
       ajv-formats: 3.0.1(ajv@8.17.1)
       yaml: 2.8.2
-
-  '@learnrudi/registry-client@1.0.5':
-    dependencies:
-      '@learnrudi/env': 1.0.1
 
   '@lydell/node-pty-darwin-arm64@1.1.0':
     optional: true

@@ -10,6 +10,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { execFileSync as defaultExecFileSync } from 'child_process';
 import { listInstalled } from '@learnrudi/core';
+import { getSecret } from '@learnrudi/secrets';
 import * as net from 'net';
 
 /**
@@ -114,6 +115,25 @@ function accountArg(accountEmail) {
   return [requireSubprocessArg(accountEmail, 'account email')];
 }
 
+function getRequiredSecrets(manifest) {
+  const secrets = manifest?.requires?.secrets || manifest?.secrets || [];
+  return secrets.map((secret) => ({
+    name: typeof secret === 'string' ? secret : (secret.name || secret.key),
+    required: typeof secret === 'object' ? secret.required !== false : true,
+  })).filter((secret) => secret.name);
+}
+
+async function buildAuthEnv(stack) {
+  const env = { ...process.env };
+  for (const secret of getRequiredSecrets(stack)) {
+    const value = await getSecret(secret.name);
+    if (value) {
+      env[secret.name] = value;
+    }
+  }
+  return env;
+}
+
 export function createAuthSubprocess({
   runtime,
   scriptPath,
@@ -183,6 +203,7 @@ export async function cmdAuth(args, flags) {
     }
 
     const stackPath = stack.path;
+    const authEnv = await buildAuthEnv(stack);
 
     // Detect runtime and auth script
     const authInfo = await detectRuntime(stackPath);
@@ -255,6 +276,7 @@ export async function cmdAuth(args, flags) {
         runAuthSubprocess(plan, {
           cwd,
           stdio: 'inherit',
+          env: authEnv,
         });
 
         // Clean up temp file if we created one
@@ -286,7 +308,7 @@ export async function cmdAuth(args, flags) {
         cwd,
         stdio: 'inherit',
         env: {
-          ...process.env,
+          ...authEnv,
           OAUTH_PORT: port.toString(),
         },
       });

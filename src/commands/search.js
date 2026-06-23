@@ -95,7 +95,7 @@ export async function cmdSearch(args, flags) {
     for (const [kind, packages] of Object.entries(grouped)) {
       if (packages.length === 0) continue;
 
-      console.log(`${kind.toUpperCase()}S:`);
+      console.log(`${headingForKind(kind)}:`);
       for (const pkg of packages) {
         const id = pkg.id || `${kind}:${pkg.name}`;
         console.log(`  ${id}`);

@@ -128,13 +128,71 @@ function parsePackageId(id) {
 function createPackageId(kind2, name) {
   return `${kind2}:${name}`;
 }
+function getSkillDiscoveryRoots(options = {}) {
+  const roots = [
+    { source: "rudi", path: PATHS.skills }
+  ];
+  if (options.includeExternal) {
+    roots.push({ source: "claude", path: import_path.default.join(CLAUDE_HOME, "skills") });
+  }
+  return roots;
+}
+function readSkillCandidates(root) {
+  if (!root?.path || !import_fs.default.existsSync(root.path)) return [];
+  const candidates = [];
+  for (const entry of import_fs.default.readdirSync(root.path, { withFileTypes: true })) {
+    if (entry.name.startsWith(".")) continue;
+    if (entry.isFile() && entry.name.endsWith(".md")) {
+      const name = entry.name.replace(/\.md$/, "");
+      const filePath = import_path.default.join(root.path, entry.name);
+      candidates.push({
+        name,
+        source: root.source,
+        format: "flat",
+        packagePath: filePath,
+        entryPath: filePath
+      });
+      continue;
+    }
+    if (entry.isDirectory()) {
+      const packagePath = import_path.default.join(root.path, entry.name);
+      const entryPath = import_path.default.join(packagePath, "SKILL.md");
+      if (import_fs.default.existsSync(entryPath) && import_fs.default.statSync(entryPath).isFile()) {
+        candidates.push({
+          name: entry.name,
+          source: root.source,
+          format: "directory",
+          packagePath,
+          entryPath
+        });
+      }
+    }
+  }
+  return candidates;
+}
+function discoverSkillPackages(options = {}) {
+  const byName = /* @__PURE__ */ new Map();
+  for (const root of getSkillDiscoveryRoots(options)) {
+    for (const candidate of readSkillCandidates(root)) {
+      if (!byName.has(candidate.name)) {
+        byName.set(candidate.name, candidate);
+      }
+    }
+  }
+  return Array.from(byName.values());
+}
+function findLocalSkillPackage(name) {
+  return discoverSkillPackages().find((skill) => skill.name === name) || null;
+}
 function getPackagePath(id) {
   const [kind2, name] = parsePackageId(id);
   switch (kind2) {
     case "stack":
       return import_path.default.join(PATHS.stacks, name);
-    case "skill":
-      return import_path.default.join(PATHS.skills, `${name}.md`);
+    case "skill": {
+      const existingSkill = findLocalSkillPackage(name);
+      return existingSkill?.packagePath || import_path.default.join(PATHS.skills, `${name}.md`);
+    }
     case "prompt":
       return import_path.default.join(PATHS.skills, `${name}.md`);
     case "workflow":
@@ -164,7 +222,10 @@ function getLockfilePath(id) {
 function isPackageInstalled(id) {
   const packagePath = getPackagePath(id);
   const [kind2, name] = parsePackageId(id);
-  if (kind2 === "skill" || kind2 === "prompt" || kind2 === "workflow") {
+  if (kind2 === "skill") {
+    return Boolean(findLocalSkillPackage(name));
+  }
+  if (kind2 === "prompt" || kind2 === "workflow") {
     return import_fs.default.existsSync(packagePath) && import_fs.default.statSync(packagePath).isFile();
   }
   if (!import_fs.default.existsSync(packagePath)) {
@@ -207,7 +268,10 @@ function getInstalledPackages(kind2) {
   if (!dir || !import_fs.default.existsSync(dir)) {
     return [];
   }
-  if (kind2 === "skill" || kind2 === "prompt") {
+  if (kind2 === "skill") {
+    return discoverSkillPackages().map((skill) => skill.name);
+  }
+  if (kind2 === "prompt") {
     return import_fs.default.readdirSync(dir).filter((name) => {
       if (!name.endsWith(".md") || name.startsWith(".")) return false;
       const stat = import_fs.default.statSync(import_path.default.join(dir, name));
@@ -226,13 +290,14 @@ function getInstalledPackages(kind2) {
     return stat.isDirectory() && !name.startsWith(".");
   });
 }
-var import_path, import_os, import_fs, RUDI_HOME, PATHS, PACKAGE_KINDS;
+var import_path, import_os, import_fs, RUDI_HOME, CLAUDE_HOME, PATHS, PACKAGE_KINDS;
 var init_src = __esm({
   "packages/env/src/index.js"() {
     import_path = __toESM(require("path"), 1);
     import_os = __toESM(require("os"), 1);
     import_fs = __toESM(require("fs"), 1);
     RUDI_HOME = process.env.RUDI_HOME ? import_path.default.resolve(process.env.RUDI_HOME) : import_path.default.join(import_os.default.homedir(), ".rudi");
+    CLAUDE_HOME = process.env.CLAUDE_HOME ? import_path.default.resolve(process.env.CLAUDE_HOME) : import_path.default.join(import_os.default.homedir(), ".claude");
     PATHS = {
       // Root
       home: RUDI_HOME,
@@ -10215,7 +10280,44 @@ async function listInstalled(kind2) {
     }[k2];
     if (!dir || !import_fs5.default.existsSync(dir)) continue;
     const entries = import_fs5.default.readdirSync(dir, { withFileTypes: true });
-    if (k2 === "skill" || k2 === "prompt" || k2 === "workflow") {
+    if (k2 === "skill") {
+      for (const skill of discoverSkillPackages({ includeExternal: true })) {
+        try {
+          const metadata = extractSingleFileMetadata(skill.entryPath, k2);
+          packages.push({
+            id: `${k2}:${skill.name}`,
+            kind: k2,
+            name: metadata.name || skill.name,
+            version: metadata.version || "1.0.0",
+            description: metadata.description || `${skill.name} ${k2}`,
+            category: metadata.category || "general",
+            tags: metadata.tags || [],
+            icon: metadata.icon || "",
+            requires: metadata.requires,
+            format: skill.format,
+            source: skill.source,
+            entryPath: skill.entryPath,
+            path: skill.packagePath
+          });
+        } catch {
+          packages.push({
+            id: `${k2}:${skill.name}`,
+            kind: k2,
+            name: skill.name,
+            version: "1.0.0",
+            description: `${skill.name} ${k2}`,
+            category: "general",
+            tags: [],
+            format: skill.format,
+            source: skill.source,
+            entryPath: skill.entryPath,
+            path: skill.packagePath
+          });
+        }
+      }
+      continue;
+    }
+    if (k2 === "prompt" || k2 === "workflow") {
       const extensions = k2 === "workflow" ? WORKFLOW_EXTENSIONS : [".md"];
       for (const entry of entries) {
         const extension = import_path6.default.extname(entry.name);
@@ -11875,6 +11977,7 @@ var init_stack_lifecycle = __esm({
 // packages/core/src/index.js
 var src_exports = {};
 __export(src_exports, {
+  CLAUDE_HOME: () => CLAUDE_HOME,
   CONFIG_MODE: () => CONFIG_MODE,
   PATHS: () => PATHS,
   RUDI_JSON_PATH: () => RUDI_JSON_PATH,
@@ -11906,6 +12009,7 @@ __export(src_exports, {
   createShimsForTool: () => createShimsForTool,
   createToolIndex: () => createToolIndex,
   deleteLockfile: () => deleteLockfile,
+  discoverSkillPackages: () => discoverSkillPackages,
   discoverStackTools: () => discoverStackTools,
   ensureDirectories: () => ensureDirectories,
   ensureUv: () => ensureUv,
@@ -11927,6 +12031,7 @@ __export(src_exports, {
   getPackage: () => getPackage,
   getPackagePath: () => getPackagePath,
   getShimOwner: () => getShimOwner,
+  getSkillDiscoveryRoots: () => getSkillDiscoveryRoots,
   getSystemBinaryInfo: () => getSystemBinaryInfo,
   hasLockfile: () => hasLockfile,
   indexAllStacks: () => indexAllStacks,
@@ -37087,6 +37192,7 @@ REGISTRY
 
 INSTALLED
   list [kind]           List installed packages (stacks, skills, workflows, runtimes, binaries, agents)
+  skills                List installed and discovered skills
   home                  Show ~/.rudi structure and status
   doctor                Check system health and dependencies
   which <cmd>           Show path to a command
@@ -37394,6 +37500,7 @@ EXAMPLES
   rudi list stacks --detected     Show MCP servers in Claude/Gemini/Codex
   rudi list binaries
   rudi list workflows
+  rudi skills
   rudi list skills --category=coding
 `,
     secrets: `
@@ -37716,7 +37823,7 @@ Found ${results.length} package(s):
     };
     for (const [kind3, packages] of Object.entries(grouped)) {
       if (packages.length === 0) continue;
-      console.log(`${kind3.toUpperCase()}S:`);
+      console.log(`${headingForKind(kind3)}:`);
       for (const pkg of packages) {
         const id = pkg.id || `${kind3}:${pkg.name}`;
         console.log(`  ${id}`);
@@ -39648,6 +39755,13 @@ function headingForKind2(kind2) {
   if (kind2 === "workflow") return "WORKFLOWS";
   return `${kind2.toUpperCase()}S`;
 }
+function formatSkillSource(pkg) {
+  if (pkg.kind !== "skill") return "";
+  const details = [];
+  if (pkg.format) details.push(pkg.format);
+  if (pkg.source && pkg.source !== "rudi") details.push(pkg.source);
+  return details.length > 0 ? ` [${details.join(", ")}]` : "";
+}
 async function cmdList(args, flags) {
   let kind2 = args[0];
   if (kind2) {
@@ -39766,7 +39880,7 @@ SKILLS (${packages.length}):`);
   ${category.toUpperCase()} (${skills.length}):`);
         for (const pkg of skills) {
           const icon = pkg.icon ? `${pkg.icon} ` : "";
-          console.log(`    ${icon}${pkg.id || `skill:${pkg.name}`}`);
+          console.log(`    ${icon}${pkg.id || `skill:${pkg.name}`}${formatSkillSource(pkg)}`);
           if (pkg.description) {
             console.log(`      ${pkg.description}`);
           }
@@ -39801,7 +39915,7 @@ ${headingForKind2(pkgKind)} (${pkgs.length}):`);
       console.log("\u2500".repeat(50));
       for (const pkg of pkgs) {
         const icon = pkg.icon ? `${pkg.icon} ` : "";
-        console.log(`  ${icon}${pkg.id || `${pkgKind}:${pkg.name}`}`);
+        console.log(`  ${icon}${pkg.id || `${pkgKind}:${pkg.name}`}${formatSkillSource(pkg)}`);
         console.log(`    Version: ${pkg.version || "unknown"}`);
         if (pkg.description) {
           console.log(`    ${pkg.description}`);
@@ -39855,6 +39969,12 @@ function normalizeStackPackageId(stackId) {
     throw new Error("stack id is required");
   }
   return normalized.startsWith("stack:") ? normalized : `stack:${normalized}`;
+}
+function filterRemovablePackages(packages) {
+  return packages.filter((pkg) => {
+    if (pkg.kind !== "skill") return true;
+    return !pkg.source || pkg.source === "rudi";
+  });
 }
 function getSecretName2(secret) {
   if (typeof secret === "string") return secret;
@@ -39979,7 +40099,7 @@ async function removeBulk(kind2, flags) {
     }
   }
   try {
-    const packages = await listInstalled(kind2);
+    const packages = filterRemovablePackages(await listInstalled(kind2));
     if (packages.length === 0) {
       console.log(kind2 ? `No ${pluralizeKind3(kind2)} installed.` : "No packages installed.");
       return;
@@ -47827,6 +47947,7 @@ var fs27 = __toESM(require("fs/promises"), 1);
 var path26 = __toESM(require("path"), 1);
 var import_child_process8 = require("child_process");
 init_src5();
+init_src4();
 var net = __toESM(require("net"), 1);
 async function findAvailablePort(basePort = 3456) {
   for (let port = basePort; port < basePort + 10; port++) {
@@ -47905,6 +48026,23 @@ function accountArg(accountEmail) {
   }
   return [requireSubprocessArg(accountEmail, "account email")];
 }
+function getRequiredSecrets(manifest) {
+  const secrets = manifest?.requires?.secrets || manifest?.secrets || [];
+  return secrets.map((secret) => ({
+    name: typeof secret === "string" ? secret : secret.name || secret.key,
+    required: typeof secret === "object" ? secret.required !== false : true
+  })).filter((secret) => secret.name);
+}
+async function buildAuthEnv(stack) {
+  const env = { ...process.env };
+  for (const secret of getRequiredSecrets(stack)) {
+    const value = await getSecret(secret.name);
+    if (value) {
+      env[secret.name] = value;
+    }
+  }
+  return env;
+}
 function createAuthSubprocess({
   runtime,
   scriptPath,
@@ -47957,6 +48095,7 @@ Installed stacks:`);
       process.exit(1);
     }
     const stackPath = stack.path;
+    const authEnv = await buildAuthEnv(stack);
     const authInfo = await detectRuntime2(stackPath);
     if (!authInfo) {
       console.error(`No authentication script found for ${stackId}`);
@@ -48004,7 +48143,8 @@ Installed stacks:`);
         });
         runAuthSubprocess(plan, {
           cwd,
-          stdio: "inherit"
+          stdio: "inherit",
+          env: authEnv
         });
         if (tempAuthScript) {
           await fs27.unlink(tempAuthScript);
@@ -48030,7 +48170,7 @@ Installed stacks:`);
         cwd,
         stdio: "inherit",
         env: {
-          ...process.env,
+          ...authEnv,
           OAUTH_PORT: port.toString()
         }
       });
@@ -48084,7 +48224,7 @@ function loadManifest2(stackPath) {
   }
   return JSON.parse(fs28.readFileSync(manifestPath, "utf-8"));
 }
-function getRequiredSecrets(manifest) {
+function getRequiredSecrets2(manifest) {
   const secrets = manifest?.requires?.secrets || manifest?.secrets || [];
   return secrets.map((s2) => ({
     name: typeof s2 === "string" ? s2 : s2.name || s2.key,
@@ -48093,7 +48233,7 @@ function getRequiredSecrets(manifest) {
 }
 async function buildEnv(manifest) {
   const env = { ...process.env };
-  const requiredSecrets = getRequiredSecrets(manifest);
+  const requiredSecrets = getRequiredSecrets2(manifest);
   const missing = [];
   for (const secret of requiredSecrets) {
     const value = await getSecret(secret.name);
@@ -48187,7 +48327,7 @@ async function cmdMcp(args, flags) {
     console.error(`[rudi mcp] Path: ${stackPath}`);
     console.error(`[rudi mcp] Runtime: ${runtime}`);
     console.error(`[rudi mcp] Command: ${cmd} ${cmdArgs.join(" ")}`);
-    console.error(`[rudi mcp] Secrets loaded: ${getRequiredSecrets(manifest).length - missing.length}`);
+    console.error(`[rudi mcp] Secrets loaded: ${getRequiredSecrets2(manifest).length - missing.length}`);
     if (getBundledRuntime(runtime)) {
       console.error(`[rudi mcp] Using bundled ${runtime} runtime`);
     } else {
@@ -74201,6 +74341,9 @@ async function main() {
       // Shortcuts for listing specific package types
       case "stacks":
         await cmdList(["stacks"], flags);
+        break;
+      case "skills":
+        await cmdList(["skills"], flags);
         break;
       case "prompts":
         await cmdList(["prompts"], flags);
