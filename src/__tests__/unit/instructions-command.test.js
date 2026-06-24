@@ -5,6 +5,7 @@ import path from 'node:path';
 import {
   RUDI_INSTRUCTIONS_BEGIN,
   RUDI_INSTRUCTIONS_END,
+  buildInstalledRudiReferenceLines,
   buildRudiInstructionBlock,
   hasManagedInstructionBlock,
   normalizeInstructionAgent,
@@ -24,6 +25,46 @@ test('buildRudiInstructionBlock emits a bounded discover-first block', () => {
   assert.match(block, /--with-related-skills/);
   assert.match(block, /rudi integrate codex/);
   assert.doesNotMatch(block, /rudi mcp --list/);
+});
+
+test('buildRudiInstructionBlock includes installed SWE references when available', () => {
+  const block = buildRudiInstructionBlock('codex', {
+    installed: {
+      stacks: [
+        {
+          id: 'stack:swe-engineering',
+          description: 'Portable SWE Operating Manual reference and JS/TS agent debt scanning tools for engineering workflows',
+        },
+      ],
+      skills: [
+        {
+          id: 'skill:swe-compliance-checklist',
+          source: 'rudi',
+          description: 'Create and execute phase-gated SWE Operating Manual compliance checklists for software changes',
+        },
+      ],
+    },
+  });
+
+  assert.match(block, /Installed RUDI references/);
+  assert.match(block, /`stack:swe-engineering`/);
+  assert.match(block, /`skill:swe-compliance-checklist`/);
+  assert.match(block, /swe_manual_read/);
+  assert.match(block, /swe_debt_scan/);
+});
+
+test('buildInstalledRudiReferenceLines omits external skills and empty inventory', () => {
+  assert.deepEqual(buildInstalledRudiReferenceLines(), []);
+
+  const lines = buildInstalledRudiReferenceLines({
+    skills: [
+      { id: 'skill:local-rudi', source: 'rudi' },
+      { id: 'skill:external-claude', source: 'claude' },
+    ],
+  });
+
+  assert.equal(lines.some(line => line.includes('skill:local-rudi')), true);
+  assert.equal(lines.some(line => line.includes('skill:external-claude')), false);
 });
 
 test('patchManagedInstructionBlock appends a managed block to existing content', () => {

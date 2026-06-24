@@ -35,6 +35,7 @@ import { cmdSearch } from './commands/search.js';
 import { cmdInstall } from './commands/install.js';
 import { cmdRun } from './commands/run.js';
 import { cmdList } from './commands/list.js';
+import { cmdSkills } from './commands/skills.js';
 import { cmdRemove } from './commands/remove.js';
 import { cmdSecrets } from './commands/secrets.js';
 import { cmdDb } from './commands/db.js';
@@ -254,7 +255,7 @@ async function main() {
         break;
 
       case 'skills':
-        await cmdList(['skills'], flags);
+        await cmdSkills(args, flags);
         break;
 
       case 'prompts':

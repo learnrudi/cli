@@ -22,6 +22,7 @@ import { PATHS } from '@learnrudi/env';
 import { AGENT_CONFIGS, findAgentConfig, getInstalledAgents } from '@learnrudi/mcp';
 import {
   buildRudiInstructionBlock,
+  loadInstalledRudiInstructionReferences,
   patchManagedInstructionBlock,
   resolveInstructionTarget,
 } from './instructions.js';
@@ -53,13 +54,17 @@ function backupConfig(configPath) {
   return backupPath;
 }
 
-export function installCodexGlobalInstructions(flags = {}, env = {}) {
+export async function installCodexGlobalInstructions(flags = {}, env = {}) {
   const dryRun = flags['dry-run'] === true || flags.dryRun === true;
   const targetPath = resolveInstructionTarget('codex', { global: true }, env);
   const existing = fs.existsSync(targetPath)
     ? fs.readFileSync(targetPath, 'utf-8')
     : '';
-  const result = patchManagedInstructionBlock(existing, buildRudiInstructionBlock('codex'));
+  const installed = await loadInstalledRudiInstructionReferences();
+  const result = patchManagedInstructionBlock(
+    existing,
+    buildRudiInstructionBlock('codex', { installed })
+  );
 
   let backupPath = null;
   if (result.changed && !dryRun) {
@@ -273,7 +278,7 @@ async function integrateCodexAgent(agentConfig, targetPath, flags) {
     console.log(`  ✓ Already configured`);
   }
 
-  const instructions = installCodexGlobalInstructions(flags);
+  const instructions = await installCodexGlobalInstructions(flags);
   logCodexInstructionResult(instructions, flags);
 
   return {
@@ -314,7 +319,7 @@ async function dryRunIntegrateAgent(agentId, flags = {}) {
       console.log('  ✓ Already configured');
     }
 
-    const instructions = installCodexGlobalInstructions({ ...flags, 'dry-run': true });
+    const instructions = await installCodexGlobalInstructions({ ...flags, 'dry-run': true });
     logCodexInstructionResult(instructions, { ...flags, 'dry-run': true });
 
     return {

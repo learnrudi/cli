@@ -114,6 +114,10 @@ MCP config and instruction config are separate layers:
 - `rudi instructions <agent>` prints the managed instruction block.
 - `rudi instructions <agent> --install` writes or updates that block in the
   agent's global or project instruction file.
+- `rudi skills sync codex` creates native `~/.codex/skills/<skill>/` wrappers
+  for installed RUDI skills so Codex can surface them in its skill/slash UI.
+  This is separate from MCP router integration and from the managed AGENTS.md
+  instruction block.
 
 Discover installed stacks with `rudi list stacks --json` or inspect
 `~/.rudi/cache/tool-index.json`. Rebuild the router cache with

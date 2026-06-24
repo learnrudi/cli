@@ -97,11 +97,11 @@ test('patchCodexTomlRouter leaves matching rudi router entry unchanged', () => {
   assert.equal(result.content, input);
 });
 
-test('installCodexGlobalInstructions creates missing global AGENTS.md', () => {
+test('installCodexGlobalInstructions creates missing global AGENTS.md', async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rudi-codex-instructions-'));
 
   try {
-    const result = installCodexGlobalInstructions({}, { home: tmp, cwd: tmp });
+    const result = await installCodexGlobalInstructions({}, { home: tmp, cwd: tmp });
     const targetPath = path.join(tmp, '.codex', 'AGENTS.md');
 
     assert.equal(result.action, 'added');
@@ -114,7 +114,7 @@ test('installCodexGlobalInstructions creates missing global AGENTS.md', () => {
   }
 });
 
-test('installCodexGlobalInstructions appends to existing global AGENTS.md', () => {
+test('installCodexGlobalInstructions appends to existing global AGENTS.md', async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rudi-codex-instructions-'));
 
   try {
@@ -122,7 +122,7 @@ test('installCodexGlobalInstructions appends to existing global AGENTS.md', () =
     fs.mkdirSync(path.dirname(targetPath), { recursive: true });
     fs.writeFileSync(targetPath, '# Existing Codex Instructions\n\nKeep this line.\n');
 
-    const result = installCodexGlobalInstructions({}, { home: tmp, cwd: tmp });
+    const result = await installCodexGlobalInstructions({}, { home: tmp, cwd: tmp });
     const content = fs.readFileSync(targetPath, 'utf-8');
 
     assert.equal(result.action, 'added');

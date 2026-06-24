@@ -29,6 +29,11 @@ test('commands: list exports cmdList function', async () => {
   assert.strictEqual(typeof cmdList, 'function');
 });
 
+test('commands: skills exports cmdSkills function', async () => {
+  const { cmdSkills } = await import('../../commands/skills.js');
+  assert.strictEqual(typeof cmdSkills, 'function');
+});
+
 test('commands: remove exports cmdRemove function', async () => {
   const { cmdRemove } = await import('../../commands/remove.js');
   assert.strictEqual(typeof cmdRemove, 'function');

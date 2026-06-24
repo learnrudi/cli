@@ -30,7 +30,7 @@ REGISTRY
 
 INSTALLED
   list [kind]           List installed packages (stacks, skills, workflows, runtimes, binaries, agents)
-  skills                List installed and discovered skills
+  skills                List skills or sync installed skills to native agents
   home                  Show ~/.rudi structure and status
   doctor                Check system health and dependencies
   which <cmd>           Show path to a command
@@ -82,6 +82,7 @@ EXAMPLES
   rudi secrets set SLACK_TOKEN   Configure secret
   rudi integrate claude          Wire up Claude Desktop/Code
   rudi instructions codex        Print Codex instruction block
+  rudi skills sync codex         Create native Codex wrappers for RUDI skills
   rudi leverage frontend         Calculate frontend workflow leverage
   rudi list                      Show installed packages
 
@@ -341,6 +342,26 @@ EXAMPLES
   rudi list workflows
   rudi skills
   rudi list skills --category=coding
+`,
+    skills: `
+rudi skills - List or sync installed RUDI skills
+
+USAGE
+  rudi skills
+  rudi skills sync codex [--force] [--dry-run] [--json]
+
+COMMANDS
+  sync codex       Create native ~/.codex/skills wrappers for installed RUDI skills
+
+OPTIONS
+  --force          Overwrite existing Codex skill wrappers
+  --dry-run        Preview sync results without writing files
+  --json           Output JSON
+
+EXAMPLES
+  rudi skills
+  rudi skills sync codex
+  rudi skills sync codex --force
 `,
     secrets: `
 rudi secrets - Manage secrets
