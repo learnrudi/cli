@@ -17,6 +17,11 @@ import { PATHS, ensureDirectories, getPlatformArch } from '@learnrudi/env';
 import { fetchIndex } from '@learnrudi/registry-client';
 import { initSchema } from '@learnrudi/db';
 import { runCommand } from '../utils/subprocess.js';
+import {
+  buildRudiInstructionBlock,
+  patchManagedInstructionBlock,
+  resolveInstructionTarget
+} from './instructions.js';
 
 // Download base URL for RUDI registry releases
 const RELEASES_BASE = 'https://github.com/learnrudi/registry/releases/download/v1.0.0';
@@ -24,6 +29,65 @@ const RELEASES_BASE = 'https://github.com/learnrudi/registry/releases/download/v
 // Essential packages to install on init
 const BUNDLED_RUNTIMES = ['node', 'python'];
 const ESSENTIAL_BINARIES = ['sqlite', 'ripgrep'];
+const CODEX_INSTRUCTIONS_ACTION = 'codex-instructions';
+
+export function shouldInstallAgentInstructions(flags = {}) {
+  return !(
+    flags['no-agent-instructions'] === true ||
+    flags.noAgentInstructions === true ||
+    flags['no-codex-instructions'] === true ||
+    flags.noCodexInstructions === true
+  );
+}
+
+export function installCodexInstructionBlock({ actions = null, quiet = false, env = {} } = {}) {
+  const targetPath = resolveInstructionTarget('codex', {}, env);
+  let backupPath = null;
+
+  try {
+    const existing = fs.existsSync(targetPath)
+      ? fs.readFileSync(targetPath, 'utf-8')
+      : '';
+    const result = patchManagedInstructionBlock(existing, buildRudiInstructionBlock('codex'));
+
+    if (!result.changed) {
+      actions?.skipped?.push(CODEX_INSTRUCTIONS_ACTION);
+      if (!quiet) console.log('   ✓ Codex AGENTS RUDI block unchanged');
+      return {
+        ...result,
+        targetPath,
+        backupPath
+      };
+    }
+
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    if (fs.existsSync(targetPath)) {
+      backupPath = `${targetPath}.backup.${Date.now()}`;
+      fs.copyFileSync(targetPath, backupPath);
+    }
+    fs.writeFileSync(targetPath, result.content);
+    actions?.created?.push(CODEX_INSTRUCTIONS_ACTION);
+    if (!quiet) {
+      const label = result.action === 'updated' ? 'updated' : 'installed';
+      console.log(`   + Codex AGENTS RUDI block ${label}`);
+    }
+    return {
+      ...result,
+      targetPath,
+      backupPath
+    };
+  } catch (error) {
+    actions?.failed?.push(CODEX_INSTRUCTIONS_ACTION);
+    if (!quiet) console.log(`   ✗ Codex AGENTS RUDI block: ${error.message}`);
+    return {
+      changed: false,
+      action: 'failed',
+      targetPath,
+      backupPath,
+      error
+    };
+  }
+}
 
 export async function cmdInit(args, flags) {
   const force = flags.force || false;
@@ -181,6 +245,15 @@ export async function cmdInit(args, flags) {
   } else {
     actions.skipped.push('settings');
     if (!quiet) console.log('   ✓ settings.json exists');
+  }
+
+  // Step 7: Seed Codex instructions so agents can discover RUDI capabilities.
+  if (!quiet) console.log('\n7. Checking Codex agent instructions...');
+  if (shouldInstallAgentInstructions(flags)) {
+    installCodexInstructionBlock({ actions, quiet });
+  } else {
+    actions.skipped.push(CODEX_INSTRUCTIONS_ACTION);
+    if (!quiet) console.log('   ⚠ Codex AGENTS RUDI block skipped (--no-agent-instructions)');
   }
 
   // Done - show summary

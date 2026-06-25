@@ -1,7 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
+import {
+  installCodexInstructionBlock,
+  shouldInstallAgentInstructions,
+} from '../../commands/init.js';
 import {
   RUDI_INSTRUCTIONS_BEGIN,
   RUDI_INSTRUCTIONS_END,
@@ -19,6 +25,9 @@ test('buildRudiInstructionBlock emits a bounded discover-first block', () => {
   assert.match(block, new RegExp(RUDI_INSTRUCTIONS_BEGIN));
   assert.match(block, new RegExp(RUDI_INSTRUCTIONS_END));
   assert.match(block, /RUDI is a local tools, secrets, and MCP capability layer/);
+  assert.match(block, /~\/\.rudi\/stacks/);
+  assert.match(block, /~\/\.rudi\/skills/);
+  assert.match(block, /single RUDI MCP router/);
   assert.match(block, /rudi list stacks --json/);
   assert.match(block, /Stack manifests may declare related skills/);
   assert.match(block, /--with-related-skills/);
@@ -103,4 +112,37 @@ test('normalizeInstructionAgent keeps unknown targets generic', () => {
   assert.equal(normalizeInstructionAgent('claude-code'), 'claude');
   assert.equal(normalizeInstructionAgent('openai'), 'codex');
   assert.equal(normalizeInstructionAgent('cursor'), 'generic');
+});
+
+test('shouldInstallAgentInstructions defaults on and honors explicit opt-outs', () => {
+  assert.equal(shouldInstallAgentInstructions({}), true);
+  assert.equal(shouldInstallAgentInstructions({ 'no-agent-instructions': true }), false);
+  assert.equal(shouldInstallAgentInstructions({ noAgentInstructions: true }), false);
+  assert.equal(shouldInstallAgentInstructions({ 'no-codex-instructions': true }), false);
+  assert.equal(shouldInstallAgentInstructions({ noCodexInstructions: true }), false);
+});
+
+test('installCodexInstructionBlock writes an idempotent managed global Codex block', (t) => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'rudi-init-codex-'));
+  const actions = { created: [], skipped: [], failed: [] };
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+
+  const first = installCodexInstructionBlock({ actions, quiet: true, env: { home, cwd: home } });
+  const targetPath = path.join(home, '.codex', 'AGENTS.md');
+
+  assert.equal(first.action, 'added');
+  assert.equal(first.changed, true);
+  assert.equal(fs.existsSync(targetPath), true);
+  assert.deepEqual(actions.created, ['codex-instructions']);
+
+  const content = fs.readFileSync(targetPath, 'utf-8');
+  assert.equal(hasManagedInstructionBlock(content), true);
+  assert.match(content, /~\/\.rudi\/stacks/);
+  assert.match(content, /mcp__rudi__stack_<name>_\*/);
+
+  const second = installCodexInstructionBlock({ actions, quiet: true, env: { home, cwd: home } });
+
+  assert.equal(second.action, 'none');
+  assert.equal(second.changed, false);
+  assert.deepEqual(actions.skipped, ['codex-instructions']);
 });

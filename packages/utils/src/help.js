@@ -421,6 +421,8 @@ OPTIONS
   --force            Reinitialize even if already set up
   --skip-downloads   Skip downloading runtimes/binaries
   --with-shims       Create shims in ~/.rudi/bins/ (opt-in)
+  --no-agent-instructions
+                     Skip installing the Codex AGENTS.md RUDI block
   --quiet            Minimal output (for programmatic use)
 
 WHAT IT DOES
@@ -430,6 +432,7 @@ WHAT IT DOES
   4. Optionally creates shims in ~/.rudi/bins/ (use --with-shims)
   5. Initializes the database (if missing)
   6. Creates settings.json (if missing)
+  7. Installs/refreshes the managed Codex AGENTS.md RUDI block
 
 NOTE: Safe to run multiple times - only creates what's missing.
 
@@ -438,6 +441,7 @@ EXAMPLES
   rudi init --force
   rudi init --with-shims
   rudi init --skip-downloads
+  rudi init --no-agent-instructions
   rudi init --quiet
 `,
     home: `
