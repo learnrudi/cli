@@ -184,6 +184,433 @@
         ]
       }
     ],
-    "binaries": []
+    "binaries": [
+      {
+        "id": "chromium",
+        "name": "Chromium",
+        "kind": "binary",
+        "installDir": "chromium",
+        "basePath": "binaries",
+        "installType": "system",
+        "commands": [
+          {
+            "name": "chromium",
+            "bin": "chromium",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "docker",
+        "name": "Docker",
+        "kind": "binary",
+        "installDir": "docker",
+        "basePath": "binaries",
+        "installType": "system",
+        "commands": [
+          {
+            "name": "docker",
+            "bin": "docker",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "ffmpeg",
+        "name": "FFmpeg",
+        "kind": "binary",
+        "installDir": "ffmpeg",
+        "basePath": "binaries",
+        "installType": "binary",
+        "commands": [
+          {
+            "name": "ffmpeg",
+            "bin": "ffmpeg",
+            "args": null
+          },
+          {
+            "name": "ffprobe",
+            "bin": "ffprobe",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "flyio",
+        "name": "Fly.io CLI",
+        "kind": "binary",
+        "installDir": "flyio",
+        "basePath": "binaries",
+        "installType": "npm",
+        "commands": [
+          {
+            "name": "flyio",
+            "bin": "flyio/node_modules/.bin/flyctl",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "git",
+        "name": "Git",
+        "kind": "binary",
+        "installDir": "git",
+        "basePath": "binaries",
+        "installType": "system",
+        "commands": [
+          {
+            "name": "git",
+            "bin": "git",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "httpie",
+        "name": "HTTPie",
+        "kind": "binary",
+        "installDir": "httpie",
+        "basePath": "binaries",
+        "installType": "pip",
+        "commands": [
+          {
+            "name": "httpie",
+            "bin": "http",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "imagemagick",
+        "name": "ImageMagick",
+        "kind": "binary",
+        "installDir": "imagemagick",
+        "basePath": "binaries",
+        "installType": "binary",
+        "commands": [
+          {
+            "name": "imagemagick",
+            "bin": "imagemagick/magick",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "jq",
+        "name": "jq",
+        "kind": "binary",
+        "installDir": "jq",
+        "basePath": "binaries",
+        "installType": "binary",
+        "commands": [
+          {
+            "name": "jq",
+            "bin": "jq",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "neonctl",
+        "name": "Neon CLI",
+        "kind": "binary",
+        "installDir": "neonctl",
+        "basePath": "binaries",
+        "installType": "npm",
+        "commands": [
+          {
+            "name": "neonctl",
+            "bin": "neonctl",
+            "args": null
+          },
+          {
+            "name": "neon",
+            "bin": "neon",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "netlify",
+        "name": "Netlify CLI",
+        "kind": "binary",
+        "installDir": "netlify",
+        "basePath": "binaries",
+        "installType": "npm",
+        "commands": [
+          {
+            "name": "netlify",
+            "bin": "netlify",
+            "args": null
+          },
+          {
+            "name": "ntl",
+            "bin": "ntl",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "pandoc",
+        "name": "Pandoc",
+        "kind": "binary",
+        "installDir": "pandoc",
+        "basePath": "binaries",
+        "installType": "binary",
+        "commands": [
+          {
+            "name": "pandoc",
+            "bin": "pandoc",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "pdftoppm",
+        "name": "pdftoppm",
+        "kind": "binary",
+        "installDir": "pdftoppm",
+        "basePath": "binaries",
+        "installType": "system",
+        "commands": [
+          {
+            "name": "pdftoppm",
+            "bin": "pdftoppm",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "playwright",
+        "name": "Playwright",
+        "kind": "binary",
+        "installDir": "playwright",
+        "basePath": "binaries",
+        "installType": "binary",
+        "commands": [
+          {
+            "name": "screenshot",
+            "bin": "npx",
+            "args": [
+              "playwright",
+              "screenshot"
+            ]
+          },
+          {
+            "name": "codegen",
+            "bin": "npx",
+            "args": [
+              "playwright",
+              "codegen"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "psql",
+        "name": "PostgreSQL Client",
+        "kind": "binary",
+        "installDir": "psql",
+        "basePath": "binaries",
+        "installType": "binary",
+        "commands": [
+          {
+            "name": "psql",
+            "bin": "psql",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "railway",
+        "name": "Railway CLI",
+        "kind": "binary",
+        "installDir": "railway",
+        "basePath": "binaries",
+        "installType": "npm",
+        "commands": [
+          {
+            "name": "railway",
+            "bin": "railway/node_modules/.bin/railway",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "rclone",
+        "name": "rclone",
+        "kind": "binary",
+        "installDir": "rclone",
+        "basePath": "binaries",
+        "installType": "binary",
+        "commands": [
+          {
+            "name": "rclone",
+            "bin": "rclone",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "ripgrep",
+        "name": "ripgrep",
+        "kind": "binary",
+        "installDir": "ripgrep",
+        "basePath": "binaries",
+        "installType": "binary",
+        "commands": [
+          {
+            "name": "ripgrep",
+            "bin": "rg",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "sqlite",
+        "name": "SQLite",
+        "kind": "binary",
+        "installDir": "sqlite",
+        "basePath": "binaries",
+        "installType": "system",
+        "commands": [
+          {
+            "name": "sqlite",
+            "bin": "sqlite3",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "supabase",
+        "name": "Supabase CLI",
+        "kind": "binary",
+        "installDir": "supabase",
+        "basePath": "binaries",
+        "installType": "npm",
+        "commands": [
+          {
+            "name": "supabase",
+            "bin": "supabase",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "tesseract",
+        "name": "Tesseract OCR",
+        "kind": "binary",
+        "installDir": "tesseract",
+        "basePath": "binaries",
+        "installType": "system",
+        "commands": [
+          {
+            "name": "tesseract",
+            "bin": "tesseract",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "uv",
+        "name": "uv",
+        "kind": "binary",
+        "installDir": "uv",
+        "basePath": "binaries",
+        "installType": "binary",
+        "commands": [
+          {
+            "name": "uv",
+            "bin": "uv",
+            "args": null
+          },
+          {
+            "name": "uvx",
+            "bin": "uvx",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "vercel",
+        "name": "Vercel CLI",
+        "kind": "binary",
+        "installDir": "vercel",
+        "basePath": "binaries",
+        "installType": "npm",
+        "commands": [
+          {
+            "name": "vercel",
+            "bin": "vercel",
+            "args": null
+          },
+          {
+            "name": "vc",
+            "bin": "vc",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "whisper",
+        "name": "Whisper",
+        "kind": "binary",
+        "installDir": "whisper",
+        "basePath": "binaries",
+        "installType": "system",
+        "commands": [
+          {
+            "name": "whisper",
+            "bin": "whisper",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "wrangler",
+        "name": "Cloudflare Wrangler",
+        "kind": "binary",
+        "installDir": "wrangler",
+        "basePath": "binaries",
+        "installType": "npm",
+        "commands": [
+          {
+            "name": "wrangler",
+            "bin": "wrangler/node_modules/.bin/wrangler",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "yq",
+        "name": "yq",
+        "kind": "binary",
+        "installDir": "yq",
+        "basePath": "binaries",
+        "installType": "binary",
+        "commands": [
+          {
+            "name": "yq",
+            "bin": "yq",
+            "args": null
+          }
+        ]
+      },
+      {
+        "id": "yt-dlp",
+        "name": "yt-dlp",
+        "kind": "binary",
+        "installDir": "yt-dlp",
+        "basePath": "binaries",
+        "installType": "binary",
+        "commands": [
+          {
+            "name": "yt-dlp",
+            "bin": "yt-dlp",
+            "args": null
+          }
+        ]
+      }
+    ]
   }
 }

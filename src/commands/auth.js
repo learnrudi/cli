@@ -10,6 +10,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { execFileSync as defaultExecFileSync } from 'child_process';
 import { listInstalled } from '@learnrudi/core';
+import { getSecret as defaultGetSecret } from '@learnrudi/secrets';
 import * as net from 'net';
 
 /**
@@ -114,6 +115,76 @@ function accountArg(accountEmail) {
   return [requireSubprocessArg(accountEmail, 'account email')];
 }
 
+function getManifestSecrets(stack) {
+  return stack?.requires?.secrets || stack?.secrets || [];
+}
+
+function getSecretName(secret) {
+  if (typeof secret === 'string') return secret;
+  if (!secret || typeof secret !== 'object') return null;
+  return secret.name || secret.key || null;
+}
+
+function isSecretRequired(secret) {
+  if (!secret || typeof secret !== 'object') return true;
+  return secret.required !== false;
+}
+
+function normalizeEnvSecretName(secret, index) {
+  const rawName = getSecretName(secret);
+  if (typeof rawName !== 'string') return null;
+
+  const name = rawName.trim();
+  if (!name) return null;
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+    throw new Error(`Invalid auth secret name at index ${index}`);
+  }
+  return name;
+}
+
+export async function resolveAuthSecrets(stack, options = {}) {
+  const getSecret = options.getSecret || defaultGetSecret;
+  const resolved = {};
+  const missing = [];
+  const secrets = getManifestSecrets(stack);
+
+  for (const [index, secret] of secrets.entries()) {
+    const name = normalizeEnvSecretName(secret, index);
+    if (!name) continue;
+
+    const value = await getSecret(name);
+    if (value !== undefined && value !== null && value !== '') {
+      resolved[name] = String(value);
+    } else if (isSecretRequired(secret)) {
+      missing.push(name);
+    }
+  }
+
+  if (missing.length > 0) {
+    const stackLabel = stack?.id || stack?.name || 'stack';
+    const setupCommand = missing.length === 1
+      ? `rudi secrets set ${missing[0]}`
+      : 'rudi secrets set <name>';
+    throw new Error(
+      `Missing required secret(s) for ${stackLabel}: ${missing.join(', ')}. Set with: ${setupCommand}`
+    );
+  }
+
+  return resolved;
+}
+
+export async function buildAuthEnvironment({
+  stack,
+  baseEnv = process.env,
+  getSecret = defaultGetSecret,
+} = {}) {
+  const secrets = await resolveAuthSecrets(stack, { getSecret });
+  return {
+    ...baseEnv,
+    ...secrets,
+  };
+}
+
 export function createAuthSubprocess({
   runtime,
   scriptPath,
@@ -149,6 +220,12 @@ export function runAuthSubprocess(plan, options = {}) {
     stdio: options.stdio || 'inherit',
     ...(options.env ? { env: options.env } : {}),
   });
+}
+
+export function getTempAuthScriptPath(authScript, useTsx) {
+  const safeAuthScript = requireSubprocessArg(authScript, 'auth script path');
+  const tempExt = useTsx ? '.ts' : '.mjs';
+  return path.join(path.dirname(safeAuthScript), `auth-temp${tempExt}`);
 }
 
 /**
@@ -193,6 +270,8 @@ export async function cmdAuth(args, flags) {
       process.exit(1);
     }
 
+    const authEnv = await buildAuthEnvironment({ stack });
+
     console.log('');
     console.log('═'.repeat(60));
     console.log(`  Authenticating ${stack.name || stackId}`);
@@ -229,10 +308,7 @@ export async function cmdAuth(args, flags) {
       if (!useBuiltInPort) {
         // Fallback: Create temporary script with dynamic port
         const authContent = await fs.readFile(authInfo.authScript, 'utf-8');
-
-        // Determine file extension based on whether we're using tsx
-        const tempExt = authInfo.useTsx ? '.ts' : '.mjs';
-        tempAuthScript = path.join(cwd, '..', `auth-temp${tempExt}`);
+        tempAuthScript = getTempAuthScriptPath(authInfo.authScript, authInfo.useTsx);
 
         // Replace hardcoded port with dynamic port
         const modifiedContent = authContent
@@ -255,6 +331,7 @@ export async function cmdAuth(args, flags) {
         runAuthSubprocess(plan, {
           cwd,
           stdio: 'inherit',
+          env: authEnv,
         });
 
         // Clean up temp file if we created one
@@ -286,7 +363,7 @@ export async function cmdAuth(args, flags) {
         cwd,
         stdio: 'inherit',
         env: {
-          ...process.env,
+          ...authEnv,
           OAUTH_PORT: port.toString(),
         },
       });

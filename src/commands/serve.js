@@ -127,6 +127,7 @@ export async function cmdServe(args, flags) {
     broadcast,
     json,
     error,
+    invalidField,
     readBody,
     createRequestContext,
     attachRequestContext,

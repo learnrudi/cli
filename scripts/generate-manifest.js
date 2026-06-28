@@ -50,7 +50,7 @@ function readCatalogDir(dirPath) {
  * Handles multiple formats:
  * - commands: [{ name, bin, args? }] - new explicit format
  * - binary: "name" - single binary
- * - binaries: ["a", "b"] - multiple binaries with same name
+ * - binaries/bins: ["a", "b"] - multiple binaries with same name
  */
 function extractCommands(pkg, kind) {
   // New format: explicit commands array
@@ -62,9 +62,24 @@ function extractCommands(pkg, kind) {
     }));
   }
 
-  // Legacy format: binaries array (ffmpeg has ["ffmpeg", "ffprobe"])
-  if (pkg.binaries && Array.isArray(pkg.binaries)) {
-    return pkg.binaries.map(name => ({
+  // Command map format: { "name": "command args" }
+  if (pkg.commands && typeof pkg.commands === 'object') {
+    return Object.entries(pkg.commands).map(([name, command]) => {
+      const parts = typeof command === 'string' ? command.trim().split(/\s+/).filter(Boolean) : [];
+      return {
+        name,
+        bin: parts[0] || name,
+        args: parts.length > 1 ? parts.slice(1) : null,
+      };
+    });
+  }
+
+  // Registry manifest format: bins/binaries arrays (ffmpeg has ["ffmpeg", "ffprobe"])
+  const bins = Array.isArray(pkg.bins)
+    ? pkg.bins
+    : (Array.isArray(pkg.binaries) ? pkg.binaries : null);
+  if (bins) {
+    return bins.map(name => ({
       name,
       bin: name,
       args: null,
@@ -72,7 +87,7 @@ function extractCommands(pkg, kind) {
   }
 
   // Legacy format: single binary field
-  if (pkg.binary) {
+  if (typeof pkg.binary === 'string') {
     const id = pkg.id.replace(/^(runtime|binary|agent):/, '');
     return [{
       name: id,
@@ -113,6 +128,15 @@ function getKindBasePath(kind) {
   }
 }
 
+function getCatalogDirName(kind) {
+  switch (kind) {
+    case 'runtime': return 'runtimes';
+    case 'agent': return 'agents';
+    case 'binary': return 'binaries';
+    default: return `${kind}s`;
+  }
+}
+
 function normalizeGlobalNpmCommands(commands) {
   return commands.map(cmd => {
     const binName = path.basename(cmd.bin || cmd.name);
@@ -128,7 +152,7 @@ function normalizeGlobalNpmCommands(commands) {
  * Process packages from a catalog directory
  */
 function processPackages(catalogPath, kind) {
-  const dirPath = path.join(catalogPath, kind + 's'); // runtimes, agents, binaries
+  const dirPath = path.join(catalogPath, getCatalogDirName(kind));
   const packages = readCatalogDir(dirPath);
 
   return packages.map(pkg => {

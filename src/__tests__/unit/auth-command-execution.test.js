@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  buildAuthEnvironment,
   createAuthSubprocess,
+  getTempAuthScriptPath,
   runAuthSubprocess,
 } from '../../commands/auth.js';
 
@@ -52,6 +54,17 @@ test('createAuthSubprocess rejects NUL bytes in account input', () => {
   );
 });
 
+test('getTempAuthScriptPath keeps generated auth script beside source script', () => {
+  assert.equal(
+    getTempAuthScriptPath('/tmp/google-workspace/src/auth.ts', true),
+    '/tmp/google-workspace/src/auth-temp.ts',
+  );
+  assert.equal(
+    getTempAuthScriptPath('/tmp/google-workspace/dist/auth.js', false),
+    '/tmp/google-workspace/dist/auth-temp.mjs',
+  );
+});
+
 test('runAuthSubprocess dispatches command and args without a shell option', () => {
   const calls = [];
   runAuthSubprocess({
@@ -72,4 +85,49 @@ test('runAuthSubprocess dispatches command and args without a shell option', () 
   assert.equal(calls[0].options.shell, undefined);
   assert.equal(calls[0].options.cwd, '/tmp');
   assert.deepEqual(calls[0].options.env, { TEST_ENV: '1' });
+});
+
+test('buildAuthEnvironment injects required stack secrets from the RUDI secrets store', async () => {
+  const lookups = [];
+  const env = await buildAuthEnvironment({
+    stack: {
+      id: 'stack:google-workspace',
+      name: 'Google Workspace',
+      requires: {
+        secrets: [
+          { name: 'GOOGLE_CREDENTIALS' },
+          { key: 'OPTIONAL_GOOGLE_TOKEN', required: false },
+        ],
+      },
+    },
+    baseEnv: {
+      PATH: '/usr/bin',
+      GOOGLE_CREDENTIALS: 'stale-shell-value',
+    },
+    getSecret: async (name) => {
+      lookups.push(name);
+      return name === 'GOOGLE_CREDENTIALS' ? '{"installed":{"client_id":"id","client_secret":"secret"}}' : null;
+    },
+  });
+
+  assert.deepEqual(lookups, ['GOOGLE_CREDENTIALS', 'OPTIONAL_GOOGLE_TOKEN']);
+  assert.equal(env.PATH, '/usr/bin');
+  assert.equal(env.GOOGLE_CREDENTIALS, '{"installed":{"client_id":"id","client_secret":"secret"}}');
+  assert.equal(env.OPTIONAL_GOOGLE_TOKEN, undefined);
+});
+
+test('buildAuthEnvironment fails clearly when a required stack secret is missing', async () => {
+  await assert.rejects(
+    () => buildAuthEnvironment({
+      stack: {
+        id: 'stack:google-workspace',
+        requires: {
+          secrets: [{ key: 'GOOGLE_CREDENTIALS' }],
+        },
+      },
+      baseEnv: {},
+      getSecret: async () => null,
+    }),
+    /Missing required secret\(s\) for stack:google-workspace: GOOGLE_CREDENTIALS/,
+  );
 });

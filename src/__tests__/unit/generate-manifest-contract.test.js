@@ -26,6 +26,18 @@ async function withCatalog(run) {
       name: 'A Runtime',
       binary: 'a',
     }));
+    await writeFile(path.join(dir, 'binaries', 'ffmpeg.json'), JSON.stringify({
+      id: 'binary:ffmpeg',
+      name: 'FFmpeg',
+      bins: ['ffmpeg', 'ffprobe'],
+    }));
+    await writeFile(path.join(dir, 'binaries', 'playwright.json'), JSON.stringify({
+      id: 'binary:playwright',
+      name: 'Playwright',
+      commands: {
+        screenshot: 'npx playwright screenshot',
+      },
+    }));
 
     await run(dir);
   } finally {
@@ -46,5 +58,12 @@ test('generateManifest is deterministic for unchanged catalog content', async ()
     assert.deepEqual(first, second);
     assert.equal(first.generated, '1970-01-01T00:00:00.000Z');
     assert.deepEqual(first.packages.runtimes.map(pkg => pkg.id), ['a-runtime', 'z-runtime']);
+    assert.deepEqual(first.packages.binaries.map(pkg => pkg.id), ['ffmpeg', 'playwright']);
+    assert.deepEqual(first.packages.binaries[0].commands.map(cmd => cmd.name), ['ffmpeg', 'ffprobe']);
+    assert.deepEqual(first.packages.binaries[1].commands, [{
+      name: 'screenshot',
+      bin: 'npx',
+      args: ['playwright', 'screenshot'],
+    }]);
   });
 });
