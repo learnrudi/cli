@@ -143,6 +143,24 @@ test('utils: printHelp is exported', async () => {
   assert.strictEqual(typeof printHelp, 'function');
 });
 
+test('utils: secrets help documents implemented secret commands only', async () => {
+  const { printHelp } = await import('@learnrudi/utils/help');
+  const lines = [];
+  const originalLog = console.log;
+  console.log = (message = '') => {
+    lines.push(String(message));
+  };
+  try {
+    printHelp('secrets');
+  } finally {
+    console.log = originalLog;
+  }
+
+  const rendered = lines.join('\n');
+  assert.match(rendered, /get <name>\s+Get a secret value/);
+  assert.doesNotMatch(rendered, /export\s+Export secrets/);
+});
+
 test('utils: printVersion is exported', async () => {
   const { printVersion } = await import('@learnrudi/utils/help');
   assert.strictEqual(typeof printVersion, 'function');

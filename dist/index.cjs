@@ -37217,6 +37217,7 @@ RUN
 
 SECRETS
   secrets set <name>    Set a secret
+  secrets get <name>    Print a secret value for scripts
   secrets list          List configured secrets
   secrets remove <name> Remove a secret
 
@@ -37511,14 +37512,19 @@ USAGE
 
 COMMANDS
   set <name>       Set a secret (prompts for value)
+  get <name>       Get a secret value (prints raw value; use only in scripts)
   list             List configured secrets (values masked)
   remove <name>    Remove a secret
-  export           Export secrets as environment variables
 
 EXAMPLES
   rudi secrets set VERCEL_TOKEN
+  API_TOKEN="$(rudi secrets get API_TOKEN)" command-that-needs-token
   rudi secrets list
   rudi secrets remove GITHUB_TOKEN
+
+SECURITY
+  get prints the raw secret value to stdout. Do not run it by itself in logs or
+  paste the result into chats. Prefer non-echoing command substitution.
 `,
     db: `
 rudi db - Database operations

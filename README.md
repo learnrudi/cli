@@ -95,6 +95,7 @@ rudi search --binaries   # Filter to CLI tools
 rudi secrets list                      # Show configured secrets (masked)
 rudi secrets set SLACK_BOT_TOKEN       # Set a secret (prompts for value)
 rudi secrets set OPENAI_API_KEY "sk-..." # Set with value
+rudi secrets get OPENAI_API_KEY        # Print raw value for scripts only
 rudi secrets remove SLACK_BOT_TOKEN    # Remove a secret
 ```
 
