@@ -33,7 +33,7 @@ test('buildCodexSkillFiles normalizes RUDI skill metadata for Codex', () => {
   );
 
   assert.equal(files.skillName, 'grill-with-docs');
-  assert.match(files.skillMd, /^name: grill-with-docs$/m);
+  assert.match(files.skillMd, /^name: "?Grill With Docs"?$/m);
   assert.match(files.skillMd, /^description: "Stress-test a plan against the existing domain model"$/m);
   assert.match(files.skillMd, /Ask questions one at a time\./);
   assert.match(files.openaiYaml, /display_name: "Grill With Docs"/);
@@ -76,7 +76,7 @@ test('syncCodexSkills creates native Codex skill wrappers for RUDI skills', asyn
     assert.equal(result.results[0].action, 'created');
     assert.equal(fs.existsSync(skillPath), true);
     assert.equal(fs.existsSync(openaiPath), true);
-    assert.match(fs.readFileSync(skillPath, 'utf-8'), /name: grill-with-docs/);
+    assert.match(fs.readFileSync(skillPath, 'utf-8'), /name: "?Grill With Docs"?/);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
