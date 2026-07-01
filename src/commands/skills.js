@@ -104,7 +104,7 @@ export function buildCodexSkillFiles(pkg, sourceContent) {
 
   const skillMd = [
     '---',
-    `name: ${skillName}`,
+    `name: ${yamlString(displayName)}`,
     `description: ${yamlString(description)}`,
     '---',
     '',

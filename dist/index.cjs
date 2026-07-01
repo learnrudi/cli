@@ -37210,8 +37210,6 @@ AGENT INTEGRATION
 
 RUN
   run <stack>           Run a stack directly
-  parallel <tasks...>   Run multiple agent tasks in parallel (grouped)
-  run-group <cmd>       Inspect, merge, and cleanup run groups
   lanes <cmd>           Manage the local main/dev lane worktree layout
   leverage [preset]     Calculate human-attention leverage for agent workflows
 
@@ -37220,18 +37218,6 @@ SECRETS
   secrets get <name>    Print a secret value for scripts
   secrets list          List configured secrets
   secrets remove <name> Remove a secret
-
-DATABASE
-  db stats              Show database statistics
-  db search <query>     Search conversation history
-  db tables             Show table row counts
-  db vacuum             Compact and reclaim space
-
-SESSIONS
-  session list          List sessions
-  session search <q>    Search session content
-  session export <id>   Export a session
-  session index         Build search embeddings
 
 OPTIONS
   -h, --help           Show help
@@ -37320,6 +37306,10 @@ EXAMPLES
     parallel: `
 rudi parallel - Launch grouped parallel agent sessions
 
+LEGACY COMPATIBILITY
+  This command is retained for older RUDI sidecar/run-group workflows.
+  Prefer native Claude/Codex/Gemini orchestration for new agent work.
+
 USAGE
   rudi parallel "<task1>" "<task2>" [more tasks] [options]
   rudi parallel --template <name> [options]
@@ -37347,6 +37337,10 @@ EXAMPLES
 `,
     "run-group": `
 rudi run-group - Inspect and manage parallel agent run groups
+
+LEGACY COMPATIBILITY
+  This command is retained for older RUDI sidecar/run-group workflows.
+  Prefer native agent-host orchestration for new parallel agent work.
 
 USAGE
   rudi run-group <command> [args] [options]
@@ -37548,7 +37542,11 @@ SECURITY
   paste the result into chats. Prefer non-echoing command substitution.
 `,
     db: `
-rudi db - Database operations
+rudi db - Legacy session database operations
+
+LEGACY COMPATIBILITY
+  Core RUDI no longer initializes or requires rudi.db. These commands are
+  retained for existing session/history/database workflows.
 
 USAGE
   rudi db <command> [args]
@@ -37577,6 +37575,33 @@ EXAMPLES
   rudi db backup ~/backups/rudi.db
   rudi db prune 30 --dry-run
   rudi db tables
+`,
+    session: `
+rudi session - Legacy session history operations
+
+LEGACY COMPATIBILITY
+  Core RUDI no longer owns normal agent execution or session history.
+  These commands are retained for existing imported-session workflows.
+
+USAGE
+  rudi session <command> [args]
+
+COMMANDS
+  list [options]         List sessions with filters
+  show <id>              Show session details
+  rename <id> <title>    Rename a session
+  delete <id> [--force]  Delete a session
+  tag <id> <tags>        Add tags
+  move <id> --project    Move session to project
+  export <id> [-o file]  Export session to JSON
+  search <query>         Search session content
+  index [--embeddings]   Index sessions for semantic search
+  similar <id>           Find similar sessions
+
+EXAMPLES
+  rudi session list --days 7
+  rudi session search "authentication bugs"
+  rudi session export 7bfa7be7 -o session.json
 `,
     import: `
 rudi import - Import sessions from AI providers
@@ -37618,9 +37643,10 @@ WHAT IT DOES
   2. Downloads bundled runtimes (Node.js, Python) if not installed
   3. Downloads essential binaries (sqlite3, ripgrep) if not installed
   4. Optionally creates shims in ~/.rudi/bins/ (use --with-shims)
-  5. Initializes the database (if missing)
-  6. Creates settings.json (if missing)
-  7. Installs/refreshes the managed Codex AGENTS.md RUDI block
+  5. Creates settings.json (if missing)
+  6. Installs/refreshes the managed Codex AGENTS.md RUDI block
+
+NOTE: Legacy session/database commands initialize rudi.db only when invoked.
 
 NOTE: Safe to run multiple times - only creates what's missing.
 
@@ -37645,7 +37671,7 @@ OPTIONS
 SHOWS
   - Directory structure with sizes
   - Installed package counts
-  - Database status
+  - Legacy session database status
   - Quick commands reference
 
 EXAMPLES
@@ -37665,7 +37691,6 @@ OPTIONS
 
 CHECKS
   - Directory structure
-  - Database integrity
   - Installed packages
   - Available runtimes (node, python, deno, bun)
   - Available binaries (ffmpeg, ripgrep, etc.)
@@ -43376,7 +43401,11 @@ async function cmdDb(args, flags) {
       break;
     default:
       console.log(`
-rudi db - Database operations
+rudi db - Legacy session database operations
+
+LEGACY COMPATIBILITY
+  Core RUDI no longer initializes or requires rudi.db. These commands are
+  retained for existing session/history/database workflows.
 
 COMMANDS
   stats              Show usage statistics
@@ -43853,7 +43882,11 @@ async function cmdSession(args, flags) {
       break;
     default:
       console.log(`
-rudi session - Manage RUDI sessions
+rudi session - Legacy session history operations
+
+LEGACY COMPATIBILITY
+  Core RUDI no longer owns normal agent execution or session history.
+  These commands are retained for existing imported-session workflows.
 
 COMMANDS
   list [options]                             List sessions with filters
@@ -46500,7 +46533,6 @@ async function cmdDoctor(args, flags) {
     { path: PATHS.runtimes, name: "Runtimes" },
     { path: PATHS.binaries, name: "Binaries" },
     { path: PATHS.agents, name: "Agents" },
-    { path: PATHS.db, name: "Database" },
     { path: PATHS.cache, name: "Cache" }
   ];
   for (const dir of dirs) {
@@ -46511,13 +46543,6 @@ async function cmdDoctor(args, flags) {
       issues.push(`Missing directory: ${dir.name}`);
       fixes.push(() => import_fs19.default.mkdirSync(dir.path, { recursive: true }));
     }
-  }
-  console.log("\n\u{1F4BE} Database");
-  const dbInitialized = isDatabaseInitialized();
-  console.log(`  ${dbInitialized ? "\u2713" : "\u2717"} Initialized: ${dbInitialized}`);
-  if (!dbInitialized) {
-    issues.push("Database not initialized");
-    fixes.push(() => initSchema());
   }
   console.log("\n\u{1F7E2} Daemon");
   const daemon = await getSidecarDaemonStatus();
@@ -46802,34 +46827,34 @@ var HOME_LAYOUT = [
     key: "rudiDb",
     name: "rudi.db",
     type: "file",
-    section: "Database And Config",
+    section: "Legacy Session State",
     path: () => import_path20.default.join(PATHS.home, "rudi.db"),
-    lifecycle: "database",
+    lifecycle: "legacy-session-database",
     sensitivity: "sensitive",
     cleanable: "rudi-db-vacuum",
-    description: "SQLite database for sessions, usage, logs, and local metadata."
+    description: "Legacy SQLite database for session, usage, log, and run-group surfaces."
   },
   {
     key: "rudiDbWal",
     name: "rudi.db-wal",
     type: "file",
-    section: "Database And Config",
+    section: "Legacy Session State",
     path: () => import_path20.default.join(PATHS.home, "rudi.db-wal"),
-    lifecycle: "database-journal",
+    lifecycle: "legacy-session-database-journal",
     sensitivity: "sensitive",
     cleanable: "sqlite-managed",
-    description: "SQLite write-ahead log managed by SQLite."
+    description: "SQLite write-ahead log for the legacy session database."
   },
   {
     key: "rudiDbShm",
     name: "rudi.db-shm",
     type: "file",
-    section: "Database And Config",
+    section: "Legacy Session State",
     path: () => import_path20.default.join(PATHS.home, "rudi.db-shm"),
-    lifecycle: "database-journal",
+    lifecycle: "legacy-session-database-journal",
     sensitivity: "sensitive",
     cleanable: "sqlite-managed",
-    description: "SQLite shared-memory file managed by SQLite."
+    description: "SQLite shared-memory file for the legacy session database."
   },
   {
     key: "cache",
@@ -47492,23 +47517,7 @@ async function cmdInit(args, flags) {
   } else if (!quiet) {
     console.log("   \u26A0 Shims not created (opt-in). Run: rudi shims rebuild");
   }
-  if (!quiet) console.log("\n5. Checking database...");
-  const dbPath = import_path22.default.join(PATHS.home, "rudi.db");
-  const dbExists = import_fs22.default.existsSync(dbPath);
-  try {
-    const result = initSchema();
-    if (dbExists) {
-      actions.skipped.push("database");
-      if (!quiet) console.log(`   \u2713 Database exists (v${result.version})`);
-    } else {
-      actions.created.push("database");
-      if (!quiet) console.log(`   + Database created (v${result.version})`);
-    }
-  } catch (error) {
-    actions.failed.push("database");
-    if (!quiet) console.log(`   \u2717 Database error: ${error.message}`);
-  }
-  if (!quiet) console.log("\n6. Checking settings...");
+  if (!quiet) console.log("\n5. Checking settings...");
   const settingsPath = import_path22.default.join(PATHS.home, "settings.json");
   if (!import_fs22.default.existsSync(settingsPath)) {
     const settings = {
@@ -47523,7 +47532,7 @@ async function cmdInit(args, flags) {
     actions.skipped.push("settings");
     if (!quiet) console.log("   \u2713 settings.json exists");
   }
-  if (!quiet) console.log("\n7. Checking Codex agent instructions...");
+  if (!quiet) console.log("\n6. Checking Codex agent instructions...");
   if (shouldInstallAgentInstructions(flags)) {
     installCodexInstructionBlock({ actions, quiet });
   } else {
@@ -72472,6 +72481,10 @@ function printRunGroupHelp() {
   console.log(`
 rudi run-group - Inspect and manage parallel agent run groups
 
+LEGACY COMPATIBILITY
+  This command is retained for older RUDI sidecar/run-group workflows.
+  Prefer native agent-host orchestration for new parallel agent work.
+
 USAGE
   rudi run-group <command> [args] [options]
 
@@ -74406,7 +74419,7 @@ function buildCodexSkillFiles(pkg, sourceContent) {
   const body = parsed.body || `Use the installed RUDI skill \`skill:${skillName}\` as the source of truth.`;
   const skillMd = [
     "---",
-    `name: ${skillName}`,
+    `name: ${yamlString(displayName)}`,
     `description: ${yamlString(description)}`,
     "---",
     "",
