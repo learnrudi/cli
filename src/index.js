@@ -17,14 +17,19 @@
  *   rudi workflows           List installed workflows
  *   rudi list [kind]         List all installed packages
  *
- *   rudi db <cmd>            Database operations
- *   rudi import <cmd>        Import sessions from AI providers
  *   rudi secrets <cmd>       Manage secrets
  *   rudi doctor              Health check
  *
  *   rudi studio              Open RUDI website
  *   rudi studio version      Show installed Studio version
  *   rudi studio uninstall    Uninstall RUDI Studio
+ *
+ * Legacy compatibility:
+ *   rudi db <cmd>            Legacy session database operations
+ *   rudi session <cmd>       Legacy imported-session operations
+ *   rudi import <cmd>        Legacy session imports from AI providers
+ *   rudi parallel            Legacy sidecar run groups
+ *   rudi run-group <cmd>     Legacy run-group inspection/merge/cleanup
  */
 
 import { parseArgs } from '@learnrudi/utils/args';

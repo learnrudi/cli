@@ -48,8 +48,6 @@ AGENT INTEGRATION
 
 RUN
   run <stack>           Run a stack directly
-  parallel <tasks...>   Run multiple agent tasks in parallel (grouped)
-  run-group <cmd>       Inspect, merge, and cleanup run groups
   lanes <cmd>           Manage the local main/dev lane worktree layout
   leverage [preset]     Calculate human-attention leverage for agent workflows
 
@@ -58,18 +56,6 @@ SECRETS
   secrets get <name>    Print a secret value for scripts
   secrets list          List configured secrets
   secrets remove <name> Remove a secret
-
-DATABASE
-  db stats              Show database statistics
-  db search <query>     Search conversation history
-  db tables             Show table row counts
-  db vacuum             Compact and reclaim space
-
-SESSIONS
-  session list          List sessions
-  session search <q>    Search session content
-  session export <id>   Export a session
-  session index         Build search embeddings
 
 OPTIONS
   -h, --help           Show help
@@ -159,6 +145,10 @@ EXAMPLES
     parallel: `
 rudi parallel - Launch grouped parallel agent sessions
 
+LEGACY COMPATIBILITY
+  This command is retained for older RUDI sidecar/run-group workflows.
+  Prefer native Claude/Codex/Gemini orchestration for new agent work.
+
 USAGE
   rudi parallel "<task1>" "<task2>" [more tasks] [options]
   rudi parallel --template <name> [options]
@@ -186,6 +176,10 @@ EXAMPLES
 `,
     'run-group': `
 rudi run-group - Inspect and manage parallel agent run groups
+
+LEGACY COMPATIBILITY
+  This command is retained for older RUDI sidecar/run-group workflows.
+  Prefer native agent-host orchestration for new parallel agent work.
 
 USAGE
   rudi run-group <command> [args] [options]
@@ -387,7 +381,11 @@ SECURITY
   paste the result into chats. Prefer non-echoing command substitution.
 `,
     db: `
-rudi db - Database operations
+rudi db - Legacy session database operations
+
+LEGACY COMPATIBILITY
+  Core RUDI no longer initializes or requires rudi.db. These commands are
+  retained for existing session/history/database workflows.
 
 USAGE
   rudi db <command> [args]
@@ -416,6 +414,33 @@ EXAMPLES
   rudi db backup ~/backups/rudi.db
   rudi db prune 30 --dry-run
   rudi db tables
+`,
+    session: `
+rudi session - Legacy session history operations
+
+LEGACY COMPATIBILITY
+  Core RUDI no longer owns normal agent execution or session history.
+  These commands are retained for existing imported-session workflows.
+
+USAGE
+  rudi session <command> [args]
+
+COMMANDS
+  list [options]         List sessions with filters
+  show <id>              Show session details
+  rename <id> <title>    Rename a session
+  delete <id> [--force]  Delete a session
+  tag <id> <tags>        Add tags
+  move <id> --project    Move session to project
+  export <id> [-o file]  Export session to JSON
+  search <query>         Search session content
+  index [--embeddings]   Index sessions for semantic search
+  similar <id>           Find similar sessions
+
+EXAMPLES
+  rudi session list --days 7
+  rudi session search "authentication bugs"
+  rudi session export 7bfa7be7 -o session.json
 `,
     import: `
 rudi import - Import sessions from AI providers
@@ -485,7 +510,7 @@ OPTIONS
 SHOWS
   - Directory structure with sizes
   - Installed package counts
-  - Database status
+  - Legacy session database status
   - Quick commands reference
 
 EXAMPLES
@@ -505,7 +530,6 @@ OPTIONS
 
 CHECKS
   - Directory structure
-  - Database integrity
   - Installed packages
   - Available runtimes (node, python, deno, bun)
   - Available binaries (ffmpeg, ripgrep, etc.)

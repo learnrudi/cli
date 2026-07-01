@@ -57,7 +57,11 @@ export async function cmdDb(args, flags) {
 
     default:
       console.log(`
-rudi db - Database operations
+rudi db - Legacy session database operations
+
+LEGACY COMPATIBILITY
+  Core RUDI no longer initializes or requires rudi.db. These commands are
+  retained for existing session/history/database workflows.
 
 COMMANDS
   stats              Show usage statistics

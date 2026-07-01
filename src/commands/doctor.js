@@ -9,7 +9,6 @@ import {
   getAvailableDeps,
   getAllDepsFromRegistry
 } from '@learnrudi/core';
-import { isDatabaseInitialized, initSchema } from '@learnrudi/db';
 import { listSecretNames } from '@learnrudi/runner';
 import fs from 'fs';
 import { getSidecarDaemonStatus } from './sidecar-client.js';
@@ -42,7 +41,6 @@ export async function cmdDoctor(args, flags) {
     { path: PATHS.runtimes, name: 'Runtimes' },
     { path: PATHS.binaries, name: 'Binaries' },
     { path: PATHS.agents, name: 'Agents' },
-    { path: PATHS.db, name: 'Database' },
     { path: PATHS.cache, name: 'Cache' }
   ];
 
@@ -55,16 +53,6 @@ export async function cmdDoctor(args, flags) {
       issues.push(`Missing directory: ${dir.name}`);
       fixes.push(() => fs.mkdirSync(dir.path, { recursive: true }));
     }
-  }
-
-  // Check database
-  console.log('\n💾 Database');
-  const dbInitialized = isDatabaseInitialized();
-  console.log(`  ${dbInitialized ? '✓' : '✗'} Initialized: ${dbInitialized}`);
-
-  if (!dbInitialized) {
-    issues.push('Database not initialized');
-    fixes.push(() => initSchema());
   }
 
   // Check local daemon reachability

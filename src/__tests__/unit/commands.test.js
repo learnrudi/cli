@@ -4,6 +4,10 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert';
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 // =============================================================================
 // COMMAND EXPORTS
@@ -159,6 +163,52 @@ test('utils: secrets help documents implemented secret commands only', async () 
   const rendered = lines.join('\n');
   assert.match(rendered, /get <name>\s+Get a secret value/);
   assert.doesNotMatch(rendered, /export\s+Export secrets/);
+});
+
+test('utils: default help archives legacy DB/session/run-group surfaces', async () => {
+  const { printHelp } = await import('@learnrudi/utils/help');
+  const captureHelp = (topic) => {
+    const lines = [];
+    const originalLog = console.log;
+    console.log = (message = '') => {
+      lines.push(String(message));
+    };
+    try {
+      printHelp(topic);
+    } finally {
+      console.log = originalLog;
+    }
+    return lines.join('\n');
+  };
+
+  const defaultHelp = captureHelp();
+  assert.doesNotMatch(defaultHelp, /\nDATABASE\n/);
+  assert.doesNotMatch(defaultHelp, /\nSESSIONS\n/);
+  assert.doesNotMatch(defaultHelp, /parallel <tasks\.\.\.>/);
+  assert.doesNotMatch(defaultHelp, /run-group <cmd>/);
+
+  for (const topic of ['db', 'session', 'parallel', 'run-group']) {
+    const topicHelp = captureHelp(topic);
+    assert.match(topicHelp, /LEGACY COMPATIBILITY/);
+    assert.doesNotMatch(topicHelp, /No help available/);
+  }
+});
+
+test('doctor: core health check does not initialize legacy database state', () => {
+  const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'rudi-doctor-help-test-'));
+  const result = spawnSync(process.execPath, ['src/index.js', 'doctor', '--fix'], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      RUDI_HOME: tempHome,
+      HOME: tempHome,
+    },
+    encoding: 'utf8',
+  });
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.equal(fs.existsSync(path.join(tempHome, 'rudi.db')), false);
+  assert.doesNotMatch(result.stdout, /Database not initialized|Initializing database|\n💾 Database\n/);
 });
 
 test('utils: printVersion is exported', async () => {
