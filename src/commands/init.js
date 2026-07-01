@@ -5,7 +5,6 @@
  * - Runtimes: node, python (bundled)
  * - Binaries: sqlite3, ripgrep (essential)
  * - Shims (opt-in): symlinks to installed tools in ~/.rudi/bins
- * - Database: rudi.db with schema
  */
 
 import fs from 'fs';
@@ -15,7 +14,6 @@ import { createWriteStream } from 'fs';
 import { createGunzip } from 'zlib';
 import { PATHS, ensureDirectories, getPlatformArch } from '@learnrudi/env';
 import { fetchIndex } from '@learnrudi/registry-client';
-import { initSchema } from '@learnrudi/db';
 import { runCommand } from '../utils/subprocess.js';
 import {
   buildRudiInstructionBlock,
@@ -212,26 +210,8 @@ export async function cmdInit(args, flags) {
     console.log('   ⚠ Shims not created (opt-in). Run: rudi shims rebuild');
   }
 
-  // Step 5: Initialize database
-  if (!quiet) console.log('\n5. Checking database...');
-  const dbPath = path.join(PATHS.home, 'rudi.db');
-  const dbExists = fs.existsSync(dbPath);
-  try {
-    const result = initSchema();
-    if (dbExists) {
-      actions.skipped.push('database');
-      if (!quiet) console.log(`   ✓ Database exists (v${result.version})`);
-    } else {
-      actions.created.push('database');
-      if (!quiet) console.log(`   + Database created (v${result.version})`);
-    }
-  } catch (error) {
-    actions.failed.push('database');
-    if (!quiet) console.log(`   ✗ Database error: ${error.message}`);
-  }
-
-  // Step 6: Write settings
-  if (!quiet) console.log('\n6. Checking settings...');
+  // Step 5: Write settings
+  if (!quiet) console.log('\n5. Checking settings...');
   const settingsPath = path.join(PATHS.home, 'settings.json');
   if (!fs.existsSync(settingsPath)) {
     const settings = {
@@ -247,8 +227,8 @@ export async function cmdInit(args, flags) {
     if (!quiet) console.log('   ✓ settings.json exists');
   }
 
-  // Step 7: Seed Codex instructions so agents can discover RUDI capabilities.
-  if (!quiet) console.log('\n7. Checking Codex agent instructions...');
+  // Step 6: Seed Codex instructions so agents can discover RUDI capabilities.
+  if (!quiet) console.log('\n6. Checking Codex agent instructions...');
   if (shouldInstallAgentInstructions(flags)) {
     installCodexInstructionBlock({ actions, quiet });
   } else {
@@ -411,8 +391,7 @@ async function showStatus() {
   const checks = [
     { name: 'Home', path: PATHS.home },
     { name: 'Runtimes', path: PATHS.runtimes },
-    { name: 'Binaries', path: PATHS.binaries },
-    { name: 'Database', path: path.join(PATHS.home, 'rudi.db') }
+    { name: 'Binaries', path: PATHS.binaries }
   ];
 
   for (const check of checks) {

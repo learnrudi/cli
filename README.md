@@ -161,9 +161,6 @@ rudi doctor              # Check system health
 ├── secrets/              # Stack-specific secret/env files
 ├── secrets.json          # Primary secret store (mode 0600)
 │
-├── rudi.db               # SQLite database
-├── rudi.db-wal           # SQLite write-ahead log, SQLite-managed
-├── rudi.db-shm           # SQLite shared-memory file, SQLite-managed
 ├── rudi.json             # Installed package and stack configuration
 ├── settings.json         # Local settings
 ├── shim-registry.json    # Shim ownership tracking
@@ -174,13 +171,19 @@ rudi doctor              # Check system health
 ├── notes/                # Local user artifacts from RUDI workflows
 ├── archive/              # Manual cleanup archives
 ├── prompts/              # Legacy prompt directory; new assets map to skills/
-├── .rudi-lite-port       # Current daemon port file, legacy Lite naming
-└── .rudi-lite-token      # Current daemon auth token, legacy Lite naming
+│
+├── rudi.db               # Legacy session database, created by DB/session commands
+├── rudi.db-wal           # SQLite write-ahead log, SQLite-managed
+├── rudi.db-shm           # SQLite shared-memory file, SQLite-managed
+├── .rudi-lite-port       # Legacy daemon port file
+└── .rudi-lite-token      # Legacy daemon auth token
 ```
 
 Use `rudi home` for a lifecycle-oriented view of this tree. It labels each path
 as installed code, persistent state, secret material, generated cache, operational
 logs, or legacy compatibility. Use `rudi home --json` for machine-readable output.
+Core `rudi init` does not create `rudi.db`; legacy session/database commands
+initialize it only when those surfaces are used.
 
 ## How MCP Integration Works
 

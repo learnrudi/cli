@@ -457,9 +457,10 @@ WHAT IT DOES
   2. Downloads bundled runtimes (Node.js, Python) if not installed
   3. Downloads essential binaries (sqlite3, ripgrep) if not installed
   4. Optionally creates shims in ~/.rudi/bins/ (use --with-shims)
-  5. Initializes the database (if missing)
-  6. Creates settings.json (if missing)
-  7. Installs/refreshes the managed Codex AGENTS.md RUDI block
+  5. Creates settings.json (if missing)
+  6. Installs/refreshes the managed Codex AGENTS.md RUDI block
+
+NOTE: Legacy session/database commands initialize rudi.db only when invoked.
 
 NOTE: Safe to run multiple times - only creates what's missing.
 

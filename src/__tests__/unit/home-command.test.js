@@ -21,6 +21,7 @@ test('home json explains active lifecycle categories without secret values', asy
   }
   fs.writeFileSync(path.join(rudiHome, 'secrets.json'), JSON.stringify({ API_TOKEN: 'do-not-print' }));
   fs.writeFileSync(path.join(rudiHome, 'logs', 'daemon.err.log'), 'error line\n');
+  fs.writeFileSync(path.join(rudiHome, 'rudi.db'), '');
 
   const { cmdHome } = await import('../../commands/home.js');
   const originalLog = console.log;
@@ -46,6 +47,8 @@ test('home json explains active lifecycle categories without secret values', asy
   assert.equal(data.entries.secretsJson.sensitivity, 'secret');
   assert.equal(data.entries.logs.lifecycle, 'operational-logs');
   assert.equal(data.entries.logs.cleanable, 'rotate-or-archive');
+  assert.equal(data.entries.rudiDb.section, 'Legacy Session State');
+  assert.equal(data.entries.rudiDb.lifecycle, 'legacy-session-database');
   if (process.platform !== 'win32') {
     assert.ok(data.entries.bins.size < 1024 * 16, 'bins size should count the symlink, not its target');
   }
