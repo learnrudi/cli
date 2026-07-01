@@ -168,34 +168,34 @@ const HOME_LAYOUT = [
     key: 'rudiDb',
     name: 'rudi.db',
     type: 'file',
-    section: 'Database And Config',
+    section: 'Legacy Session State',
     path: () => path.join(PATHS.home, 'rudi.db'),
-    lifecycle: 'database',
+    lifecycle: 'legacy-session-database',
     sensitivity: 'sensitive',
     cleanable: 'rudi-db-vacuum',
-    description: 'SQLite database for sessions, usage, logs, and local metadata.'
+    description: 'Legacy SQLite database for session, usage, log, and run-group surfaces.'
   },
   {
     key: 'rudiDbWal',
     name: 'rudi.db-wal',
     type: 'file',
-    section: 'Database And Config',
+    section: 'Legacy Session State',
     path: () => path.join(PATHS.home, 'rudi.db-wal'),
-    lifecycle: 'database-journal',
+    lifecycle: 'legacy-session-database-journal',
     sensitivity: 'sensitive',
     cleanable: 'sqlite-managed',
-    description: 'SQLite write-ahead log managed by SQLite.'
+    description: 'SQLite write-ahead log for the legacy session database.'
   },
   {
     key: 'rudiDbShm',
     name: 'rudi.db-shm',
     type: 'file',
-    section: 'Database And Config',
+    section: 'Legacy Session State',
     path: () => path.join(PATHS.home, 'rudi.db-shm'),
-    lifecycle: 'database-journal',
+    lifecycle: 'legacy-session-database-journal',
     sensitivity: 'sensitive',
     cleanable: 'sqlite-managed',
-    description: 'SQLite shared-memory file managed by SQLite.'
+    description: 'SQLite shared-memory file for the legacy session database.'
   },
   {
     key: 'cache',
