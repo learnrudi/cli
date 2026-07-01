@@ -66,6 +66,7 @@ import { cmdRuntime } from './commands/runtime.js';
 import { cmdDaemon } from './commands/daemon.js';
 import { cmdInstructions } from './commands/instructions.js';
 import { cmdLeverage } from './commands/leverage.js';
+import { cmdSkills } from './commands/skills.js';
 
 const VERSION = typeof __RUDI_CLI_VERSION__ === 'string'
   ? __RUDI_CLI_VERSION__
@@ -254,7 +255,7 @@ async function main() {
         break;
 
       case 'skills':
-        await cmdList(['skills'], flags);
+        await cmdSkills(args, flags);
         break;
 
       case 'prompts':
