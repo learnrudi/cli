@@ -188,7 +188,11 @@ export async function cmdSession(args, flags) {
 
     default:
       console.log(`
-rudi session - Manage RUDI sessions
+rudi session - Legacy session history operations
+
+LEGACY COMPATIBILITY
+  Core RUDI no longer owns normal agent execution or session history.
+  These commands are retained for existing imported-session workflows.
 
 COMMANDS
   list [options]                             List sessions with filters

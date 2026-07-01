@@ -4,6 +4,10 @@ function printRunGroupHelp() {
   console.log(`
 rudi run-group - Inspect and manage parallel agent run groups
 
+LEGACY COMPATIBILITY
+  This command is retained for older RUDI sidecar/run-group workflows.
+  Prefer native agent-host orchestration for new parallel agent work.
+
 USAGE
   rudi run-group <command> [args] [options]
 

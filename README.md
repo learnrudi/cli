@@ -139,6 +139,22 @@ rudi remove slack        # Uninstall a package
 rudi doctor              # Check system health
 ```
 
+### Legacy Compatibility
+
+RUDI keeps several older Lite/session orchestration commands callable for
+existing local workflows, but they are no longer part of the default core
+capability path:
+
+```bash
+rudi help db          # Legacy session database operations
+rudi help session     # Legacy imported-session history operations
+rudi help parallel    # Legacy sidecar run-group launcher
+rudi help run-group   # Legacy sidecar run-group inspection/merge/cleanup
+```
+
+Core `rudi init`, package install, router indexing, and agent integration do not
+initialize or require `rudi.db`.
+
 ## Directory Structure
 
 ```

@@ -24,11 +24,6 @@ Most-used commands (CLI has 25+ total — see `src/index.js` for full inventory)
 | `rudi list` | `ls` | List installed packages |
 | `rudi remove` | `rm`, `uninstall` | Remove a package |
 | `rudi secrets` | `secret` | Manage secrets |
-| `rudi serve` | | Start HTTP + WebSocket sidecar server |
-| `rudi parallel` | `par` | Launch parallel run groups from terminal |
-| `rudi session` | `sessions` | Session operations |
-| `rudi import` | | Import sessions from AI providers |
-| `rudi db` | `database` | Database operations |
 | `rudi project` | `projects` | Project management |
 | `rudi doctor` | | Health check |
 | `rudi init` | `bootstrap`, `setup` | Initialize RUDI |
@@ -45,13 +40,24 @@ Most-used commands (CLI has 25+ total — see `src/index.js` for full inventory)
 
 **Shortcuts:** `rudi stacks`, `rudi prompts`, `rudi workflows`, `rudi runtimes`, `rudi binaries` (aliases: `bins`, `tools`), `rudi agents`
 
+Legacy compatibility commands remain callable for existing Lite/session-era
+workflows, but they are not the default RUDI product surface:
+
+| Command | Aliases | Purpose |
+|---------|---------|---------|
+| `rudi serve` | | Legacy HTTP + WebSocket sidecar entrypoint |
+| `rudi parallel` | `par` | Legacy terminal-based run groups |
+| `rudi run-group` | `run-groups` | Legacy run-group inspection, merge, and cleanup |
+| `rudi session` | `sessions` | Legacy imported-session operations |
+| `rudi import` | | Legacy session import from AI providers |
+| `rudi db` | `database` | Legacy session database operations |
+
 ---
 
 ## Architecture
 
 ```
 ~/.rudi/                        # RUDI home directory
-├── rudi.db                     # SQLite database (better-sqlite3, single DB for all data)
 ├── secrets.json                # Secrets file
 ├── stacks/                     # Installed stacks (MCP servers)
 ├── skills/                     # Installed skills
@@ -61,8 +67,9 @@ Most-used commands (CLI has 25+ total — see `src/index.js` for full inventory)
 ├── bins/                       # Binary symlinks
 ├── agents/                     # Agent integration metadata
 ├── blobs/                      # Binary blobs
-├── .rudi-lite-port             # Daemon port (legacy filename)
-└── .rudi-lite-token            # Daemon auth token (legacy filename)
+├── rudi.db                     # Legacy session/run-group SQLite database
+├── .rudi-lite-port             # Legacy daemon port filename
+└── .rudi-lite-token            # Legacy daemon auth token filename
 
 cli/
 ├── src/
@@ -89,7 +96,9 @@ cli/
 └── dist/index.cjs              # Built output (bin: rudi)
 ```
 
-**Dependency flow:** `index.js` -> `commands/*.js` -> `packages/*` -> `~/.rudi/rudi.db`
+**Dependency flow:** core commands use `index.js` -> `commands/*.js` ->
+`packages/*` -> package/config files under `~/.rudi/`. Legacy DB/session
+commands additionally use `~/.rudi/rudi.db`.
 
 Storage is separate from daemon lifecycle. The daemon may call storage
 repositories and report storage health, but database repair/import policy is
@@ -197,7 +206,7 @@ rudi parallel "task one" "task two" [--name "Batch"] [--provider claude] [--mode
 
 ## Key Notes
 
-- **DB path:** `~/.rudi/rudi.db` (SQLite via better-sqlite3)
+- **Legacy DB path:** `~/.rudi/rudi.db` (SQLite via better-sqlite3, used by legacy session/run-group surfaces)
 - **Daemon routes:** Legacy routes are still defined in `src/commands/serve.js` and `src/commands/agent/routes/` while migration proceeds.
 - **MCP router:** `src/router-mcp.js` exposes installed stack tools over MCP and must remain independent of Lite being open.
 - **Legacy Lite paths:** Lite consumes the daemon API via `httpBridge.ts` — see `/Users/hoff/dev/RUDI/apps/lite/AGENTS.md`
