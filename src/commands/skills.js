@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { listInstalled } from '@learnrudi/core';
+import { CLAUDE_HOME } from '@learnrudi/env';
 import { cmdList } from './list.js';
 
 function compactText(value, maxLength = 160) {
@@ -79,6 +80,13 @@ function codexSkillsRoot(env = process.env) {
   return path.join(codexHome, 'skills');
 }
 
+function claudeSkillsRoot(env = process.env) {
+  const claudeHome = env.CLAUDE_HOME
+    ? path.resolve(env.CLAUDE_HOME)
+    : CLAUDE_HOME;
+  return path.join(claudeHome, 'skills');
+}
+
 function shortDescription(description, fallback) {
   return compactText(description || fallback, 64);
 }
@@ -89,9 +97,30 @@ function defaultPrompt(skillName, description, displayName) {
 }
 
 export function buildCodexSkillFiles(pkg, sourceContent) {
+  const baseFiles = buildClaudeSkillFiles(pkg, sourceContent);
+  const { skillName } = baseFiles;
+  const parsed = stripFrontmatter(sourceContent);
+  const displayName = compactText(parsed.metadata.name || pkg.name || skillName, 80);
+  const description = compactText(
+    pkg.description || parsed.metadata.description || `${displayName} RUDI skill`,
+    320
+  );
+
+  const openaiYaml = [
+    'interface:',
+    `  display_name: ${yamlString(displayName)}`,
+    `  short_description: ${yamlString(shortDescription(description, displayName))}`,
+    `  default_prompt: ${yamlString(defaultPrompt(skillName, description, displayName))}`,
+    '',
+  ].join('\n');
+
+  return { ...baseFiles, openaiYaml };
+}
+
+export function buildClaudeSkillFiles(pkg, sourceContent) {
   const skillName = normalizeSkillName(pkg);
   if (!skillName) {
-    throw new Error(`Cannot derive Codex skill name from ${pkg?.id || pkg?.name || 'package'}`);
+    throw new Error(`Cannot derive skill name from ${pkg?.id || pkg?.name || 'package'}`);
   }
 
   const parsed = stripFrontmatter(sourceContent);
@@ -112,15 +141,7 @@ export function buildCodexSkillFiles(pkg, sourceContent) {
     '',
   ].join('\n');
 
-  const openaiYaml = [
-    'interface:',
-    `  display_name: ${yamlString(displayName)}`,
-    `  short_description: ${yamlString(shortDescription(description, displayName))}`,
-    `  default_prompt: ${yamlString(defaultPrompt(skillName, description, displayName))}`,
-    '',
-  ].join('\n');
-
-  return { skillName, skillMd, openaiYaml };
+  return { skillName, skillMd };
 }
 
 export async function syncCodexSkills(options = {}) {
@@ -199,22 +220,97 @@ export async function syncCodexSkills(options = {}) {
   };
 }
 
+export async function syncClaudeSkills(options = {}) {
+  const {
+    skills = null,
+    claudeRoot = claudeSkillsRoot(),
+    force = false,
+    dryRun = false,
+  } = options;
+
+  const installedSkills = skills || await listInstalled('skill');
+  const rudiSkills = installedSkills.filter(skill => !skill.source || skill.source === 'rudi');
+  const results = [];
+
+  for (const skill of rudiSkills) {
+    const sourcePath = skill.entryPath || skill.path;
+    const skillName = normalizeSkillName(skill);
+
+    if (!skillName) {
+      results.push({
+        id: skill.id,
+        action: 'failed',
+        error: 'Could not derive Claude skill name',
+      });
+      continue;
+    }
+
+    if (!sourcePath || !fs.existsSync(sourcePath)) {
+      results.push({
+        id: skill.id,
+        skillName,
+        action: 'failed',
+        error: 'Source skill file not found',
+      });
+      continue;
+    }
+
+    const targetDir = path.join(claudeRoot, skillName);
+    const skillMdPath = path.join(targetDir, 'SKILL.md');
+    const exists = fs.existsSync(skillMdPath);
+
+    if (exists && !force) {
+      results.push({
+        id: skill.id,
+        skillName,
+        action: 'skipped',
+        reason: 'Claude skill already exists; use --force to update',
+        targetDir,
+      });
+      continue;
+    }
+
+    const sourceContent = fs.readFileSync(sourcePath, 'utf-8');
+    const files = buildClaudeSkillFiles(skill, sourceContent);
+    const action = exists ? 'updated' : 'created';
+
+    if (!dryRun) {
+      fs.mkdirSync(targetDir, { recursive: true });
+      fs.writeFileSync(skillMdPath, files.skillMd);
+    }
+
+    results.push({
+      id: skill.id,
+      skillName,
+      action: dryRun ? `would_${action}` : action,
+      targetDir,
+    });
+  }
+
+  return {
+    claudeRoot,
+    total: results.length,
+    results,
+  };
+}
+
 function printSkillsHelp() {
   console.log(`
 rudi skills - List or sync installed RUDI skills
 
 USAGE
   rudi skills
-  rudi skills sync codex [--force] [--dry-run] [--json]
+  rudi skills sync <codex|claude> [--force] [--dry-run] [--json]
 
 OPTIONS
-  --force      Overwrite existing Codex skill wrappers
+  --force      Overwrite existing native skill wrappers
   --dry-run    Preview sync results without writing files
   --json       Output JSON
 
 EXAMPLES
   rudi skills
   rudi skills sync codex
+  rudi skills sync claude
   rudi skills sync codex --force
 `);
 }
@@ -236,11 +332,12 @@ export async function cmdSkills(args = [], flags = {}) {
   }
 
   const target = args[1];
-  if (target !== 'codex') {
-    throw new Error('Usage: rudi skills sync codex [--force] [--dry-run] [--json]');
+  if (target !== 'codex' && target !== 'claude') {
+    throw new Error('Usage: rudi skills sync <codex|claude> [--force] [--dry-run] [--json]');
   }
 
-  const result = await syncCodexSkills({
+  const sync = target === 'codex' ? syncCodexSkills : syncClaudeSkills;
+  const result = await sync({
     force: flags.force === true,
     dryRun: flags['dry-run'] === true || flags.dryRun === true,
   });
@@ -250,7 +347,9 @@ export async function cmdSkills(args = [], flags = {}) {
     return;
   }
 
-  console.log(`Codex skills root: ${result.codexRoot}`);
+  const targetName = target === 'codex' ? 'Codex' : 'Claude';
+  const skillsRoot = target === 'codex' ? result.codexRoot : result.claudeRoot;
+  console.log(`${targetName} skills root: ${skillsRoot}`);
   for (const item of result.results) {
     if (item.action === 'failed') {
       console.log(`  x ${item.id}: ${item.error}`);
@@ -270,5 +369,5 @@ export async function cmdSkills(args = [], flags = {}) {
   const prefix = result.results.some(item => item.action.startsWith('would_'))
     ? 'Would sync'
     : 'Synced';
-  console.log(`\n${prefix} ${syncedCount} skill(s). Restart Codex to pick up native skill changes.`);
+  console.log(`\n${prefix} ${syncedCount} skill(s). Restart ${targetName} to pick up native skill changes.`);
 }

@@ -70,6 +70,7 @@ EXAMPLES
   rudi integrate claude          Wire up Claude Desktop/Code
   rudi instructions codex        Print Codex instruction block
   rudi skills sync codex         Create native Codex wrappers for RUDI skills
+  rudi skills sync claude        Create native Claude wrappers for RUDI skills
   rudi leverage frontend         Calculate frontend workflow leverage
   rudi list                      Show installed packages
 
@@ -343,19 +344,21 @@ rudi skills - List or sync installed RUDI skills
 
 USAGE
   rudi skills
-  rudi skills sync codex [--force] [--dry-run] [--json]
+  rudi skills sync <codex|claude> [--force] [--dry-run] [--json]
 
 COMMANDS
   sync codex       Create native ~/.codex/skills wrappers for installed RUDI skills
+  sync claude      Create native ~/.claude/skills wrappers for installed RUDI skills
 
 OPTIONS
-  --force          Overwrite existing Codex skill wrappers
+  --force          Overwrite existing native skill wrappers
   --dry-run        Preview sync results without writing files
   --json           Output JSON
 
 EXAMPLES
   rudi skills
   rudi skills sync codex
+  rudi skills sync claude
   rudi skills sync codex --force
 `,
     secrets: `

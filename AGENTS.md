@@ -125,8 +125,11 @@ MCP config and instruction config are separate layers:
   agent's global or project instruction file.
 - `rudi skills sync codex` creates native `~/.codex/skills/<skill>/` wrappers
   for installed RUDI skills so Codex can surface them in its skill/slash UI.
-  This is separate from MCP router integration and from the managed AGENTS.md
-  instruction block.
+- `rudi skills sync claude` creates native `~/.claude/skills/<skill>/`
+  wrappers for installed RUDI skills so Claude can surface them in its native
+  skill UI.
+- Skill sync is separate from MCP router integration and from managed
+  AGENTS.md/CLAUDE.md instruction blocks.
 
 Discover installed stacks with `rudi list stacks --json` or inspect
 `~/.rudi/cache/tool-index.json`. Rebuild the router cache with

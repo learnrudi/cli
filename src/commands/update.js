@@ -113,6 +113,24 @@ async function rebuildUpdatedStackIndex(stackIds, flags, deps) {
   });
 }
 
+function getUpdatedSkillIds(updatedPackages) {
+  return updatedPackages
+    .filter(pkg => pkg.kind === 'skill')
+    .map(pkg => pkg.id)
+    .sort();
+}
+
+function logNativeSkillSyncHint(skillIds, deps) {
+  if (skillIds.length === 0) return;
+
+  deps.log('');
+  deps.log(`Updated ${skillIds.length} skill package(s). Native Claude/Codex skill wrappers are not overwritten automatically.`);
+  deps.log('To sync native wrappers for updated RUDI skills, run:');
+  deps.log('  rudi skills sync codex --force');
+  deps.log('  rudi skills sync claude --force');
+  deps.log('These commands overwrite existing native wrappers; omit --force to create only missing wrappers.');
+}
+
 async function updateOnePackage(pkg, flags, deps) {
   deps.log(`Updating ${pkg.id}...`);
   const result = await deps.updatePackage(pkg.id, {
@@ -170,6 +188,7 @@ export async function runUpdate(args = [], flags = {}, deps = defaultDependencie
   const updatedStackIds = updatedPackages
     .filter(pkg => pkg.kind === 'stack')
     .map(pkg => pkg.id);
+  const updatedSkillIds = getUpdatedSkillIds(updatedPackages);
   const indexResult = await rebuildUpdatedStackIndex(updatedStackIds, flags, deps);
 
   if (pkgId) {
@@ -177,6 +196,7 @@ export async function runUpdate(args = [], flags = {}, deps = defaultDependencie
   } else {
     deps.log(`\nUpdated ${updatedPackages.length} package(s)${failedPackages.length > 0 ? `, ${failedPackages.length} failed` : ''}${skippedPackages.length > 0 ? `, ${skippedPackages.length} skipped` : ''}`);
   }
+  logNativeSkillSyncHint(updatedSkillIds, deps);
 
   return {
     updated: updatedPackages.length,
@@ -186,6 +206,7 @@ export async function runUpdate(args = [], flags = {}, deps = defaultDependencie
     failures: failedPackages,
     skippedPackages,
     indexedStacks: updatedStackIds,
+    updatedSkills: updatedSkillIds,
     indexResult,
   };
 }

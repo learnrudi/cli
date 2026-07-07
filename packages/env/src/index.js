@@ -23,8 +23,8 @@ export const RUDI_HOME = process.env.RUDI_HOME
   : path.join(os.homedir(), '.rudi');
 
 /**
- * Claude Code home directory. RUDI may discover skills from this directory, but
- * does not own or mutate it.
+ * Claude Code home directory. RUDI discovers skills from this directory and
+ * writes generated wrappers only when the user runs `rudi skills sync claude`.
  */
 export const CLAUDE_HOME = process.env.CLAUDE_HOME
   ? path.resolve(process.env.CLAUDE_HOME)

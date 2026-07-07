@@ -37232,6 +37232,7 @@ EXAMPLES
   rudi integrate claude          Wire up Claude Desktop/Code
   rudi instructions codex        Print Codex instruction block
   rudi skills sync codex         Create native Codex wrappers for RUDI skills
+  rudi skills sync claude        Create native Claude wrappers for RUDI skills
   rudi leverage frontend         Calculate frontend workflow leverage
   rudi list                      Show installed packages
 
@@ -37504,19 +37505,21 @@ rudi skills - List or sync installed RUDI skills
 
 USAGE
   rudi skills
-  rudi skills sync codex [--force] [--dry-run] [--json]
+  rudi skills sync <codex|claude> [--force] [--dry-run] [--json]
 
 COMMANDS
   sync codex       Create native ~/.codex/skills wrappers for installed RUDI skills
+  sync claude      Create native ~/.claude/skills wrappers for installed RUDI skills
 
 OPTIONS
-  --force          Overwrite existing Codex skill wrappers
+  --force          Overwrite existing native skill wrappers
   --dry-run        Preview sync results without writing files
   --json           Output JSON
 
 EXAMPLES
   rudi skills
   rudi skills sync codex
+  rudi skills sync claude
   rudi skills sync codex --force
 `,
     secrets: `
@@ -47740,6 +47743,18 @@ async function rebuildUpdatedStackIndex(stackIds, flags, deps) {
     validate: false
   });
 }
+function getUpdatedSkillIds(updatedPackages) {
+  return updatedPackages.filter((pkg) => pkg.kind === "skill").map((pkg) => pkg.id).sort();
+}
+function logNativeSkillSyncHint(skillIds, deps) {
+  if (skillIds.length === 0) return;
+  deps.log("");
+  deps.log(`Updated ${skillIds.length} skill package(s). Native Claude/Codex skill wrappers are not overwritten automatically.`);
+  deps.log("To sync native wrappers for updated RUDI skills, run:");
+  deps.log("  rudi skills sync codex --force");
+  deps.log("  rudi skills sync claude --force");
+  deps.log("These commands overwrite existing native wrappers; omit --force to create only missing wrappers.");
+}
 async function updateOnePackage(pkg, flags, deps) {
   deps.log(`Updating ${pkg.id}...`);
   const result = await deps.updatePackage(pkg.id, {
@@ -47789,6 +47804,7 @@ async function runUpdate(args = [], flags = {}, deps = defaultDependencies) {
     }
   }
   const updatedStackIds = updatedPackages.filter((pkg) => pkg.kind === "stack").map((pkg) => pkg.id);
+  const updatedSkillIds = getUpdatedSkillIds(updatedPackages);
   const indexResult = await rebuildUpdatedStackIndex(updatedStackIds, flags, deps);
   if (pkgId) {
     deps.log(`Updated ${updatedPackages[0].id}`);
@@ -47796,6 +47812,7 @@ async function runUpdate(args = [], flags = {}, deps = defaultDependencies) {
     deps.log(`
 Updated ${updatedPackages.length} package(s)${failedPackages.length > 0 ? `, ${failedPackages.length} failed` : ""}${skippedPackages.length > 0 ? `, ${skippedPackages.length} skipped` : ""}`);
   }
+  logNativeSkillSyncHint(updatedSkillIds, deps);
   return {
     updated: updatedPackages.length,
     failed: failedPackages.length,
@@ -47804,6 +47821,7 @@ Updated ${updatedPackages.length} package(s)${failedPackages.length > 0 ? `, ${f
     failures: failedPackages,
     skippedPackages,
     indexedStacks: updatedStackIds,
+    updatedSkills: updatedSkillIds,
     indexResult
   };
 }
@@ -74352,6 +74370,7 @@ var import_fs64 = __toESM(require("fs"), 1);
 var import_path67 = __toESM(require("path"), 1);
 var import_os28 = __toESM(require("os"), 1);
 init_src5();
+init_src();
 function compactText(value, maxLength = 160) {
   const compact = String(value || "").replace(/\s+/g, " ").trim();
   if (compact.length <= maxLength) return compact;
@@ -74398,6 +74417,10 @@ function codexSkillsRoot(env = process.env) {
   const codexHome = env.CODEX_HOME ? import_path67.default.resolve(env.CODEX_HOME) : import_path67.default.join(import_os28.default.homedir(), ".codex");
   return import_path67.default.join(codexHome, "skills");
 }
+function claudeSkillsRoot(env = process.env) {
+  const claudeHome = env.CLAUDE_HOME ? import_path67.default.resolve(env.CLAUDE_HOME) : CLAUDE_HOME;
+  return import_path67.default.join(claudeHome, "skills");
+}
 function shortDescription(description, fallback) {
   return compactText(description || fallback, 64);
 }
@@ -74406,9 +74429,27 @@ function defaultPrompt(skillName, description, displayName) {
   return `Use $${skillName} to ${action}.`;
 }
 function buildCodexSkillFiles(pkg, sourceContent) {
+  const baseFiles = buildClaudeSkillFiles(pkg, sourceContent);
+  const { skillName } = baseFiles;
+  const parsed = stripFrontmatter(sourceContent);
+  const displayName = compactText(parsed.metadata.name || pkg.name || skillName, 80);
+  const description = compactText(
+    pkg.description || parsed.metadata.description || `${displayName} RUDI skill`,
+    320
+  );
+  const openaiYaml = [
+    "interface:",
+    `  display_name: ${yamlString(displayName)}`,
+    `  short_description: ${yamlString(shortDescription(description, displayName))}`,
+    `  default_prompt: ${yamlString(defaultPrompt(skillName, description, displayName))}`,
+    ""
+  ].join("\n");
+  return { ...baseFiles, openaiYaml };
+}
+function buildClaudeSkillFiles(pkg, sourceContent) {
   const skillName = normalizeSkillName(pkg);
   if (!skillName) {
-    throw new Error(`Cannot derive Codex skill name from ${pkg?.id || pkg?.name || "package"}`);
+    throw new Error(`Cannot derive skill name from ${pkg?.id || pkg?.name || "package"}`);
   }
   const parsed = stripFrontmatter(sourceContent);
   const displayName = compactText(parsed.metadata.name || pkg.name || skillName, 80);
@@ -74426,14 +74467,7 @@ function buildCodexSkillFiles(pkg, sourceContent) {
     body.trimEnd(),
     ""
   ].join("\n");
-  const openaiYaml = [
-    "interface:",
-    `  display_name: ${yamlString(displayName)}`,
-    `  short_description: ${yamlString(shortDescription(description, displayName))}`,
-    `  default_prompt: ${yamlString(defaultPrompt(skillName, description, displayName))}`,
-    ""
-  ].join("\n");
-  return { skillName, skillMd, openaiYaml };
+  return { skillName, skillMd };
 }
 async function syncCodexSkills(options = {}) {
   const {
@@ -74500,22 +74534,86 @@ async function syncCodexSkills(options = {}) {
     results
   };
 }
+async function syncClaudeSkills(options = {}) {
+  const {
+    skills = null,
+    claudeRoot = claudeSkillsRoot(),
+    force = false,
+    dryRun = false
+  } = options;
+  const installedSkills = skills || await listInstalled("skill");
+  const rudiSkills = installedSkills.filter((skill) => !skill.source || skill.source === "rudi");
+  const results = [];
+  for (const skill of rudiSkills) {
+    const sourcePath = skill.entryPath || skill.path;
+    const skillName = normalizeSkillName(skill);
+    if (!skillName) {
+      results.push({
+        id: skill.id,
+        action: "failed",
+        error: "Could not derive Claude skill name"
+      });
+      continue;
+    }
+    if (!sourcePath || !import_fs64.default.existsSync(sourcePath)) {
+      results.push({
+        id: skill.id,
+        skillName,
+        action: "failed",
+        error: "Source skill file not found"
+      });
+      continue;
+    }
+    const targetDir = import_path67.default.join(claudeRoot, skillName);
+    const skillMdPath = import_path67.default.join(targetDir, "SKILL.md");
+    const exists = import_fs64.default.existsSync(skillMdPath);
+    if (exists && !force) {
+      results.push({
+        id: skill.id,
+        skillName,
+        action: "skipped",
+        reason: "Claude skill already exists; use --force to update",
+        targetDir
+      });
+      continue;
+    }
+    const sourceContent = import_fs64.default.readFileSync(sourcePath, "utf-8");
+    const files = buildClaudeSkillFiles(skill, sourceContent);
+    const action = exists ? "updated" : "created";
+    if (!dryRun) {
+      import_fs64.default.mkdirSync(targetDir, { recursive: true });
+      import_fs64.default.writeFileSync(skillMdPath, files.skillMd);
+    }
+    results.push({
+      id: skill.id,
+      skillName,
+      action: dryRun ? `would_${action}` : action,
+      targetDir
+    });
+  }
+  return {
+    claudeRoot,
+    total: results.length,
+    results
+  };
+}
 function printSkillsHelp() {
   console.log(`
 rudi skills - List or sync installed RUDI skills
 
 USAGE
   rudi skills
-  rudi skills sync codex [--force] [--dry-run] [--json]
+  rudi skills sync <codex|claude> [--force] [--dry-run] [--json]
 
 OPTIONS
-  --force      Overwrite existing Codex skill wrappers
+  --force      Overwrite existing native skill wrappers
   --dry-run    Preview sync results without writing files
   --json       Output JSON
 
 EXAMPLES
   rudi skills
   rudi skills sync codex
+  rudi skills sync claude
   rudi skills sync codex --force
 `);
 }
@@ -74532,10 +74630,11 @@ async function cmdSkills(args = [], flags = {}) {
     return await cmdList(["skills", ...args], flags);
   }
   const target = args[1];
-  if (target !== "codex") {
-    throw new Error("Usage: rudi skills sync codex [--force] [--dry-run] [--json]");
+  if (target !== "codex" && target !== "claude") {
+    throw new Error("Usage: rudi skills sync <codex|claude> [--force] [--dry-run] [--json]");
   }
-  const result = await syncCodexSkills({
+  const sync = target === "codex" ? syncCodexSkills : syncClaudeSkills;
+  const result = await sync({
     force: flags.force === true,
     dryRun: flags["dry-run"] === true || flags.dryRun === true
   });
@@ -74543,7 +74642,9 @@ async function cmdSkills(args = [], flags = {}) {
     console.log(JSON.stringify(result, null, 2));
     return;
   }
-  console.log(`Codex skills root: ${result.codexRoot}`);
+  const targetName = target === "codex" ? "Codex" : "Claude";
+  const skillsRoot = target === "codex" ? result.codexRoot : result.claudeRoot;
+  console.log(`${targetName} skills root: ${skillsRoot}`);
   for (const item of result.results) {
     if (item.action === "failed") {
       console.log(`  x ${item.id}: ${item.error}`);
@@ -74556,7 +74657,7 @@ async function cmdSkills(args = [], flags = {}) {
   const syncedCount = result.results.filter((item) => item.action === "created" || item.action === "updated" || item.action === "would_created" || item.action === "would_updated").length;
   const prefix = result.results.some((item) => item.action.startsWith("would_")) ? "Would sync" : "Synced";
   console.log(`
-${prefix} ${syncedCount} skill(s). Restart Codex to pick up native skill changes.`);
+${prefix} ${syncedCount} skill(s). Restart ${targetName} to pick up native skill changes.`);
 }
 
 // src/index.js

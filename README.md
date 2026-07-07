@@ -111,12 +111,15 @@ rudi integrate all       # Add to all detected agents
 
 This modifies the agent's MCP configuration file (e.g., `~/Library/Application Support/Claude/claude_desktop_config.json`) to include your installed stacks with proper secret injection.
 
-Codex has a separate native skill directory. After installing RUDI skills, sync
-editable Codex wrappers when you want them to appear in Codex's skill/slash UI:
+Claude and Codex have separate native skill directories. After installing RUDI
+skills, sync editable native wrappers when you want them to appear in the
+agent's skill/slash UI:
 
 ```bash
 rudi skills sync codex
+rudi skills sync claude
 rudi skills sync codex --force   # overwrite existing generated wrappers
+rudi skills sync claude --force  # overwrite existing generated wrappers
 ```
 
 ### Inspecting Packages

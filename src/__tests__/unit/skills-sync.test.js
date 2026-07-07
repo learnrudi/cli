@@ -5,7 +5,9 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
+  buildClaudeSkillFiles,
   buildCodexSkillFiles,
+  syncClaudeSkills,
   syncCodexSkills,
 } from '../../commands/skills.js';
 
@@ -114,4 +116,105 @@ test('syncCodexSkills skips existing wrappers unless force is set', async () => 
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('syncClaudeSkills creates native Claude skill wrappers for RUDI skills', async () => {
+  const root = makeTempRoot('rudi-skills-sync-claude-');
+
+  try {
+    const source = path.join(root, 'grill-with-docs.md');
+    const claudeRoot = path.join(root, 'claude-skills');
+    fs.writeFileSync(source, [
+      '---',
+      'name: Grill With Docs',
+      'description: Stress-test docs',
+      '---',
+      '',
+      'Ask questions one at a time.',
+      '',
+    ].join('\n'));
+
+    const result = await syncClaudeSkills({
+      claudeRoot,
+      skills: [
+        {
+          id: 'skill:grill-with-docs',
+          kind: 'skill',
+          name: 'Grill With Docs',
+          description: 'Stress-test docs',
+          source: 'rudi',
+          entryPath: source,
+        },
+      ],
+    });
+
+    const skillPath = path.join(claudeRoot, 'grill-with-docs', 'SKILL.md');
+    const openaiPath = path.join(claudeRoot, 'grill-with-docs', 'agents', 'openai.yaml');
+
+    assert.equal(result.results[0].action, 'created');
+    assert.equal(fs.existsSync(skillPath), true);
+    assert.equal(fs.existsSync(openaiPath), false);
+    assert.match(fs.readFileSync(skillPath, 'utf-8'), /name: "?Grill With Docs"?/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('syncClaudeSkills skips existing wrappers unless force is set', async () => {
+  const root = makeTempRoot('rudi-skills-sync-claude-existing-');
+
+  try {
+    const source = path.join(root, 'skill.md');
+    const claudeRoot = path.join(root, 'claude-skills');
+    const targetDir = path.join(claudeRoot, 'example-skill');
+    fs.mkdirSync(targetDir, { recursive: true });
+    fs.writeFileSync(path.join(targetDir, 'SKILL.md'), 'existing');
+    fs.writeFileSync(source, '---\nname: Example Skill\ndescription: Example\n---\n\nnew body\n');
+
+    const skills = [
+      {
+        id: 'skill:example-skill',
+        kind: 'skill',
+        name: 'Example Skill',
+        description: 'Example',
+        source: 'rudi',
+        entryPath: source,
+      },
+    ];
+
+    const skipped = await syncClaudeSkills({ claudeRoot, skills });
+    assert.equal(skipped.results[0].action, 'skipped');
+    assert.equal(fs.readFileSync(path.join(targetDir, 'SKILL.md'), 'utf-8'), 'existing');
+
+    const updated = await syncClaudeSkills({ claudeRoot, skills, force: true });
+    assert.equal(updated.results[0].action, 'updated');
+    assert.match(fs.readFileSync(path.join(targetDir, 'SKILL.md'), 'utf-8'), /new body/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('buildClaudeSkillFiles emits a Claude SKILL.md without Codex metadata', () => {
+  const files = buildClaudeSkillFiles(
+    {
+      id: 'skill:grill-with-docs',
+      name: 'Grill With Docs',
+      description: 'Stress-test a plan against the existing domain model',
+    },
+    [
+      '---',
+      'name: Grill With Docs',
+      'description: Registry description',
+      'version: 1.0.0',
+      '---',
+      '',
+      'Ask questions one at a time.',
+      '',
+    ].join('\n')
+  );
+
+  assert.equal(files.skillName, 'grill-with-docs');
+  assert.match(files.skillMd, /^name: "?Grill With Docs"?$/m);
+  assert.match(files.skillMd, /Ask questions one at a time\./);
+  assert.equal(Object.hasOwn(files, 'openaiYaml'), false);
 });

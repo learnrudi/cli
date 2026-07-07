@@ -94,6 +94,27 @@ test('runUpdate preserves install-local state only when explicitly requested', a
   );
 });
 
+test('runUpdate reports native skill wrapper sync commands after updating a skill', async () => {
+  const deps = createDeps();
+
+  const result = await runUpdate(['skill:video-editor'], {}, deps);
+
+  assert.equal(result.updated, 1);
+  assert.deepEqual(
+    deps.calls.filter(call => call[0] === 'rebuildToolIndex'),
+    []
+  );
+
+  const logOutput = deps.calls
+    .filter(call => call[0] === 'log')
+    .map(call => call[1])
+    .join('\n');
+
+  assert.match(logOutput, /rudi skills sync codex --force/);
+  assert.match(logOutput, /rudi skills sync claude --force/);
+  assert.match(logOutput, /not overwritten automatically/i);
+});
+
 test('runUpdate all updates installed packages and rebuilds stack index once', async () => {
   const deps = createDeps();
 
