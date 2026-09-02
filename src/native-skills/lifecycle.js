@@ -288,6 +288,19 @@ async function collectResourceEntries(sourceRoot, resourceName, entries, sourceE
   await walk(resourceRoot, resourceName);
 }
 
+async function readBundledCodexMetadata(sourceRoot) {
+  const metadataPath = path.join(sourceRoot, 'agents', 'openai.yaml');
+  let metadataStat;
+  try {
+    metadataStat = await fsp.lstat(metadataPath);
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+  assertRealEntry(metadataStat, metadataPath, 'file');
+  return fsp.readFile(metadataPath);
+}
+
 function manifestEntry(entry) {
   if (entry.type === 'directory') {
     return { path: entry.relativePath, type: entry.type, mode: entry.mode };
@@ -350,15 +363,7 @@ async function buildProjection(host, skill) {
     mode: sourceStat.mode & 0o777,
     content: sourceContent,
   }];
-  if (host === 'codex') {
-    entries.push({ type: 'directory', relativePath: 'agents', mode: 0o755 });
-    entries.push({
-      type: 'file',
-      relativePath: path.join('agents', 'openai.yaml'),
-      mode: 0o644,
-      content: Buffer.from(generated.openaiYaml),
-    });
-  }
+  let codexMetadata = host === 'codex' ? Buffer.from(generated.openaiYaml) : null;
   let packageDigest;
   if (path.basename(sourcePath) === 'SKILL.md') {
     const sourceRoot = path.dirname(sourcePath);
@@ -367,11 +372,23 @@ async function buildProjection(host, skill) {
       throw new Error(`Source skill package not found: ${sourceRoot}`);
     }
     packageDigest = completePackage.digest;
+    if (host === 'codex') {
+      codexMetadata = await readBundledCodexMetadata(sourceRoot) ?? codexMetadata;
+    }
     for (const resourceName of RESOURCE_DIRECTORIES) {
       await collectResourceEntries(sourceRoot, resourceName, entries, sourceEntries);
     }
   } else {
     packageDigest = digestEntries(sourceEntries).digest;
+  }
+  if (host === 'codex') {
+    entries.push({ type: 'directory', relativePath: 'agents', mode: 0o755 });
+    entries.push({
+      type: 'file',
+      relativePath: path.join('agents', 'openai.yaml'),
+      mode: 0o644,
+      content: codexMetadata,
+    });
   }
   const rendered = digestEntries(entries);
   const sourceIdentity = resolveSourceIdentity(skill.source);

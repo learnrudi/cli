@@ -75,6 +75,50 @@ test('reconcileNativeSkill creates a complete Codex tree and ownership receipt',
   }
 });
 
+test('forced reconciliation preserves bundled Codex metadata verbatim', async () => {
+  const state = fixture();
+  try {
+    const canonicalMetadata = [
+      'interface:',
+      '  display_name: Demo Skill',
+      '  short_description: Canonical metadata fixture',
+      '  default_prompt: Run the canonical metadata fixture.',
+      '',
+      'policy:',
+      '  allow_implicit_invocation: false',
+      '',
+    ].join('\n');
+    const agentsDir = path.join(path.dirname(state.skill.entryPath), 'agents');
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(path.join(agentsDir, 'openai.yaml'), canonicalMetadata);
+
+    const created = await reconcileNativeSkill({
+      host: 'codex',
+      skill: state.skill,
+      targetRoot: state.nativeRoot,
+      receiptRoot: state.receiptRoot,
+    });
+    fs.writeFileSync(path.join(created.targetDir, 'agents', 'openai.yaml'), 'stale metadata\n');
+
+    const forced = await reconcileNativeSkill({
+      host: 'codex',
+      skill: state.skill,
+      targetRoot: state.nativeRoot,
+      receiptRoot: state.receiptRoot,
+      force: true,
+    });
+
+    assert.equal(forced.action, 'updated');
+    assert.equal(forced.forced, true);
+    assert.equal(
+      fs.readFileSync(path.join(forced.targetDir, 'agents', 'openai.yaml'), 'utf8'),
+      canonicalMetadata,
+    );
+  } finally {
+    fs.rmSync(state.root, { recursive: true, force: true });
+  }
+});
+
 test('managed updates replace the complete tree, prune stale resources, and become idempotent', async () => {
   const state = fixture();
   try {
