@@ -17115,12 +17115,13 @@ var require_data = __commonJS({
   }
 });
 
-// node_modules/.pnpm/fast-uri@3.1.6/node_modules/fast-uri/lib/utils.js
+// node_modules/.pnpm/fast-uri@3.1.8/node_modules/fast-uri/lib/utils.js
 var require_utils = __commonJS({
-  "node_modules/.pnpm/fast-uri@3.1.6/node_modules/fast-uri/lib/utils.js"(exports2, module2) {
+  "node_modules/.pnpm/fast-uri@3.1.8/node_modules/fast-uri/lib/utils.js"(exports2, module2) {
     "use strict";
     var isUUID = RegExp.prototype.test.bind(/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/iu);
     var isIPv4 = RegExp.prototype.test.bind(/^(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)$/u);
+    var isPort = RegExp.prototype.test.bind(/^\d*$/u);
     var isHexPair = RegExp.prototype.test.bind(/^[\da-f]{2}$/iu);
     var isUnreserved = RegExp.prototype.test.bind(/^[\da-z\-._~]$/iu);
     var isPathCharacter = RegExp.prototype.test.bind(/^[A-Za-z0-9\-._~!$&'()*+,;=:@/]$/u);
@@ -17586,8 +17587,12 @@ var require_utils = __commonJS({
         uriTokens.push(host);
       }
       if (typeof component.port === "number" || typeof component.port === "string") {
+        const port = String(component.port);
+        if (!isPort(port)) {
+          throw new TypeError("URI port is malformed.");
+        }
         uriTokens.push(":");
-        uriTokens.push(String(component.port));
+        uriTokens.push(port);
       }
       return uriTokens.length ? uriTokens.join("") : void 0;
     }
@@ -17612,9 +17617,9 @@ var require_utils = __commonJS({
   }
 });
 
-// node_modules/.pnpm/fast-uri@3.1.6/node_modules/fast-uri/lib/schemes.js
+// node_modules/.pnpm/fast-uri@3.1.8/node_modules/fast-uri/lib/schemes.js
 var require_schemes = __commonJS({
-  "node_modules/.pnpm/fast-uri@3.1.6/node_modules/fast-uri/lib/schemes.js"(exports2, module2) {
+  "node_modules/.pnpm/fast-uri@3.1.8/node_modules/fast-uri/lib/schemes.js"(exports2, module2) {
     "use strict";
     var { isUUID } = require_utils();
     var URN_REG = /^([\da-z][\d\-a-z]{0,31}):((?:[\w!$'()*+,\-./:;=@]|%[\da-f]{2})+)$/iu;
@@ -17823,9 +17828,9 @@ var require_schemes = __commonJS({
   }
 });
 
-// node_modules/.pnpm/fast-uri@3.1.6/node_modules/fast-uri/index.js
+// node_modules/.pnpm/fast-uri@3.1.8/node_modules/fast-uri/index.js
 var require_fast_uri = __commonJS({
-  "node_modules/.pnpm/fast-uri@3.1.6/node_modules/fast-uri/index.js"(exports2, module2) {
+  "node_modules/.pnpm/fast-uri@3.1.8/node_modules/fast-uri/index.js"(exports2, module2) {
     "use strict";
     var { normalizeIPv6, removeDotSegments, recomposeAuthority, normalizePercentEncoding, normalizePathEncoding, serializePathEncoding, normalizeQueryFragmentEncoding, encodeQuery, encodeFragment, reescapeHostDelimiters, isIPv4, nonSimpleDomain } = require_utils();
     var { SCHEMES, getSchemeHandler } = require_schemes();
@@ -18030,12 +18035,15 @@ var require_fast_uri = __commonJS({
       }
       return false;
     }
+    function isIPLiteral(host) {
+      return host[0] === "[" && host[host.length - 1] === "]";
+    }
     function hasMalformedComponentPercentEncoding(matches) {
       const host = matches[4];
-      return hasMalformedPercentEncoding(matches[3]) || host !== void 0 && !(host[0] === "[" && host[host.length - 1] === "]") && hasMalformedPercentEncoding(host) || hasMalformedPercentEncoding(matches[6]) || hasMalformedPercentEncoding(matches[7]) || hasMalformedPercentEncoding(matches[8]);
+      return hasMalformedPercentEncoding(matches[3]) || host !== void 0 && !isIPLiteral(host) && hasMalformedPercentEncoding(host) || hasMalformedPercentEncoding(matches[6]) || hasMalformedPercentEncoding(matches[7]) || hasMalformedPercentEncoding(matches[8]);
     }
     function canonicalizeHost(parsed, options, schemeHandler, isIP) {
-      if (!options.unicodeSupport && (!schemeHandler || !schemeHandler.unicodeSupport) && parsed.host && parsed.host[0] !== "[" && (options.domainHost || schemeHandler && schemeHandler.domainHost) && isIP === false && nonSimpleDomain(parsed.host)) {
+      if (!options.unicodeSupport && (!schemeHandler || !schemeHandler.unicodeSupport) && parsed.host && !isIPLiteral(parsed.host) && (options.domainHost || schemeHandler && schemeHandler.domainHost) && isIP === false && nonSimpleDomain(parsed.host)) {
         try {
           parsed.host = new URL("http://" + parsed.host).hostname;
         } catch (e) {
@@ -18122,10 +18130,11 @@ var require_fast_uri = __commonJS({
         if (parsed.host) {
           const ipv4result = isIPv4(parsed.host);
           if (ipv4result === false) {
-            const bracketedIPLiteral = parsed.host[0] === "[" && parsed.host[parsed.host.length - 1] === "]";
+            const bracketedIPLiteral = isIPLiteral(parsed.host);
+            const hasIPLiteralBracket = parsed.host.indexOf("[") !== -1 || parsed.host.indexOf("]") !== -1;
             const ipv6result = normalizeIPv6(parsed.host);
             isIP = ipv6result.isIPV6 || ipv6result.isIPVFuture === true;
-            malformedIPLiteral = bracketedIPLiteral && ipv6result.error === true;
+            malformedIPLiteral = hasIPLiteralBracket && (!bracketedIPLiteral || ipv6result.error === true);
             parsed.host = isIP ? ipv6result.host : ipv6result.host.toLowerCase();
             if (malformedIPLiteral) {
               parsed.error = parsed.error || "URI host is malformed.";
@@ -18148,14 +18157,17 @@ var require_fast_uri = __commonJS({
           parsed.error = parsed.error || "URI is not a " + options.reference + " reference.";
         }
         const schemeHandler = getSchemeHandler(options.scheme || parsed.scheme);
-        malformedHost = canonicalizeHost(parsed, options, schemeHandler, isIP);
-        if (!schemeHandler || schemeHandler && !schemeHandler.skipNormalize) {
-          if (uri.indexOf("%") !== -1) {
-            if (parsed.host !== void 0 && !malformedIPLiteral) {
-              const host = isIP ? parsed.host : normalizePercentEncoding(parsed.host, true);
-              parsed.host = reescapeHostDelimiters(host, isIP);
-            }
+        if (!malformedIPLiteral) {
+          malformedHost = canonicalizeHost(parsed, options, schemeHandler, isIP);
+        }
+        if (uri.indexOf("%") !== -1 && parsed.host !== void 0 && !malformedIPLiteral) {
+          let host = isIP ? parsed.host : normalizePercentEncoding(parsed.host, true);
+          if (!isIP) {
+            host = normalizePercentEncoding(host.toLowerCase());
           }
+          parsed.host = reescapeHostDelimiters(host, isIP);
+        }
+        if (!schemeHandler || schemeHandler && !schemeHandler.skipNormalize) {
           if (parsed.path) {
             parsed.path = normalizePathEncoding(parsed.path);
           }
@@ -22531,14 +22543,48 @@ init_src5();
 var fsp = __toESM(require("node:fs/promises"), 1);
 var import_node_os = __toESM(require("node:os"), 1);
 var import_node_path4 = __toESM(require("node:path"), 1);
-var NATIVE_SKILL_HOSTS = Object.freeze([
-  "codex",
-  "claude",
-  "gemini",
-  "antigravity"
-]);
+
+// src/native-skills/policy.js
+var NATIVE_SKILL_HOSTS = Object.freeze(["codex", "claude", "gemini", "antigravity"]);
+var NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+function object(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function validateNativeSkillPolicy(value) {
+  if (!object(value) || value.schemaVersion !== 1 || !object(value.skills) || Object.keys(value).some((key) => !["schemaVersion", "skills"].includes(key))) {
+    throw new Error("Invalid native skill policy: expected schemaVersion 1 and skills object");
+  }
+  const names = /* @__PURE__ */ new Set();
+  for (const [id, rule] of Object.entries(value.skills)) {
+    if (!id.startsWith("skill:") || !NAME.test(id.slice(6)) || !object(rule) || Object.keys(rule).some((key) => !["name", "hosts"].includes(key))) {
+      throw new Error(`Invalid native skill policy entry: ${id}`);
+    }
+    const name = rule.name === void 0 ? id.slice(6) : rule.name;
+    if (typeof name !== "string" || name.length > 64 || !NAME.test(name)) {
+      throw new Error(`Invalid native skill policy name for ${id}`);
+    }
+    if (rule.hosts !== void 0 && (!Array.isArray(rule.hosts) || rule.hosts.some((host) => !NATIVE_SKILL_HOSTS.includes(host)) || new Set(rule.hosts).size !== rule.hosts.length)) {
+      throw new Error(`Invalid native skill policy hosts for ${id}`);
+    }
+    if (names.has(name)) throw new Error(`Native skill policy name collision: ${name}`);
+    names.add(name);
+  }
+  return value;
+}
+function resolveNativeSkillRule(policy, id, host) {
+  const rule = policy.skills[id];
+  const name = rule?.name ?? id.slice(6);
+  for (const [owner, other] of Object.entries(policy.skills)) {
+    if (owner !== id && (other.name ?? owner.slice(6)) === name) {
+      throw new Error(`Native skill policy name collision: ${id} and ${owner}`);
+    }
+  }
+  return { name, allowed: !rule?.hosts || rule.hosts.includes(host) };
+}
+
+// src/native-skills/lifecycle.js
 var RESOURCE_DIRECTORIES = Object.freeze(["assets", "references", "scripts"]);
-var RECEIPT_SCHEMA_VERSION = 2;
+var RECEIPT_SCHEMA_VERSION = 3;
 var DIGEST_PATTERN = /^[a-f0-9]{64}$/;
 var SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 var TRUSTED_PLATFORM_SYMLINKS = new Set(
@@ -22566,7 +22612,7 @@ function yamlString(value) {
 }
 function normalizeNativeSkillName(skill) {
   const raw = String(skill?.id || "").replace(/^skill:/, "");
-  if (!SKILL_NAME_PATTERN.test(raw)) {
+  if (typeof skill?.id !== "string" || !skill.id.startsWith("skill:") || !SKILL_NAME_PATTERN.test(raw)) {
     throw new Error(`Invalid native skill package id: ${skill?.id || "<missing>"}`);
   }
   return raw;
@@ -22578,14 +22624,19 @@ function defaultPrompt(skillName, description, displayName) {
   const action = compactText(lowerFirst(description || `run the ${displayName} workflow`), 120);
   return `Use $${skillName} to ${action}.`;
 }
-function buildPortableSkillFiles(skill, sourceContent) {
-  const skillName = normalizeNativeSkillName(skill);
+function renameSelfInvocation(content, skill, skillName) {
+  if (!content) return "";
+  const packageName = normalizeNativeSkillName(skill);
+  if (packageName === skillName) return content;
+  return content.replace(new RegExp(`\\$${packageName}(?![a-zA-Z0-9_-])`, "g"), `$${skillName}`);
+}
+function buildPortableSkillFiles(skill, sourceContent, skillName = normalizeNativeSkillName(skill)) {
   const parsed = parseSkillDocument(sourceContent);
   const displayName = compactText(parsed.metadata.name || skill.name || skillName, 80);
   const description = String(
     skill.description || parsed.metadata.description || `${displayName} RUDI skill`
   ).replace(/\s+/g, " ").trim();
-  const body = parsed.body || `Use the installed RUDI skill \`skill:${skillName}\` as the source of truth.`;
+  const body = renameSelfInvocation(parsed.body, skill, skillName) || `Use the installed RUDI skill \`${skill.id}\` as the source of truth.`;
   const skillMd = [
     "---",
     `name: ${yamlString(skillName)}`,
@@ -22597,9 +22648,8 @@ function buildPortableSkillFiles(skill, sourceContent) {
   ].join("\n");
   return { skillName, skillMd };
 }
-function buildCodexSkillFiles(skill, sourceContent) {
-  const baseFiles = buildPortableSkillFiles(skill, sourceContent);
-  const { skillName } = baseFiles;
+function buildCodexSkillFiles(skill, sourceContent, skillName = normalizeNativeSkillName(skill)) {
+  const baseFiles = buildPortableSkillFiles(skill, sourceContent, skillName);
   const parsed = parseSkillDocument(sourceContent);
   const displayName = humanizeSkillDisplayName(parsed.metadata.name || skill.name || skillName);
   const description = compactText(
@@ -22645,6 +22695,24 @@ function getNativeSkillReceiptRoot(options = {}) {
   const env = options.env || process.env;
   const rudiHome = import_node_path4.default.resolve(env.RUDI_HOME || import_node_path4.default.join(taskHome(options), ".rudi"));
   return import_node_path4.default.join(rudiHome, "state", "native-skills");
+}
+async function nativeSkillRule(host, skill, options) {
+  assertSupportedHost(host);
+  normalizeNativeSkillName(skill);
+  const policyPath = import_node_path4.default.join(import_node_path4.default.dirname(import_node_path4.default.dirname(getNativeSkillReceiptRoot(options))), "native-skills.json");
+  await assertNoSymlinkPathComponents(policyPath, "Native skill policy path", { allowMissingTail: true });
+  let content;
+  try {
+    const stat = await fsp.lstat(policyPath);
+    assertRealEntry(stat, policyPath, "file");
+    if (stat.size > 1024 * 1024) throw new Error("Native skill policy exceeds 1 MiB");
+    content = await fsp.readFile(policyPath, "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") return { name: normalizeNativeSkillName(skill), allowed: true };
+    throw error;
+  }
+  const policy = validateNativeSkillPolicy(JSON.parse(content));
+  return resolveNativeSkillRule(policy, skill.id, host);
 }
 function configuredNativeSkillHosts(installedAgents = []) {
   const ids = new Set((installedAgents || []).map((agent) => agent?.id).filter(Boolean));
@@ -22783,9 +22851,8 @@ function resolveSourceIdentity(source) {
   if (!source || typeof source !== "object" || Array.isArray(source)) return null;
   return source.resolvedCommit || source.checksum || source.requestedRef || source.type || null;
 }
-async function buildProjection(host, skill) {
+async function buildProjection(host, skill, skillName = normalizeNativeSkillName(skill)) {
   assertSupportedHost(host);
-  const skillName = normalizeNativeSkillName(skill);
   if (skill.conflictingPaths?.length) {
     throw new Error(`Conflicting skill formats for ${skill.id}; reconcile canonical sources before native sync`);
   }
@@ -22803,7 +22870,7 @@ async function buildProjection(host, skill) {
   assertRealEntry(sourceStat, sourcePath, "file");
   const sourceContent = await fsp.readFile(sourcePath);
   const sourceText = sourceContent.toString("utf8");
-  const generated = host === "codex" ? buildCodexSkillFiles(skill, sourceText) : buildPortableSkillFiles(skill, sourceText);
+  const generated = host === "codex" ? buildCodexSkillFiles(skill, sourceText, skillName) : buildPortableSkillFiles(skill, sourceText, skillName);
   const entries = [{
     type: "file",
     relativePath: "SKILL.md",
@@ -22835,6 +22902,7 @@ async function buildProjection(host, skill) {
     packageDigest = digestEntries(sourceEntries).digest;
   }
   if (host === "codex") {
+    codexMetadata = Buffer.from(renameSelfInvocation(codexMetadata.toString("utf8"), skill, skillName));
     entries.push({ type: "directory", relativePath: "agents", mode: 493 });
     entries.push({
       type: "file",
@@ -22904,6 +22972,26 @@ async function inspectTree(root) {
 function receiptPathFor(receiptRoot, host, skillName) {
   return import_node_path4.default.join(import_node_path4.default.resolve(receiptRoot), host, `${skillName}.json`);
 }
+async function assertTargetOwnership(receiptRoot, host, skillId, targetDir) {
+  const directory = import_node_path4.default.join(receiptRoot, host);
+  await assertSafeRoot(directory, "Native skill receipt directory");
+  let names;
+  try {
+    names = await fsp.readdir(directory);
+  } catch (error) {
+    if (error.code === "ENOENT") return;
+    throw error;
+  }
+  for (const name of names.filter((name2) => name2.endsWith(".json"))) {
+    const packageName = name.slice(0, -5);
+    if (!SKILL_NAME_PATTERN.test(packageName)) throw new Error(`Invalid receipt name: ${name}`);
+    if (`skill:${packageName}` === skillId) continue;
+    const receipt = await readReceipt(import_node_path4.default.join(directory, name), { host, skillId: `skill:${packageName}` });
+    if (receipt?.targetDir === targetDir) {
+      throw new Error(`Native skill target already owned by ${receipt.skillId}: ${targetDir}`);
+    }
+  }
+}
 function isIsoTimestamp(value) {
   if (typeof value !== "string") return false;
   const parsed = new Date(value);
@@ -22916,19 +23004,19 @@ function validateReceipt(receipt, expected = {}) {
   if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)) {
     throw new Error("Native skill receipt must be an object");
   }
-  if (receipt.schemaVersion !== RECEIPT_SCHEMA_VERSION) {
+  if (![2, RECEIPT_SCHEMA_VERSION].includes(receipt.schemaVersion)) {
     throw new Error(`Unsupported native skill receipt schema: ${receipt.schemaVersion}`);
   }
   if (!NATIVE_SKILL_HOSTS.includes(receipt.host)) {
     throw new Error(`Invalid native skill receipt host: ${receipt.host}`);
   }
-  if (!String(receipt.skillId || "").startsWith("skill:")) {
+  if (!String(receipt.skillId || "").startsWith("skill:") || !SKILL_NAME_PATTERN.test(receipt.skillId.slice(6))) {
     throw new Error("Invalid native skill receipt skillId");
   }
   if (!SKILL_NAME_PATTERN.test(receipt.skillName || "")) {
     throw new Error("Invalid native skill receipt skillName");
   }
-  if (receipt.skillId !== `skill:${receipt.skillName}`) {
+  if (receipt.schemaVersion === 2 && receipt.skillId !== `skill:${receipt.skillName}`) {
     throw new Error("Native skill receipt id/name mismatch");
   }
   if (typeof receipt.packageVersion !== "string" || !receipt.packageVersion.trim()) {
@@ -23092,25 +23180,29 @@ function resultBase(host, projection, targetDir, receiptPath) {
 async function inspectNativeSkillProjection(options = {}) {
   const host = options.host;
   const skill = options.skill;
-  const projection = await buildProjection(host, skill);
+  const rule = await nativeSkillRule(host, skill, options);
+  if (!rule.allowed) return { host, id: skill.id, skillName: rule.name, state: "excluded", restartRequired: false };
+  const projection = await buildProjection(host, skill, rule.name);
   const targetRoot = import_node_path4.default.resolve(options.targetRoot || getNativeSkillRoot(host, options));
   const receiptRoot = import_node_path4.default.resolve(options.receiptRoot || getNativeSkillReceiptRoot(options));
   await assertSafeRoot(targetRoot, "Native skill target root");
   await assertSafeRoot(receiptRoot, "Native skill receipt root");
   const targetDir = import_node_path4.default.join(targetRoot, projection.skillName);
-  const receiptPath = receiptPathFor(receiptRoot, host, projection.skillName);
-  const receiptExpectation = {
-    host,
-    skillId: projection.skillId,
-    skillName: projection.skillName,
-    targetDir
-  };
-  const receipt = await readReceipt(receiptPath, receiptExpectation);
+  const receiptPath = receiptPathFor(receiptRoot, host, normalizeNativeSkillName(skill));
+  const receipt = await readReceipt(receiptPath, { host, skillId: projection.skillId });
+  if (receipt) {
+    validateReceipt(receipt, { targetDir: import_node_path4.default.join(targetRoot, receipt.skillName) });
+  }
+  const renamed = Boolean(receipt && receipt.targetDir !== targetDir);
+  if (renamed && await inspectTree(receipt.targetDir)) {
+    throw new Error(`Prior native skill target still exists; preserve and reconcile it before renaming: ${receipt.targetDir}`);
+  }
+  await assertTargetOwnership(receiptRoot, host, skill.id, targetDir);
   const actual = await inspectTree(targetDir);
   let state;
   if (!actual) {
     state = "missing";
-  } else if (!receipt) {
+  } else if (!receipt || renamed) {
     state = "unmanaged";
   } else if (actual.digest !== receipt.renderedTreeDigest) {
     state = "drifted";
@@ -23123,7 +23215,7 @@ async function inspectNativeSkillProjection(options = {}) {
     ...resultBase(host, projection, targetDir, receiptPath),
     actualTreeDigest: actual?.digest || null,
     expectedMatchesActual: actual?.digest === projection.renderedTreeDigest,
-    managed: Boolean(receipt),
+    managed: Boolean(receipt) && !renamed,
     receipt,
     state
   };
@@ -23213,6 +23305,7 @@ async function reconcileNativeSkill(options = {}) {
     };
     const force = options.force === true;
     const dryRun = options.dryRun === true;
+    if (inspected.state === "excluded") return { ...base, action: "excluded", reason: "Host excluded by native skill policy" };
     if (inspected.state === "current") {
       return { ...base, action: dryRun ? "would_current" : "current" };
     }
@@ -23232,7 +23325,7 @@ async function reconcileNativeSkill(options = {}) {
     }
     if (inspected.state === "unmanaged" && inspected.expectedMatchesActual) {
       if (dryRun) return { ...base, action: "would_adopt" };
-      const projection2 = await buildProjection(host, skill);
+      const projection2 = await buildProjection(host, skill, inspected.skillName);
       await assertSafeRoot(import_node_path4.default.dirname(inspected.targetDir), "Native skill target root");
       await assertSafeRoot(import_node_path4.default.dirname(import_node_path4.default.dirname(inspected.receiptPath)), "Native skill receipt root");
       const current = await inspectTree(inspected.targetDir);
@@ -23241,18 +23334,16 @@ async function reconcileNativeSkill(options = {}) {
       }
       const receiptExpectation = {
         host,
-        skillId: projection2.skillId,
-        skillName: projection2.skillName,
-        targetDir: inspected.targetDir
+        skillId: projection2.skillId
       };
-      await assertReceiptUnchanged(inspected.receiptPath, null, receiptExpectation);
+      await assertReceiptUnchanged(inspected.receiptPath, inspected.receipt, receiptExpectation);
       await atomicWriteReceipt(
         inspected.receiptPath,
-        receiptFor(host, projection2, inspected.targetDir)
+        receiptFor(host, projection2, inspected.targetDir, inspected.receipt)
       );
       return { ...base, action: "adopted" };
     }
-    const projection = await buildProjection(host, skill);
+    const projection = await buildProjection(host, skill, inspected.skillName);
     const receipt = receiptFor(host, projection, inspected.targetDir, inspected.receipt);
     const targetChanges = inspected.actualTreeDigest !== projection.renderedTreeDigest;
     const action = inspected.state === "missing" ? "created" : "updated";
@@ -23270,9 +23361,7 @@ async function reconcileNativeSkill(options = {}) {
       }
       const receiptExpectation = {
         host,
-        skillId: projection.skillId,
-        skillName: projection.skillName,
-        targetDir: inspected.targetDir
+        skillId: projection.skillId
       };
       await assertReceiptUnchanged(
         inspected.receiptPath,
@@ -23293,9 +23382,7 @@ async function reconcileNativeSkill(options = {}) {
         priorReceipt: inspected.receipt,
         receiptExpectation: {
           host,
-          skillId: projection.skillId,
-          skillName: projection.skillName,
-          targetDir: inspected.targetDir
+          skillId: projection.skillId
         },
         priorActualDigest: inspected.actualTreeDigest,
         writeReceipt: options.operations?.writeReceipt || atomicWriteReceipt
@@ -23413,15 +23500,19 @@ async function removeNativeSkillProjection(options = {}) {
   const skill = options.skill;
   try {
     assertSupportedHost(host);
-    const skillName = normalizeNativeSkillName(skill);
+    const packageName = normalizeNativeSkillName(skill);
+    const rule = await nativeSkillRule(host, skill, options);
     const targetRoot = import_node_path4.default.resolve(options.targetRoot || getNativeSkillRoot(host, options));
     const receiptRoot = import_node_path4.default.resolve(options.receiptRoot || getNativeSkillReceiptRoot(options));
     await assertSafeRoot(targetRoot, "Native skill target root");
     await assertSafeRoot(receiptRoot, "Native skill receipt root");
+    const receiptPath = receiptPathFor(receiptRoot, host, packageName);
+    const receipt = await readReceipt(receiptPath, { host, skillId: skill.id });
+    const skillName = receipt?.skillName || rule.name;
     const targetDir = import_node_path4.default.join(targetRoot, skillName);
-    const receiptPath = receiptPathFor(receiptRoot, host, skillName);
     const receiptExpectation = { host, skillId: skill.id, skillName, targetDir };
-    const receipt = await readReceipt(receiptPath, receiptExpectation);
+    if (receipt) validateReceipt(receipt, receiptExpectation);
+    await assertTargetOwnership(receiptRoot, host, skill.id, targetDir);
     const actual = await inspectTree(targetDir);
     const base = { host, id: skill.id, skillName, targetDir, receiptPath, restartRequired: false };
     if (!receipt) {
@@ -23539,15 +23630,15 @@ async function summarizeNativeSkillHost(host, options = {}) {
   }
   for (const name of names) {
     try {
-      const skillName = name.slice(0, -".json".length);
-      if (!SKILL_NAME_PATTERN.test(skillName)) throw new Error(`Invalid receipt name: ${name}`);
-      const targetDir = import_node_path4.default.join(targetRoot, skillName);
+      const packageName = name.slice(0, -".json".length);
+      if (!SKILL_NAME_PATTERN.test(packageName)) throw new Error(`Invalid receipt name: ${name}`);
       const receipt = await readReceipt(import_node_path4.default.join(hostReceiptRoot, name), {
         host,
-        skillId: `skill:${skillName}`,
-        skillName,
-        targetDir
+        skillId: `skill:${packageName}`
       });
+      const targetDir = import_node_path4.default.join(targetRoot, receipt.skillName);
+      validateReceipt(receipt, { targetDir });
+      await assertTargetOwnership(receiptRoot, host, receipt.skillId, targetDir);
       const actual = await inspectTree(targetDir);
       summary.totalManaged += 1;
       if (!actual) summary.missing += 1;
@@ -23568,15 +23659,14 @@ async function getManagedNativeSkillHosts(skill, options = {}) {
   await assertSafeRoot(receiptRoot, "Native skill receipt root");
   const hosts = [];
   for (const host of NATIVE_SKILL_HOSTS) {
+    const rule = await nativeSkillRule(host, skill, options);
+    if (!rule.allowed) continue;
     const receiptPath = receiptPathFor(receiptRoot, host, skillName);
-    const targetDir = import_node_path4.default.join(getNativeSkillRoot(host, options), skillName);
-    const receipt = await readReceipt(receiptPath, {
-      host,
-      skillId: skill.id,
-      skillName,
-      targetDir
-    });
-    if (receipt) hosts.push(host);
+    const receipt = await readReceipt(receiptPath, { host, skillId: skill.id });
+    if (receipt) {
+      validateReceipt(receipt, { targetDir: import_node_path4.default.join(getNativeSkillRoot(host, options), receipt.skillName) });
+      hosts.push(host);
+    }
   }
   return hosts;
 }
@@ -41391,7 +41481,7 @@ async function cmdLeverage(args, flags) {
 }
 
 // src/index.js
-var VERSION = true ? "1.10.26" : process.env.npm_package_version || "0.0.0";
+var VERSION = true ? "1.10.27" : process.env.npm_package_version || "0.0.0";
 var RETIRED_COMMANDS = /* @__PURE__ */ new Map([
   ["apply", "Provider transcripts remain authoritative; organization-plan execution was removed."],
   ["database", "Use Studio only if you still need the isolated compatibility database."],
