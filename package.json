@@ -1,6 +1,6 @@
 {
   "name": "@learnrudi/cli",
-  "version": "1.10.26",
+  "version": "1.10.27",
   "packageManager": "pnpm@10.22.0",
   "description": "RUDI CLI - Install and manage local MCP stacks, runtimes, daemon lifecycle, and agent router integrations",
   "type": "module",
@@ -40,7 +40,7 @@
   },
   "pnpm": {
     "overrides": {
-      "fast-uri": "3.1.6"
+      "fast-uri": "3.1.8"
     }
   },
   "engines": {

@@ -133,7 +133,7 @@ test('publishable workspace packages declare remediated dependency floors', () =
   const manifestPackage = JSON.parse(read('packages/manifest/package.json'));
 
   assert.equal(cliPackage.dependencies.ajv, '^8.18.0');
-  assert.equal(cliPackage.pnpm.overrides['fast-uri'], '3.1.6');
+  assert.equal(cliPackage.pnpm.overrides['fast-uri'], '3.1.8');
   assert.equal(corePackage.dependencies.yaml, '^2.8.3');
   assert.equal(dbPackage.dependencies.uuid, '^11.1.1');
   assert.equal(manifestPackage.dependencies.ajv, '^8.18.0');
