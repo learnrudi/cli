@@ -210,6 +210,48 @@ native sessions to load the new projection; RUDI does not claim hot reload.
 states. `rudi agent hosts --json` counts only receipt-backed, digest-matching
 trees as synchronized; unrelated skill directories do not qualify.
 
+Private native names and host restrictions can be configured in
+`$RUDI_HOME/native-skills.json` (default `~/.rudi/native-skills.json`):
+
+```json
+{
+  "schemaVersion": 1,
+  "skills": {
+    "skill:image-generator": { "name": "image-generate" },
+    "skill:codex-project-task-archiver": { "hosts": ["codex"] }
+  }
+}
+```
+
+Package IDs, canonical directories, lockfiles, and receipt filenames stay stable:
+install/update/check/remove still use `skill:image-generator`; the native folder,
+frontmatter name, and exact self-invocations use `image-generate`. Omitted `name`
+keeps the package name. Omitted `hosts` permits all supported hosts; an empty
+array excludes all hosts. Reconciliation returns `excluded` on disallowed hosts
+without creating or removing a tree, including with `--force`. Explicit package
+removal still cleans unchanged receipt-owned trees on previously allowed hosts. This is private local policy and
+does not rename public registry packages.
+
+Policy objects reject unknown fields, unsupported versions, invalid names,
+unknown/duplicate hosts, duplicate target names, and symlinked paths. A name
+reserved by another policy entry or owned by another package cannot be taken
+over, including with force. Invalid policy prevents native reconciliation.
+
+Receipt schema 3 records the stable `skillId` separately from the native
+`skillName`; schema 2 remains readable. During a rename, an existing old target
+blocks reconciliation. After that target has been deliberately preserved or
+relocated, sync adopts an exact rendered new tree and updates the same receipt
+atomically. A customized new tree remains `unmanaged` and the prior receipt is
+retained; normal sync never recreates the retired name. A missing new tree may
+be created. Use `--dry-run` to inspect these decisions first. Removal follows
+the receipt's recorded target and digest, preserving unowned or changed trees.
+Changing policy does not automatically move or delete existing directories.
+
+Older CLI versions cannot read schema 3 receipts. Keep receipt backups when
+rolling out this feature; reverting the executable alone is not a complete
+rollback. Keep the new CLI and private policy together on every participating
+workstation before running native reconciliation there.
+
 ### Running Headless Agent Hosts
 
 `rudi agent` is the supported headless execution surface. Foreground launches
