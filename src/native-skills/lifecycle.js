@@ -5,15 +5,12 @@ import * as fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-export const NATIVE_SKILL_HOSTS = Object.freeze([
-  'codex',
-  'claude',
-  'gemini',
-  'antigravity',
-]);
+import { NATIVE_SKILL_HOSTS, resolveNativeSkillRule, validateNativeSkillPolicy } from './policy.js';
+
+export { NATIVE_SKILL_HOSTS };
 
 const RESOURCE_DIRECTORIES = Object.freeze(['assets', 'references', 'scripts']);
-const RECEIPT_SCHEMA_VERSION = 2;
+const RECEIPT_SCHEMA_VERSION = 3;
 const DIGEST_PATTERN = /^[a-f0-9]{64}$/;
 const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const TRUSTED_PLATFORM_SYMLINKS = new Set(
@@ -50,7 +47,7 @@ function yamlString(value) {
 
 export function normalizeNativeSkillName(skill) {
   const raw = String(skill?.id || '').replace(/^skill:/, '');
-  if (!SKILL_NAME_PATTERN.test(raw)) {
+  if (typeof skill?.id !== 'string' || !skill.id.startsWith('skill:') || !SKILL_NAME_PATTERN.test(raw)) {
     throw new Error(`Invalid native skill package id: ${skill?.id || '<missing>'}`);
   }
   return raw;
@@ -65,16 +62,22 @@ function defaultPrompt(skillName, description, displayName) {
   return `Use $${skillName} to ${action}.`;
 }
 
-export function buildPortableSkillFiles(skill, sourceContent) {
-  const skillName = normalizeNativeSkillName(skill);
+function renameSelfInvocation(content, skill, skillName) {
+  if (!content) return '';
+  const packageName = normalizeNativeSkillName(skill);
+  if (packageName === skillName) return content;
+  return content.replace(new RegExp(`\\$${packageName}(?![a-zA-Z0-9_-])`, 'g'), `$${skillName}`);
+}
+
+export function buildPortableSkillFiles(skill, sourceContent, skillName = normalizeNativeSkillName(skill)) {
   const parsed = parseSkillDocument(sourceContent);
   const displayName = compactText(parsed.metadata.name || skill.name || skillName, 80);
   // Trigger conditions can occur at the end; UI summaries have separate limits.
   const description = String(
     skill.description || parsed.metadata.description || `${displayName} RUDI skill`,
   ).replace(/\s+/g, ' ').trim();
-  const body = parsed.body
-    || `Use the installed RUDI skill \`skill:${skillName}\` as the source of truth.`;
+  const body = renameSelfInvocation(parsed.body, skill, skillName)
+    || `Use the installed RUDI skill \`${skill.id}\` as the source of truth.`;
   const skillMd = [
     '---',
     `name: ${yamlString(skillName)}`,
@@ -87,9 +90,8 @@ export function buildPortableSkillFiles(skill, sourceContent) {
   return { skillName, skillMd };
 }
 
-export function buildCodexSkillFiles(skill, sourceContent) {
-  const baseFiles = buildPortableSkillFiles(skill, sourceContent);
-  const { skillName } = baseFiles;
+export function buildCodexSkillFiles(skill, sourceContent, skillName = normalizeNativeSkillName(skill)) {
+  const baseFiles = buildPortableSkillFiles(skill, sourceContent, skillName);
   const parsed = parseSkillDocument(sourceContent);
   const displayName = humanizeSkillDisplayName(parsed.metadata.name || skill.name || skillName);
   const description = compactText(
@@ -139,6 +141,25 @@ export function getNativeSkillReceiptRoot(options = {}) {
   const env = options.env || process.env;
   const rudiHome = path.resolve(env.RUDI_HOME || path.join(taskHome(options), '.rudi'));
   return path.join(rudiHome, 'state', 'native-skills');
+}
+
+async function nativeSkillRule(host, skill, options) {
+  assertSupportedHost(host);
+  normalizeNativeSkillName(skill);
+  const policyPath = path.join(path.dirname(path.dirname(getNativeSkillReceiptRoot(options))), 'native-skills.json');
+  await assertNoSymlinkPathComponents(policyPath, 'Native skill policy path', { allowMissingTail: true });
+  let content;
+  try {
+    const stat = await fsp.lstat(policyPath);
+    assertRealEntry(stat, policyPath, 'file');
+    if (stat.size > 1024 * 1024) throw new Error('Native skill policy exceeds 1 MiB');
+    content = await fsp.readFile(policyPath, 'utf8');
+  } catch (error) {
+    if (error.code === 'ENOENT') return { name: normalizeNativeSkillName(skill), allowed: true };
+    throw error;
+  }
+  const policy = validateNativeSkillPolicy(JSON.parse(content));
+  return resolveNativeSkillRule(policy, skill.id, host);
 }
 
 export function configuredNativeSkillHosts(installedAgents = []) {
@@ -301,9 +322,8 @@ function resolveSourceIdentity(source) {
     || null;
 }
 
-async function buildProjection(host, skill) {
+async function buildProjection(host, skill, skillName = normalizeNativeSkillName(skill)) {
   assertSupportedHost(host);
-  const skillName = normalizeNativeSkillName(skill);
   if (skill.conflictingPaths?.length) {
     throw new Error(`Conflicting skill formats for ${skill.id}; reconcile canonical sources before native sync`);
   }
@@ -322,8 +342,8 @@ async function buildProjection(host, skill) {
   const sourceContent = await fsp.readFile(sourcePath);
   const sourceText = sourceContent.toString('utf8');
   const generated = host === 'codex'
-    ? buildCodexSkillFiles(skill, sourceText)
-    : buildPortableSkillFiles(skill, sourceText);
+    ? buildCodexSkillFiles(skill, sourceText, skillName)
+    : buildPortableSkillFiles(skill, sourceText, skillName);
   const entries = [{
     type: 'file',
     relativePath: 'SKILL.md',
@@ -355,6 +375,7 @@ async function buildProjection(host, skill) {
     packageDigest = digestEntries(sourceEntries).digest;
   }
   if (host === 'codex') {
+    codexMetadata = Buffer.from(renameSelfInvocation(codexMetadata.toString('utf8'), skill, skillName));
     entries.push({ type: 'directory', relativePath: 'agents', mode: 0o755 });
     entries.push({
       type: 'file',
@@ -428,6 +449,27 @@ function receiptPathFor(receiptRoot, host, skillName) {
   return path.join(path.resolve(receiptRoot), host, `${skillName}.json`);
 }
 
+async function assertTargetOwnership(receiptRoot, host, skillId, targetDir) {
+  const directory = path.join(receiptRoot, host);
+  await assertSafeRoot(directory, 'Native skill receipt directory');
+  let names;
+  try {
+    names = await fsp.readdir(directory);
+  } catch (error) {
+    if (error.code === 'ENOENT') return;
+    throw error;
+  }
+  for (const name of names.filter(name => name.endsWith('.json'))) {
+    const packageName = name.slice(0, -5);
+    if (!SKILL_NAME_PATTERN.test(packageName)) throw new Error(`Invalid receipt name: ${name}`);
+    if (`skill:${packageName}` === skillId) continue;
+    const receipt = await readReceipt(path.join(directory, name), { host, skillId: `skill:${packageName}` });
+    if (receipt?.targetDir === targetDir) {
+      throw new Error(`Native skill target already owned by ${receipt.skillId}: ${targetDir}`);
+    }
+  }
+}
+
 function isIsoTimestamp(value) {
   if (typeof value !== 'string') return false;
   const parsed = new Date(value);
@@ -442,19 +484,20 @@ function validateReceipt(receipt, expected = {}) {
   if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt)) {
     throw new Error('Native skill receipt must be an object');
   }
-  if (receipt.schemaVersion !== RECEIPT_SCHEMA_VERSION) {
+  if (![2, RECEIPT_SCHEMA_VERSION].includes(receipt.schemaVersion)) {
     throw new Error(`Unsupported native skill receipt schema: ${receipt.schemaVersion}`);
   }
   if (!NATIVE_SKILL_HOSTS.includes(receipt.host)) {
     throw new Error(`Invalid native skill receipt host: ${receipt.host}`);
   }
-  if (!String(receipt.skillId || '').startsWith('skill:')) {
+  if (!String(receipt.skillId || '').startsWith('skill:')
+    || !SKILL_NAME_PATTERN.test(receipt.skillId.slice(6))) {
     throw new Error('Invalid native skill receipt skillId');
   }
   if (!SKILL_NAME_PATTERN.test(receipt.skillName || '')) {
     throw new Error('Invalid native skill receipt skillName');
   }
-  if (receipt.skillId !== `skill:${receipt.skillName}`) {
+  if (receipt.schemaVersion === 2 && receipt.skillId !== `skill:${receipt.skillName}`) {
     throw new Error('Native skill receipt id/name mismatch');
   }
   if (typeof receipt.packageVersion !== 'string' || !receipt.packageVersion.trim()) {
@@ -628,25 +671,29 @@ function resultBase(host, projection, targetDir, receiptPath) {
 export async function inspectNativeSkillProjection(options = {}) {
   const host = options.host;
   const skill = options.skill;
-  const projection = await buildProjection(host, skill);
+  const rule = await nativeSkillRule(host, skill, options);
+  if (!rule.allowed) return { host, id: skill.id, skillName: rule.name, state: 'excluded', restartRequired: false };
+  const projection = await buildProjection(host, skill, rule.name);
   const targetRoot = path.resolve(options.targetRoot || getNativeSkillRoot(host, options));
   const receiptRoot = path.resolve(options.receiptRoot || getNativeSkillReceiptRoot(options));
   await assertSafeRoot(targetRoot, 'Native skill target root');
   await assertSafeRoot(receiptRoot, 'Native skill receipt root');
   const targetDir = path.join(targetRoot, projection.skillName);
-  const receiptPath = receiptPathFor(receiptRoot, host, projection.skillName);
-  const receiptExpectation = {
-    host,
-    skillId: projection.skillId,
-    skillName: projection.skillName,
-    targetDir,
-  };
-  const receipt = await readReceipt(receiptPath, receiptExpectation);
+  const receiptPath = receiptPathFor(receiptRoot, host, normalizeNativeSkillName(skill));
+  const receipt = await readReceipt(receiptPath, { host, skillId: projection.skillId });
+  if (receipt) {
+    validateReceipt(receipt, { targetDir: path.join(targetRoot, receipt.skillName) });
+  }
+  const renamed = Boolean(receipt && receipt.targetDir !== targetDir);
+  if (renamed && await inspectTree(receipt.targetDir)) {
+    throw new Error(`Prior native skill target still exists; preserve and reconcile it before renaming: ${receipt.targetDir}`);
+  }
+  await assertTargetOwnership(receiptRoot, host, skill.id, targetDir);
   const actual = await inspectTree(targetDir);
   let state;
   if (!actual) {
     state = 'missing';
-  } else if (!receipt) {
+  } else if (!receipt || renamed) {
     state = 'unmanaged';
   } else if (actual.digest !== receipt.renderedTreeDigest) {
     state = 'drifted';
@@ -665,7 +712,7 @@ export async function inspectNativeSkillProjection(options = {}) {
     ...resultBase(host, projection, targetDir, receiptPath),
     actualTreeDigest: actual?.digest || null,
     expectedMatchesActual: actual?.digest === projection.renderedTreeDigest,
-    managed: Boolean(receipt),
+    managed: Boolean(receipt) && !renamed,
     receipt,
     state,
   };
@@ -758,6 +805,7 @@ export async function reconcileNativeSkill(options = {}) {
     const force = options.force === true;
     const dryRun = options.dryRun === true;
 
+    if (inspected.state === 'excluded') return { ...base, action: 'excluded', reason: 'Host excluded by native skill policy' };
     if (inspected.state === 'current') {
       return { ...base, action: dryRun ? 'would_current' : 'current' };
     }
@@ -777,7 +825,7 @@ export async function reconcileNativeSkill(options = {}) {
     }
     if (inspected.state === 'unmanaged' && inspected.expectedMatchesActual) {
       if (dryRun) return { ...base, action: 'would_adopt' };
-      const projection = await buildProjection(host, skill);
+      const projection = await buildProjection(host, skill, inspected.skillName);
       await assertSafeRoot(path.dirname(inspected.targetDir), 'Native skill target root');
       await assertSafeRoot(path.dirname(path.dirname(inspected.receiptPath)), 'Native skill receipt root');
       const current = await inspectTree(inspected.targetDir);
@@ -787,18 +835,16 @@ export async function reconcileNativeSkill(options = {}) {
       const receiptExpectation = {
         host,
         skillId: projection.skillId,
-        skillName: projection.skillName,
-        targetDir: inspected.targetDir,
       };
-      await assertReceiptUnchanged(inspected.receiptPath, null, receiptExpectation);
+      await assertReceiptUnchanged(inspected.receiptPath, inspected.receipt, receiptExpectation);
       await atomicWriteReceipt(
         inspected.receiptPath,
-        receiptFor(host, projection, inspected.targetDir),
+        receiptFor(host, projection, inspected.targetDir, inspected.receipt),
       );
       return { ...base, action: 'adopted' };
     }
 
-    const projection = await buildProjection(host, skill);
+    const projection = await buildProjection(host, skill, inspected.skillName);
     const receipt = receiptFor(host, projection, inspected.targetDir, inspected.receipt);
     const targetChanges = inspected.actualTreeDigest !== projection.renderedTreeDigest;
     const action = inspected.state === 'missing' ? 'created' : 'updated';
@@ -817,8 +863,6 @@ export async function reconcileNativeSkill(options = {}) {
       const receiptExpectation = {
         host,
         skillId: projection.skillId,
-        skillName: projection.skillName,
-        targetDir: inspected.targetDir,
       };
       await assertReceiptUnchanged(
         inspected.receiptPath,
@@ -840,8 +884,6 @@ export async function reconcileNativeSkill(options = {}) {
         receiptExpectation: {
           host,
           skillId: projection.skillId,
-          skillName: projection.skillName,
-          targetDir: inspected.targetDir,
         },
         priorActualDigest: inspected.actualTreeDigest,
         writeReceipt: options.operations?.writeReceipt || atomicWriteReceipt,
@@ -968,15 +1010,19 @@ export async function removeNativeSkillProjection(options = {}) {
   const skill = options.skill;
   try {
     assertSupportedHost(host);
-    const skillName = normalizeNativeSkillName(skill);
+    const packageName = normalizeNativeSkillName(skill);
+    const rule = await nativeSkillRule(host, skill, options);
     const targetRoot = path.resolve(options.targetRoot || getNativeSkillRoot(host, options));
     const receiptRoot = path.resolve(options.receiptRoot || getNativeSkillReceiptRoot(options));
     await assertSafeRoot(targetRoot, 'Native skill target root');
     await assertSafeRoot(receiptRoot, 'Native skill receipt root');
+    const receiptPath = receiptPathFor(receiptRoot, host, packageName);
+    const receipt = await readReceipt(receiptPath, { host, skillId: skill.id });
+    const skillName = receipt?.skillName || rule.name;
     const targetDir = path.join(targetRoot, skillName);
-    const receiptPath = receiptPathFor(receiptRoot, host, skillName);
     const receiptExpectation = { host, skillId: skill.id, skillName, targetDir };
-    const receipt = await readReceipt(receiptPath, receiptExpectation);
+    if (receipt) validateReceipt(receipt, receiptExpectation);
+    await assertTargetOwnership(receiptRoot, host, skill.id, targetDir);
     const actual = await inspectTree(targetDir);
     const base = { host, id: skill.id, skillName, targetDir, receiptPath, restartRequired: false };
     if (!receipt) {
@@ -1098,15 +1144,15 @@ export async function summarizeNativeSkillHost(host, options = {}) {
   }
   for (const name of names) {
     try {
-      const skillName = name.slice(0, -'.json'.length);
-      if (!SKILL_NAME_PATTERN.test(skillName)) throw new Error(`Invalid receipt name: ${name}`);
-      const targetDir = path.join(targetRoot, skillName);
+      const packageName = name.slice(0, -'.json'.length);
+      if (!SKILL_NAME_PATTERN.test(packageName)) throw new Error(`Invalid receipt name: ${name}`);
       const receipt = await readReceipt(path.join(hostReceiptRoot, name), {
         host,
-        skillId: `skill:${skillName}`,
-        skillName,
-        targetDir,
+        skillId: `skill:${packageName}`,
       });
+      const targetDir = path.join(targetRoot, receipt.skillName);
+      validateReceipt(receipt, { targetDir });
+      await assertTargetOwnership(receiptRoot, host, receipt.skillId, targetDir);
       const actual = await inspectTree(targetDir);
       summary.totalManaged += 1;
       if (!actual) summary.missing += 1;
@@ -1130,15 +1176,14 @@ export async function getManagedNativeSkillHosts(skill, options = {}) {
   await assertSafeRoot(receiptRoot, 'Native skill receipt root');
   const hosts = [];
   for (const host of NATIVE_SKILL_HOSTS) {
+    const rule = await nativeSkillRule(host, skill, options);
+    if (!rule.allowed) continue;
     const receiptPath = receiptPathFor(receiptRoot, host, skillName);
-    const targetDir = path.join(getNativeSkillRoot(host, options), skillName);
-    const receipt = await readReceipt(receiptPath, {
-      host,
-      skillId: skill.id,
-      skillName,
-      targetDir,
-    });
-    if (receipt) hosts.push(host);
+    const receipt = await readReceipt(receiptPath, { host, skillId: skill.id });
+    if (receipt) {
+      validateReceipt(receipt, { targetDir: path.join(getNativeSkillRoot(host, options), receipt.skillName) });
+      hosts.push(host);
+    }
   }
   return hosts;
 }

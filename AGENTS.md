@@ -109,6 +109,12 @@ MCP config, managed instructions, and native skill projections are separate:
   automatically; drifted and unmanaged trees are preserved unless exact scoped
   `--force` is supplied. Whole-inventory force also requires `--all`.
 - Native skill changes set `restartRequired`; RUDI does not claim host hot reload.
+- Private native names and allowed hosts come from `$RUDI_HOME/native-skills.json`.
+  Package IDs and receipt filenames remain stable. Receipt schema 3 separates
+  package ID from native name; schema 2 remains readable. Never infer ownership
+  from a matching name, move old targets automatically, or overwrite private
+  variants during a rename. Keep naming policy in the shared native lifecycle,
+  not individual command adapters.
 
 Discover installed stacks with `rudi list stacks --json` or inspect
 `~/.rudi/cache/tool-index.json`. Rebuild with `rudi index --json`. Do not use or
