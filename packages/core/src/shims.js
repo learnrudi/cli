@@ -17,6 +17,7 @@
 import fs from 'fs';
 import path from 'path';
 import { PATHS, resolveNodeRuntimeBin } from '@learnrudi/env';
+import { resolveNpmRuntimeBin } from './npm-runtime.js';
 
 /**
  * @typedef {Object} ShimOwnership
@@ -136,6 +137,8 @@ export async function createShimsForTool(manifest) {
   const bins = manifest.bins || [manifest.name || manifest.id.split(':')[1]];
   const created = [];
   const collisions = [];
+  const nodeBinDir = manifest.installType === 'npm' && manifest.nodeRuntime !== undefined
+    ? path.dirname(resolveNpmRuntimeBin(manifest.nodeRuntime, 'node')) : undefined;
 
   for (const bin of bins) {
     const target = resolveBinTarget(manifest, bin);
@@ -152,7 +155,7 @@ export async function createShimsForTool(manifest) {
     if (manifest.installType === 'binary') {
       createSymlinkShim(bin, target, PATHS.bins);
     } else {
-      createWrapperShim(bin, target, PATHS.bins);
+      createWrapperShim(bin, target, PATHS.bins, nodeBinDir);
     }
 
     // Register ownership and detect collisions
@@ -208,14 +211,22 @@ function resolveBinTarget(manifest, bin) {
  * @param {string} targetAbs - Absolute path to target executable
  * @param {string} binsDir - Shims directory
  */
-function createWrapperShim(name, targetAbs, binsDir) {
+function createWrapperShim(name, targetAbs, binsDir, nodeBinDir) {
   fs.mkdirSync(binsDir, { recursive: true });
   const shimPath = path.join(binsDir, name);
 
   // Create bash wrapper that execs the target
+  const shellQuote = value => `'${value.replaceAll("'", "'\\''")}'`;
+  const runtimePath = nodeBinDir ? `if [ ! -f ${shellQuote(path.join(nodeBinDir, 'node'))} ] || [ ! -x ${shellQuote(path.join(nodeBinDir, 'node'))} ]; then
+  printf '%s\\n' 'Required managed Node runtime is missing; reinstall the tool runtime.' >&2
+  exit 127
+fi
+export PATH=${shellQuote(nodeBinDir)}:"$PATH"
+` : '';
+  const quotedTarget = targetAbs.replace(/["\\$`]/g, '\\$&');
   const script = `#!/usr/bin/env bash
 set -euo pipefail
-exec "${targetAbs}" "$@"
+${runtimePath}exec "${quotedTarget}" "$@"
 `;
 
   // Atomic write: write to temp file, then rename

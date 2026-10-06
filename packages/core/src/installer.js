@@ -32,6 +32,7 @@ import {
 import { resolvePackage, getInstallOrder } from './resolver.js';
 import { readLockfile, restoreLockfile, writeLockfile } from './lockfile.js';
 import { createShimsForTool, removeShims } from './shims.js';
+import { getNpmNodeRuntimeId, resolveNpmRuntimeBin } from './npm-runtime.js';
 import { installRegistrySkill } from './skill-install.js';
 
 const SINGLE_FILE_KINDS = new Set(['skill', 'prompt', 'workflow']);
@@ -147,7 +148,14 @@ export function createNpmInstallCommand(options = {}) {
     args.push('-g');
   }
 
-  args.push(packageName);
+  const version = options.version;
+  if (version !== undefined && (typeof version !== 'string'
+    || !/^[a-zA-Z0-9._~^>=<:+-]+$/.test(version))) {
+    throw new Error('Invalid npm package version');
+  }
+  const alreadyVersioned = packageName.slice(1).includes('@');
+  args.push(version && version !== 'latest' && !alreadyVersioned
+    ? `${packageName}@${version}` : packageName);
 
   if (options.ignoreScripts) {
     args.push('--ignore-scripts');
@@ -728,6 +736,35 @@ function hasInstallScripts(installRoot, packageName, scope = 'local') {
  * @property {string} [error] - Error message if failed
  */
 
+async function withRuntimeInstallLock(pkg, install) {
+  if (pkg.kind !== 'runtime' || pkg.install?.source !== 'download' || !pkg.install?.url) {
+    return install();
+  }
+  const installPath = getInstallPathForPackage(pkg);
+  fs.mkdirSync(path.dirname(installPath), { recursive: true });
+  const lockPath = path.join(path.dirname(installPath), `.${path.basename(installPath)}.runtime-install.lock`);
+  let descriptor;
+  try {
+    descriptor = fs.openSync(lockPath, 'wx', 0o600);
+  } catch (error) {
+    if (error.code === 'EEXIST') {
+      throw new Error(`Runtime installation already in progress: ${pkg.id} (${lockPath})`);
+    }
+    throw error;
+  }
+  const owned = fs.fstatSync(descriptor);
+  try {
+    fs.writeFileSync(descriptor, JSON.stringify({ package: pkg.id, pid: process.pid }));
+    return await install();
+  } finally {
+    fs.closeSync(descriptor);
+    if (fs.existsSync(lockPath)) {
+      const current = fs.lstatSync(lockPath);
+      if (current.dev === owned.dev && current.ino === owned.ino) fs.unlinkSync(lockPath);
+    }
+  }
+}
+
 /**
  * Install a package and its dependencies
  * @param {string} id - Package ID
@@ -817,7 +854,7 @@ export async function installPackage(id, options = {}) {
     onProgress?.({ phase: 'installing', package: pkg.id, total: toInstall.length, current: results.length + 1 });
 
     try {
-      const result = await installSinglePackage(pkg, {
+      const result = await withRuntimeInstallLock(pkg, () => installSinglePackage(pkg, {
         force,
         allowScripts,
         withShims,
@@ -826,7 +863,7 @@ export async function installPackage(id, options = {}) {
         preserveStatePaths,
         deferFinalize: pkg.id === resolved.id && pkg.source?.type === 'github',
         onProgress
-      });
+      }));
       results.push(result);
     } catch (error) {
       return {
@@ -927,7 +964,9 @@ export async function rollbackDeferredInstall(transaction) {
   if (transaction.backupPath) {
     fs.renameSync(transaction.backupPath, transaction.installPath);
   }
-  restoreLockfile(transaction.id, transaction.previousLockfile);
+  if (!transaction.lockfileUnchanged) {
+    restoreLockfile(transaction.id, transaction.previousLockfile);
+  }
   return { success: true, id: transaction.id, path: transaction.installPath };
 }
 
@@ -1137,6 +1176,8 @@ async function installSinglePackage(pkg, options = {}) {
       try {
         const npmInstallRoot = installPath;
         const npmScope = 'local';
+        const nodeRuntime = getNpmNodeRuntimeId(pkg);
+        const boundNpm = nodeRuntime ? resolveNpmRuntimeBin(nodeRuntime, 'npm') : undefined;
 
         if (!fs.existsSync(installPath)) {
           fs.mkdirSync(installPath, { recursive: true });
@@ -1147,9 +1188,9 @@ async function installSinglePackage(pkg, options = {}) {
         // Use bundled Node's npm if RESOURCES_PATH is set (running from Studio)
         // Otherwise fall back to system npm (CLI standalone use)
         const resourcesPath = process.env.RESOURCES_PATH;
-        const npmCmd = resourcesPath
+        const npmCmd = boundNpm || (resourcesPath
           ? path.join(resourcesPath, 'bundled-runtimes', 'node', 'bin', 'npm')
-          : await findNpmExecutable();
+          : await findNpmExecutable());
 
         if (!fs.existsSync(path.join(installPath, 'package.json'))) {
           runCommandPlan(createNpmInitCommand(npmCmd), {
@@ -1166,6 +1207,7 @@ async function installSinglePackage(pkg, options = {}) {
         runCommandPlan(createNpmInstallCommand({
           npmCmd,
           packageName: pkg.npmPackage,
+          version: pkg.version,
           global: false,
           prefix: null,
           ignoreScripts: shouldIgnoreScripts,
@@ -1201,10 +1243,9 @@ async function installSinglePackage(pkg, options = {}) {
           runCommandPlan(createPostInstallCommand(pkg.postInstall, binDir), {
             cwd: installPath,
             stdio: 'pipe',
-            env: {
-              ...process.env,
+            env: buildNodeToolEnv(npmCmd, {
               PATH: `${binDir}${path.delimiter}${process.env.PATH || ''}`
-            }
+            })
           });
         }
 
@@ -1226,6 +1267,7 @@ async function installSinglePackage(pkg, options = {}) {
           name: pkgName,
           version: installedVersion,
           npmPackage: pkg.npmPackage,
+          ...(nodeRuntime ? { nodeRuntime } : {}),
           bins: bins,
           hasInstallScripts: scriptsDetected,
           scriptsPolicy: scriptsPolicy,
@@ -1248,7 +1290,8 @@ async function installSinglePackage(pkg, options = {}) {
               installType: 'npm',
               installDir: npmInstallRoot,
               bins: bins,
-              name: pkgName
+              name: pkgName,
+              nodeRuntime,
             });
           } else {
             console.warn(`[Installer] Warning: No binaries found for ${pkg.npmPackage}`);
@@ -1314,9 +1357,31 @@ async function installSinglePackage(pkg, options = {}) {
 
     try {
       if (pkg.install?.source === 'download' && pkg.install?.url) {
-        await downloadResolvedPackage(pkg, installPath, {
+        const downloaded = await downloadResolvedPackage(pkg, installPath, {
           onProgress: (progress) => onProgress?.({ ...progress, package: pkg.id }),
         });
+
+        if (pkg.kind === 'runtime') {
+          try {
+            onProgress?.({ phase: 'lockfile', package: pkg.id });
+            await writeLockfile(pkg, { installPath });
+          } catch (error) {
+            try {
+              await rollbackDeferredInstall({
+                id: pkg.id, installPath,
+                previousInstallExisted: Boolean(downloaded.backupPath),
+                backupPath: downloaded.backupPath,
+                // Atomic lock writes leave the old bytes untouched on failure.
+                lockfileUnchanged: true,
+              });
+            } catch (rollbackError) {
+              throw new Error(`${error.message}; runtime rollback failed: ${rollbackError.message}`);
+            }
+            throw error;
+          }
+          return { success: true, id: pkg.id, path: installPath, lockfileWritten: true,
+            ...(downloaded.backupPath ? { backupPath: downloaded.backupPath } : {}) };
+        }
 
         if (pkg.kind === 'binary' && withShims) {
           const bins = Array.isArray(pkg.bins) ? pkg.bins : Object.keys(pkg.bins || {});
@@ -1359,7 +1424,11 @@ async function installSinglePackage(pkg, options = {}) {
       }
       return { success: true, id: pkg.id, path: installPath };
     } catch (error) {
-      try { fs.rmSync(installPath, { recursive: true, force: true }); } catch {}
+      // Verified runtime downloads own staging and rollback. Removing their
+      // destination here would delete the working installation they preserved.
+      if (pkg.kind !== 'runtime' || pkg.install?.source !== 'download' || !pkg.install?.url) {
+        try { fs.rmSync(installPath, { recursive: true, force: true }); } catch {}
+      }
       throw new Error(`Failed to install ${pkg.id}: ${error.message}`);
     }
   }

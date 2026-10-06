@@ -392,6 +392,7 @@ export async function cmdShims(args, flags) {
         name: manifest?.name || name,
         source: manifest?.source,
         systemPath: manifest?.systemPath,
+        nodeRuntime: manifest?.nodeRuntime,
       });
 
       created += result.created.length;

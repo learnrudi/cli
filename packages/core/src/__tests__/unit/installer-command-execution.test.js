@@ -57,6 +57,16 @@ test('npm install validates registry package names and builds argv', () => {
   );
 });
 
+test('npm install honors a registry version pin without changing package identity', () => {
+  const command = createNpmInstallCommand({
+    npmCmd: '/runtime/bin/npm', packageName: 'wrangler', version: '4.131.1',
+  });
+  assert.equal(command.args[1], 'wrangler@4.131.1');
+  assert.throws(() => createNpmInstallCommand({
+    npmCmd: 'npm', packageName: 'wrangler', version: '4.1.0; touch probe',
+  }), /Invalid npm package version/);
+});
+
 test('external stack dependency commands suppress lifecycle scripts by default', () => {
   assert.deepEqual(
     createStackDependencyInstallCommand('pnpm', '/opt/rudi/pnpm', {

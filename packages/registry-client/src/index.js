@@ -633,9 +633,25 @@ function resolvedBinEntries(bins, packageId) {
   return entries;
 }
 
+function validateRuntimeBinary(root, relativePath, packageId) {
+  const binaryPath = path.join(root, relativePath);
+  if (!fs.existsSync(binaryPath)) {
+    throw new Error(`[${packageId}] extracted runtime binary not found: ${relativePath}`);
+  }
+  const relative = path.relative(fs.realpathSync(root), fs.realpathSync(binaryPath));
+  if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error(`[${packageId}] runtime binary escapes its installation: ${relativePath}`);
+  }
+  if (!fs.statSync(binaryPath).isFile()) {
+    throw new Error(`[${packageId}] runtime binary is not a regular file: ${relativePath}`);
+  }
+  fs.chmodSync(binaryPath, 0o755);
+}
+
 /**
  * Download an already platform-resolved registry v2 package.
- * Integrity failures are terminal and remove the incomplete destination.
+ * Runtime replacements stage first and retain the previous tree for rollback.
+ * Incomplete binary-package destinations are removed on failure.
  */
 export async function downloadResolvedPackage(pkg, destPath, options = {}) {
   const { onProgress } = options;
@@ -663,6 +679,10 @@ export async function downloadResolvedPackage(pkg, destPath, options = {}) {
   fs.mkdirSync(cacheDir, { recursive: true });
   const safeId = String(pkg.id).replace(/[^a-zA-Z0-9._-]/g, '-');
   const tempFile = path.join(cacheDir, `${safeId}-${crypto.randomUUID()}.download`);
+  let destinationPrepared = false;
+  let stagingPath = null;
+  let backupPath = null;
+  let runtimeActivated = false;
 
   try {
     onProgress?.({ phase: 'downloading', package: pkg.id, url: parsedUrl.toString() });
@@ -681,31 +701,34 @@ export async function downloadResolvedPackage(pkg, destPath, options = {}) {
       throw new Error(`Checksum mismatch for ${pkg.id}`);
     }
 
-    fs.rmSync(destPath, { recursive: true, force: true });
-    fs.mkdirSync(destPath, { recursive: true });
+    if (pkg.kind === 'runtime') {
+      fs.mkdirSync(path.dirname(destPath), { recursive: true });
+      stagingPath = fs.mkdtempSync(path.join(path.dirname(destPath), `.${path.basename(destPath)}.install-`));
+    } else {
+      fs.rmSync(destPath, { recursive: true, force: true });
+      destinationPrepared = true;
+      fs.mkdirSync(destPath, { recursive: true });
+    }
+    const workPath = stagingPath || destPath;
     onProgress?.({ phase: 'extracting', package: pkg.id });
 
     if (extractType === 'raw') {
       if (bins.length !== 1) {
         throw new Error(`[${pkg.id}] raw download must expose exactly one binary`);
       }
-      installRawBinaryDownload(tempFile, destPath, bins[0].name);
+      installRawBinaryDownload(tempFile, workPath, bins[0].name);
     } else {
-      runRegistryCommandPlan(createRegistryArchiveExtractCommand(extractType, tempFile, destPath, {
+      runRegistryCommandPlan(createRegistryArchiveExtractCommand(extractType, tempFile, workPath, {
         stripComponents: pkg.install.extract?.strip || 0,
       }), { stdio: 'pipe' });
       for (const bin of bins) {
         if (pkg.kind === 'runtime') {
-          const runtimeBin = path.join(destPath, bin.path);
-          if (!fs.existsSync(runtimeBin)) {
-            throw new Error(`[${pkg.id}] extracted runtime binary not found: ${bin.path}`);
-          }
-          fs.chmodSync(runtimeBin, 0o755);
+          validateRuntimeBinary(workPath, bin.path, pkg.id);
           continue;
         }
-        const direct = path.join(destPath, bin.name);
+        const direct = path.join(workPath, bin.name);
         if (!fs.existsSync(direct)) {
-          await extractBinaryFromPath(destPath, bin.path, destPath);
+          await extractBinaryFromPath(workPath, bin.path, workPath);
         }
         if (!fs.existsSync(direct)) {
           throw new Error(`[${pkg.id}] extracted binary not found: ${bin.name}`);
@@ -729,24 +752,43 @@ export async function downloadResolvedPackage(pkg, destPath, options = {}) {
       },
       installedAt,
     };
-    fs.writeFileSync(path.join(destPath, 'manifest.json'), JSON.stringify(manifest, null, 2));
+    // Runtime metadata is installer-owned; never follow archive-provided links.
+    fs.writeFileSync(path.join(workPath, 'manifest.json'), JSON.stringify(manifest, null, 2),
+      pkg.kind === 'runtime' ? { flag: 'wx' } : undefined);
     if (pkg.kind === 'runtime') {
-      fs.writeFileSync(path.join(destPath, 'runtime.json'), JSON.stringify({
+      fs.writeFileSync(path.join(workPath, 'runtime.json'), JSON.stringify({
         runtime: pkg.id.replace(/^runtime:/, ''),
         version: pkg.version,
         platformArch: getPlatformArch(),
         source: parsedUrl.toString(),
         downloadedAt: installedAt,
         bins: manifest.bins,
-      }, null, 2));
+      }, null, 2), { flag: 'wx' });
+      // Finish fallible scratch cleanup before the working runtime is replaced.
+      fs.unlinkSync(tempFile);
+      if (fs.existsSync(destPath)) {
+        backupPath = path.join(path.dirname(destPath), `.${path.basename(destPath)}.runtime-backup-${crypto.randomUUID()}`);
+        fs.renameSync(destPath, backupPath);
+      }
+      fs.renameSync(stagingPath, destPath);
+      stagingPath = null;
+      runtimeActivated = true;
     }
 
     onProgress?.({ phase: 'complete', package: pkg.id, path: destPath });
-    return { success: true, path: destPath };
+    return { success: true, path: destPath, ...(backupPath ? { backupPath } : {}) };
   } catch (error) {
-    fs.rmSync(destPath, { recursive: true, force: true });
+    if (destinationPrepared) fs.rmSync(destPath, { recursive: true, force: true });
+    if (runtimeActivated) fs.rmSync(destPath, { recursive: true, force: true });
+    if (backupPath) {
+      if (fs.existsSync(destPath)) {
+        throw new Error(`${error.message}; previous runtime retained at ${backupPath}; destination changed during rollback`);
+      }
+      fs.renameSync(backupPath, destPath);
+    }
     throw error;
   } finally {
+    if (stagingPath) fs.rmSync(stagingPath, { recursive: true, force: true });
     if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
   }
 }
