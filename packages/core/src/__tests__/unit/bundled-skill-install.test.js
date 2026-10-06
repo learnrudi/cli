@@ -106,7 +106,7 @@ test('a failed lockfile write restores the previous skill and lock', () => {
     const writeFile = fs.writeFileSync;
     let failed = false;
     fs.writeFileSync = (file, ...args) => {
-      if (!failed && String(file).endsWith('upgrade-demo.lock.yaml')) {
+      if (!failed && path.dirname(String(file)) === path.join(process.env.RUDI_HOME, 'locks/skills')) {
         failed = true;
         throw new Error('injected lock write failure');
       }

@@ -48,7 +48,8 @@ export async function writeLockfile(resolved, options = {}) {
     version: resolved.version,
     name: resolved.name,
     installedAt: new Date().toISOString(),
-    checksum: await computeInstalledContentChecksum(installPath),
+    checksum: await computeInstalledContentChecksum(installPath, { runtime: resolved.kind === 'runtime' }),
+    ...(resolved.kind === 'runtime' ? { checksumMode: 'runtime-tree-v1' } : {}),
     installLayout,
     ...(resolved.source?.type === 'github'
       ? {
@@ -73,7 +74,18 @@ export async function writeLockfile(resolved, options = {}) {
     lineWidth: 0 // Don't wrap lines
   });
 
-  fs.writeFileSync(lockPath, content);
+  // Commit metadata atomically so a partial write cannot damage the old lock.
+  const pendingPath = `${lockPath}.${crypto.randomUUID()}.pending`;
+  try {
+    fs.writeFileSync(pendingPath, content, { flag: 'wx', mode: 0o600 });
+    fs.renameSync(pendingPath, lockPath);
+  } finally {
+    try {
+      fs.rmSync(pendingPath, { force: true });
+    } catch (error) {
+      process.emitWarning(`Could not remove pending package lock ${pendingPath}: ${error.message}`);
+    }
+  }
 
   return lockPath;
 }
@@ -163,13 +175,16 @@ export async function verifyLockfile(id) {
     )
       ? path.join(PATHS.skills, name)
       : getPackagePath(id);
-    const checksum = await computeInstalledContentChecksum(installPath);
+    if (lockfile.checksumMode && (lockfile.checksumMode !== 'runtime-tree-v1' || kind !== 'runtime')) {
+      return { valid: false, errors: [...errors, 'Unsupported installed package checksum mode'] };
+    }
+    const checksum = await computeInstalledContentChecksum(installPath, {
+      runtime: lockfile.checksumMode === 'runtime-tree-v1',
+    });
     if (checksum !== lockfile.checksum) {
       errors.push('Installed package content checksum does not match lockfile');
     }
   }
-
-  // In production, we would also verify checksums
 
   return {
     valid: errors.length === 0,
@@ -191,11 +206,19 @@ const CHECKSUM_IGNORED_NAMES = new Set([
 ]);
 const CHECKSUM_IGNORED_ROOT_NAMES = new Set(['outputs', 'runs']);
 
-function updateContentHash(hash, rootPath, currentPath, includeIgnored) {
+function updateContentHash(hash, rootPath, currentPath, options) {
   const relativePath = path.relative(rootPath, currentPath).split(path.sep).join('/');
   const stat = fs.lstatSync(currentPath);
   if (stat.isSymbolicLink()) {
-    throw new Error(`Cannot checksum symbolic link in installed package: ${relativePath}`);
+    if (!options.runtime) {
+      throw new Error(`Cannot checksum symbolic link in installed package: ${relativePath}`);
+    }
+    const target = path.relative(fs.realpathSync(rootPath), fs.realpathSync(currentPath));
+    if (!target || target === '..' || target.startsWith(`..${path.sep}`) || path.isAbsolute(target)) {
+      throw new Error(`Runtime symbolic link escapes its installation: ${relativePath}`);
+    }
+    hash.update(`link\0${relativePath}\0${fs.readlinkSync(currentPath)}\0`);
+    return;
   }
   if (stat.isFile()) {
     const executable = (stat.mode & 0o111) !== 0 ? 'executable' : 'regular';
@@ -209,14 +232,14 @@ function updateContentHash(hash, rootPath, currentPath, includeIgnored) {
   hash.update(`dir\0${relativePath}\0`);
   for (const entry of fs.readdirSync(currentPath).sort()) {
     if (
-      !includeIgnored && (CHECKSUM_IGNORED_NAMES.has(entry) ||
+      !options.includeIgnored && (CHECKSUM_IGNORED_NAMES.has(entry) ||
       (currentPath === rootPath && CHECKSUM_IGNORED_ROOT_NAMES.has(entry)))
     ) continue;
-    updateContentHash(hash, rootPath, path.join(currentPath, entry), includeIgnored);
+    updateContentHash(hash, rootPath, path.join(currentPath, entry), options);
   }
 }
 
-export async function computeInstalledContentChecksum(installPath, { includeIgnored = false } = {}) {
+export async function computeInstalledContentChecksum(installPath, { includeIgnored = false, runtime = false } = {}) {
   if (!fs.existsSync(installPath)) {
     throw new Error(`Cannot checksum missing installed package: ${installPath}`);
   }
@@ -227,7 +250,7 @@ export async function computeInstalledContentChecksum(installPath, { includeIgno
     hash.update(`file\0.\0${executable}\0`);
     hash.update(fs.readFileSync(installPath));
   } else {
-    updateContentHash(hash, installPath, installPath, includeIgnored);
+    updateContentHash(hash, installPath, installPath, { includeIgnored: includeIgnored || runtime, runtime });
   }
   return hash.digest('hex');
 }

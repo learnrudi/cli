@@ -15,6 +15,7 @@ import {
 } from '@learnrudi/registry-client';
 import { getPlatformArch, isPackageInstalled, parsePackageId } from '@learnrudi/env';
 import { readLockfile } from './lockfile.js';
+import { getNpmNodeRuntimeId } from './npm-runtime.js';
 
 const SINGLE_FILE_KINDS = new Set(['skill', 'prompt', 'workflow']);
 const EXTERNAL_STACK_ID_PATTERN = /^stack:[a-z0-9][a-z0-9-_]*$/;
@@ -343,6 +344,21 @@ async function resolveDynamicNpm(id) {
   };
 }
 
+async function resolveRuntimeDependency(runtimeId, required = false) {
+  const runtimePkg = await getInstallableRegistryPackage(runtimeId);
+  if (!runtimePkg) {
+    if (required) throw new Error(`Required npm Node runtime not found: ${runtimeId}`);
+    return null;
+  }
+  return {
+    ...runtimePkg,
+    id: runtimeId,
+    kind: 'runtime',
+    installed: isPackageInstalled(runtimeId),
+    dependencies: [],
+  };
+}
+
 /**
  * Resolve dependencies for a package
  */
@@ -351,21 +367,16 @@ async function resolveDependencies(pkg) {
 
   // Resolve runtime dependencies (binary stacks have no runtime dependency)
   const runtimeVal = pkg.runtime === 'binary' ? null : pkg.runtime;
-  const runtimes = pkg.requires?.runtimes || (runtimeVal ? [runtimeVal] : []);
+  const nodeRuntime = getNpmNodeRuntimeId(pkg);
+  const runtimes = [...new Set([
+    ...(pkg.requires?.runtimes || (runtimeVal ? [runtimeVal] : [])),
+    ...(nodeRuntime ? [nodeRuntime] : []),
+  ])];
 
   for (const runtime of runtimes) {
     const runtimeId = runtime.startsWith('runtime:') ? runtime : `runtime:${runtime}`;
-    const runtimePkg = await getInstallableRegistryPackage(runtimeId);
-
-    if (runtimePkg) {
-      dependencies.push({
-        ...runtimePkg,
-        id: runtimeId,
-        kind: 'runtime',
-        installed: isPackageInstalled(runtimeId),
-        dependencies: []
-      });
-    }
+    const dependency = await resolveRuntimeDependency(runtimeId, runtimeId === nodeRuntime);
+    if (dependency) dependencies.push(dependency);
   }
 
   // Resolve binary dependencies
@@ -379,12 +390,15 @@ async function resolveDependencies(pkg) {
     const binaryPkg = await getInstallableRegistryPackage(binaryId);
 
     if (binaryPkg) {
+      const nodeRuntime = getNpmNodeRuntimeId(binaryPkg);
+      const binaryDependencies = nodeRuntime
+        ? [await resolveRuntimeDependency(nodeRuntime, true)] : [];
       dependencies.push({
         ...binaryPkg,
         id: binaryId,
         kind: 'binary',
         installed: isPackageInstalled(binaryId),
-        dependencies: []
+        dependencies: binaryDependencies
       });
     }
   }

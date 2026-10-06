@@ -14,10 +14,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  quality:
-    name: quality
+  quality-matrix:
+    name: quality (${{ matrix.node }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    env:
+      RUDI_CLI_TEST_WRAPPER_ACTIVE: '1'
 
     steps:
       - name: Check out repository
@@ -28,7 +34,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: ${{ matrix.node }}
 
       - name: Enable Corepack
         run: corepack enable
@@ -56,3 +62,15 @@ jobs:
 
       - name: Verify package contents
         run: npm pack --dry-run
+
+  quality:
+    name: quality
+    needs: quality-matrix
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require all Node versions to pass
+        env:
+          QUALITY_RESULT: ${{ needs.quality-matrix.result }}
+        run: test "$QUALITY_RESULT" = success

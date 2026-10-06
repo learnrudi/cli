@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { supportsTrustedPublishingNpm } from '../../../scripts/validate-publish-runtime.mjs';
 
@@ -33,12 +34,32 @@ test('GitHub quality workflow blocks unverified changes', () => {
   assert.match(workflow, /^\s{4}name: quality$/m);
   assert.match(workflow, /actions\/checkout@v5/);
   assert.match(workflow, /actions\/setup-node@v6/);
+  assert.match(workflow, /node: \[22, 24\]/);
+  assert.match(workflow, /node-version: \$\{\{ matrix\.node \}\}/);
+  assert.match(workflow, /RUDI_CLI_TEST_WRAPPER_ACTIVE: ['"]1['"]/);
   assert.match(workflow, /fetch-depth: 0/);
   assert.match(workflow, /pnpm install --frozen-lockfile/);
   assert.match(workflow, /pnpm test/);
   assert.match(workflow, /pnpm build/);
   assert.match(workflow, /node scripts\/agent-debt-runner\.mjs --changed-since/);
   assert.match(workflow, /npm pack --dry-run/);
+});
+
+test('required quality check succeeds only when the whole runtime matrix succeeds', () => {
+  const gate = workflowJob(read('.github/workflows/quality.yml'), 'quality');
+  assert.doesNotMatch(gate, /strategy:/, 'required check must have a stable, non-matrix name');
+  assert.match(gate, /^    name: quality$/m);
+  assert.match(gate, /^    needs: quality-matrix$/m);
+  assert.match(gate, /^    if: \$\{\{ always\(\) \}\}$/m);
+  assert.match(gate, /QUALITY_RESULT: \$\{\{ needs\.quality-matrix\.result \}\}/);
+  const command = gate.match(/^        run: (.+)$/m)?.[1];
+  assert.ok(command, 'required check must evaluate the matrix result');
+  for (const result of ['success', 'failure', 'cancelled', 'skipped', '']) {
+    const execution = spawnSync('/bin/sh', ['-c', command], {
+      env: { PATH: '/usr/bin:/bin', QUALITY_RESULT: result }, timeout: 1000,
+    });
+    assert.equal(execution.status, result === 'success' ? 0 : 1, result);
+  }
 });
 
 test('npm release workflow verifies the exact version and publishes through OIDC', () => {

@@ -17,7 +17,9 @@ with provider-owned agent software:
 npm install -g @learnrudi/cli
 ```
 
-Requires Node.js 18 or later. The installer creates `~/.rudi/`.
+Supports Node.js 22 and 24 LTS. The registry catalog selects the managed
+runtime version; the coordinated Node 24 migration targets 24.21.0.
+The installer creates `~/.rudi/`.
 
 Shims are opt-in. If you want PATH exposure for installed tools:
 
@@ -76,6 +78,39 @@ rudi install npm:puppeteer --allow-scripts
 # Optional: create shims immediately (opt-in)
 rudi install binary:ffmpeg --with-shims
 ```
+
+Curated npm tools can declare `install.nodeRuntime` to use a separate managed
+Node runtime for installation, registry post-install commands, and execution.
+The installer honors the catalog's tool version and explicit runtime binding;
+availability of those pins and bindings depends on the published catalog.
+The binding survives `rudi shims rebuild`. The shared `node`, `npm`, and
+`npx` commands retain their existing runtime. A missing bound runtime produces
+an error instead of falling back to another Node version.
+
+For development, use `pnpm test`. The local wrapper may select the managed Node
+when existing native dependencies require it. To verify a specific supported
+Node version, install dependencies in a separate checkout using that Node and run
+`RUDI_CLI_TEST_WRAPPER_ACTIVE=1 pnpm test` with its `bin` directory first in PATH.
+CI enforces this under both Node 22 and 24; do not reuse native modules built
+for a different Node ABI. `pnpm build` updates this checkout's
+distribution files; it does not update the installed `rudi` command. Use
+`node dist/index.cjs <command>` to exercise the rebuilt checkout with your
+selected working Node. Regenerating active launchers is a separate installation
+step and must use the intended CLI version.
+
+Downloaded runtime updates are verified and extracted in a sibling staging
+directory before replacing the installed runtime. Failed downloads, invalid
+executables, and lockfile-write failures preserve the previous runtime. A
+successful replacement retains its previous directory at the returned
+`backupPath`; retain it until the new runtime and its consumers are accepted.
+Concurrent runtime installs fail with the lock path in the error. If a process
+is interrupted, inspect the lock's PID and retained directories before removing
+a stale lock or resuming; automatic crash recovery is not provided.
+
+Runtime locks use `runtime-tree-v1`: they include bundled dependencies and
+permit only symlinks resolving within the installation. Other package locks
+retain their existing checksum rules. Keep the matching CLI version when
+verifying or rolling back a runtime that uses this checksum mode.
 
 GitHub source installs accept only the exact public HTTPS form
 `https://github.com/<owner>/<repo>/tree/<ref>/<stack-path>`. RUDI resolves the
