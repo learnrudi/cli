@@ -24,6 +24,11 @@ export function shouldReportDaemonIssue(daemon) {
   return daemon.reason !== 'not_running' && (!daemon.reachable || !daemon.ready);
 }
 
+export function isSupportedNodeVersion(version) {
+  const parsed = typeof version === 'string' && /^v?(\d+)\.\d+\.\d+$/.exec(version);
+  return Boolean(parsed && [22, 24].includes(Number(parsed[1])));
+}
+
 export async function cmdDoctor(args, flags) {
   console.log('RUDI Health Check');
   console.log('═'.repeat(50));
@@ -159,13 +164,13 @@ export async function cmdDoctor(args, flags) {
   // Check Node.js version
   console.log('\n📍 Environment');
   const nodeVersion = process.version;
-  const nodeOk = parseInt(nodeVersion.slice(1)) >= 18;
-  console.log(`  ${nodeOk ? '✓' : '✗'} Node.js: ${nodeVersion} ${nodeOk ? '' : '(requires >=18)'}`);
+  const nodeOk = isSupportedNodeVersion(nodeVersion);
+  console.log(`  ${nodeOk ? '✓' : '✗'} Node.js: ${nodeVersion} ${nodeOk ? '' : '(supported: Node 22 or 24 LTS)'}`);
   console.log(`  ✓ Platform: ${process.platform}-${process.arch}`);
   console.log(`  ✓ RUDI Home: ${PATHS.home}`);
 
   if (!nodeOk) {
-    issues.push('Node.js version too old (requires >=18)');
+    issues.push('Unsupported Node.js version (supported: Node 22 or 24 LTS; managed default: Node 24)');
   }
 
   // Summary

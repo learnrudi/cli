@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 async function readResponse(child, id, timeoutMs = 5000) {
   return new Promise((resolve, reject) => {
@@ -46,7 +47,7 @@ function send(child, request) {
 test('stdio router preserves cached discovery and exact stack call behavior', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'rudi-router-characterization-'));
   const fixture = path.join(root, 'fixture-stack.mjs');
-  const router = path.resolve(import.meta.dirname, '../../router-mcp.js');
+  const router = fileURLToPath(new URL('../../router-mcp.js', import.meta.url));
   try {
     await fs.mkdir(path.join(root, 'cache'), { recursive: true });
     await fs.writeFile(fixture, [
@@ -170,7 +171,7 @@ test('stdio router preserves cached discovery and exact stack call behavior', as
 test('stdio live discovery isolates malformed dependencies and honors inline precedence', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'rudi-router-live-characterization-'));
   const fixture = path.join(root, 'live-stack.mjs');
-  const router = path.resolve(import.meta.dirname, '../../router-mcp.js');
+  const router = fileURLToPath(new URL('../../router-mcp.js', import.meta.url));
   try {
     await fs.writeFile(fixture, [
       "import readline from 'node:readline';",
