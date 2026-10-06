@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  quality:
-    name: quality
+  quality-matrix:
+    name: quality (${{ matrix.node }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -62,3 +62,15 @@ jobs:
 
       - name: Verify package contents
         run: npm pack --dry-run
+
+  quality:
+    name: quality
+    needs: quality-matrix
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require all Node versions to pass
+        env:
+          QUALITY_RESULT: ${{ needs.quality-matrix.result }}
+        run: test "$QUALITY_RESULT" = success

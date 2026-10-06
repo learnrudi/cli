@@ -75,3 +75,11 @@ The user explicitly approved activating Node 24 on both Macs, installing the ver
 - Retained per-Mac rollback journals: outputs/node24-migration/2026-09-30/activation/activation-state.json. Preserve old runtime, CLI/native directories, lock bytes/absence, launchers and evidence together. No credentials, databases or mutable application state were transferred between Macs.
 
 Existing gaps remain separate: Dot hosted-chat tool exposure; primary Service Desk's Codex allowlist 0.146.0 versus preserved CLI 0.147.0; broken Homebrew Node 25 with declared consumers. Existing host processes may retain Node 20 until their normal reconnect. No global host restart, old-runtime deletion, commit or publication occurred.
+
+## Authorized source publication — October 6, 2026
+
+The user approved committing the reviewed CLI source, opening a PR, merging after CI passes, and synchronizing both canonical Mac checkouts to clean `main`. This supersedes the earlier source-publication hold; npm release, deployment, restart and backup removal remain separate.
+
+PR #47's first Linux run passed the complete Node 22 and Node 24 matrix. Main's existing branch protection requires a check named `quality`, so the matrix now feeds a stable final `quality` job without changing branch protection. The final job runs even when a dependency fails and accepts only the matrix result `success`; failure, cancellation, skipped and empty results fail closed.
+
+The focused workflow-contract command `node --test src/__tests__/unit/quality-workflow-contract.test.js` first failed because the stable gate was absent (7 passed, 1 failed), then passed all 8 tests after the workflow correction. The test executes the gate's shell command for each result. No refactor or runtime implementation change was needed. Raw red/green and publication verification logs are retained under `outputs/cli-main-review-20261006-q38zd_d5` on the primary Mac. Windows execution remains unverified.
