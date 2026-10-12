@@ -22,6 +22,7 @@ import * as readline from 'readline';
 import * as os from 'os';
 
 import { createRouterDispatcher } from '@learnrudi/mcp/router-core';
+import { loadRouterSettings } from './router-settings.js';
 
 // =============================================================================
 // CONSTANTS
@@ -57,6 +58,7 @@ const serverPool = new Map();
 
 /** @type {RudiConfig | null} */
 let rudiConfig = null;
+let routerSettings = {};
 
 /** @type {Object | null} */
 let toolIndex = null;
@@ -340,7 +342,7 @@ function spawnStackServer(stackId, stackConfig) {
   }
 
   const secrets = getStackSecrets(stackId);
-  const env = { ...process.env, ...secrets };
+  const env = { ...process.env, ...routerSettings[stackId]?.env, ...secrets };
   prependRudiExecutionPath(env);
 
   debug(`Spawning stack ${stackId}: ${launch.bin} ${launch.args?.join(' ')}`);
@@ -459,7 +461,13 @@ async function sendToStack(server, request, timeoutMs = REQUEST_TIMEOUT_MS) {
 
     const timeout = setTimeout(() => {
       server.pending.delete(request.id);
-      reject(new Error(`Request timeout: ${request.method}`));
+      if (request.method === 'tools/call') {
+        const label = `${server.stackId}.${request.params.name}`;
+        log(`Tool timeout: ${label}, deadline=${timeoutMs}ms, request=${request.id}`);
+        reject(new Error(`Tool ${label} timed out after ${timeoutMs} ms; downstream work may still be running. Inspect its status or outputs before retrying.`));
+      } else {
+        reject(new Error(`Request timeout: ${request.method}`));
+      }
     }, timeoutMs);
 
     server.pending.set(request.id, { resolve, reject, timeout });
@@ -585,6 +593,10 @@ async function executeStackTool({ stackId, toolName, arguments: arguments_ }) {
 
   const server = getOrSpawnServer(stackId);
   await initializeStack(server, stackId);
+  const deadlines = routerSettings[stackId]?.toolTimeoutMs;
+  const timeoutMs = deadlines && Object.hasOwn(deadlines, toolName)
+    ? deadlines[toolName]
+    : REQUEST_TIMEOUT_MS;
 
   const response = await sendToStack(server, {
     jsonrpc: '2.0',
@@ -594,7 +606,7 @@ async function executeStackTool({ stackId, toolName, arguments: arguments_ }) {
       name: toolName,
       arguments: arguments_
     }
-  });
+  }, timeoutMs);
 
   if (response.error) {
     throw new Error(`Tool error: ${response.error.message}`);
@@ -636,6 +648,7 @@ async function main() {
 
   // Load config
   rudiConfig = loadRudiConfig();
+  routerSettings = loadRouterSettings(RUDI_HOME);
   const stackCount = Object.keys(rudiConfig.stacks || {}).length;
   log(`Loaded ${stackCount} stacks from rudi.json`);
 
