@@ -496,6 +496,50 @@ When Claude invokes the MCP server:
 
 This architecture means secrets stay local and are never written to agent config files.
 
+### Persistent local router settings
+
+Put non-secret, machine-specific MCP settings in `$RUDI_HOME/router-settings.json`
+(`~/.rudi/router-settings.json` by default). This optional file is separate from
+installer-owned `rudi.json` and stack directories, so stack updates and
+re-registration do not replace it. Use restrictive file permissions, such as
+`0600`. Example (replace the model path with the actual installed file):
+
+```json
+{
+  "schemaVersion": 1,
+  "stacks": {
+    "stack:audio-tools": {
+      "env": {
+        "AUDIO_TOOLS_WHISPER_MODEL": "/absolute/path/to/ggml-large-v3-turbo.bin"
+      },
+      "toolTimeoutMs": {
+        "audio_transcribe": 900000
+      }
+    }
+  }
+}
+```
+
+The local stdio router reads this file at startup; reconnect the MCP server after
+editing it. These settings do not configure hosted routers or the direct
+`rudi run` / `rudi mcp` commands. The environment order is inherited values,
+selected stack settings, declared secrets, then the existing managed PATH setup.
+Keep credentials in the secret store; do not put them in `env`.
+
+`toolTimeoutMs` uses the stack's original tool name and accepts integer
+milliseconds from 1 through 900000 (15 minutes). Unconfigured calls, initialization,
+and discovery keep the 30-second deadline. Choose a deadline covering the tool's
+own processing budget; for local audio this includes probing, conversion, and
+Whisper. The host's MCP tool timeout must also allow that duration (for example,
+960 seconds for a 900-second downstream budget plus initialization). Increasing
+the router deadline does not increase the tool's own execution limit.
+
+Malformed, unsupported, or oversized settings stop router startup with a
+diagnostic; values are never included in that diagnostic. A tool deadline error
+does not cancel downstream work or retry it. Inspect the tool's status/output
+before retrying because work may still finish. Remove an override to restore its
+default, or remove the file to restore all defaults, then reconnect.
+
 ## Security Model
 
 ### npm Package Installation
