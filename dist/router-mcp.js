@@ -2,8 +2,8 @@
 
 // src/router-mcp.js
 import { spawn } from "child_process";
-import * as fs from "fs";
-import * as path from "path";
+import * as fs2 from "fs";
+import * as path2 from "path";
 import * as readline from "readline";
 import * as os from "os";
 
@@ -181,11 +181,69 @@ function createRouterDispatcher(options) {
   return Object.freeze({ listTools, callTool, handleRequest: handleRequest2 });
 }
 
+// src/router-settings.js
+import fs from "node:fs";
+import path from "node:path";
+function invalid(detail) {
+  throw new Error(`Invalid router-settings.json: ${detail}`);
+}
+function isObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function allowedKeys(value, keys) {
+  return Object.keys(value).every((key) => keys.includes(key));
+}
+function validateEnvironment(env) {
+  if (!isObject(env)) invalid("env must be an object");
+  for (const [name, value] of Object.entries(env)) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || typeof value !== "string" || value.includes("\0")) {
+      invalid("env requires valid variable names and string values without NUL bytes");
+    }
+  }
+}
+function validateTimeouts(timeouts) {
+  if (!isObject(timeouts)) invalid("toolTimeoutMs must be an object");
+  for (const [name, value] of Object.entries(timeouts)) {
+    if (!name.trim() || /[\u0000-\u001f\u007f]/.test(name) || !Number.isSafeInteger(value) || value < 1 || value > 9e5) {
+      invalid("toolTimeoutMs requires tool names and integer milliseconds from 1 to 900000");
+    }
+  }
+}
+function loadRouterSettings(rudiHome) {
+  const file = path.join(rudiHome, "router-settings.json");
+  let raw;
+  try {
+    if (fs.statSync(file).size > 1024 * 1024) invalid("file exceeds 1 MiB");
+    raw = fs.readFileSync(file, "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") return {};
+    if (error.message.startsWith("Invalid router-settings.json:")) throw error;
+    throw new Error("Cannot read router-settings.json");
+  }
+  let settings;
+  try {
+    settings = JSON.parse(raw);
+  } catch {
+    invalid("expected valid JSON");
+  }
+  if (!isObject(settings) || settings.schemaVersion !== 1 || !allowedKeys(settings, ["schemaVersion", "stacks"]) || !isObject(settings.stacks)) {
+    invalid("expected schemaVersion 1 and a stacks object");
+  }
+  for (const [id, stack] of Object.entries(settings.stacks)) {
+    if (!/^stack:[a-z0-9][a-z0-9_-]*$/.test(id) || !isObject(stack) || !allowedKeys(stack, ["env", "toolTimeoutMs"])) {
+      invalid("expected stack:<id> entries with supported settings");
+    }
+    if (Object.hasOwn(stack, "env")) validateEnvironment(stack.env);
+    if (Object.hasOwn(stack, "toolTimeoutMs")) validateTimeouts(stack.toolTimeoutMs);
+  }
+  return settings.stacks;
+}
+
 // src/router-mcp.js
-var RUDI_HOME = process.env.RUDI_HOME || path.join(os.homedir(), ".rudi");
-var RUDI_JSON_PATH = path.join(RUDI_HOME, "rudi.json");
-var SECRETS_PATH = path.join(RUDI_HOME, "secrets.json");
-var TOOL_INDEX_PATH = path.join(RUDI_HOME, "cache", "tool-index.json");
+var RUDI_HOME = process.env.RUDI_HOME || path2.join(os.homedir(), ".rudi");
+var RUDI_JSON_PATH = path2.join(RUDI_HOME, "rudi.json");
+var SECRETS_PATH = path2.join(RUDI_HOME, "secrets.json");
+var TOOL_INDEX_PATH = path2.join(RUDI_HOME, "cache", "tool-index.json");
 var REQUEST_TIMEOUT_MS = 3e4;
 var PROTOCOL_VERSION = "2024-11-05";
 var DEFAULT_IDLE_TTL_MS = 10 * 60 * 1e3;
@@ -200,6 +258,7 @@ var LIVE_TOOL_LIST = readBoolEnv("RUDI_ROUTER_LIVE_TOOL_LIST", false);
 var TOOL_NAME_STYLE = process.env.RUDI_ROUTER_TOOL_NAMES === "portable" ? "portable" : "canonical";
 var serverPool = /* @__PURE__ */ new Map();
 var rudiConfig = null;
+var routerSettings = {};
 var toolIndex = null;
 var cleanupTimer = null;
 function log(msg) {
@@ -227,23 +286,23 @@ function hasProcessExited(proc) {
   return proc.exitCode !== null || proc.signalCode !== null;
 }
 function existingDirectory(dirPath) {
-  return typeof dirPath === "string" && fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory();
+  return typeof dirPath === "string" && fs2.existsSync(dirPath) && fs2.statSync(dirPath).isDirectory();
 }
 function getRudiExecutionPathEntries() {
-  const entries = [path.join(RUDI_HOME, "bins")];
+  const entries = [path2.join(RUDI_HOME, "bins")];
   for (const runtimeBin of [
-    path.join(RUDI_HOME, "runtimes", "node", "bin"),
-    path.join(RUDI_HOME, "runtimes", "python", "bin")
+    path2.join(RUDI_HOME, "runtimes", "node", "bin"),
+    path2.join(RUDI_HOME, "runtimes", "python", "bin")
   ]) {
     if (existingDirectory(runtimeBin)) {
       entries.push(runtimeBin);
     }
   }
-  const binariesRoot = path.join(RUDI_HOME, "binaries");
+  const binariesRoot = path2.join(RUDI_HOME, "binaries");
   if (existingDirectory(binariesRoot)) {
-    for (const entry of fs.readdirSync(binariesRoot, { withFileTypes: true })) {
+    for (const entry of fs2.readdirSync(binariesRoot, { withFileTypes: true })) {
       if (entry.isDirectory()) {
-        entries.push(path.join(binariesRoot, entry.name));
+        entries.push(path2.join(binariesRoot, entry.name));
       }
     }
   }
@@ -252,12 +311,12 @@ function getRudiExecutionPathEntries() {
 function prependRudiExecutionPath(env) {
   const seen = /* @__PURE__ */ new Set();
   const entries = [];
-  for (const entry of [...getRudiExecutionPathEntries(), ...(env.PATH || "").split(path.delimiter)]) {
+  for (const entry of [...getRudiExecutionPathEntries(), ...(env.PATH || "").split(path2.delimiter)]) {
     if (!entry || seen.has(entry)) continue;
     seen.add(entry);
     entries.push(entry);
   }
-  env.PATH = entries.join(path.delimiter);
+  env.PATH = entries.join(path2.delimiter);
 }
 function isProcessUsable(proc) {
   return proc && !hasProcessExited(proc) && !proc.killed;
@@ -320,7 +379,7 @@ function cleanupServerPool() {
 }
 function loadRudiConfig() {
   try {
-    const content = fs.readFileSync(RUDI_JSON_PATH, "utf-8");
+    const content = fs2.readFileSync(RUDI_JSON_PATH, "utf-8");
     return JSON.parse(content);
   } catch (err) {
     log(`Failed to load rudi.json: ${err.message}`);
@@ -329,7 +388,7 @@ function loadRudiConfig() {
 }
 function loadToolIndex() {
   try {
-    const content = fs.readFileSync(TOOL_INDEX_PATH, "utf-8");
+    const content = fs2.readFileSync(TOOL_INDEX_PATH, "utf-8");
     return JSON.parse(content);
   } catch {
     return null;
@@ -337,7 +396,7 @@ function loadToolIndex() {
 }
 function loadSecrets() {
   try {
-    const content = fs.readFileSync(SECRETS_PATH, "utf-8");
+    const content = fs2.readFileSync(SECRETS_PATH, "utf-8");
     return JSON.parse(content);
   } catch {
     return {};
@@ -363,12 +422,12 @@ function spawnStackServer(stackId, stackConfig) {
     throw new Error(`Stack ${stackId} has no launch configuration`);
   }
   if (stackConfig.runtime === "binary") {
-    if (!fs.existsSync(launch.bin)) {
+    if (!fs2.existsSync(launch.bin)) {
       throw new Error(`Binary not found for stack ${stackId}: ${launch.bin}`);
     }
   }
   const secrets = getStackSecrets(stackId);
-  const env = { ...process.env, ...secrets };
+  const env = { ...process.env, ...routerSettings[stackId]?.env, ...secrets };
   prependRudiExecutionPath(env);
   debug(`Spawning stack ${stackId}: ${launch.bin} ${launch.args?.join(" ")}`);
   const childProcess = spawn(launch.bin, launch.args || [], {
@@ -454,7 +513,13 @@ async function sendToStack(server, request, timeoutMs = REQUEST_TIMEOUT_MS) {
     }
     const timeout = setTimeout(() => {
       server.pending.delete(request.id);
-      reject(new Error(`Request timeout: ${request.method}`));
+      if (request.method === "tools/call") {
+        const label = `${server.stackId}.${request.params.name}`;
+        log(`Tool timeout: ${label}, deadline=${timeoutMs}ms, request=${request.id}`);
+        reject(new Error(`Tool ${label} timed out after ${timeoutMs} ms; downstream work may still be running. Inspect its status or outputs before retrying.`));
+      } else {
+        reject(new Error(`Request timeout: ${request.method}`));
+      }
     }, timeoutMs);
     server.pending.set(request.id, { resolve, reject, timeout });
     const line = JSON.stringify(request) + "\n";
@@ -538,6 +603,8 @@ async function executeStackTool({ stackId, toolName, arguments: arguments_ }) {
   }
   const server = getOrSpawnServer(stackId);
   await initializeStack(server, stackId);
+  const deadlines = routerSettings[stackId]?.toolTimeoutMs;
+  const timeoutMs = deadlines && Object.hasOwn(deadlines, toolName) ? deadlines[toolName] : REQUEST_TIMEOUT_MS;
   const response = await sendToStack(server, {
     jsonrpc: "2.0",
     id: `call-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -546,7 +613,7 @@ async function executeStackTool({ stackId, toolName, arguments: arguments_ }) {
       name: toolName,
       arguments: arguments_
     }
-  });
+  }, timeoutMs);
   if (response.error) {
     throw new Error(`Tool error: ${response.error.message}`);
   }
@@ -570,6 +637,7 @@ async function main() {
   log(`Live tools/list: ${LIVE_TOOL_LIST ? "enabled" : "disabled"}`);
   log(`Tool name style: ${TOOL_NAME_STYLE}`);
   rudiConfig = loadRudiConfig();
+  routerSettings = loadRouterSettings(RUDI_HOME);
   const stackCount = Object.keys(rudiConfig.stacks || {}).length;
   log(`Loaded ${stackCount} stacks from rudi.json`);
   toolIndex = loadToolIndex();
