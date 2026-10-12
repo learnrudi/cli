@@ -14,6 +14,16 @@ lines.on('line', (line) => {
     }) }] };
   const delay = request.method === 'tools/call' ? request.params.arguments?.delayMs ?? 0 : 0;
   setTimeout(() => {
-    process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', id: request.id, result })}\n`);
+    if (request.params?.arguments?.exitCode !== undefined) {
+      process.exit(request.params.arguments.exitCode);
+    }
+    const response = { jsonrpc: '2.0', id: request.id, result };
+    if (request.params?.arguments?.fail === 'protocol') {
+      delete response.result;
+      response.error = { code: -32042, message: 'fixture provider failed' };
+    } else if (request.params?.arguments?.fail === 'tool') {
+      response.result = { isError: true, content: [{ type: 'text', text: 'fixture tool failed' }] };
+    }
+    process.stdout.write(`${JSON.stringify(response)}\n`);
   }, delay);
 });

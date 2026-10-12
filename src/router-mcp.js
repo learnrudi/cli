@@ -23,6 +23,7 @@ import * as os from 'os';
 
 import { createRouterDispatcher } from '@learnrudi/mcp/router-core';
 import { loadRouterSettings } from './router-settings.js';
+import { createResultReceipt } from './router-results.js';
 
 // =============================================================================
 // CONSTANTS
@@ -34,6 +35,9 @@ const SECRETS_PATH = path.join(RUDI_HOME, 'secrets.json');
 const TOOL_INDEX_PATH = path.join(RUDI_HOME, 'cache', 'tool-index.json');
 
 const REQUEST_TIMEOUT_MS = 30000;
+// Speech allows 120 seconds at the provider plus a 5-second outer allowance.
+const SPEECH_TIMEOUT_MS = 150000;
+const MAX_OUTSTANDING_REQUESTS = 128;
 const PROTOCOL_VERSION = '2024-11-05';
 const DEFAULT_IDLE_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_MAX_SERVERS = 8;
@@ -55,6 +59,8 @@ const TOOL_NAME_STYLE = process.env.RUDI_ROUTER_TOOL_NAMES === 'portable'
 
 /** @type {Map<string, StackServer>} */
 const serverPool = new Map();
+// Failed disk writes retain only the latest state; never resubmit a provider call.
+const unsavedResults = new Map();
 
 /** @type {RudiConfig | null} */
 let rudiConfig = null;
@@ -86,6 +92,7 @@ let cleanupTimer = null;
  * @property {(value: JsonRpcResponse) => void} resolve
  * @property {(error: Error) => void} reject
  * @property {NodeJS.Timeout} timeout
+ * @property {{file: string, write: (state: Object) => boolean}} [receipt]
  */
 
 /**
@@ -186,9 +193,26 @@ function markServerUsed(server) {
   server.lastUsedAt = Date.now();
 }
 
+function saveResult(receipt, state) {
+  if (receipt.write(state)) {
+    unsavedResults.delete(receipt.file);
+    return true;
+  }
+  if (!unsavedResults.has(receipt.file)) {
+    log(`Result persistence failed; retaining in memory: file=${receipt.file}`);
+  }
+  unsavedResults.set(receipt.file, { receipt, state });
+  return false;
+}
+
+function flushResults() {
+  for (const { receipt, state } of unsavedResults.values()) saveResult(receipt, state);
+}
+
 function rejectPending(server, reason) {
   for (const [, pending] of server.pending) {
     clearTimeout(pending.timeout);
+    if (pending.receipt) saveResult(pending.receipt, { status: 'interrupted', reason });
     pending.reject(new Error(reason));
   }
   server.pending.clear();
@@ -206,6 +230,8 @@ function terminateServer(stackId, server, reason) {
   }
 
   log(`Stopping stack ${stackId}: ${reason}`);
+  // Shutdown exits the router before the child's close event can run.
+  rejectPending(server, `Stack ${stackId} stopped: ${reason}; outcome unknown`);
   try {
     server.process.kill('SIGTERM');
   } catch {
@@ -226,6 +252,7 @@ function terminateServer(stackId, server, reason) {
 }
 
 function cleanupServerPool() {
+  flushResults();
   const now = Date.now();
 
   for (const [stackId, server] of serverPool) {
@@ -386,9 +413,13 @@ function spawnStackServer(stackId, stackConfig) {
       const pending = server.pending.get(response.id);
       if (pending) {
         clearTimeout(pending.timeout);
-        server.pending.delete(response.id);
         markServerUsed(server);
-        pending.resolve(response);
+        if (pending.receipt) {
+          saveResult(pending.receipt, { status: 'completed', response });
+        } else {
+          pending.resolve(response);
+        }
+        server.pending.delete(response.id);
       }
     } catch (err) {
       debug(`Failed to parse response from ${stackId}: ${err.message}`);
@@ -406,7 +437,8 @@ function spawnStackServer(stackId, stackConfig) {
     serverPool.delete(stackId);
   });
 
-  childProcess.on('exit', (code, signal) => {
+  // Wait for stdout to drain so a final response written before exit is retained.
+  childProcess.on('close', (code, signal) => {
     debug(`Stack ${stackId} exited: code=${code}, signal=${signal}`);
     rejectPending(server, `Stack ${stackId} exited (code=${code}, signal=${signal || 'none'})`);
     rl.close();
@@ -459,13 +491,29 @@ async function sendToStack(server, request, timeoutMs = REQUEST_TIMEOUT_MS) {
       return;
     }
 
+    const outstanding = Array.from(serverPool.values())
+      .reduce((total, active) => total + active.pending.size, unsavedResults.size);
+    if (outstanding >= MAX_OUTSTANDING_REQUESTS) {
+      reject(new Error(`Router capacity ${MAX_OUTSTANDING_REQUESTS} reached; request not dispatched. Inspect pending results before retrying.`));
+      return;
+    }
+
     const timeout = setTimeout(() => {
-      server.pending.delete(request.id);
       if (request.method === 'tools/call') {
         const label = `${server.stackId}.${request.params.name}`;
+        const receipt = createResultReceipt(RUDI_HOME, {
+          requestId: request.id, stackId: server.stackId, tool: request.params.name,
+          timeoutMs, timedOutAt: new Date().toISOString(),
+        });
+        server.pending.get(request.id).receipt = receipt;
+        const saved = saveResult(receipt, { status: 'pending' });
+        const recovery = saved
+          ? `Result file: ${receipt.file}`
+          : `Result persistence unavailable; inspect outputs before retrying. Result file: ${receipt.file}`;
         log(`Tool timeout: ${label}, deadline=${timeoutMs}ms, request=${request.id}`);
-        reject(new Error(`Tool ${label} timed out after ${timeoutMs} ms; downstream work may still be running. Inspect its status or outputs before retrying.`));
+        reject(new Error(`Tool ${label} timed out after ${timeoutMs} ms; downstream work may still be running. Do not retry until its outcome is checked. ${recovery}`));
       } else {
+        server.pending.delete(request.id);
         reject(new Error(`Request timeout: ${request.method}`));
       }
     }, timeoutMs);
@@ -596,7 +644,8 @@ async function executeStackTool({ stackId, toolName, arguments: arguments_ }) {
   const deadlines = routerSettings[stackId]?.toolTimeoutMs;
   const timeoutMs = deadlines && Object.hasOwn(deadlines, toolName)
     ? deadlines[toolName]
-    : REQUEST_TIMEOUT_MS;
+    : (stackId === 'stack:speech-generator' && toolName === 'generate_speech'
+      ? SPEECH_TIMEOUT_MS : REQUEST_TIMEOUT_MS);
 
   const response = await sendToStack(server, {
     jsonrpc: '2.0',

@@ -2,8 +2,8 @@
 
 // src/router-mcp.js
 import { spawn } from "child_process";
-import * as fs2 from "fs";
-import * as path2 from "path";
+import * as fs3 from "fs";
+import * as path3 from "path";
 import * as readline from "readline";
 import * as os from "os";
 
@@ -239,12 +239,49 @@ function loadRouterSettings(rudiHome) {
   return settings.stacks;
 }
 
+// src/router-results.js
+import fs2 from "node:fs";
+import path2 from "node:path";
+import { randomUUID } from "node:crypto";
+function createResultReceipt(rudiHome, metadata) {
+  const directory = path2.join(rudiHome, "outputs", "router-results");
+  const file = path2.join(directory, `${randomUUID()}.json`);
+  const record = { schemaVersion: 1, routerPid: process.pid, ...metadata };
+  return {
+    file,
+    write(state) {
+      const temporary = `${file}.${randomUUID()}.tmp`;
+      try {
+        fs2.mkdirSync(directory, { recursive: true, mode: 448 });
+        if (!fs2.lstatSync(directory).isDirectory()) return false;
+        fs2.chmodSync(directory, 448);
+        fs2.writeFileSync(temporary, JSON.stringify({
+          ...record,
+          ...state,
+          updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+        }) + "\n", { flag: "wx", mode: 384 });
+        fs2.renameSync(temporary, file);
+        return true;
+      } catch {
+        return false;
+      } finally {
+        try {
+          fs2.unlinkSync(temporary);
+        } catch {
+        }
+      }
+    }
+  };
+}
+
 // src/router-mcp.js
-var RUDI_HOME = process.env.RUDI_HOME || path2.join(os.homedir(), ".rudi");
-var RUDI_JSON_PATH = path2.join(RUDI_HOME, "rudi.json");
-var SECRETS_PATH = path2.join(RUDI_HOME, "secrets.json");
-var TOOL_INDEX_PATH = path2.join(RUDI_HOME, "cache", "tool-index.json");
+var RUDI_HOME = process.env.RUDI_HOME || path3.join(os.homedir(), ".rudi");
+var RUDI_JSON_PATH = path3.join(RUDI_HOME, "rudi.json");
+var SECRETS_PATH = path3.join(RUDI_HOME, "secrets.json");
+var TOOL_INDEX_PATH = path3.join(RUDI_HOME, "cache", "tool-index.json");
 var REQUEST_TIMEOUT_MS = 3e4;
+var SPEECH_TIMEOUT_MS = 15e4;
+var MAX_OUTSTANDING_REQUESTS = 128;
 var PROTOCOL_VERSION = "2024-11-05";
 var DEFAULT_IDLE_TTL_MS = 10 * 60 * 1e3;
 var DEFAULT_MAX_SERVERS = 8;
@@ -257,6 +294,7 @@ var FORCE_KILL_MS = readIntEnv("RUDI_ROUTER_FORCE_KILL_MS", DEFAULT_FORCE_KILL_M
 var LIVE_TOOL_LIST = readBoolEnv("RUDI_ROUTER_LIVE_TOOL_LIST", false);
 var TOOL_NAME_STYLE = process.env.RUDI_ROUTER_TOOL_NAMES === "portable" ? "portable" : "canonical";
 var serverPool = /* @__PURE__ */ new Map();
+var unsavedResults = /* @__PURE__ */ new Map();
 var rudiConfig = null;
 var routerSettings = {};
 var toolIndex = null;
@@ -286,23 +324,23 @@ function hasProcessExited(proc) {
   return proc.exitCode !== null || proc.signalCode !== null;
 }
 function existingDirectory(dirPath) {
-  return typeof dirPath === "string" && fs2.existsSync(dirPath) && fs2.statSync(dirPath).isDirectory();
+  return typeof dirPath === "string" && fs3.existsSync(dirPath) && fs3.statSync(dirPath).isDirectory();
 }
 function getRudiExecutionPathEntries() {
-  const entries = [path2.join(RUDI_HOME, "bins")];
+  const entries = [path3.join(RUDI_HOME, "bins")];
   for (const runtimeBin of [
-    path2.join(RUDI_HOME, "runtimes", "node", "bin"),
-    path2.join(RUDI_HOME, "runtimes", "python", "bin")
+    path3.join(RUDI_HOME, "runtimes", "node", "bin"),
+    path3.join(RUDI_HOME, "runtimes", "python", "bin")
   ]) {
     if (existingDirectory(runtimeBin)) {
       entries.push(runtimeBin);
     }
   }
-  const binariesRoot = path2.join(RUDI_HOME, "binaries");
+  const binariesRoot = path3.join(RUDI_HOME, "binaries");
   if (existingDirectory(binariesRoot)) {
-    for (const entry of fs2.readdirSync(binariesRoot, { withFileTypes: true })) {
+    for (const entry of fs3.readdirSync(binariesRoot, { withFileTypes: true })) {
       if (entry.isDirectory()) {
-        entries.push(path2.join(binariesRoot, entry.name));
+        entries.push(path3.join(binariesRoot, entry.name));
       }
     }
   }
@@ -311,12 +349,12 @@ function getRudiExecutionPathEntries() {
 function prependRudiExecutionPath(env) {
   const seen = /* @__PURE__ */ new Set();
   const entries = [];
-  for (const entry of [...getRudiExecutionPathEntries(), ...(env.PATH || "").split(path2.delimiter)]) {
+  for (const entry of [...getRudiExecutionPathEntries(), ...(env.PATH || "").split(path3.delimiter)]) {
     if (!entry || seen.has(entry)) continue;
     seen.add(entry);
     entries.push(entry);
   }
-  env.PATH = entries.join(path2.delimiter);
+  env.PATH = entries.join(path3.delimiter);
 }
 function isProcessUsable(proc) {
   return proc && !hasProcessExited(proc) && !proc.killed;
@@ -324,9 +362,24 @@ function isProcessUsable(proc) {
 function markServerUsed(server) {
   server.lastUsedAt = Date.now();
 }
+function saveResult(receipt, state) {
+  if (receipt.write(state)) {
+    unsavedResults.delete(receipt.file);
+    return true;
+  }
+  if (!unsavedResults.has(receipt.file)) {
+    log(`Result persistence failed; retaining in memory: file=${receipt.file}`);
+  }
+  unsavedResults.set(receipt.file, { receipt, state });
+  return false;
+}
+function flushResults() {
+  for (const { receipt, state } of unsavedResults.values()) saveResult(receipt, state);
+}
 function rejectPending(server, reason) {
   for (const [, pending] of server.pending) {
     clearTimeout(pending.timeout);
+    if (pending.receipt) saveResult(pending.receipt, { status: "interrupted", reason });
     pending.reject(new Error(reason));
   }
   server.pending.clear();
@@ -340,6 +393,7 @@ function terminateServer(stackId, server, reason) {
     return;
   }
   log(`Stopping stack ${stackId}: ${reason}`);
+  rejectPending(server, `Stack ${stackId} stopped: ${reason}; outcome unknown`);
   try {
     server.process.kill("SIGTERM");
   } catch {
@@ -356,6 +410,7 @@ function terminateServer(stackId, server, reason) {
   if (killTimer.unref) killTimer.unref();
 }
 function cleanupServerPool() {
+  flushResults();
   const now = Date.now();
   for (const [stackId, server] of serverPool) {
     if (server.terminating) continue;
@@ -379,7 +434,7 @@ function cleanupServerPool() {
 }
 function loadRudiConfig() {
   try {
-    const content = fs2.readFileSync(RUDI_JSON_PATH, "utf-8");
+    const content = fs3.readFileSync(RUDI_JSON_PATH, "utf-8");
     return JSON.parse(content);
   } catch (err) {
     log(`Failed to load rudi.json: ${err.message}`);
@@ -388,7 +443,7 @@ function loadRudiConfig() {
 }
 function loadToolIndex() {
   try {
-    const content = fs2.readFileSync(TOOL_INDEX_PATH, "utf-8");
+    const content = fs3.readFileSync(TOOL_INDEX_PATH, "utf-8");
     return JSON.parse(content);
   } catch {
     return null;
@@ -396,7 +451,7 @@ function loadToolIndex() {
 }
 function loadSecrets() {
   try {
-    const content = fs2.readFileSync(SECRETS_PATH, "utf-8");
+    const content = fs3.readFileSync(SECRETS_PATH, "utf-8");
     return JSON.parse(content);
   } catch {
     return {};
@@ -422,7 +477,7 @@ function spawnStackServer(stackId, stackConfig) {
     throw new Error(`Stack ${stackId} has no launch configuration`);
   }
   if (stackConfig.runtime === "binary") {
-    if (!fs2.existsSync(launch.bin)) {
+    if (!fs3.existsSync(launch.bin)) {
       throw new Error(`Binary not found for stack ${stackId}: ${launch.bin}`);
     }
   }
@@ -461,9 +516,13 @@ function spawnStackServer(stackId, stackConfig) {
       const pending = server.pending.get(response.id);
       if (pending) {
         clearTimeout(pending.timeout);
-        server.pending.delete(response.id);
         markServerUsed(server);
-        pending.resolve(response);
+        if (pending.receipt) {
+          saveResult(pending.receipt, { status: "completed", response });
+        } else {
+          pending.resolve(response);
+        }
+        server.pending.delete(response.id);
       }
     } catch (err) {
       debug(`Failed to parse response from ${stackId}: ${err.message}`);
@@ -477,7 +536,7 @@ function spawnStackServer(stackId, stackConfig) {
     rejectPending(server, `Stack ${stackId} error: ${err.message}`);
     serverPool.delete(stackId);
   });
-  childProcess.on("exit", (code, signal) => {
+  childProcess.on("close", (code, signal) => {
     debug(`Stack ${stackId} exited: code=${code}, signal=${signal}`);
     rejectPending(server, `Stack ${stackId} exited (code=${code}, signal=${signal || "none"})`);
     rl.close();
@@ -511,13 +570,28 @@ async function sendToStack(server, request, timeoutMs = REQUEST_TIMEOUT_MS) {
       reject(new Error(`Stack ${server.stackId} is not available`));
       return;
     }
+    const outstanding = Array.from(serverPool.values()).reduce((total, active) => total + active.pending.size, unsavedResults.size);
+    if (outstanding >= MAX_OUTSTANDING_REQUESTS) {
+      reject(new Error(`Router capacity ${MAX_OUTSTANDING_REQUESTS} reached; request not dispatched. Inspect pending results before retrying.`));
+      return;
+    }
     const timeout = setTimeout(() => {
-      server.pending.delete(request.id);
       if (request.method === "tools/call") {
         const label = `${server.stackId}.${request.params.name}`;
+        const receipt = createResultReceipt(RUDI_HOME, {
+          requestId: request.id,
+          stackId: server.stackId,
+          tool: request.params.name,
+          timeoutMs,
+          timedOutAt: (/* @__PURE__ */ new Date()).toISOString()
+        });
+        server.pending.get(request.id).receipt = receipt;
+        const saved = saveResult(receipt, { status: "pending" });
+        const recovery = saved ? `Result file: ${receipt.file}` : `Result persistence unavailable; inspect outputs before retrying. Result file: ${receipt.file}`;
         log(`Tool timeout: ${label}, deadline=${timeoutMs}ms, request=${request.id}`);
-        reject(new Error(`Tool ${label} timed out after ${timeoutMs} ms; downstream work may still be running. Inspect its status or outputs before retrying.`));
+        reject(new Error(`Tool ${label} timed out after ${timeoutMs} ms; downstream work may still be running. Do not retry until its outcome is checked. ${recovery}`));
       } else {
+        server.pending.delete(request.id);
         reject(new Error(`Request timeout: ${request.method}`));
       }
     }, timeoutMs);
@@ -604,7 +678,7 @@ async function executeStackTool({ stackId, toolName, arguments: arguments_ }) {
   const server = getOrSpawnServer(stackId);
   await initializeStack(server, stackId);
   const deadlines = routerSettings[stackId]?.toolTimeoutMs;
-  const timeoutMs = deadlines && Object.hasOwn(deadlines, toolName) ? deadlines[toolName] : REQUEST_TIMEOUT_MS;
+  const timeoutMs = deadlines && Object.hasOwn(deadlines, toolName) ? deadlines[toolName] : stackId === "stack:speech-generator" && toolName === "generate_speech" ? SPEECH_TIMEOUT_MS : REQUEST_TIMEOUT_MS;
   const response = await sendToStack(server, {
     jsonrpc: "2.0",
     id: `call-${Date.now()}-${Math.random().toString(36).slice(2)}`,
