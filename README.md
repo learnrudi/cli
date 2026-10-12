@@ -515,6 +515,11 @@ re-registration do not replace it. Use restrictive file permissions, such as
       "toolTimeoutMs": {
         "audio_transcribe": 900000
       }
+    },
+    "stack:speech-generator": {
+      "toolTimeoutMs": {
+        "generate_speech": 150000
+      }
     }
   }
 }
@@ -527,8 +532,10 @@ selected stack settings, declared secrets, then the existing managed PATH setup.
 Keep credentials in the secret store; do not put them in `env`.
 
 `toolTimeoutMs` uses the stack's original tool name and accepts integer
-milliseconds from 1 through 900000 (15 minutes). Unconfigured calls, initialization,
-and discovery keep the 30-second deadline. Choose a deadline covering the tool's
+milliseconds from 1 through 900000 (15 minutes). Speech `generate_speech` defaults
+to 150 seconds, allowing its 120-second provider budget plus overhead. Other
+unconfigured calls, initialization, and discovery keep the 30-second deadline.
+Explicit settings override these defaults. Choose a deadline covering the tool's
 own processing budget; for local audio this includes probing, conversion, and
 Whisper. The host's MCP tool timeout must also allow that duration (for example,
 960 seconds for a 900-second downstream budget plus initialization). Increasing
@@ -536,9 +543,25 @@ the router deadline does not increase the tool's own execution limit.
 
 Malformed, unsupported, or oversized settings stop router startup with a
 diagnostic; values are never included in that diagnostic. A tool deadline error
-does not cancel downstream work or retry it. Inspect the tool's status/output
-before retrying because work may still finish. Remove an override to restore its
+does not cancel downstream work or retry it. It includes a `Result file` path
+under `$RUDI_HOME/outputs/router-results/`. Read that private JSON receipt before
+retrying: `pending` means the stack has not returned; `completed` contains the
+original JSON-RPC `response`, including tool/provider errors; `interrupted` means
+the stack or router stopped without a known result. A completed response is not
+necessarily a successful tool action: inspect its `error`, `result.isError`, and
+tool-specific payload. Inputs and environment are omitted; returned content can
+be sensitive, so receipts use owner-only permissions and stay on the local Mac.
+Receipts are retained until explicitly removed. Remove an override to restore its
 default, or remove the file to restore all defaults, then reconnect.
+
+Timed-out calls remain active for pool cleanup until the stack returns or stops.
+The router admits at most 128 outstanding requests and failed receipt writes;
+at capacity it rejects new work before dispatch. If receipt storage is
+temporarily unavailable, it retains the latest result in memory, reports the
+failure on stderr, and retries only the local write during pool cleanup. No
+provider call is replayed. Abrupt process loss or shutdown while storage remains
+unavailable can still lose in-memory data. A `pending` receipt whose `routerPid`
+is no longer running has an unknown outcome; inspect artifacts before retrying.
 
 ## Security Model
 
