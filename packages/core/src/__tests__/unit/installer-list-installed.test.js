@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -9,6 +9,66 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../../../..');
 const installerUrl = pathToFileURL(path.join(repoRoot, 'packages/core/src/installer.js')).href;
+
+test('list includes nested npm tools in the full and binary inventories', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rudi-list-npm-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const packagePath = path.join(root, '.rudi/binaries/npm/typescript');
+  fs.mkdirSync(packagePath, { recursive: true });
+  fs.writeFileSync(path.join(packagePath, 'manifest.json'), JSON.stringify({
+    id: 'npm:typescript', kind: 'binary', name: 'TypeScript',
+    version: '5.9.3', installType: 'npm', npmPackage: 'typescript', bins: ['tsc', 'tsserver'],
+  }));
+  const env = { ...process.env, HOME: root, RUDI_HOME: path.join(root, '.rudi'),
+    CLAUDE_HOME: path.join(root, '.claude') };
+  for (const filter of [[], ['binaries']]) {
+    const output = execFileSync(process.execPath, ['src/index.js', 'list', ...filter, '--json'], {
+      cwd: repoRoot, env, encoding: 'utf8',
+    });
+    const installed = JSON.parse(output);
+    assert.equal(installed.length, 1);
+    assert.equal(installed[0].id, 'npm:typescript');
+    assert.equal(installed[0].kind, 'binary');
+    assert.equal(installed[0].path, packagePath);
+  }
+});
+
+test('npm inventory preserves scoped versioned IDs, ignores dependencies and links, and reflects removal', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rudi-list-scoped-npm-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const rudiHome = path.join(root, '.rudi');
+  const npmRoot = path.join(rudiHome, 'binaries/npm');
+  const packagePath = path.join(npmRoot, 'example__cli@1.0.0');
+  const dependencyPath = path.join(packagePath, 'node_modules/dependency');
+  fs.mkdirSync(dependencyPath, { recursive: true });
+  fs.writeFileSync(path.join(packagePath, 'manifest.json'), JSON.stringify({
+    id: 'npm:@example/cli@1.0.0', kind: 'binary', version: '1.0.0', installType: 'npm', bins: [],
+  }));
+  fs.writeFileSync(path.join(dependencyPath, 'manifest.json'), '{}');
+  fs.symlinkSync(packagePath, path.join(npmRoot, 'linked-package'));
+  const env = { ...process.env, HOME: root, RUDI_HOME: rudiHome, CLAUDE_HOME: path.join(root, '.claude') };
+  const run = args => execFileSync(process.execPath, ['src/index.js', ...args], {
+    cwd: repoRoot, env, encoding: 'utf8',
+  });
+  assert.deepEqual(JSON.parse(run(['list', '--json'])).map(pkg => pkg.id), ['npm:@example/cli@1.0.0']);
+  run(['remove', 'npm:@example/cli@1.0.0', '-y']);
+  assert.deepEqual(JSON.parse(run(['list', '--json'])), []);
+});
+
+test('npm inventory rejects a manifest that claims a different package directory', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rudi-list-invalid-npm-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const rudiHome = path.join(root, '.rudi');
+  const packagePath = path.join(rudiHome, 'binaries/npm/typescript');
+  fs.mkdirSync(packagePath, { recursive: true });
+  fs.writeFileSync(path.join(packagePath, 'manifest.json'), JSON.stringify({ id: 'npm:other-package' }));
+  const result = spawnSync(process.execPath, ['src/index.js', 'list', 'binaries', '--json'], {
+    cwd: repoRoot, encoding: 'utf8', env: { ...process.env, RUDI_HOME: rudiHome },
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /manifest id does not match its directory/);
+  assert.equal(result.stdout, '');
+});
 
 test('listInstalled canonicalizes legacy stack manifest ids', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rudi-list-installed-'));

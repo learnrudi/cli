@@ -1755,6 +1755,23 @@ function getInstalledPackageSource(id, fallback) {
   return readLockfile(id)?.source || fallback;
 }
 
+function installedPackageDirectories(dir, entries, kind) {
+  const directories = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+    const packagePath = path.join(dir, entry.name);
+    directories.push({ name: entry.name, packagePath, idKind: kind });
+    // Dynamic npm installs have one container level. Never walk node_modules.
+    if (kind === 'binary' && entry.name === 'npm') {
+      for (const child of fs.readdirSync(packagePath, { withFileTypes: true })) {
+        if (!child.isDirectory() || child.name.startsWith('.')) continue;
+        directories.push({ name: child.name, packagePath: path.join(packagePath, child.name), idKind: 'npm' });
+      }
+    }
+  }
+  return directories;
+}
+
 /**
  * List all installed packages
  * @param {'stack' | 'skill' | 'prompt' | 'workflow' | 'runtime' | 'binary' | 'agent'} [kind] - Filter by kind
@@ -1867,10 +1884,8 @@ export async function listInstalled(kind) {
     }
 
     // Other packages are directories
-    for (const entry of entries) {
-      if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
-
-      const pkgDir = path.join(dir, entry.name);
+    for (const entry of installedPackageDirectories(dir, entries, k)) {
+      const pkgDir = entry.packagePath;
 
       // Check for manifest.json or runtime.json
       const manifestPath = path.join(pkgDir, 'manifest.json');
@@ -1878,7 +1893,13 @@ export async function listInstalled(kind) {
 
       if (fs.existsSync(manifestPath)) {
         const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
-        const packageId = normalizeInstalledPackageId(k, manifest.id, entry.name);
+        const packageId = normalizeInstalledPackageId(entry.idKind, manifest.id, entry.name);
+        if (entry.idKind === 'npm' && (
+          typeof manifest.id !== 'string' || !manifest.id.startsWith('npm:') ||
+          !NPM_PACKAGE_PATTERN.test(manifest.id.slice(4)) || getPackagePath(packageId) !== pkgDir
+        )) {
+          throw new Error(`Installed npm manifest id does not match its directory: ${pkgDir}`);
+        }
         packages.push({
           ...manifest,
           id: packageId,
@@ -1887,7 +1908,7 @@ export async function listInstalled(kind) {
           source: getInstalledPackageSource(packageId, manifest.source),
           path: pkgDir
         });
-      } else if (fs.existsSync(runtimePath)) {
+      } else if (entry.idKind !== 'npm' && fs.existsSync(runtimePath)) {
         // Older format - has runtime.json
         const runtimeMeta = JSON.parse(fs.readFileSync(runtimePath, 'utf-8'));
         packages.push({

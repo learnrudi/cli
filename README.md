@@ -15,11 +15,26 @@ with provider-owned agent software:
 
 ```bash
 npm install -g @learnrudi/cli
+rudi init --skip-downloads
+rudi home
 ```
 
-Supports Node.js 22 and 24 LTS. The registry catalog selects the managed
-runtime version; the coordinated Node 24 migration targets 24.21.0.
-The installer creates `~/.rudi/`.
+Install Node.js 22 or 24 and npm first. npm installs the CLI executable and its
+dependencies into your npm prefix; it does not create `~/.rudi/`. Initialization
+creates the local RUDI directories and settings. It also installs a managed
+RUDI instruction block in your Codex home; add `--no-agent-instructions` to skip
+that integration.
+
+The published 1.10.29 package has initialization and npm-inventory defects.
+This checkout fixes both: `rudi init` uses the verified registry installer and
+returns nonzero on incomplete setup; `rudi list` includes dynamic npm tools.
+These fixes and the companion registry update to Node 24.21.0 are local
+candidates awaiting publication. The public registry still supplies Node 20.10.0,
+outside this CLI's supported Node versions; keep a supported Node on PATH
+until the registry update is published.
+`--skip-downloads` initializes local structure without installing runtimes. See the
+[fresh-install findings and verification guide](https://github.com/learnrudi/cli/blob/main/docs/cli-layout-and-installation.md)
+for the tested scope and remaining registry compatibility gap.
 
 Shims are opt-in. If you want PATH exposure for installed tools:
 
@@ -43,7 +58,7 @@ When you run `tsc`, the shell finds `~/.rudi/bins/tsc`, which delegates to the a
 
 ### Package Sources
 
-RUDI supports three installation sources:
+RUDI supports four installation sources:
 
 1. **Dynamic npm** (`npm:<package>`) - Any npm package with a `bin` field
 2. **Curated Registry** - Pre-configured stacks and binaries with documentation
@@ -430,6 +445,10 @@ Core CLI and daemon paths do not initialize, open, repair, or require
 `rudi.db`.
 
 ## Directory Structure
+
+This is the machine-local installation and data directory. The CLI source tree
+is separate; see the
+[annotated repository tree and execution trace](https://github.com/learnrudi/cli/blob/main/docs/cli-layout-and-installation.md).
 
 ```
 ~/.rudi/

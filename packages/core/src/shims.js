@@ -131,9 +131,10 @@ export function getAllShimOwners() {
  * @param {string} manifest.installDir - Installation directory
  * @param {string[]} manifest.bins - Executable names
  * @param {Object} [manifest.source] - Source info (for system type)
+ * @param {{quiet?: boolean}} [options] - Suppress success output; keep warnings
  * @returns {{ created: string[], collisions: Array<{ bin: string, previousOwner: string }> }}
  */
-export async function createShimsForTool(manifest) {
+export async function createShimsForTool(manifest, { quiet = false } = {}) {
   const bins = manifest.bins || [manifest.name || manifest.id.split(':')[1]];
   const created = [];
   const collisions = [];
@@ -157,6 +158,7 @@ export async function createShimsForTool(manifest) {
     } else {
       createWrapperShim(bin, target, PATHS.bins, nodeBinDir);
     }
+    if (!quiet) console.log(`[Shims] Created ${shimType} shim: ${bin} → ${target}`);
 
     // Register ownership and detect collisions
     const { collision, previousOwner } = registerShim(bin, manifest.id, shimType, target);
@@ -236,8 +238,6 @@ ${runtimePath}exec "${quotedTarget}" "$@"
 
   // Atomic rename (overwrites existing)
   fs.renameSync(tempPath, shimPath);
-
-  console.log(`[Shims] Created wrapper shim: ${name} → ${targetAbs}`);
 }
 
 /**
@@ -261,8 +261,6 @@ function createSymlinkShim(name, targetAbs, binsDir) {
   // Use relative symlink so it survives if home path changes (e.g., containers)
   const relTarget = path.relative(binsDir, targetAbs);
   fs.symlinkSync(relTarget, shimPath);
-
-  console.log(`[Shims] Created symlink shim: ${name} → ${targetAbs}`);
 }
 
 /**
