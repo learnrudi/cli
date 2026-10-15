@@ -2,6 +2,15 @@
 
 Date: 2026-06-03
 
+**Historical planning record.** The checked items below describe evidence
+available during that work; they are not a current installation acceptance
+report. Workspace paths and example catalog entries may have changed. Use the
+[current CLI guide](cli-layout-and-installation.md) and
+[October 15 fresh-install audit](swe-compliance/2026-10-15-cli-cleanup-and-fresh-install.md)
+for the source layout and original setup findings. The
+[onboarding fix ledger](swe-compliance/2026-10-15-cli-onboarding-fixes.md) records
+the unpublished fixes and the remaining registry runtime compatibility gap.
+
 This checklist tracks the work required to make RUDI ready for public use as a clean CLI, registry, and local capability layer. It covers the relationship between:
 
 - `apps/cli`: the user-facing installer, manager, router, and runner.

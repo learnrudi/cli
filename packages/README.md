@@ -1,221 +1,56 @@
-# RUDI Packages
+# RUDI workspace packages
 
-Shared libraries and utilities for RUDI. Used by both the CLI and Studio.
+These libraries belong to the `@learnrudi/cli` pnpm workspace. The CLI build
+bundles the libraries it uses into `dist/index.cjs` and `dist/router-mcp.js`.
+End users install `@learnrudi/cli`; they do not need this source directory or
+separate installs of the workspace packages.
 
-## Monorepo Structure
-
-```
-packages/
-├── core/                          # Core resolver and installer
-│   └── @prompt/core
-├── runner/                        # Execution engine
-│   └── @prompt/runner
-├── manifest/                      # Stack/prompt manifest parsing
-│   └── @prompt/manifest
-└── db/                            # Database and session management
-    └── @prompt/db
-```
-
-## Packages
-
-### @prompt/core
-
-Resolver, installer, and registry client. Handles:
-
-- Package discovery and search
-- Dependency resolution
-- Installation to `~/.prompt/packages/`
-- Lockfile generation
-- Registry caching
-
-**Used by**: CLI `search`, `install`, `list` commands
-
-**Exports**:
-
-```typescript
-export async function searchPackages(query: string, options?: SearchOptions): Promise<Package[]>
-export async function installPackage(id: string, version?: string): Promise<Installation>
-export async function listInstalledPackages(kind?: 'stack' | 'prompt' | 'runtime'): Promise<Package[]>
-```
-
-### @prompt/runner
-
-Execution engine for stacks and prompts. Handles:
-
-- Stream execution (stdout/stderr)
-- Environment variable injection (secrets)
-- Working directory management
-- Exit code handling
-
-**Used by**: CLI `run` command, Studio execution
-
-**Exports**:
-
-```typescript
-export async function runStack(id: string, options: RunOptions): Promise<RunResult>
-export async function checkSecrets(required: SecretDeclaration[]): Promise<SecretCheck>
-```
-
-### @prompt/manifest
-
-Stack, prompt, and runtime manifest parsing. Validates:
-
-- YAML/JSON structure
-- Required fields
-- Input/output schemas
-- Dependencies and runtime requirements
-
-**Used by**: Core, Runner, CLI
-
-**Exports**:
-
-```typescript
-export function parseStackManifest(path: string): StackManifest
-export function parsePromptManifest(path: string): PromptManifest
-export function validateManifest(manifest: any): ValidationResult
-```
-
-### @prompt/db
-
-SQLite-based database layer. Manages:
-
-- Session storage (all messages from all providers)
-- Execution history (runs, artifacts, costs)
-- Installation tracking (what's installed, where)
-- Full-text search across sessions
-
-**Used by**: CLI `db` commands, Studio session browser
-
-**Exports**:
-
-```typescript
-export async function initDatabase(): Promise<Database>
-export async function storSession(session: Session): Promise<void>
-export async function searchSessions(query: string): Promise<Session[]>
-export async function getRunHistory(): Promise<Run[]>
-export async function calculateCosts(): Promise<CostBreakdown>
-```
+| Directory | Package | Responsibility and consumers |
+| --- | --- | --- |
+| `core/` | `@learnrudi/core` | Package resolution, installation/removal, locks, shims, configuration, and tool indexing; used by CLI commands. |
+| `env/` | `@learnrudi/env` | Home paths, platform detection, and installed-package discovery; shared foundation. |
+| `manifest/` | `@learnrudi/manifest` | Parse and validate package manifests; used by installation and execution. |
+| `mcp/` | `@learnrudi/mcp` | MCP configuration, router, and tool-name helpers; used by integration and indexing. |
+| `registry-client/` | `@learnrudi/registry-client` | Registry fetching/search, artifact downloads, and verification; used by core and CLI commands. |
+| `runner/` | `@learnrudi/runner` | Process spawning, streaming, and execution-time environment preparation; used by `rudi run`. |
+| `secrets/` | `@learnrudi/secrets` | Secret storage and resolution; used by CLI and runner. |
+| `utils/` | `@learnrudi/utils` | Argument parsing and terminal help; used by the CLI entrypoint. |
+| `db/` | `@learnrudi/db` | Retained Studio compatibility code. Not imported by the CLI production runtime or runner, and not shipped in the CLI npm package. |
 
 ## Development
 
-### Installation
-
-Install dependencies:
+Run these commands from the CLI repository root:
 
 ```bash
-npm install
+pnpm install --frozen-lockfile
+pnpm test
+pnpm build
+npm pack --dry-run
 ```
 
-### Building
+The root test wrapper discovers workspace unit tests. To run one package's
+tests, use its declared script, for example `pnpm --filter @learnrudi/core test`.
+The root build produces the CLI bundles; there is no per-package build command.
+Use a supported Node version and install native dependencies with that version.
+See the [repository guide](../docs/cli-layout-and-installation.md) for the tree,
+source-to-install trace, and clean installation checks.
 
-Build all packages:
+## Database retirement boundary
 
-```bash
-npm run build
-```
+`packages/db` implements the older imported-session database. The current
+Agent Host launch store is implemented separately in
+`src/agent-host/launch-store.js`; it still uses `better-sqlite3`. Removing the
+legacy package would not justify removing that production dependency.
 
-Build a specific package:
+[ADR 0001](../docs/adr/0001-retire-legacy-agent-execution.md) requires coordinated
+Studio retirement or migration before deleting this package. The October 15,
+2026 audit found no CLI production imports, but the admin Mac's archived Studio
+checkout still declares `file:../cli/packages/db` and imports its service API.
+That archived relative path is not evidence of a working current deployment;
+it is an unresolved source/recovery dependency. Keep the package until that
+consumer's preservation or migration decision is recorded on both peers.
 
-```bash
-npm run build -- --filter=@prompt/core
-```
-
-### Testing
-
-Run tests:
-
-```bash
-npm test
-```
-
-Test a specific package:
-
-```bash
-npm test -- --filter=@prompt/runner
-```
-
-### Linking to CLI/Studio
-
-Both CLI and Studio import these packages. During development:
-
-```bash
-# In packages/core, packages/runner, etc
-npm link
-
-# In cli/ or studio/
-npm link @prompt/core @prompt/runner @prompt/manifest @prompt/db
-```
-
-Or use workspace references (preferred):
-
-```json
-{
-  "dependencies": {
-    "@prompt/core": "workspace:*"
-  }
-}
-```
-
-## Architecture
-
-All packages follow a consistent interface:
-
-```typescript
-// All async by design
-export async function operation(params: Params): Promise<Result>
-```
-
-### Data Flow
-
-```
-CLI/Studio Input
-    ↓
-@prompt/manifest (parse/validate)
-    ↓
-@prompt/core (resolve/install)
-    ↓
-@prompt/runner (execute)
-    ↓
-@prompt/db (store/log)
-    ↓
-Output / Artifact
-```
-
-### Error Handling
-
-All packages throw typed errors:
-
-```typescript
-export class RUDIError extends Error {
-  constructor(public code: string, message: string) {
-    super(message)
-  }
-}
-
-export class ManifestValidationError extends RUDIError {}
-export class RuntimeNotFoundError extends RUDIError {}
-export class SecretMissingError extends RUDIError {}
-```
-
-## Publishing
-
-Packages are published to npm as scoped packages:
-
-```bash
-npm publish --scope=@prompt
-```
-
-Only CLI and Runner are published publicly.  Core and DB are internal-only (for now).
-
-## Contributing
-
-See [CONTRIBUTING.md](../CONTRIBUTING.md) for:
-
-- Code style
-- Commit conventions
-- Testing requirements
-- Pull request process
-
-## License
-
-MIT
+The audit and remaining retirement checks are recorded in the
+[cleanup ledger](../docs/swe-compliance/2026-10-15-cli-cleanup-and-fresh-install.md).
+Existing user `rudi.db` files remain preserved independently of this source-code
+decision. They are never opened, migrated, or deleted by the CLI.

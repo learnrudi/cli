@@ -9,20 +9,13 @@
 
 import fs from 'fs';
 import path from 'path';
-import { pipeline } from 'stream/promises';
-import { createWriteStream } from 'fs';
-import { createGunzip } from 'zlib';
-import { PATHS, ensureDirectories, getPlatformArch } from '@learnrudi/env';
-import { fetchIndex } from '@learnrudi/registry-client';
-import { runCommand } from '../utils/subprocess.js';
+import { PATHS, ensureDirectories } from '@learnrudi/env';
+import { createShimsForTool, installPackage } from '@learnrudi/core';
 import {
   buildRudiInstructionBlock,
   patchManagedInstructionBlock,
   resolveInstructionTarget
 } from './instructions.js';
-
-// Download base URL for RUDI registry releases
-const RELEASES_BASE = 'https://github.com/learnrudi/registry/releases/download/v1.0.0';
 
 // Essential packages to install on init
 const BUNDLED_RUNTIMES = ['node', 'python'];
@@ -130,70 +123,12 @@ export async function cmdInit(args, flags) {
     }
   }
 
-  // Step 2: Download bundled runtimes
+  // Use the same schema-aware, verified installer as `rudi install`.
   if (!skipDownloads) {
     if (!quiet) console.log('\n2. Checking runtimes...');
-    const index = await fetchIndex();
-    const platform = getPlatformArch();
-
-    for (const runtimeName of BUNDLED_RUNTIMES) {
-      const runtime = index.packages?.runtimes?.official?.find(
-        r => r.id === `runtime:${runtimeName}` || r.id === runtimeName
-      );
-
-      if (!runtime) {
-        actions.failed.push(`runtime:${runtimeName}`);
-        if (!quiet) console.log(`   ⚠ ${runtimeName}: not found in registry`);
-        continue;
-      }
-
-      const destPath = path.join(PATHS.runtimes, runtimeName);
-      if (fs.existsSync(destPath) && !force) {
-        actions.skipped.push(`runtime:${runtimeName}`);
-        if (!quiet) console.log(`   ✓ ${runtimeName}: already installed`);
-        continue;
-      }
-
-      try {
-        await downloadRuntime(runtime, runtimeName, destPath, platform);
-        actions.created.push(`runtime:${runtimeName}`);
-        if (!quiet) console.log(`   + ${runtimeName}: installed`);
-      } catch (error) {
-        actions.failed.push(`runtime:${runtimeName}`);
-        if (!quiet) console.log(`   ✗ ${runtimeName}: ${error.message}`);
-      }
-    }
-
-    // Step 3: Download essential binaries
+    await installBootstrapPackages('runtime', BUNDLED_RUNTIMES, actions, { force, quiet });
     if (!quiet) console.log('\n3. Checking essential binaries...');
-
-    for (const binaryName of ESSENTIAL_BINARIES) {
-      const binary = index.packages?.binaries?.official?.find(
-        b => b.id === `binary:${binaryName}` || b.id === binaryName || b.name?.toLowerCase() === binaryName
-      );
-
-      if (!binary) {
-        actions.failed.push(`binary:${binaryName}`);
-        if (!quiet) console.log(`   ⚠ ${binaryName}: not found in registry`);
-        continue;
-      }
-
-      const destPath = path.join(PATHS.binaries, binaryName);
-      if (fs.existsSync(destPath) && !force) {
-        actions.skipped.push(`binary:${binaryName}`);
-        if (!quiet) console.log(`   ✓ ${binaryName}: already installed`);
-        continue;
-      }
-
-      try {
-        await downloadBinary(binary, binaryName, destPath, platform);
-        actions.created.push(`binary:${binaryName}`);
-        if (!quiet) console.log(`   + ${binaryName}: installed`);
-      } catch (error) {
-        actions.failed.push(`binary:${binaryName}`);
-        if (!quiet) console.log(`   ✗ ${binaryName}: ${error.message}`);
-      }
-    }
+    await installBootstrapPackages('binary', ESSENTIAL_BINARIES, actions, { force, quiet });
   } else {
     if (!quiet) console.log('\n2-3. Skipping downloads (--skip-downloads)');
   }
@@ -235,6 +170,12 @@ export async function cmdInit(args, flags) {
     if (!quiet) console.log('   ⚠ Codex AGENTS RUDI block skipped (--no-agent-instructions)');
   }
 
+  // Successful packages remain installed so a retry can complete the setup.
+  // Never print a success summary when any required action failed.
+  if (actions.failed.length > 0) {
+    throw new Error(`RUDI initialization incomplete: ${actions.failed.join(', ')}`);
+  }
+
   // Done - show summary
   if (!quiet) {
     console.log('\n' + '═'.repeat(60));
@@ -260,64 +201,24 @@ export async function cmdInit(args, flags) {
   return actions;
 }
 
-async function downloadRuntime(runtime, name, destPath, platform) {
-  // Get download URL
-  let url;
-  if (runtime.upstream?.[platform]) {
-    url = runtime.upstream[platform];
-  } else if (runtime.download?.[platform]) {
-    url = `${RELEASES_BASE}/${runtime.download[platform]}`;
-  } else {
-    throw new Error(`No download for ${platform}`);
+async function installBootstrapPackages(kind, names, actions, options) {
+  for (const name of names) {
+    const id = `${kind}:${name}`;
+    try {
+      const result = await installPackage(id, {
+        force: options.force,
+        // Init reconciles optional shims once below, including repeat runs.
+        withShims: false,
+      });
+      if (!result.success) throw new Error(result.error || 'Installation failed');
+      const skipped = result.alreadyInstalled === true;
+      actions[skipped ? 'skipped' : 'created'].push(id);
+      if (!options.quiet) console.log(`   ✓ ${name}: ${skipped ? 'already installed' : 'installed'}`);
+    } catch (error) {
+      actions.failed.push(id);
+      console.error(`   ✗ ${id}: ${error.message}`);
+    }
   }
-
-  await downloadAndExtract(url, destPath, name);
-}
-
-async function downloadBinary(binary, name, destPath, platform) {
-  // Get download URL
-  let url;
-  if (binary.upstream?.[platform]) {
-    url = binary.upstream[platform];
-  } else if (binary.download?.[platform]) {
-    url = `${RELEASES_BASE}/${binary.download[platform]}`;
-  } else {
-    throw new Error(`No download for ${platform}`);
-  }
-
-  await downloadAndExtract(url, destPath, name, binary.extract);
-}
-
-async function downloadAndExtract(url, destPath, name, extractConfig) {
-  const tempFile = path.join(PATHS.cache, `${name}-download.tar.gz`);
-
-  // Download
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
-  }
-
-  // Ensure dest exists
-  if (!fs.existsSync(destPath)) {
-    fs.mkdirSync(destPath, { recursive: true });
-  }
-
-  // Save to temp file
-  const fileStream = createWriteStream(tempFile);
-  await pipeline(response.body, fileStream);
-
-  // Extract
-  try {
-    runCommand('tar', ['-xzf', tempFile, '-C', destPath, '--strip-components=1'], {
-      stdio: 'pipe'
-    });
-  } catch {
-    // Try without strip-components for flat archives
-    runCommand('tar', ['-xzf', tempFile, '-C', destPath], { stdio: 'pipe' });
-  }
-
-  // Cleanup
-  fs.unlinkSync(tempFile);
 }
 
 async function createShims(shimsDir, quiet = false) {
@@ -352,8 +253,21 @@ async function createShims(shimsDir, quiet = false) {
     }
   }
 
-  // Create binary shims
+  // Use manifest-aware shims for both downloads and system packages (macOS
+  // SQLite). This also supports opting in after an earlier shim-free init.
+  for (const name of ESSENTIAL_BINARIES) {
+    const installDir = path.join(PATHS.binaries, name);
+    const manifestPath = path.join(installDir, 'manifest.json');
+    if (!fs.existsSync(manifestPath)) continue;
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    if (!['system', 'binary'].includes(manifest.installType)) continue;
+    const result = await createShimsForTool({ ...manifest, installDir }, { quiet });
+    shims.push(...result.created);
+  }
+
+  // Keep legacy layouts and the ripgrep alias working without a manifest.
   for (const [shimName, targetPath] of Object.entries(binaryShims)) {
+    if (shims.includes(shimName)) continue;
     const fullTarget = path.join(PATHS.home, targetPath);
     const shimPath = path.join(shimsDir, shimName);
 
@@ -382,21 +296,4 @@ function createShim(shimPath, targetPath) {
 
   // Create symlink
   fs.symlinkSync(targetPath, shimPath);
-}
-
-async function showStatus() {
-  console.log('Current status:');
-
-  const checks = [
-    { name: 'Home', path: PATHS.home },
-    { name: 'Runtimes', path: PATHS.runtimes },
-    { name: 'Binaries', path: PATHS.binaries }
-  ];
-
-  for (const check of checks) {
-    const exists = fs.existsSync(check.path);
-    console.log(`  ${exists ? '✓' : '✗'} ${check.name}: ${check.path}`);
-  }
-
-  console.log('\nRun: rudi home (for details)');
 }

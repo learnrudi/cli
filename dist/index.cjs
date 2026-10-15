@@ -10507,7 +10507,7 @@ function getShimOwner(bin) {
 function getAllShimOwners() {
   return loadShimRegistry();
 }
-async function createShimsForTool(manifest) {
+async function createShimsForTool(manifest, { quiet = false } = {}) {
   const bins = manifest.bins || [manifest.name || manifest.id.split(":")[1]];
   const created = [];
   const collisions = [];
@@ -10524,6 +10524,7 @@ async function createShimsForTool(manifest) {
     } else {
       createWrapperShim(bin, target, PATHS.bins, nodeBinDir);
     }
+    if (!quiet) console.log(`[Shims] Created ${shimType} shim: ${bin} \u2192 ${target}`);
     const { collision, previousOwner } = registerShim(bin, manifest.id, shimType, target);
     if (collision) {
       collisions.push({ bin, previousOwner });
@@ -10568,7 +10569,6 @@ ${runtimePath}exec "${quotedTarget}" "$@"
   import_fs4.default.writeFileSync(tempPath, script, "utf8");
   import_fs4.default.chmodSync(tempPath, 493);
   import_fs4.default.renameSync(tempPath, shimPath);
-  console.log(`[Shims] Created wrapper shim: ${name} \u2192 ${targetAbs}`);
 }
 function createSymlinkShim(name, targetAbs, binsDir) {
   import_fs4.default.mkdirSync(binsDir, { recursive: true });
@@ -10579,7 +10579,6 @@ function createSymlinkShim(name, targetAbs, binsDir) {
   }
   const relTarget = import_path5.default.relative(binsDir, targetAbs);
   import_fs4.default.symlinkSync(relTarget, shimPath);
-  console.log(`[Shims] Created symlink shim: ${name} \u2192 ${targetAbs}`);
 }
 function removeShims(bins) {
   const removed = [];
@@ -12222,6 +12221,21 @@ function extractSingleFileMetadata(filePath, kind) {
 function getInstalledPackageSource(id, fallback) {
   return readLockfile(id)?.source || fallback;
 }
+function installedPackageDirectories(dir, entries, kind) {
+  const directories = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+    const packagePath = import_path6.default.join(dir, entry.name);
+    directories.push({ name: entry.name, packagePath, idKind: kind });
+    if (kind === "binary" && entry.name === "npm") {
+      for (const child of import_fs5.default.readdirSync(packagePath, { withFileTypes: true })) {
+        if (!child.isDirectory() || child.name.startsWith(".")) continue;
+        directories.push({ name: child.name, packagePath: import_path6.default.join(packagePath, child.name), idKind: "npm" });
+      }
+    }
+  }
+  return directories;
+}
 async function listInstalled(kind) {
   const kinds = kind ? [kind] : ["stack", "skill", "workflow", "runtime", "binary"];
   const packages = [];
@@ -12313,14 +12327,16 @@ async function listInstalled(kind) {
       }
       continue;
     }
-    for (const entry of entries) {
-      if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
-      const pkgDir = import_path6.default.join(dir, entry.name);
+    for (const entry of installedPackageDirectories(dir, entries, k)) {
+      const pkgDir = entry.packagePath;
       const manifestPath = import_path6.default.join(pkgDir, "manifest.json");
       const runtimePath = import_path6.default.join(pkgDir, "runtime.json");
       if (import_fs5.default.existsSync(manifestPath)) {
         const manifest = JSON.parse(import_fs5.default.readFileSync(manifestPath, "utf-8"));
-        const packageId = normalizeInstalledPackageId(k, manifest.id, entry.name);
+        const packageId = normalizeInstalledPackageId(entry.idKind, manifest.id, entry.name);
+        if (entry.idKind === "npm" && (typeof manifest.id !== "string" || !manifest.id.startsWith("npm:") || !NPM_PACKAGE_PATTERN.test(manifest.id.slice(4)) || getPackagePath(packageId) !== pkgDir)) {
+          throw new Error(`Installed npm manifest id does not match its directory: ${pkgDir}`);
+        }
         packages.push({
           ...manifest,
           id: packageId,
@@ -12329,7 +12345,7 @@ async function listInstalled(kind) {
           source: getInstalledPackageSource(packageId, manifest.source),
           path: pkgDir
         });
-      } else if (import_fs5.default.existsSync(runtimePath)) {
+      } else if (entry.idKind !== "npm" && import_fs5.default.existsSync(runtimePath)) {
         const runtimeMeta = JSON.parse(import_fs5.default.readFileSync(runtimePath, "utf-8"));
         packages.push({
           id: `${k}:${entry.name}`,
@@ -33825,10 +33841,8 @@ async function cmdHome(args, flags) {
 // src/commands/init.js
 var import_fs17 = __toESM(require("fs"), 1);
 var import_path16 = __toESM(require("path"), 1);
-var import_promises2 = require("stream/promises");
-var import_fs18 = require("fs");
 init_src();
-init_src3();
+init_src5();
 
 // src/commands/instructions.js
 var import_fs16 = __toESM(require("fs"), 1);
@@ -34071,7 +34085,6 @@ async function cmdInstructions(args, flags) {
 }
 
 // src/commands/init.js
-var RELEASES_BASE = "https://github.com/learnrudi/registry/releases/download/v1.0.0";
 var BUNDLED_RUNTIMES = ["node", "python"];
 var ESSENTIAL_BINARIES = ["sqlite", "ripgrep"];
 var CODEX_INSTRUCTIONS_ACTION = "codex-instructions";
@@ -34158,57 +34171,9 @@ async function cmdInit(args, flags) {
   }
   if (!skipDownloads) {
     if (!quiet) console.log("\n2. Checking runtimes...");
-    const index = await fetchIndex();
-    const platform = getPlatformArch();
-    for (const runtimeName2 of BUNDLED_RUNTIMES) {
-      const runtime = index.packages?.runtimes?.official?.find(
-        (r) => r.id === `runtime:${runtimeName2}` || r.id === runtimeName2
-      );
-      if (!runtime) {
-        actions.failed.push(`runtime:${runtimeName2}`);
-        if (!quiet) console.log(`   \u26A0 ${runtimeName2}: not found in registry`);
-        continue;
-      }
-      const destPath = import_path16.default.join(PATHS.runtimes, runtimeName2);
-      if (import_fs17.default.existsSync(destPath) && !force) {
-        actions.skipped.push(`runtime:${runtimeName2}`);
-        if (!quiet) console.log(`   \u2713 ${runtimeName2}: already installed`);
-        continue;
-      }
-      try {
-        await downloadRuntime2(runtime, runtimeName2, destPath, platform);
-        actions.created.push(`runtime:${runtimeName2}`);
-        if (!quiet) console.log(`   + ${runtimeName2}: installed`);
-      } catch (error) {
-        actions.failed.push(`runtime:${runtimeName2}`);
-        if (!quiet) console.log(`   \u2717 ${runtimeName2}: ${error.message}`);
-      }
-    }
+    await installBootstrapPackages("runtime", BUNDLED_RUNTIMES, actions, { force, quiet });
     if (!quiet) console.log("\n3. Checking essential binaries...");
-    for (const binaryName of ESSENTIAL_BINARIES) {
-      const binary = index.packages?.binaries?.official?.find(
-        (b) => b.id === `binary:${binaryName}` || b.id === binaryName || b.name?.toLowerCase() === binaryName
-      );
-      if (!binary) {
-        actions.failed.push(`binary:${binaryName}`);
-        if (!quiet) console.log(`   \u26A0 ${binaryName}: not found in registry`);
-        continue;
-      }
-      const destPath = import_path16.default.join(PATHS.binaries, binaryName);
-      if (import_fs17.default.existsSync(destPath) && !force) {
-        actions.skipped.push(`binary:${binaryName}`);
-        if (!quiet) console.log(`   \u2713 ${binaryName}: already installed`);
-        continue;
-      }
-      try {
-        await downloadBinary(binary, binaryName, destPath, platform);
-        actions.created.push(`binary:${binaryName}`);
-        if (!quiet) console.log(`   + ${binaryName}: installed`);
-      } catch (error) {
-        actions.failed.push(`binary:${binaryName}`);
-        if (!quiet) console.log(`   \u2717 ${binaryName}: ${error.message}`);
-      }
-    }
+    await installBootstrapPackages("binary", ESSENTIAL_BINARIES, actions, { force, quiet });
   } else {
     if (!quiet) console.log("\n2-3. Skipping downloads (--skip-downloads)");
   }
@@ -34243,6 +34208,9 @@ async function cmdInit(args, flags) {
     actions.skipped.push(CODEX_INSTRUCTIONS_ACTION);
     if (!quiet) console.log("   \u26A0 Codex AGENTS RUDI block skipped (--no-agent-instructions)");
   }
+  if (actions.failed.length > 0) {
+    throw new Error(`RUDI initialization incomplete: ${actions.failed.join(", ")}`);
+  }
   if (!quiet) {
     console.log("\n" + "\u2550".repeat(60));
     if (actions.created.length > 0) {
@@ -34262,47 +34230,24 @@ async function cmdInit(args, flags) {
   }
   return actions;
 }
-async function downloadRuntime2(runtime, name, destPath, platform) {
-  let url;
-  if (runtime.upstream?.[platform]) {
-    url = runtime.upstream[platform];
-  } else if (runtime.download?.[platform]) {
-    url = `${RELEASES_BASE}/${runtime.download[platform]}`;
-  } else {
-    throw new Error(`No download for ${platform}`);
+async function installBootstrapPackages(kind, names, actions, options) {
+  for (const name of names) {
+    const id = `${kind}:${name}`;
+    try {
+      const result = await installPackage(id, {
+        force: options.force,
+        // Init reconciles optional shims once below, including repeat runs.
+        withShims: false
+      });
+      if (!result.success) throw new Error(result.error || "Installation failed");
+      const skipped = result.alreadyInstalled === true;
+      actions[skipped ? "skipped" : "created"].push(id);
+      if (!options.quiet) console.log(`   \u2713 ${name}: ${skipped ? "already installed" : "installed"}`);
+    } catch (error) {
+      actions.failed.push(id);
+      console.error(`   \u2717 ${id}: ${error.message}`);
+    }
   }
-  await downloadAndExtract(url, destPath, name);
-}
-async function downloadBinary(binary, name, destPath, platform) {
-  let url;
-  if (binary.upstream?.[platform]) {
-    url = binary.upstream[platform];
-  } else if (binary.download?.[platform]) {
-    url = `${RELEASES_BASE}/${binary.download[platform]}`;
-  } else {
-    throw new Error(`No download for ${platform}`);
-  }
-  await downloadAndExtract(url, destPath, name, binary.extract);
-}
-async function downloadAndExtract(url, destPath, name, extractConfig) {
-  const tempFile = import_path16.default.join(PATHS.cache, `${name}-download.tar.gz`);
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
-  }
-  if (!import_fs17.default.existsSync(destPath)) {
-    import_fs17.default.mkdirSync(destPath, { recursive: true });
-  }
-  const fileStream = (0, import_fs18.createWriteStream)(tempFile);
-  await (0, import_promises2.pipeline)(response.body, fileStream);
-  try {
-    runCommand("tar", ["-xzf", tempFile, "-C", destPath, "--strip-components=1"], {
-      stdio: "pipe"
-    });
-  } catch {
-    runCommand("tar", ["-xzf", tempFile, "-C", destPath], { stdio: "pipe" });
-  }
-  import_fs17.default.unlinkSync(tempFile);
 }
 async function createShims(shimsDir, quiet = false) {
   const shims = [];
@@ -34328,7 +34273,17 @@ async function createShims(shimsDir, quiet = false) {
       shims.push(shimName);
     }
   }
+  for (const name of ESSENTIAL_BINARIES) {
+    const installDir = import_path16.default.join(PATHS.binaries, name);
+    const manifestPath = import_path16.default.join(installDir, "manifest.json");
+    if (!import_fs17.default.existsSync(manifestPath)) continue;
+    const manifest = JSON.parse(import_fs17.default.readFileSync(manifestPath, "utf8"));
+    if (!["system", "binary"].includes(manifest.installType)) continue;
+    const result = await createShimsForTool({ ...manifest, installDir }, { quiet });
+    shims.push(...result.created);
+  }
   for (const [shimName, targetPath] of Object.entries(binaryShims)) {
+    if (shims.includes(shimName)) continue;
     const fullTarget = import_path16.default.join(PATHS.home, targetPath);
     const shimPath = import_path16.default.join(shimsDir, shimName);
     if (import_fs17.default.existsSync(fullTarget)) {
@@ -36304,7 +36259,7 @@ Wiring up RUDI router...`);
 }
 
 // src/commands/index-tools.js
-var import_fs19 = __toESM(require("fs"), 1);
+var import_fs18 = __toESM(require("fs"), 1);
 var import_path17 = __toESM(require("path"), 1);
 init_src5();
 init_src5();
@@ -37092,7 +37047,7 @@ async function cmdIndex(args, flags) {
     (id) => config.stacks[id].installed
   );
   const stackRoot = PATHS.stacks;
-  const filesystemStacks = import_fs19.default.existsSync(stackRoot) ? import_fs19.default.readdirSync(stackRoot, { withFileTypes: true }).filter((entry) => entry.isDirectory() && !entry.name.startsWith(".")).map((entry) => entry.name) : [];
+  const filesystemStacks = import_fs18.default.existsSync(stackRoot) ? import_fs18.default.readdirSync(stackRoot, { withFileTypes: true }).filter((entry) => entry.isDirectory() && !entry.name.startsWith(".")).map((entry) => entry.name) : [];
   const registeredNames = new Set(
     installedStacks.map((id) => id.replace(/^stack:/, ""))
   );
@@ -37101,7 +37056,7 @@ async function cmdIndex(args, flags) {
   );
   const missingStacks = installedStacks.filter((id) => {
     const expectedPath = config.stacks[id]?.path || import_path17.default.join(stackRoot, id.replace(/^stack:/, ""));
-    return !import_fs19.default.existsSync(expectedPath);
+    return !import_fs18.default.existsSync(expectedPath);
   });
   if (!jsonOutput) {
     if (orphanedStacks.length > 0) {
@@ -37265,7 +37220,7 @@ After configuring secrets, run: rudi index`);
 
 // src/commands/status.js
 init_src5();
-var import_fs20 = __toESM(require("fs"), 1);
+var import_fs19 = __toESM(require("fs"), 1);
 var import_path18 = __toESM(require("path"), 1);
 var AGENTS = [
   { id: "claude", name: "Claude Code" },
@@ -37323,7 +37278,7 @@ function findBinary(command) {
     import_path18.default.join(PATHS.binaries, command)
   ];
   for (const p of rudiPaths) {
-    if (import_fs20.default.existsSync(p)) {
+    if (import_fs19.default.existsSync(p)) {
       return { found: true, path: p, source: "rudi" };
     }
   }
@@ -37393,13 +37348,13 @@ async function getFullStatus(options = {}) {
   } catch {
   }
   const directories = {
-    home: { path: PATHS.home, exists: import_fs20.default.existsSync(PATHS.home) },
-    stacks: { path: PATHS.stacks, exists: import_fs20.default.existsSync(PATHS.stacks) },
+    home: { path: PATHS.home, exists: import_fs19.default.existsSync(PATHS.home) },
+    stacks: { path: PATHS.stacks, exists: import_fs19.default.existsSync(PATHS.stacks) },
     // Retained for visibility/recovery of legacy state; it is not an executable source.
-    agents: { path: PATHS.agents, exists: import_fs20.default.existsSync(PATHS.agents) },
-    runtimes: { path: PATHS.runtimes, exists: import_fs20.default.existsSync(PATHS.runtimes) },
-    binaries: { path: PATHS.binaries, exists: import_fs20.default.existsSync(PATHS.binaries) },
-    db: { path: PATHS.db, exists: import_fs20.default.existsSync(PATHS.db) }
+    agents: { path: PATHS.agents, exists: import_fs19.default.existsSync(PATHS.agents) },
+    runtimes: { path: PATHS.runtimes, exists: import_fs19.default.existsSync(PATHS.runtimes) },
+    binaries: { path: PATHS.binaries, exists: import_fs19.default.existsSync(PATHS.binaries) },
+    db: { path: PATHS.db, exists: import_fs19.default.existsSync(PATHS.db) }
   };
   const summary = {
     agentsInstalled: agents.filter((a) => a.installed).length,
@@ -37562,7 +37517,7 @@ async function cmdStatus(args, flags) {
 
 // src/commands/check.js
 init_src5();
-var import_fs21 = __toESM(require("fs"), 1);
+var import_fs20 = __toESM(require("fs"), 1);
 var import_path19 = __toESM(require("path"), 1);
 
 // src/runtime-inspection.js
@@ -37689,12 +37644,12 @@ function findGlobalBinary2(name) {
 function detectKindFromFilesystem(name) {
   if (KNOWN_AGENT_HOSTS.has(name)) return "agent";
   const runtimePath = import_path19.default.join(PATHS.runtimes, name, "bin", name);
-  if (import_fs21.default.existsSync(runtimePath)) return "runtime";
+  if (import_fs20.default.existsSync(runtimePath)) return "runtime";
   const binaryPath = import_path19.default.join(PATHS.binaries, name, name);
   const binaryPath2 = import_path19.default.join(PATHS.binaries, name);
-  if (import_fs21.default.existsSync(binaryPath) || import_fs21.default.existsSync(binaryPath2)) return "binary";
+  if (import_fs20.default.existsSync(binaryPath) || import_fs20.default.existsSync(binaryPath2)) return "binary";
   const stackPath = import_path19.default.join(PATHS.stacks, name);
-  if (import_fs21.default.existsSync(stackPath)) return "stack";
+  if (import_fs20.default.existsSync(stackPath)) return "stack";
   const globalPath = findGlobalBinary2(name);
   if (globalPath) {
     if (globalPath.includes("/node") || globalPath.includes("/python") || globalPath.includes("/deno") || globalPath.includes("/bun")) {
@@ -37799,7 +37754,7 @@ async function cmdCheck(args, flags) {
         result.version = getVersion3(inspected.primaryBinary.path);
       } else {
         const legacyRudiPath = import_path19.default.join(PATHS.runtimes, name, "bin", name);
-        if (!inspected.manifestPresent && import_fs21.default.existsSync(legacyRudiPath)) {
+        if (!inspected.manifestPresent && import_fs20.default.existsSync(legacyRudiPath)) {
           result.installed = true;
           result.source = "rudi";
           result.path = legacyRudiPath;
@@ -37821,7 +37776,7 @@ async function cmdCheck(args, flags) {
     }
     case "binary": {
       const rudiPath = import_path19.default.join(PATHS.binaries, name, name);
-      if (import_fs21.default.existsSync(rudiPath)) {
+      if (import_fs20.default.existsSync(rudiPath)) {
         result.installed = true;
         result.path = rudiPath;
       } else {
@@ -37920,7 +37875,7 @@ Fix: ${result.lifecycle.fixCommand}`);
 
 // src/commands/shims.js
 init_src5();
-var import_fs22 = __toESM(require("fs"), 1);
+var import_fs21 = __toESM(require("fs"), 1);
 var import_path20 = __toESM(require("path"), 1);
 var LEGACY_AGENT_SHIM_IDS = /* @__PURE__ */ new Map([
   ["agy", "antigravity"],
@@ -37934,23 +37889,23 @@ var LEGACY_AGENT_SHIM_IDS = /* @__PURE__ */ new Map([
 ]);
 function listShims2() {
   const binsDir = PATHS.bins;
-  if (!import_fs22.default.existsSync(binsDir)) {
+  if (!import_fs21.default.existsSync(binsDir)) {
     return [];
   }
-  const entries = import_fs22.default.readdirSync(binsDir);
+  const entries = import_fs21.default.readdirSync(binsDir);
   return entries.filter((entry) => {
     const fullPath = import_path20.default.join(binsDir, entry);
-    const stat = import_fs22.default.lstatSync(fullPath);
+    const stat = import_fs21.default.lstatSync(fullPath);
     return stat.isFile() || stat.isSymbolicLink();
   });
 }
 function getShimType(shimPath) {
-  const stat = import_fs22.default.lstatSync(shimPath);
+  const stat = import_fs21.default.lstatSync(shimPath);
   if (stat.isSymbolicLink()) {
     return "symlink";
   }
   try {
-    const content = import_fs22.default.readFileSync(shimPath, "utf8");
+    const content = import_fs21.default.readFileSync(shimPath, "utf8");
     if (/^#![^\r\n]*(?:^|[\/\s])(?:ba|z|k)?sh(?:\s|$)/.test(content)) {
       return "wrapper";
     }
@@ -37961,14 +37916,14 @@ function getShimType(shimPath) {
 function getShimTarget(name, shimPath, type) {
   if (type === "symlink") {
     try {
-      return import_fs22.default.readlinkSync(shimPath);
+      return import_fs21.default.readlinkSync(shimPath);
     } catch (err) {
       return null;
     }
   }
   if (type === "wrapper") {
     try {
-      const content = import_fs22.default.readFileSync(shimPath, "utf8");
+      const content = import_fs21.default.readFileSync(shimPath, "utf8");
       const match = content.match(/exec "([^"]+)"/);
       return match ? match[1] : null;
     } catch (err) {
@@ -37978,14 +37933,14 @@ function getShimTarget(name, shimPath, type) {
   return null;
 }
 function createShimLink(shimPath, targetPath) {
-  if (import_fs22.default.existsSync(shimPath)) {
-    import_fs22.default.unlinkSync(shimPath);
+  if (import_fs21.default.existsSync(shimPath)) {
+    import_fs21.default.unlinkSync(shimPath);
   }
-  import_fs22.default.symlinkSync(targetPath, shimPath);
+  import_fs21.default.symlinkSync(targetPath, shimPath);
 }
 function writeShimScript(name, script) {
   const shimPath = import_path20.default.join(PATHS.bins, name);
-  import_fs22.default.writeFileSync(shimPath, script, { encoding: "utf8", mode: 493 });
+  import_fs21.default.writeFileSync(shimPath, script, { encoding: "utf8", mode: 493 });
 }
 function getCliEntryPath() {
   const candidates = [
@@ -37993,7 +37948,7 @@ function getCliEntryPath() {
     import_path20.default.join(import_path20.default.dirname(process.argv[1]), "..", "src", "index.js")
   ];
   for (const candidate of candidates) {
-    if (import_fs22.default.existsSync(candidate)) {
+    if (import_fs21.default.existsSync(candidate)) {
       return candidate;
     }
   }
@@ -38006,8 +37961,8 @@ function copyRouterMcp(routerDir) {
     import_path20.default.join(import_path20.default.dirname(process.argv[1]), "..", "src", "router-mcp.js")
   ];
   for (const source of possibleSources) {
-    if (import_fs22.default.existsSync(source)) {
-      import_fs22.default.copyFileSync(source, destPath);
+    if (import_fs21.default.existsSync(source)) {
+      import_fs21.default.copyFileSync(source, destPath);
       return true;
     }
   }
@@ -38027,18 +37982,18 @@ function getRuntimeShimDefs() {
   };
 }
 function collectManifests(dir, kind) {
-  if (!import_fs22.default.existsSync(dir)) return [];
-  const entries = import_fs22.default.readdirSync(dir);
+  if (!import_fs21.default.existsSync(dir)) return [];
+  const entries = import_fs21.default.readdirSync(dir);
   const manifests = [];
   for (const entry of entries) {
     if (entry.startsWith(".")) continue;
     const entryPath = import_path20.default.join(dir, entry);
-    const stat = import_fs22.default.statSync(entryPath);
+    const stat = import_fs21.default.statSync(entryPath);
     if (!stat.isDirectory()) continue;
     const manifestPath = import_path20.default.join(entryPath, "manifest.json");
-    if (!import_fs22.default.existsSync(manifestPath)) continue;
+    if (!import_fs21.default.existsSync(manifestPath)) continue;
     try {
-      const manifest = JSON.parse(import_fs22.default.readFileSync(manifestPath, "utf8"));
+      const manifest = JSON.parse(import_fs21.default.readFileSync(manifestPath, "utf8"));
       manifests.push({ kind, name: entry, installPath: entryPath, manifest });
     } catch {
     }
@@ -38078,13 +38033,13 @@ function getPackageFromShim(shimName, target) {
     import_path20.default.join(PATHS.runtimes)
   ];
   for (const dir of manifestDirs) {
-    if (!import_fs22.default.existsSync(dir)) continue;
-    const packages = import_fs22.default.readdirSync(dir);
+    if (!import_fs21.default.existsSync(dir)) continue;
+    const packages = import_fs21.default.readdirSync(dir);
     for (const pkg of packages) {
       const manifestPath = import_path20.default.join(dir, pkg, "manifest.json");
-      if (import_fs22.default.existsSync(manifestPath)) {
+      if (import_fs21.default.existsSync(manifestPath)) {
         try {
-          const manifest = JSON.parse(import_fs22.default.readFileSync(manifestPath, "utf8"));
+          const manifest = JSON.parse(import_fs21.default.readFileSync(manifestPath, "utf8"));
           const bins = manifest.bins || manifest.binaries || [manifest.name || pkg];
           if (bins.includes(shimName)) {
             const kind = dir.includes("binaries") ? "binary" : dir.includes("runtimes") ? "runtime" : "agent";
@@ -38129,7 +38084,7 @@ function getBrokenShimGuidance(packageIds) {
 }
 function removeBrokenLegacyAgentShims(pkg, shims, dependencies = {}) {
   const binsPath = dependencies.binsPath || PATHS.bins;
-  const unlinkSyncImpl = dependencies.unlinkSyncImpl || import_fs22.default.unlinkSync;
+  const unlinkSyncImpl = dependencies.unlinkSyncImpl || import_fs21.default.unlinkSync;
   const result = { failed: [], removed: [] };
   for (const shim of shims) {
     if (shim.valid || shim.package !== pkg) continue;
@@ -38175,13 +38130,13 @@ async function cmdShims(args, flags) {
       process.exit(1);
     }
     ensureDirectories();
-    import_fs22.default.mkdirSync(PATHS.bins, { recursive: true });
+    import_fs21.default.mkdirSync(PATHS.bins, { recursive: true });
     let created = 0;
     let missing = 0;
     let collisions = 0;
     const runtimeShimDefs = getRuntimeShimDefs();
     for (const [name, targetPath] of Object.entries(runtimeShimDefs)) {
-      if (!import_fs22.default.existsSync(targetPath)) {
+      if (!import_fs21.default.existsSync(targetPath)) {
         missing++;
         continue;
       }
@@ -38235,8 +38190,8 @@ exec rudi mcp "$@"
 `);
     created++;
     const routerDir = import_path20.default.join(PATHS.home, "router");
-    import_fs22.default.mkdirSync(routerDir, { recursive: true });
-    import_fs22.default.writeFileSync(import_path20.default.join(routerDir, "package.json"), JSON.stringify({
+    import_fs21.default.mkdirSync(routerDir, { recursive: true });
+    import_fs21.default.writeFileSync(import_path20.default.join(routerDir, "package.json"), JSON.stringify({
       name: "rudi-router",
       type: "module",
       private: true
@@ -38338,7 +38293,7 @@ ${valid} valid, ${broken} broken`);
       for (const shim of orphaned) {
         const shimPath = import_path20.default.join(PATHS.bins, shim.name);
         try {
-          import_fs22.default.unlinkSync(shimPath);
+          import_fs21.default.unlinkSync(shimPath);
           console.log(`  \x1B[32m\u2713\x1B[0m Removed ${shim.name}`);
         } catch (err) {
           fixUnresolved += 1;
@@ -38387,7 +38342,7 @@ ${valid} valid, ${broken} broken`);
 }
 
 // src/commands/info.js
-var import_fs23 = __toESM(require("fs"), 1);
+var import_fs22 = __toESM(require("fs"), 1);
 var import_path21 = __toESM(require("path"), 1);
 init_src();
 init_src5();
@@ -38410,7 +38365,7 @@ Package: ${id}`);
 }
 function resolvesToSameFile(leftPath, rightPath) {
   try {
-    return import_fs23.default.realpathSync(leftPath) === import_fs23.default.realpathSync(rightPath);
+    return import_fs22.default.realpathSync(leftPath) === import_fs22.default.realpathSync(rightPath);
   } catch {
     return false;
   }
@@ -38427,15 +38382,15 @@ async function cmdInfo(args, flags) {
     const [kind, name] = parsePackageId(pkgId);
     if (kind === "skill") return await showSkillInfo(pkgId, flags);
     const installPath = getPackagePath(pkgId);
-    if (!import_fs23.default.existsSync(installPath)) {
+    if (!import_fs22.default.existsSync(installPath)) {
       console.error(`Package not installed: ${pkgId}`);
       process.exit(1);
     }
     const manifestPath = import_path21.default.join(installPath, "manifest.json");
     let manifest = null;
-    if (import_fs23.default.existsSync(manifestPath)) {
+    if (import_fs22.default.existsSync(manifestPath)) {
       try {
-        manifest = JSON.parse(import_fs23.default.readFileSync(manifestPath, "utf-8"));
+        manifest = JSON.parse(import_fs22.default.readFileSync(manifestPath, "utf-8"));
       } catch {
         console.warn("Warning: Could not parse manifest.json");
       }
@@ -38505,7 +38460,7 @@ Binaries (${bins.length}):`);
         const validation = validateShim(bin);
         const ownership = getShimOwner(bin);
         let shimStatus = "\u2717 no shim";
-        if (import_fs23.default.existsSync(shimPath)) {
+        if (import_fs22.default.existsSync(shimPath)) {
           if (validation.valid) {
             if (installedRuntimeBinary && !resolvesToSameFile(validation.target, installedRuntimeBinary.resolvedPath)) {
               shimStatus = `\u21AA preserved for ${ownership?.owner || "another package"}: ${validation.target}`;
@@ -38534,7 +38489,7 @@ Binaries: none`);
     const lockName = name.replace(/\//g, "__").replace(/^@/, "");
     const lockDir = kind === "binary" ? "binaries" : kind === "npm" ? "npms" : kind + "s";
     const lockPath = import_path21.default.join(PATHS.locks, lockDir, `${lockName}.lock.yaml`);
-    if (import_fs23.default.existsSync(lockPath)) {
+    if (import_fs22.default.existsSync(lockPath)) {
       console.log(`
 Lockfile: ${lockPath}`);
     }
@@ -38549,7 +38504,7 @@ Lockfile: ${lockPath}`);
 }
 
 // src/commands/studio.js
-var import_fs24 = __toESM(require("fs"), 1);
+var import_fs23 = __toESM(require("fs"), 1);
 var import_path22 = __toESM(require("path"), 1);
 var import_os8 = __toESM(require("os"), 1);
 var import_child_process10 = require("child_process");
@@ -38590,7 +38545,7 @@ function findStudioPath() {
   const platform = process.platform;
   const paths = STUDIO_PATHS[platform] || [];
   for (const p of paths) {
-    if (import_fs24.default.existsSync(p)) {
+    if (import_fs23.default.existsSync(p)) {
       return p;
     }
   }
@@ -38603,7 +38558,7 @@ function findStudioPath() {
       }).trim();
       if (result) {
         const foundPath = result.split("\n")[0];
-        if (import_fs24.default.existsSync(foundPath)) {
+        if (import_fs23.default.existsSync(foundPath)) {
           return foundPath;
         }
       }
@@ -38614,7 +38569,7 @@ function findStudioPath() {
       }).trim();
       if (nameResult) {
         const foundPath = nameResult.split("\n")[0];
-        if (import_fs24.default.existsSync(foundPath)) {
+        if (import_fs23.default.existsSync(foundPath)) {
           return foundPath;
         }
       }
@@ -38626,8 +38581,8 @@ function findStudioPath() {
 function getStudioVersion(studioPath) {
   if (process.platform === "darwin") {
     const plistPath = import_path22.default.join(studioPath, "Contents/Info.plist");
-    if (import_fs24.default.existsSync(plistPath)) {
-      const content = import_fs24.default.readFileSync(plistPath, "utf-8");
+    if (import_fs23.default.existsSync(plistPath)) {
+      const content = import_fs23.default.readFileSync(plistPath, "utf-8");
       const match = content.match(/<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/);
       if (match) {
         return match[1];
@@ -38635,9 +38590,9 @@ function getStudioVersion(studioPath) {
     }
   } else {
     const pkgPath = import_path22.default.join(studioPath, "resources/app/package.json");
-    if (import_fs24.default.existsSync(pkgPath)) {
+    if (import_fs23.default.existsSync(pkgPath)) {
       try {
-        const pkg = JSON.parse(import_fs24.default.readFileSync(pkgPath, "utf-8"));
+        const pkg = JSON.parse(import_fs23.default.readFileSync(pkgPath, "utf-8"));
         return pkg.version;
       } catch {
       }
@@ -38689,7 +38644,7 @@ async function studioUninstall(flags) {
   const studioPath = findStudioPath();
   const platform = process.platform;
   const dataPaths = APP_DATA_PATHS[platform] || [];
-  const existingDataPaths = dataPaths.filter((p) => import_fs24.default.existsSync(p));
+  const existingDataPaths = dataPaths.filter((p) => import_fs23.default.existsSync(p));
   if (!studioPath && existingDataPaths.length === 0) {
     console.log("RUDI Studio is not installed");
     process.exit(0);
@@ -38711,7 +38666,7 @@ async function studioUninstall(flags) {
   let errors = [];
   if (studioPath) {
     try {
-      import_fs24.default.rmSync(studioPath, { recursive: true, force: true });
+      import_fs23.default.rmSync(studioPath, { recursive: true, force: true });
       console.log(`Removed: ${studioPath}`);
     } catch (err) {
       errors.push(`Failed to remove ${studioPath}: ${err.message}`);
@@ -38719,7 +38674,7 @@ async function studioUninstall(flags) {
   }
   for (const p of existingDataPaths) {
     try {
-      import_fs24.default.rmSync(p, { recursive: true, force: true });
+      import_fs23.default.rmSync(p, { recursive: true, force: true });
       console.log(`Removed: ${p}`);
     } catch (err) {
       errors.push(`Failed to remove ${p}: ${err.message}`);
@@ -40604,7 +40559,7 @@ function buildHttpAuthMiddleware(ctx) {
 }
 
 // src/daemon/runtime/bootstrap.js
-var import_fs25 = __toESM(require("fs"), 1);
+var import_fs24 = __toESM(require("fs"), 1);
 var import_path24 = __toESM(require("path"), 1);
 init_src();
 var PORT_FILE = import_path24.default.join(PATHS.home, "daemon.port");
@@ -40613,17 +40568,17 @@ function parseRequestedPort(flags = {}) {
   return Number.parseInt(flags.port, 10) || 0;
 }
 function writeConnectionFiles({ port, token, portFile = PORT_FILE, tokenFile = TOKEN_FILE }) {
-  import_fs25.default.mkdirSync(PATHS.home, { recursive: true });
-  import_fs25.default.writeFileSync(portFile, String(port), { mode: 384 });
-  import_fs25.default.writeFileSync(tokenFile, token, { mode: 384 });
+  import_fs24.default.mkdirSync(PATHS.home, { recursive: true });
+  import_fs24.default.writeFileSync(portFile, String(port), { mode: 384 });
+  import_fs24.default.writeFileSync(tokenFile, token, { mode: 384 });
 }
 function removeConnectionFiles({ portFile = PORT_FILE, tokenFile = TOKEN_FILE } = {}) {
   try {
-    import_fs25.default.unlinkSync(portFile);
+    import_fs24.default.unlinkSync(portFile);
   } catch {
   }
   try {
-    import_fs25.default.unlinkSync(tokenFile);
+    import_fs24.default.unlinkSync(tokenFile);
   } catch {
   }
 }
@@ -40811,7 +40766,7 @@ async function cmdServe(_args, flags = {}) {
 }
 
 // src/commands/lanes.js
-var import_fs26 = __toESM(require("fs"), 1);
+var import_fs25 = __toESM(require("fs"), 1);
 var import_path26 = __toESM(require("path"), 1);
 var import_child_process12 = require("child_process");
 
@@ -40999,7 +40954,7 @@ function ensureDevWorktree(repoRoot, devBranch, requestedDevPath) {
       devPath: existing.path
     };
   }
-  if (import_fs26.default.existsSync(requestedDevPath)) {
+  if (import_fs25.default.existsSync(requestedDevPath)) {
     throw new Error(`Dev worktree path already exists but is not registered: ${requestedDevPath}`);
   }
   (0, import_child_process12.execFileSync)("git", ["worktree", "add", requestedDevPath, devBranch], {
