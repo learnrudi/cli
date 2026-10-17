@@ -272,7 +272,13 @@ node -e "const fs = require('node:fs'); const pids = JSON.parse(fs.readFileSync(
         path: process.argv[2],
         launch: { bin: process.execPath, args: [process.argv[3], process.argv[4]] },
       }, { timeout: 2000, log: message => logs.push(message) });
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Wait for observable sweep completion instead of racing shell/Node startup.
+      // The bound stays below the fixture descendant's five-second lifetime.
+      const sweepDeadline = Date.now() + 3000;
+      while (!fs.existsSync(process.env.FAKE_SWEEP_MARKER) && Date.now() < sweepDeadline) {
+        await new Promise(resolve => setTimeout(resolve, 25));
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
       const { descendantPid } = JSON.parse(fs.readFileSync(process.argv[4], 'utf8'));
       let descendantAlive = false;
       try {
