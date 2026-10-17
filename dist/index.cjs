@@ -35033,7 +35033,7 @@ function createShim(shimPath, targetPath) {
   if (import_fs17.default.existsSync(shimPath)) {
     import_fs17.default.unlinkSync(shimPath);
   }
-  import_fs17.default.symlinkSync(targetPath, shimPath);
+  import_fs17.default.symlinkSync(import_path16.default.relative(import_path16.default.dirname(shimPath), targetPath), shimPath);
 }
 
 // src/commands/update.js
@@ -38665,7 +38665,7 @@ function createShimLink(shimPath, targetPath) {
   if (import_fs21.default.existsSync(shimPath)) {
     import_fs21.default.unlinkSync(shimPath);
   }
-  import_fs21.default.symlinkSync(targetPath, shimPath);
+  import_fs21.default.symlinkSync(import_path20.default.relative(import_path20.default.dirname(shimPath), targetPath), shimPath);
 }
 function writeShimScript(name, script) {
   const shimPath = import_path20.default.join(PATHS.bins, name);

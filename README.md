@@ -54,12 +54,17 @@ export PATH="$HOME/.rudi/bins:$PATH"
 
 ### Shim-Based Architecture
 
-When you opt in (`rudi shims rebuild`), tools installed through RUDI get a wrapper script (shim) in `~/.rudi/bins/`. This provides:
+When you opt in (`rudi shims rebuild`), tools installed through RUDI get a wrapper script or symlink (shim) in `~/.rudi/bins/`. This provides:
 
 - Clean PATH integration without modifying system directories
 - Version isolation per package
 - Ownership tracking for clean uninstalls
 - Consistent invocation across different package sources
+
+Runtime symlinks created by `rudi init --with-shims` and `rudi shims rebuild`
+use relative targets. They keep pointing to the same installed files when the
+RUDI home is accessed through another path, including an SMB mount. This does
+not make command wrappers or runtime execution portable between machines.
 
 When you run `tsc`, the shell finds `~/.rudi/bins/tsc`, which delegates to the actual TypeScript installation at `~/.rudi/binaries/npm/typescript/node_modules/.bin/tsc`.
 
