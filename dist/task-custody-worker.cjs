@@ -22,9 +22,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // src/agent-host/task-custody.js
-var import_node_fs2 = __toESM(require("node:fs"), 1);
-var import_node_path2 = __toESM(require("node:path"), 1);
-var import_node_child_process = require("node:child_process");
+var import_node_fs3 = __toESM(require("node:fs"), 1);
+var import_node_path3 = __toESM(require("node:path"), 1);
+var import_node_child_process2 = require("node:child_process");
 
 // src/agent-host/task-profile.js
 var import_node_fs = __toESM(require("node:fs"), 1);
@@ -88,19 +88,82 @@ function parseTaskJson(source) {
   return value;
 }
 
+// src/agent-host/task-audit.js
+var import_node_fs2 = __toESM(require("node:fs"), 1);
+var import_node_path2 = __toESM(require("node:path"), 1);
+var import_node_os = __toESM(require("node:os"), 1);
+var import_node_url = require("node:url");
+var import_node_child_process = require("node:child_process");
+var import_meta = {};
+function isQualifiedTaskAuditHost() {
+  return process.platform === "darwin" && import_node_os.default.release().startsWith("24.") && process.arch === "x64";
+}
+function auditHelperPath() {
+  if (!isQualifiedTaskAuditHost()) throw new Error("task audit containment requires the qualified Darwin 24 x64 host");
+  const entry = process.argv[1] || "";
+  const helper = entry.endsWith(".cjs") ? import_node_path2.default.join(import_node_path2.default.dirname(entry), "task-audit-darwin") : (0, import_node_url.fileURLToPath)(new URL("../../dist/task-audit-darwin", import_meta.url));
+  const stat = import_node_fs2.default.lstatSync(helper);
+  if (!stat.isFile() || stat.nlink !== 1 || import_node_fs2.default.realpathSync(helper) !== helper) throw new Error("invalid task audit helper");
+  import_node_fs2.default.accessSync(helper, import_node_fs2.default.constants.X_OK);
+  return helper;
+}
+function invoke(args) {
+  return JSON.parse((0, import_node_child_process.execFileSync)(auditHelperPath(), args, {
+    encoding: "utf8",
+    timeout: 5e3,
+    maxBuffer: 16384,
+    env: { PATH: "/usr/bin:/bin" },
+    stdio: ["ignore", "pipe", "pipe"]
+  }));
+}
+function auditIdentity(pid) {
+  return invoke(["identity", String(pid)]);
+}
+function validateAuditIdentity(value) {
+  if (!value || Object.keys(value).sort().join(",") !== "asid,pid,uid,unique,version" || ![value.pid, value.version, value.asid, value.uid].every(Number.isSafeInteger) || value.pid < 2 || value.version < 1 || value.asid < 1e5 || value.uid !== process.getuid() || !/^[1-9][0-9]{0,19}$/u.test(value.unique) || BigInt(value.unique) > 18446744073709551615n) throw new Error("invalid task audit identity");
+  return value;
+}
+async function drainAuditScope(scope, guardian = null) {
+  if (scope?.schema_version !== 1) throw new Error("invalid audit scope");
+  const owner = validateAuditIdentity(scope.owner);
+  if (guardian && validateAuditIdentity(guardian).asid !== owner.asid) throw new Error("guardian audit scope mismatch");
+  const args = [
+    "sweep",
+    owner.asid,
+    owner.unique,
+    owner.pid,
+    owner.version,
+    guardian?.pid || 0,
+    guardian?.version || 0,
+    9
+  ].map(String);
+  const end = Date.now() + 7e3;
+  let quiet = false;
+  let last;
+  while (Date.now() < end) {
+    const result = invoke(args);
+    last = result;
+    const empty = result.members === 0 && result.uncertain === 0;
+    if (empty && quiet) return;
+    quiet = empty;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`audit session drain unconfirmed; custody blocked: ${JSON.stringify(last)}`);
+}
+
 // src/agent-host/task-custody.js
 var delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function processIdentity(pid) {
   if (!Number.isSafeInteger(pid) || pid < 2) throw new Error("invalid custody PID");
   try {
-    const value = (0, import_node_child_process.execFileSync)(
+    const value = (0, import_node_child_process2.execFileSync)(
       "/bin/ps",
       ["-p", String(pid), "-o", "pid=,pgid=,uid=,lstart="],
       { encoding: "utf8", timeout: 2e3, maxBuffer: 4096, env: { PATH: "/usr/bin:/bin", LC_ALL: "C" }, stdio: ["ignore", "pipe", "pipe"] }
     ).trim();
     const match = value.match(/^(\d+)\s+(\d+)\s+(\d+)\s+(.+)$/u);
     if (!match) throw new Error("invalid process identity");
-    const boot = process.platform === "linux" ? import_node_fs2.default.readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim() : (0, import_node_child_process.execFileSync)(
+    const boot = process.platform === "linux" ? import_node_fs3.default.readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim() : (0, import_node_child_process2.execFileSync)(
       "/usr/sbin/sysctl",
       ["-n", "kern.bootsessionuuid"],
       { encoding: "utf8", timeout: 2e3, maxBuffer: 4096, stdio: ["ignore", "pipe", "pipe"] }
@@ -115,17 +178,25 @@ function sameProcess(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 function record(directory, name, value) {
-  const fd = import_node_fs2.default.openSync(import_node_path2.default.join(directory, name), "wx", 384);
+  const fd = import_node_fs3.default.openSync(import_node_path3.default.join(directory, name), "wx", 384);
   try {
-    import_node_fs2.default.writeFileSync(fd, `${JSON.stringify(value)}
+    import_node_fs3.default.writeFileSync(fd, `${JSON.stringify(value)}
 `);
-    import_node_fs2.default.fsyncSync(fd);
+    import_node_fs3.default.fsyncSync(fd);
   } finally {
-    import_node_fs2.default.closeSync(fd);
+    import_node_fs3.default.closeSync(fd);
   }
 }
 function read(directory, name) {
-  return parseTaskJson(readTaskRegularFile(import_node_path2.default.join(directory, name), 16384, true).toString("utf8"));
+  return parseTaskJson(readTaskRegularFile(import_node_path3.default.join(directory, name), 16384, true).toString("utf8"));
+}
+function quarantineTaskCustody(directory, reason) {
+  try {
+    record(directory, "quarantine.json", { reason, at: (/* @__PURE__ */ new Date()).toISOString() });
+  } catch (error) {
+    if (error.code !== "EEXIST") throw error;
+    read(directory, "quarantine.json");
+  }
 }
 function validateIdentity(value) {
   if (!value || !Number.isSafeInteger(value.pid) || value.pid < 2 || !Number.isSafeInteger(value.pgid) || value.uid !== process.getuid() || typeof value.started !== "string" || typeof value.boot !== "string" || Object.keys(value).sort().join(",") !== "boot,pgid,pid,started,uid") throw new Error("invalid custody identity");
@@ -141,6 +212,13 @@ function groupAlive(pgid) {
   }
 }
 async function stopOwnedNative(directory) {
+  if (import_node_fs3.default.existsSync(import_node_path3.default.join(directory, "session.json"))) {
+    const scope = read(directory, "session.json");
+    if (read(directory, "owner.json").process.boot !== processIdentity(process.pid).boot) return;
+    const guardian = import_node_fs3.default.existsSync(import_node_path3.default.join(directory, "guardian-audit.json")) ? read(directory, "guardian-audit.json") : null;
+    await drainAuditScope(scope, guardian);
+    return;
+  }
   const native = validateIdentity(read(directory, "native.json"));
   if (native.pid !== native.pgid) throw new Error("native custody requires its own process group");
   const currentBoot = processIdentity(process.pid).boot;
@@ -162,22 +240,28 @@ async function runTaskWatchdog(directory) {
   const owner = validateIdentity(read(directory, "owner.json").process);
   if (owner.pid !== process.ppid || !sameProcess(processIdentity(owner.pid), owner) || !process.send) throw new Error("watchdog requires its verified parent IPC");
   record(directory, "guardian.json", processIdentity(process.pid));
+  if (import_node_fs3.default.existsSync(import_node_path3.default.join(directory, "session.json"))) record(directory, "guardian-audit.json", validateAuditIdentity(auditIdentity(process.pid)));
   let stopping = false;
   const cleanup = async (normal = false) => {
     if (stopping) return;
     stopping = true;
     try {
-      if (!normal) record(directory, "quarantine.json", { reason: "supervisor lost; descendant containment unqualified", at: (/* @__PURE__ */ new Date()).toISOString() });
+      let quarantineError;
+      if (!normal) try {
+        quarantineTaskCustody(directory, "supervisor lost; task outcome requires reconciliation");
+      } catch (error) {
+        quarantineError = error;
+      }
       await stopOwnedNative(directory);
-      record(directory, "orphan-cleanup.json", { native_group_gone: true, mode: normal ? "normal" : "quarantined", at: (/* @__PURE__ */ new Date()).toISOString() });
-      process.exit(0);
+      record(directory, "orphan-cleanup.json", { native_group_gone: true, audit_session_drained: import_node_fs3.default.existsSync(import_node_path3.default.join(directory, "session.json")), mode: normal && !import_node_fs3.default.existsSync(import_node_path3.default.join(directory, "quarantine.json")) ? "normal" : "quarantined", at: (/* @__PURE__ */ new Date()).toISOString() });
+      process.exit(quarantineError ? 1 : 0);
     } catch {
       process.exit(1);
     }
   };
   process.once("disconnect", () => void cleanup());
   process.once("message", (message) => {
-    if (message === "done") void cleanup(true);
+    if (message === "done" || message === "abort") void cleanup(message === "done");
   });
   process.once("SIGTERM", () => void cleanup());
   process.once("SIGINT", () => void cleanup());

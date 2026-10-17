@@ -671,9 +671,9 @@ function resolveRegistryPackageForPlatform(value, platformArch) {
   if (!pkg.delivery || !pkg.install?.source) {
     return pkg;
   }
-  const os15 = platformArch.slice(0, platformArch.lastIndexOf("-"));
+  const os16 = platformArch.slice(0, platformArch.lastIndexOf("-"));
   const platforms = pkg.install.platforms || {};
-  const platformKey = [platformArch, os15, "default"].find((key) => platforms[key]);
+  const platformKey = [platformArch, os16, "default"].find((key) => platforms[key]);
   const platform = platformKey ? platforms[platformKey] : void 0;
   const install = {
     ...pkg.install,
@@ -688,7 +688,7 @@ function resolveRegistryPackageForPlatform(value, platformArch) {
     _resolved: {
       platform,
       platformKey,
-      keysTried: [platformArch, os15, "default"]
+      keysTried: [platformArch, os16, "default"]
     }
   });
   if (install.source === "download") {
@@ -1264,9 +1264,9 @@ function normalizeCommandPlan(plan) {
   return { command, args };
 }
 function runRegistryCommandPlan(plan, options = {}) {
-  const { execFileSync: execFileSync10 = import_child_process.execFileSync, ...execOptions } = options;
+  const { execFileSync: execFileSync12 = import_child_process.execFileSync, ...execOptions } = options;
   const { command, args } = normalizeCommandPlan(plan);
-  return execFileSync10(command, args, execOptions);
+  return execFileSync12(command, args, execOptions);
 }
 function createRegistryArchiveExtractCommand(archiveType, archivePath, destPath, options = {}) {
   const archive = assertCommandArg(archivePath, "archive path");
@@ -2473,17 +2473,17 @@ var require_visit = __commonJS({
     visit.BREAK = BREAK;
     visit.SKIP = SKIP;
     visit.REMOVE = REMOVE;
-    function visit_(key, node, visitor, path61) {
-      const ctrl = callVisitor(key, node, visitor, path61);
+    function visit_(key, node, visitor, path63) {
+      const ctrl = callVisitor(key, node, visitor, path63);
       if (identity.isNode(ctrl) || identity.isPair(ctrl)) {
-        replaceNode(key, path61, ctrl);
-        return visit_(key, ctrl, visitor, path61);
+        replaceNode(key, path63, ctrl);
+        return visit_(key, ctrl, visitor, path63);
       }
       if (typeof ctrl !== "symbol") {
         if (identity.isCollection(node)) {
-          path61 = Object.freeze(path61.concat(node));
+          path63 = Object.freeze(path63.concat(node));
           for (let i = 0; i < node.items.length; ++i) {
-            const ci = visit_(i, node.items[i], visitor, path61);
+            const ci = visit_(i, node.items[i], visitor, path63);
             if (typeof ci === "number")
               i = ci - 1;
             else if (ci === BREAK)
@@ -2494,13 +2494,13 @@ var require_visit = __commonJS({
             }
           }
         } else if (identity.isPair(node)) {
-          path61 = Object.freeze(path61.concat(node));
-          const ck = visit_("key", node.key, visitor, path61);
+          path63 = Object.freeze(path63.concat(node));
+          const ck = visit_("key", node.key, visitor, path63);
           if (ck === BREAK)
             return BREAK;
           else if (ck === REMOVE)
             node.key = null;
-          const cv = visit_("value", node.value, visitor, path61);
+          const cv = visit_("value", node.value, visitor, path63);
           if (cv === BREAK)
             return BREAK;
           else if (cv === REMOVE)
@@ -2521,17 +2521,17 @@ var require_visit = __commonJS({
     visitAsync.BREAK = BREAK;
     visitAsync.SKIP = SKIP;
     visitAsync.REMOVE = REMOVE;
-    async function visitAsync_(key, node, visitor, path61) {
-      const ctrl = await callVisitor(key, node, visitor, path61);
+    async function visitAsync_(key, node, visitor, path63) {
+      const ctrl = await callVisitor(key, node, visitor, path63);
       if (identity.isNode(ctrl) || identity.isPair(ctrl)) {
-        replaceNode(key, path61, ctrl);
-        return visitAsync_(key, ctrl, visitor, path61);
+        replaceNode(key, path63, ctrl);
+        return visitAsync_(key, ctrl, visitor, path63);
       }
       if (typeof ctrl !== "symbol") {
         if (identity.isCollection(node)) {
-          path61 = Object.freeze(path61.concat(node));
+          path63 = Object.freeze(path63.concat(node));
           for (let i = 0; i < node.items.length; ++i) {
-            const ci = await visitAsync_(i, node.items[i], visitor, path61);
+            const ci = await visitAsync_(i, node.items[i], visitor, path63);
             if (typeof ci === "number")
               i = ci - 1;
             else if (ci === BREAK)
@@ -2542,13 +2542,13 @@ var require_visit = __commonJS({
             }
           }
         } else if (identity.isPair(node)) {
-          path61 = Object.freeze(path61.concat(node));
-          const ck = await visitAsync_("key", node.key, visitor, path61);
+          path63 = Object.freeze(path63.concat(node));
+          const ck = await visitAsync_("key", node.key, visitor, path63);
           if (ck === BREAK)
             return BREAK;
           else if (ck === REMOVE)
             node.key = null;
-          const cv = await visitAsync_("value", node.value, visitor, path61);
+          const cv = await visitAsync_("value", node.value, visitor, path63);
           if (cv === BREAK)
             return BREAK;
           else if (cv === REMOVE)
@@ -2575,23 +2575,23 @@ var require_visit = __commonJS({
       }
       return visitor;
     }
-    function callVisitor(key, node, visitor, path61) {
+    function callVisitor(key, node, visitor, path63) {
       if (typeof visitor === "function")
-        return visitor(key, node, path61);
+        return visitor(key, node, path63);
       if (identity.isMap(node))
-        return visitor.Map?.(key, node, path61);
+        return visitor.Map?.(key, node, path63);
       if (identity.isSeq(node))
-        return visitor.Seq?.(key, node, path61);
+        return visitor.Seq?.(key, node, path63);
       if (identity.isPair(node))
-        return visitor.Pair?.(key, node, path61);
+        return visitor.Pair?.(key, node, path63);
       if (identity.isScalar(node))
-        return visitor.Scalar?.(key, node, path61);
+        return visitor.Scalar?.(key, node, path63);
       if (identity.isAlias(node))
-        return visitor.Alias?.(key, node, path61);
+        return visitor.Alias?.(key, node, path63);
       return void 0;
     }
-    function replaceNode(key, path61, node) {
-      const parent = path61[path61.length - 1];
+    function replaceNode(key, path63, node) {
+      const parent = path63[path63.length - 1];
       if (identity.isCollection(parent)) {
         parent.items[key] = node;
       } else if (identity.isPair(parent)) {
@@ -3201,10 +3201,10 @@ var require_Collection = __commonJS({
     var createNode = require_createNode();
     var identity = require_identity();
     var Node = require_Node();
-    function collectionFromPath(schema, path61, value) {
+    function collectionFromPath(schema, path63, value) {
       let v = value;
-      for (let i = path61.length - 1; i >= 0; --i) {
-        const k = path61[i];
+      for (let i = path63.length - 1; i >= 0; --i) {
+        const k = path63[i];
         if (typeof k === "number" && Number.isInteger(k) && k >= 0) {
           const a = [];
           a[k] = v;
@@ -3223,7 +3223,7 @@ var require_Collection = __commonJS({
         sourceObjects: /* @__PURE__ */ new Map()
       });
     }
-    var isEmptyPath = (path61) => path61 == null || typeof path61 === "object" && !!path61[Symbol.iterator]().next().done;
+    var isEmptyPath = (path63) => path63 == null || typeof path63 === "object" && !!path63[Symbol.iterator]().next().done;
     var Collection = class extends Node.NodeBase {
       constructor(type, schema) {
         super(type);
@@ -3253,11 +3253,11 @@ var require_Collection = __commonJS({
        * be a Pair instance or a `{ key, value }` object, which may not have a key
        * that already exists in the map.
        */
-      addIn(path61, value) {
-        if (isEmptyPath(path61))
+      addIn(path63, value) {
+        if (isEmptyPath(path63))
           this.add(value);
         else {
-          const [key, ...rest] = path61;
+          const [key, ...rest] = path63;
           const node = this.get(key, true);
           if (identity.isCollection(node))
             node.addIn(rest, value);
@@ -3271,8 +3271,8 @@ var require_Collection = __commonJS({
        * Removes a value from the collection.
        * @returns `true` if the item was found and removed.
        */
-      deleteIn(path61) {
-        const [key, ...rest] = path61;
+      deleteIn(path63) {
+        const [key, ...rest] = path63;
         if (rest.length === 0)
           return this.delete(key);
         const node = this.get(key, true);
@@ -3286,8 +3286,8 @@ var require_Collection = __commonJS({
        * scalar values from their surrounding node; to disable set `keepScalar` to
        * `true` (collections are always returned intact).
        */
-      getIn(path61, keepScalar) {
-        const [key, ...rest] = path61;
+      getIn(path63, keepScalar) {
+        const [key, ...rest] = path63;
         const node = this.get(key, true);
         if (rest.length === 0)
           return !keepScalar && identity.isScalar(node) ? node.value : node;
@@ -3305,8 +3305,8 @@ var require_Collection = __commonJS({
       /**
        * Checks if the collection includes a value with the key `key`.
        */
-      hasIn(path61) {
-        const [key, ...rest] = path61;
+      hasIn(path63) {
+        const [key, ...rest] = path63;
         if (rest.length === 0)
           return this.has(key);
         const node = this.get(key, true);
@@ -3316,8 +3316,8 @@ var require_Collection = __commonJS({
        * Sets a value in this collection. For `!!set`, `value` needs to be a
        * boolean to add/remove the item from the set.
        */
-      setIn(path61, value) {
-        const [key, ...rest] = path61;
+      setIn(path63, value) {
+        const [key, ...rest] = path63;
         if (rest.length === 0) {
           this.set(key, value);
         } else {
@@ -5832,9 +5832,9 @@ var require_Document = __commonJS({
           this.contents.add(value);
       }
       /** Adds a value to the document. */
-      addIn(path61, value) {
+      addIn(path63, value) {
         if (assertCollection(this.contents))
-          this.contents.addIn(path61, value);
+          this.contents.addIn(path63, value);
       }
       /**
        * Create a new `Alias` node, ensuring that the target `node` has the required anchor.
@@ -5909,14 +5909,14 @@ var require_Document = __commonJS({
        * Removes a value from the document.
        * @returns `true` if the item was found and removed.
        */
-      deleteIn(path61) {
-        if (Collection.isEmptyPath(path61)) {
+      deleteIn(path63) {
+        if (Collection.isEmptyPath(path63)) {
           if (this.contents == null)
             return false;
           this.contents = null;
           return true;
         }
-        return assertCollection(this.contents) ? this.contents.deleteIn(path61) : false;
+        return assertCollection(this.contents) ? this.contents.deleteIn(path63) : false;
       }
       /**
        * Returns item at `key`, or `undefined` if not found. By default unwraps
@@ -5931,10 +5931,10 @@ var require_Document = __commonJS({
        * scalar values from their surrounding node; to disable set `keepScalar` to
        * `true` (collections are always returned intact).
        */
-      getIn(path61, keepScalar) {
-        if (Collection.isEmptyPath(path61))
+      getIn(path63, keepScalar) {
+        if (Collection.isEmptyPath(path63))
           return !keepScalar && identity.isScalar(this.contents) ? this.contents.value : this.contents;
-        return identity.isCollection(this.contents) ? this.contents.getIn(path61, keepScalar) : void 0;
+        return identity.isCollection(this.contents) ? this.contents.getIn(path63, keepScalar) : void 0;
       }
       /**
        * Checks if the document includes a value with the key `key`.
@@ -5945,10 +5945,10 @@ var require_Document = __commonJS({
       /**
        * Checks if the document includes a value at `path`.
        */
-      hasIn(path61) {
-        if (Collection.isEmptyPath(path61))
+      hasIn(path63) {
+        if (Collection.isEmptyPath(path63))
           return this.contents !== void 0;
-        return identity.isCollection(this.contents) ? this.contents.hasIn(path61) : false;
+        return identity.isCollection(this.contents) ? this.contents.hasIn(path63) : false;
       }
       /**
        * Sets a value in this document. For `!!set`, `value` needs to be a
@@ -5965,13 +5965,13 @@ var require_Document = __commonJS({
        * Sets a value in this document. For `!!set`, `value` needs to be a
        * boolean to add/remove the item from the set.
        */
-      setIn(path61, value) {
-        if (Collection.isEmptyPath(path61)) {
+      setIn(path63, value) {
+        if (Collection.isEmptyPath(path63)) {
           this.contents = value;
         } else if (this.contents == null) {
-          this.contents = Collection.collectionFromPath(this.schema, Array.from(path61), value);
+          this.contents = Collection.collectionFromPath(this.schema, Array.from(path63), value);
         } else if (assertCollection(this.contents)) {
-          this.contents.setIn(path61, value);
+          this.contents.setIn(path63, value);
         }
       }
       /**
@@ -7931,9 +7931,9 @@ var require_cst_visit = __commonJS({
     visit.BREAK = BREAK;
     visit.SKIP = SKIP;
     visit.REMOVE = REMOVE;
-    visit.itemAtPath = (cst, path61) => {
+    visit.itemAtPath = (cst, path63) => {
       let item = cst;
-      for (const [field, index] of path61) {
+      for (const [field, index] of path63) {
         const tok = item?.[field];
         if (tok && "items" in tok) {
           item = tok.items[index];
@@ -7942,23 +7942,23 @@ var require_cst_visit = __commonJS({
       }
       return item;
     };
-    visit.parentCollection = (cst, path61) => {
-      const parent = visit.itemAtPath(cst, path61.slice(0, -1));
-      const field = path61[path61.length - 1][0];
+    visit.parentCollection = (cst, path63) => {
+      const parent = visit.itemAtPath(cst, path63.slice(0, -1));
+      const field = path63[path63.length - 1][0];
       const coll = parent?.[field];
       if (coll && "items" in coll)
         return coll;
       throw new Error("Parent collection not found");
     };
-    function _visit(path61, item, visitor) {
-      let ctrl = visitor(item, path61);
+    function _visit(path63, item, visitor) {
+      let ctrl = visitor(item, path63);
       if (typeof ctrl === "symbol")
         return ctrl;
       for (const field of ["key", "value"]) {
         const token = item[field];
         if (token && "items" in token) {
           for (let i = 0; i < token.items.length; ++i) {
-            const ci = _visit(Object.freeze(path61.concat([[field, i]])), token.items[i], visitor);
+            const ci = _visit(Object.freeze(path63.concat([[field, i]])), token.items[i], visitor);
             if (typeof ci === "number")
               i = ci - 1;
             else if (ci === BREAK)
@@ -7969,10 +7969,10 @@ var require_cst_visit = __commonJS({
             }
           }
           if (typeof ctrl === "function" && field === "key")
-            ctrl = ctrl(item, path61);
+            ctrl = ctrl(item, path63);
         }
       }
-      return typeof ctrl === "function" ? ctrl(item, path61) : ctrl;
+      return typeof ctrl === "function" ? ctrl(item, path63) : ctrl;
     }
     exports2.visit = visit;
   }
@@ -9274,14 +9274,14 @@ var require_parser = __commonJS({
             case "scalar":
             case "single-quoted-scalar":
             case "double-quoted-scalar": {
-              const fs58 = this.flowScalar(this.type);
+              const fs60 = this.flowScalar(this.type);
               if (atNextItem || it.value) {
-                map.items.push({ start, key: fs58, sep: [] });
+                map.items.push({ start, key: fs60, sep: [] });
                 this.onKeyLine = true;
               } else if (it.sep) {
-                this.stack.push(fs58);
+                this.stack.push(fs60);
               } else {
-                Object.assign(it, { key: fs58, sep: [] });
+                Object.assign(it, { key: fs60, sep: [] });
                 this.onKeyLine = true;
               }
               return;
@@ -9409,13 +9409,13 @@ var require_parser = __commonJS({
             case "scalar":
             case "single-quoted-scalar":
             case "double-quoted-scalar": {
-              const fs58 = this.flowScalar(this.type);
+              const fs60 = this.flowScalar(this.type);
               if (!it || it.value)
-                fc.items.push({ start: [], key: fs58, sep: [] });
+                fc.items.push({ start: [], key: fs60, sep: [] });
               else if (it.sep)
-                this.stack.push(fs58);
+                this.stack.push(fs60);
               else
-                Object.assign(it, { key: fs58, sep: [] });
+                Object.assign(it, { key: fs60, sep: [] });
               return;
             }
             case "flow-map-end":
@@ -10909,9 +10909,9 @@ function normalizeCommandPlan2(plan) {
   return { command, args };
 }
 function runCommandPlan(plan, options = {}) {
-  const { execFileSync: execFileSync10 = import_child_process2.execFileSync, ...execOptions } = options;
+  const { execFileSync: execFileSync12 = import_child_process2.execFileSync, ...execOptions } = options;
   const { command, args } = normalizeCommandPlan2(plan);
-  return execFileSync10(command, args, execOptions);
+  return execFileSync12(command, args, execOptions);
 }
 function createArchiveExtractCommand(extractType, archivePath, destPath, options = {}) {
   const archive = assertCommandArg2(archivePath, "archive path");
@@ -12933,9 +12933,9 @@ function acquireLock(timeoutMs = LOCK_TIMEOUT_MS) {
           }
         } catch {
         }
-        const delay2 = Math.min(50, timeoutMs - (Date.now() - startTime));
-        if (delay2 > 0) {
-          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delay2);
+        const delay3 = Math.min(50, timeoutMs - (Date.now() - startTime));
+        if (delay3 > 0) {
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delay3);
         }
       } else {
         throw err;
@@ -17489,8 +17489,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path61) {
-      let input = path61;
+    function removeDotSegments(path63) {
+      let input = path63;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -17899,8 +17899,8 @@ var require_schemes = __commonJS({
       }
       if (wsComponent.resourceName) {
         const queryIndex = wsComponent.resourceName.indexOf("?");
-        const path61 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
-        wsComponent.path = path61 && path61 !== "/" ? path61 : void 0;
+        const path63 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
+        wsComponent.path = path63 && path63 !== "/" ? path63 : void 0;
         wsComponent.query = queryIndex === -1 ? void 0 : wsComponent.resourceName.slice(queryIndex + 1);
         wsComponent.resourceName = void 0;
       }
@@ -21413,12 +21413,12 @@ var require_dist2 = __commonJS({
         throw new Error(`Unknown format "${name}"`);
       return f;
     };
-    function addFormats2(ajv2, list, fs58, exportName) {
+    function addFormats2(ajv2, list, fs60, exportName) {
       var _a;
       var _b;
       (_a = (_b = ajv2.opts.code).formats) !== null && _a !== void 0 ? _a : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
       for (const f of list)
-        ajv2.addFormat(f, fs58[f]);
+        ajv2.addFormat(f, fs60[f]);
     }
     module2.exports = exports2 = formatsPlugin;
     Object.defineProperty(exports2, "__esModule", { value: true });
@@ -22276,9 +22276,9 @@ Total: ${totalCount} package(s) available`);
 }
 
 // src/commands/install.js
-var fs35 = __toESM(require("fs/promises"), 1);
+var fs37 = __toESM(require("fs/promises"), 1);
 var fsSync = __toESM(require("fs"), 1);
-var path37 = __toESM(require("path"), 1);
+var path39 = __toESM(require("path"), 1);
 init_src5();
 init_src4();
 
@@ -22741,15 +22741,15 @@ function createWhichCommand(commandName) {
   return createCommandPlan("which", [commandName]);
 }
 function runCommand(command, args = [], options = {}) {
-  const { execFileSync: execFileSync10 = import_node_child_process.execFileSync, ...execOptions } = options;
+  const { execFileSync: execFileSync12 = import_node_child_process.execFileSync, ...execOptions } = options;
   const plan = createCommandPlan(command, args);
-  return execFileSync10(plan.command, plan.args, execOptions);
+  return execFileSync12(plan.command, plan.args, execOptions);
 }
 function runCommandPlan2(plan, options = {}) {
-  const { execFileSync: execFileSync10 = import_node_child_process.execFileSync, ...execOptions } = options;
+  const { execFileSync: execFileSync12 = import_node_child_process.execFileSync, ...execOptions } = options;
   const normalized = createCommandPlan(plan?.command, plan?.args || []);
   const mergedOptions = plan?.cwd ? { cwd: assertCommandValue(plan.cwd, "cwd"), ...execOptions } : execOptions;
-  return execFileSync10(normalized.command, normalized.args, mergedOptions);
+  return execFileSync12(normalized.command, normalized.args, mergedOptions);
 }
 
 // src/native-skills/lifecycle.js
@@ -23443,7 +23443,7 @@ async function promoteProjection({
   priorReceipt,
   receiptExpectation,
   priorActualDigest,
-  writeReceipt: writeReceipt2 = atomicWriteReceipt
+  writeReceipt = atomicWriteReceipt
 }) {
   const targetRoot = import_node_path5.default.dirname(targetDir);
   const backupDir = import_node_path5.default.join(
@@ -23467,7 +23467,7 @@ async function promoteProjection({
     await fsp.rename(stageDir, targetDir);
     promoted = true;
     await assertReceiptUnchanged(receiptPath, priorReceipt, receiptExpectation);
-    await writeReceipt2(receiptPath, receipt);
+    await writeReceipt(receiptPath, receipt);
   } catch (error) {
     const rollbackErrors = [];
     if (promoted) {
@@ -23893,154 +23893,78 @@ init_src5();
 init_src5();
 
 // src/agent-host/task-run.js
-var import_node_fs16 = __toESM(require("node:fs"), 1);
-var import_node_path18 = __toESM(require("node:path"), 1);
+var import_node_fs18 = __toESM(require("node:fs"), 1);
+var import_node_path20 = __toESM(require("node:path"), 1);
 
-// src/agent-host/launch.js
-var import_node_crypto6 = __toESM(require("node:crypto"), 1);
+// src/agent-host/task-capsule.js
+var import_node_fs8 = __toESM(require("node:fs"), 1);
+var import_node_path9 = __toESM(require("node:path"), 1);
+var import_node_crypto4 = __toESM(require("node:crypto"), 1);
+var import_node_url2 = require("node:url");
+var import_node_child_process3 = require("node:child_process");
 
-// src/agent-host/artifacts.js
+// src/agent-host/task-audit.js
 var import_node_fs5 = __toESM(require("node:fs"), 1);
 var import_node_path6 = __toESM(require("node:path"), 1);
-init_src();
-var LAUNCH_ID_PATTERN = /^launch_[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
-var OWNERSHIP_MARKER = ".rudi-agent-launch.json";
-var EVENTS_FILE = "events.jsonl";
-var STDERR_FILE = "stderr.log";
-var MAX_EVENT_BYTES = 1024 * 1024;
-var MAX_EVENT_PAGE_BYTES = 10 * 1024 * 1024;
-function assertLaunchId(launchId) {
-  if (typeof launchId !== "string" || !LAUNCH_ID_PATTERN.test(launchId)) {
-    throw new Error("Invalid launch ID");
-  }
-  return launchId;
+var import_node_os2 = __toESM(require("node:os"), 1);
+var import_node_url = require("node:url");
+var import_node_child_process2 = require("node:child_process");
+var import_meta = {};
+function isQualifiedTaskAuditHost() {
+  return process.platform === "darwin" && import_node_os2.default.release().startsWith("24.") && process.arch === "x64";
 }
-function getAgentHostPaths({
-  launchId = null,
-  rudiHome = PATHS.home
-} = {}) {
-  const home = import_node_path6.default.resolve(rudiHome);
-  const stateDirectory = import_node_path6.default.join(home, "state");
-  const artifactsRoot = import_node_path6.default.join(home, "artifacts", "agent-launches");
-  const result = {
-    artifactsRoot,
-    stateDatabase: import_node_path6.default.join(stateDirectory, "agent-hosts.db"),
-    stateDirectory
-  };
-  if (launchId != null) {
-    assertLaunchId(launchId);
-    result.launchDirectory = import_node_path6.default.join(artifactsRoot, launchId);
-    result.workspaceDirectory = import_node_path6.default.join(result.launchDirectory, "workspace");
-  }
-  return result;
+function auditHelperPath() {
+  if (!isQualifiedTaskAuditHost()) throw new Error("task audit containment requires the qualified Darwin 24 x64 host");
+  const entry = process.argv[1] || "";
+  const helper = entry.endsWith(".cjs") ? import_node_path6.default.join(import_node_path6.default.dirname(entry), "task-audit-darwin") : (0, import_node_url.fileURLToPath)(new URL("../../dist/task-audit-darwin", import_meta.url));
+  const stat = import_node_fs5.default.lstatSync(helper);
+  if (!stat.isFile() || stat.nlink !== 1 || import_node_fs5.default.realpathSync(helper) !== helper) throw new Error("invalid task audit helper");
+  import_node_fs5.default.accessSync(helper, import_node_fs5.default.constants.X_OK);
+  return helper;
 }
-function getLaunchArtifactFiles(launchDirectory) {
-  const directory = import_node_path6.default.resolve(launchDirectory);
-  return Object.freeze({
-    events: import_node_path6.default.join(directory, EVENTS_FILE),
-    marker: import_node_path6.default.join(directory, OWNERSHIP_MARKER),
-    stderr: import_node_path6.default.join(directory, STDERR_FILE)
-  });
+function invoke(args) {
+  return JSON.parse((0, import_node_child_process2.execFileSync)(auditHelperPath(), args, {
+    encoding: "utf8",
+    timeout: 5e3,
+    maxBuffer: 16384,
+    env: { PATH: "/usr/bin:/bin" },
+    stdio: ["ignore", "pipe", "pipe"]
+  }));
 }
-function createLaunchOwnershipMarker({ launchDirectory, launchId }) {
-  assertLaunchId(launchId);
-  const directory = import_node_path6.default.resolve(launchDirectory);
-  const stat = import_node_fs5.default.statSync(directory);
-  if (!stat.isDirectory()) throw new Error(`Launch artifact path is not a directory: ${directory}`);
-  const { marker } = getLaunchArtifactFiles(directory);
-  const payload = `${JSON.stringify({ launchId, schemaVersion: 1 })}
-`;
-  const handle = import_node_fs5.default.openSync(marker, "wx", 384);
-  try {
-    import_node_fs5.default.writeFileSync(handle, payload, "utf8");
-  } finally {
-    import_node_fs5.default.closeSync(handle);
-  }
-  return marker;
+function auditIdentity(pid) {
+  return invoke(["identity", String(pid)]);
 }
-function assertOwnedLaunchDirectory({ launchDirectory, launchId }) {
-  assertLaunchId(launchId);
-  const directory = import_node_path6.default.resolve(launchDirectory);
-  const { marker } = getLaunchArtifactFiles(directory);
-  let parsed;
-  try {
-    const stat = import_node_fs5.default.lstatSync(marker);
-    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("marker is not a regular file");
-    parsed = JSON.parse(import_node_fs5.default.readFileSync(marker, "utf8"));
-  } catch (error) {
-    throw new Error(`Launch artifact ownership marker is invalid: ${error.message}`);
-  }
-  if (parsed?.schemaVersion !== 1 || parsed?.launchId !== launchId) {
-    throw new Error(`Launch artifact ownership marker does not match ${launchId}`);
-  }
-  return directory;
+function validateAuditIdentity(value) {
+  if (!value || Object.keys(value).sort().join(",") !== "asid,pid,uid,unique,version" || ![value.pid, value.version, value.asid, value.uid].every(Number.isSafeInteger) || value.pid < 2 || value.version < 1 || value.asid < 1e5 || value.uid !== process.getuid() || !/^[1-9][0-9]{0,19}$/u.test(value.unique) || BigInt(value.unique) > 18446744073709551615n) throw new Error("invalid task audit identity");
+  return value;
 }
-function appendLaunchEvent(eventFile, event) {
-  const serialized = `${JSON.stringify(event)}
-`;
-  if (Buffer.byteLength(serialized, "utf8") > MAX_EVENT_BYTES) {
-    throw new Error(`Agent event exceeds ${MAX_EVENT_BYTES} bytes`);
+async function drainAuditScope(scope, guardian = null) {
+  if (scope?.schema_version !== 1) throw new Error("invalid audit scope");
+  const owner = validateAuditIdentity(scope.owner);
+  if (guardian && validateAuditIdentity(guardian).asid !== owner.asid) throw new Error("guardian audit scope mismatch");
+  const args = [
+    "sweep",
+    owner.asid,
+    owner.unique,
+    owner.pid,
+    owner.version,
+    guardian?.pid || 0,
+    guardian?.version || 0,
+    9
+  ].map(String);
+  const end = Date.now() + 7e3;
+  let quiet = false;
+  let last;
+  while (Date.now() < end) {
+    const result = invoke(args);
+    last = result;
+    const empty = result.members === 0 && result.uncertain === 0;
+    if (empty && quiet) return;
+    quiet = empty;
+    await new Promise((resolve4) => setTimeout(resolve4, 25));
   }
-  const file = import_node_path6.default.resolve(eventFile);
-  const handle = import_node_fs5.default.openSync(file, "a", 384);
-  try {
-    import_node_fs5.default.writeFileSync(handle, serialized, "utf8");
-  } finally {
-    import_node_fs5.default.closeSync(handle);
-  }
-  import_node_fs5.default.chmodSync(file, 384);
+  throw new Error(`audit session drain unconfirmed; custody blocked: ${JSON.stringify(last)}`);
 }
-function readLaunchEvents({ eventFile, limitBytes = 1024 * 1024, offset = 0 }) {
-  const file = import_node_path6.default.resolve(eventFile);
-  const validOffset = Number(offset);
-  const validLimit = Number(limitBytes);
-  if (!Number.isSafeInteger(validOffset) || validOffset < 0) {
-    throw new Error("event offset must be a non-negative integer");
-  }
-  if (!Number.isSafeInteger(validLimit) || validLimit < 1 || validLimit > MAX_EVENT_PAGE_BYTES) {
-    throw new Error(`event limitBytes must be between 1 and ${MAX_EVENT_PAGE_BYTES}`);
-  }
-  let stat;
-  try {
-    stat = import_node_fs5.default.statSync(file);
-  } catch (error) {
-    if (error.code === "ENOENT") return { data: "", eof: true, nextOffset: validOffset };
-    throw error;
-  }
-  if (!stat.isFile()) throw new Error(`Agent event path is not a file: ${file}`);
-  if (validOffset > stat.size) throw new Error("event offset exceeds file size");
-  if (validOffset === stat.size) return { data: "", eof: true, nextOffset: validOffset };
-  const remaining = stat.size - validOffset;
-  const bytesToRead = Math.min(remaining, validLimit + MAX_EVENT_BYTES);
-  const buffer = Buffer.allocUnsafe(bytesToRead);
-  const handle = import_node_fs5.default.openSync(file, "r");
-  let bytesRead;
-  try {
-    bytesRead = import_node_fs5.default.readSync(handle, buffer, 0, bytesToRead, validOffset);
-  } finally {
-    import_node_fs5.default.closeSync(handle);
-  }
-  let pageBytes = bytesRead;
-  if (remaining > validLimit) {
-    const beforeLimit = buffer.lastIndexOf(10, Math.min(validLimit - 1, bytesRead - 1));
-    if (beforeLimit >= 0) {
-      pageBytes = beforeLimit + 1;
-    } else {
-      const afterLimit = buffer.indexOf(10, Math.min(validLimit, bytesRead));
-      if (afterLimit < 0) throw new Error(`Agent event exceeds ${MAX_EVENT_BYTES} bytes`);
-      pageBytes = afterLimit + 1;
-    }
-  }
-  const page = buffer.subarray(0, pageBytes);
-  return {
-    data: page.toString("utf8"),
-    eof: validOffset + pageBytes >= stat.size,
-    nextOffset: validOffset + pageBytes
-  };
-}
-
-// src/agent-host/events/stream.js
-var import_node_child_process4 = require("node:child_process");
 
 // src/agent-host/task-profile.js
 var import_node_fs7 = __toESM(require("node:fs"), 1);
@@ -24050,7 +23974,7 @@ var import_node_crypto3 = __toESM(require("node:crypto"), 1);
 // src/agent-host/providers/catalog.js
 var import_node_fs6 = require("node:fs");
 var import_node_path7 = require("node:path");
-var import_node_os2 = require("node:os");
+var import_node_os3 = require("node:os");
 
 // src/agent-host/providers/config/claude.json
 var claude_default = {
@@ -25008,7 +24932,7 @@ function isInside(root, candidate) {
 }
 function isExternalAgentBinaryPath(candidate, options = {}) {
   if (typeof candidate !== "string" || !(0, import_node_path7.isAbsolute)(candidate.trim()) || candidate.length > 4096 || /[\r\n\0]/u.test(candidate)) return false;
-  const home = options.home || (0, import_node_os2.homedir)();
+  const home = options.home || (0, import_node_os3.homedir)();
   const realpathSyncImpl = options.realpathSyncImpl || import_node_fs6.realpathSync;
   const lexicalCandidate = (0, import_node_path7.resolve)(candidate.trim());
   const canonicalCandidate = canonicalPath(lexicalCandidate, realpathSyncImpl);
@@ -25016,7 +24940,7 @@ function isExternalAgentBinaryPath(candidate, options = {}) {
   return !rudiRoots.some((root) => isInside(root, lexicalCandidate) || isInside(root, canonicalCandidate));
 }
 function resolveProviderBinary(config, dependencies = {}) {
-  const home = dependencies.home || (0, import_node_os2.homedir)();
+  const home = dependencies.home || (0, import_node_os3.homedir)();
   const arch = process.arch;
   const accessSyncImpl = dependencies.accessSyncImpl || import_node_fs6.accessSync;
   const existsSyncImpl = dependencies.existsSyncImpl || import_node_fs6.existsSync;
@@ -25284,23 +25208,242 @@ function parseTaskJson(source) {
   return value;
 }
 
-// src/agent-host/task-custody.js
-var import_node_fs8 = __toESM(require("node:fs"), 1);
-var import_node_path9 = __toESM(require("node:path"), 1);
-var import_node_crypto4 = __toESM(require("node:crypto"), 1);
-var import_node_child_process2 = require("node:child_process");
+// src/agent-host/task-capsule.js
+var import_meta2 = {};
 var delay = (ms) => new Promise((resolve4) => setTimeout(resolve4, ms));
+function capsuleWorkerPath() {
+  const entry = process.argv[1] || "";
+  return entry.endsWith(".cjs") ? import_node_path9.default.join(import_node_path9.default.dirname(entry), "task-capsule-worker.cjs") : (0, import_node_url2.fileURLToPath)(new URL("./task-capsule-worker.js", import_meta2.url));
+}
+function capsuleRecord(filename, value) {
+  const fd = import_node_fs8.default.openSync(filename, "wx", 384);
+  try {
+    import_node_fs8.default.writeFileSync(fd, JSON.stringify(value) + "\n");
+    import_node_fs8.default.fsyncSync(fd);
+  } finally {
+    import_node_fs8.default.closeSync(fd);
+  }
+}
+async function runTaskCapsule(reference, request, environment) {
+  auditHelperPath();
+  const creator = auditIdentity(process.pid);
+  const id = import_node_crypto4.default.randomUUID();
+  const label = `com.learnrudi.containment.${id}`;
+  const directory = import_node_path9.default.join(request.outputs.runtime, `capsule-${id}`);
+  import_node_fs8.default.mkdirSync(directory, { mode: 448 });
+  const env = { PATH: "/usr/bin:/bin" };
+  for (const key of [
+    "HOME",
+    "USER",
+    "LOGNAME",
+    "LANG",
+    "LC_ALL",
+    "RUDI_COMPUTE_JOB_ID",
+    "RUDI_COMPUTE_ATTEMPT",
+    "RUDI_COMPUTE_SPEC_HASH",
+    "RUDI_AGENT_TASK_CODEX_PATH",
+    "RUDI_AGENT_TASK_CODEX_SHA256"
+  ]) {
+    if (typeof environment[key] === "string") env[key] = environment[key];
+  }
+  capsuleRecord(import_node_path9.default.join(directory, "input.json"), { reference, creator, label, environment: env });
+  const target = `gui/${process.getuid()}/${label}`;
+  capsuleRecord(import_node_path9.default.join(directory, "job.json"), {
+    Label: label,
+    SessionCreate: true,
+    RunAtLoad: true,
+    KeepAlive: false,
+    AbandonProcessGroup: false,
+    ExitTimeOut: 10,
+    ProgramArguments: [process.execPath, capsuleWorkerPath(), directory],
+    EnvironmentVariables: env,
+    StandardOutPath: import_node_path9.default.join(directory, "stdout"),
+    StandardErrorPath: import_node_path9.default.join(directory, "stderr")
+  });
+  (0, import_node_child_process3.execFileSync)("/usr/bin/plutil", ["-convert", "xml1", "-o", import_node_path9.default.join(directory, "job.plist"), import_node_path9.default.join(directory, "job.json")], { stdio: "pipe" });
+  let complete = false;
+  try {
+    (0, import_node_child_process3.execFileSync)("/bin/launchctl", ["bootstrap", `gui/${process.getuid()}`, import_node_path9.default.join(directory, "job.plist")], { stdio: "pipe", timeout: 5e3 });
+    const end = Date.now() + (request.timeout_seconds + 15) * 1e3;
+    while (Date.now() < end) {
+      if (import_node_fs8.default.existsSync(import_node_path9.default.join(directory, "result.json"))) {
+        const result = parseTaskJson(readTaskRegularFile(import_node_path9.default.join(directory, "result.json"), 32768, true).toString("utf8"));
+        complete = true;
+        if (result.error) throw new Error(result.error);
+        return result.value;
+      }
+      await delay(100);
+    }
+    (0, import_node_child_process3.spawnSync)("/bin/launchctl", ["kill", "SIGTERM", target], { timeout: 5e3, stdio: "pipe" });
+    throw new Error(`task capsule timed out; retain custody evidence at ${directory}`);
+  } finally {
+    if (complete) (0, import_node_child_process3.spawnSync)("/bin/launchctl", ["bootout", target], { timeout: 15e3, stdio: "pipe" });
+  }
+}
+
+// src/agent-host/launch.js
+var import_node_crypto7 = __toESM(require("node:crypto"), 1);
+
+// src/agent-host/artifacts.js
+var import_node_fs9 = __toESM(require("node:fs"), 1);
+var import_node_path10 = __toESM(require("node:path"), 1);
+init_src();
+var LAUNCH_ID_PATTERN = /^launch_[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+var OWNERSHIP_MARKER = ".rudi-agent-launch.json";
+var EVENTS_FILE = "events.jsonl";
+var STDERR_FILE = "stderr.log";
+var MAX_EVENT_BYTES = 1024 * 1024;
+var MAX_EVENT_PAGE_BYTES = 10 * 1024 * 1024;
+function assertLaunchId(launchId) {
+  if (typeof launchId !== "string" || !LAUNCH_ID_PATTERN.test(launchId)) {
+    throw new Error("Invalid launch ID");
+  }
+  return launchId;
+}
+function getAgentHostPaths({
+  launchId = null,
+  rudiHome = PATHS.home
+} = {}) {
+  const home = import_node_path10.default.resolve(rudiHome);
+  const stateDirectory = import_node_path10.default.join(home, "state");
+  const artifactsRoot = import_node_path10.default.join(home, "artifacts", "agent-launches");
+  const result = {
+    artifactsRoot,
+    stateDatabase: import_node_path10.default.join(stateDirectory, "agent-hosts.db"),
+    stateDirectory
+  };
+  if (launchId != null) {
+    assertLaunchId(launchId);
+    result.launchDirectory = import_node_path10.default.join(artifactsRoot, launchId);
+    result.workspaceDirectory = import_node_path10.default.join(result.launchDirectory, "workspace");
+  }
+  return result;
+}
+function getLaunchArtifactFiles(launchDirectory) {
+  const directory = import_node_path10.default.resolve(launchDirectory);
+  return Object.freeze({
+    events: import_node_path10.default.join(directory, EVENTS_FILE),
+    marker: import_node_path10.default.join(directory, OWNERSHIP_MARKER),
+    stderr: import_node_path10.default.join(directory, STDERR_FILE)
+  });
+}
+function createLaunchOwnershipMarker({ launchDirectory, launchId }) {
+  assertLaunchId(launchId);
+  const directory = import_node_path10.default.resolve(launchDirectory);
+  const stat = import_node_fs9.default.statSync(directory);
+  if (!stat.isDirectory()) throw new Error(`Launch artifact path is not a directory: ${directory}`);
+  const { marker } = getLaunchArtifactFiles(directory);
+  const payload = `${JSON.stringify({ launchId, schemaVersion: 1 })}
+`;
+  const handle = import_node_fs9.default.openSync(marker, "wx", 384);
+  try {
+    import_node_fs9.default.writeFileSync(handle, payload, "utf8");
+  } finally {
+    import_node_fs9.default.closeSync(handle);
+  }
+  return marker;
+}
+function assertOwnedLaunchDirectory({ launchDirectory, launchId }) {
+  assertLaunchId(launchId);
+  const directory = import_node_path10.default.resolve(launchDirectory);
+  const { marker } = getLaunchArtifactFiles(directory);
+  let parsed;
+  try {
+    const stat = import_node_fs9.default.lstatSync(marker);
+    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("marker is not a regular file");
+    parsed = JSON.parse(import_node_fs9.default.readFileSync(marker, "utf8"));
+  } catch (error) {
+    throw new Error(`Launch artifact ownership marker is invalid: ${error.message}`);
+  }
+  if (parsed?.schemaVersion !== 1 || parsed?.launchId !== launchId) {
+    throw new Error(`Launch artifact ownership marker does not match ${launchId}`);
+  }
+  return directory;
+}
+function appendLaunchEvent(eventFile, event) {
+  const serialized = `${JSON.stringify(event)}
+`;
+  if (Buffer.byteLength(serialized, "utf8") > MAX_EVENT_BYTES) {
+    throw new Error(`Agent event exceeds ${MAX_EVENT_BYTES} bytes`);
+  }
+  const file = import_node_path10.default.resolve(eventFile);
+  const handle = import_node_fs9.default.openSync(file, "a", 384);
+  try {
+    import_node_fs9.default.writeFileSync(handle, serialized, "utf8");
+  } finally {
+    import_node_fs9.default.closeSync(handle);
+  }
+  import_node_fs9.default.chmodSync(file, 384);
+}
+function readLaunchEvents({ eventFile, limitBytes = 1024 * 1024, offset = 0 }) {
+  const file = import_node_path10.default.resolve(eventFile);
+  const validOffset = Number(offset);
+  const validLimit = Number(limitBytes);
+  if (!Number.isSafeInteger(validOffset) || validOffset < 0) {
+    throw new Error("event offset must be a non-negative integer");
+  }
+  if (!Number.isSafeInteger(validLimit) || validLimit < 1 || validLimit > MAX_EVENT_PAGE_BYTES) {
+    throw new Error(`event limitBytes must be between 1 and ${MAX_EVENT_PAGE_BYTES}`);
+  }
+  let stat;
+  try {
+    stat = import_node_fs9.default.statSync(file);
+  } catch (error) {
+    if (error.code === "ENOENT") return { data: "", eof: true, nextOffset: validOffset };
+    throw error;
+  }
+  if (!stat.isFile()) throw new Error(`Agent event path is not a file: ${file}`);
+  if (validOffset > stat.size) throw new Error("event offset exceeds file size");
+  if (validOffset === stat.size) return { data: "", eof: true, nextOffset: validOffset };
+  const remaining = stat.size - validOffset;
+  const bytesToRead = Math.min(remaining, validLimit + MAX_EVENT_BYTES);
+  const buffer = Buffer.allocUnsafe(bytesToRead);
+  const handle = import_node_fs9.default.openSync(file, "r");
+  let bytesRead;
+  try {
+    bytesRead = import_node_fs9.default.readSync(handle, buffer, 0, bytesToRead, validOffset);
+  } finally {
+    import_node_fs9.default.closeSync(handle);
+  }
+  let pageBytes = bytesRead;
+  if (remaining > validLimit) {
+    const beforeLimit = buffer.lastIndexOf(10, Math.min(validLimit - 1, bytesRead - 1));
+    if (beforeLimit >= 0) {
+      pageBytes = beforeLimit + 1;
+    } else {
+      const afterLimit = buffer.indexOf(10, Math.min(validLimit, bytesRead));
+      if (afterLimit < 0) throw new Error(`Agent event exceeds ${MAX_EVENT_BYTES} bytes`);
+      pageBytes = afterLimit + 1;
+    }
+  }
+  const page = buffer.subarray(0, pageBytes);
+  return {
+    data: page.toString("utf8"),
+    eof: validOffset + pageBytes >= stat.size,
+    nextOffset: validOffset + pageBytes
+  };
+}
+
+// src/agent-host/events/stream.js
+var import_node_child_process6 = require("node:child_process");
+
+// src/agent-host/task-custody.js
+var import_node_fs10 = __toESM(require("node:fs"), 1);
+var import_node_path11 = __toESM(require("node:path"), 1);
+var import_node_crypto5 = __toESM(require("node:crypto"), 1);
+var import_node_child_process4 = require("node:child_process");
+var delay2 = (ms) => new Promise((resolve4) => setTimeout(resolve4, ms));
 function processIdentity(pid) {
   if (!Number.isSafeInteger(pid) || pid < 2) throw new Error("invalid custody PID");
   try {
-    const value = (0, import_node_child_process2.execFileSync)(
+    const value = (0, import_node_child_process4.execFileSync)(
       "/bin/ps",
       ["-p", String(pid), "-o", "pid=,pgid=,uid=,lstart="],
       { encoding: "utf8", timeout: 2e3, maxBuffer: 4096, env: { PATH: "/usr/bin:/bin", LC_ALL: "C" }, stdio: ["ignore", "pipe", "pipe"] }
     ).trim();
     const match = value.match(/^(\d+)\s+(\d+)\s+(\d+)\s+(.+)$/u);
     if (!match) throw new Error("invalid process identity");
-    const boot = process.platform === "linux" ? import_node_fs8.default.readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim() : (0, import_node_child_process2.execFileSync)(
+    const boot = process.platform === "linux" ? import_node_fs10.default.readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim() : (0, import_node_child_process4.execFileSync)(
       "/usr/sbin/sysctl",
       ["-n", "kern.bootsessionuuid"],
       { encoding: "utf8", timeout: 2e3, maxBuffer: 4096, stdio: ["ignore", "pipe", "pipe"] }
@@ -25315,17 +25458,25 @@ function sameProcess(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 function record(directory, name, value) {
-  const fd = import_node_fs8.default.openSync(import_node_path9.default.join(directory, name), "wx", 384);
+  const fd = import_node_fs10.default.openSync(import_node_path11.default.join(directory, name), "wx", 384);
   try {
-    import_node_fs8.default.writeFileSync(fd, `${JSON.stringify(value)}
+    import_node_fs10.default.writeFileSync(fd, `${JSON.stringify(value)}
 `);
-    import_node_fs8.default.fsyncSync(fd);
+    import_node_fs10.default.fsyncSync(fd);
   } finally {
-    import_node_fs8.default.closeSync(fd);
+    import_node_fs10.default.closeSync(fd);
   }
 }
 function read(directory, name) {
-  return parseTaskJson(readTaskRegularFile(import_node_path9.default.join(directory, name), 16384, true).toString("utf8"));
+  return parseTaskJson(readTaskRegularFile(import_node_path11.default.join(directory, name), 16384, true).toString("utf8"));
+}
+function quarantineTaskCustody(directory, reason) {
+  try {
+    record(directory, "quarantine.json", { reason, at: (/* @__PURE__ */ new Date()).toISOString() });
+  } catch (error) {
+    if (error.code !== "EEXIST") throw error;
+    read(directory, "quarantine.json");
+  }
 }
 function validateIdentity(value) {
   if (!value || !Number.isSafeInteger(value.pid) || value.pid < 2 || !Number.isSafeInteger(value.pgid) || value.uid !== process.getuid() || typeof value.started !== "string" || typeof value.boot !== "string" || Object.keys(value).sort().join(",") !== "boot,pgid,pid,started,uid") throw new Error("invalid custody identity");
@@ -25341,6 +25492,13 @@ function groupAlive(pgid) {
   }
 }
 async function stopOwnedNative(directory) {
+  if (import_node_fs10.default.existsSync(import_node_path11.default.join(directory, "session.json"))) {
+    const scope = read(directory, "session.json");
+    if (read(directory, "owner.json").process.boot !== processIdentity(process.pid).boot) return;
+    const guardian = import_node_fs10.default.existsSync(import_node_path11.default.join(directory, "guardian-audit.json")) ? read(directory, "guardian-audit.json") : null;
+    await drainAuditScope(scope, guardian);
+    return;
+  }
   const native = validateIdentity(read(directory, "native.json"));
   if (native.pid !== native.pgid) throw new Error("native custody requires its own process group");
   const currentBoot = processIdentity(process.pid).boot;
@@ -25352,111 +25510,36 @@ async function stopOwnedNative(directory) {
     const end = Date.now() + budget;
     while (Date.now() < end) {
       if (!groupAlive(native.pgid)) return;
-      await delay(50);
+      await delay2(50);
     }
   }
   throw new Error("native process group did not exit; custody blocked");
 }
 async function recoverTaskCustody(runtime) {
   canonicalDirectory(runtime, "task runtime");
-  const directory = import_node_path9.default.join(runtime, "custody.lock");
-  if (!import_node_fs8.default.existsSync(directory)) return { status: "clear" };
+  const directory = import_node_path11.default.join(runtime, "custody.lock");
+  if (!import_node_fs10.default.existsSync(directory)) return { status: "clear" };
   canonicalDirectory(directory, "custody directory");
-  const gate = import_node_path9.default.join(runtime, "custody-recovery.lock");
-  import_node_fs8.default.mkdirSync(gate, { mode: 448 });
+  const gate = import_node_path11.default.join(runtime, "custody-recovery.lock");
+  import_node_fs10.default.mkdirSync(gate, { mode: 448 });
   try {
     const owner = read(directory, "owner.json");
     validateIdentity(owner.process);
     if (sameProcess(processIdentity(owner.process.pid), owner.process)) throw new Error("active task custody");
-    if (!import_node_fs8.default.existsSync(import_node_path9.default.join(directory, "quarantine.json"))) record(directory, "quarantine.json", {
-      reason: "owner lost; descendant containment unqualified",
-      at: (/* @__PURE__ */ new Date()).toISOString()
-    });
-    if (!import_node_fs8.default.existsSync(import_node_path9.default.join(directory, "native.json"))) throw new Error("unrecorded native spawn; custody requires operator reconciliation");
-    if (import_node_fs8.default.existsSync(import_node_path9.default.join(directory, "guardian.json"))) {
+    quarantineTaskCustody(directory, "owner lost; task outcome requires reconciliation");
+    if (import_node_fs10.default.existsSync(import_node_path11.default.join(directory, "guardian.json"))) {
       const guardian = validateIdentity(read(directory, "guardian.json"));
       const end = Date.now() + 8e3;
-      while (sameProcess(processIdentity(guardian.pid), guardian) && Date.now() < end) await delay(100);
+      while (sameProcess(processIdentity(guardian.pid), guardian) && Date.now() < end) await delay2(100);
       if (sameProcess(processIdentity(guardian.pid), guardian)) throw new Error("active guardian custody");
     }
-    await stopOwnedNative(directory);
-    record(directory, `recovery-${import_node_crypto4.default.randomUUID()}.json`, { native_group_gone: true, at: (/* @__PURE__ */ new Date()).toISOString() });
+    const cleaned = import_node_fs10.default.existsSync(import_node_path11.default.join(directory, "orphan-cleanup.json")) && read(directory, "orphan-cleanup.json").audit_session_drained === true;
+    if (!cleaned) await stopOwnedNative(directory);
+    record(directory, `recovery-${import_node_crypto5.default.randomUUID()}.json`, { native_group_gone: true, at: (/* @__PURE__ */ new Date()).toISOString() });
     return { status: "quarantined", evidence: directory };
   } finally {
-    import_node_fs8.default.rmdirSync(gate);
+    import_node_fs10.default.rmdirSync(gate);
   }
-}
-async function openTaskCustody({ runtime, runDirectory, jobId, workerPath }) {
-  canonicalDirectory(runtime, "task runtime");
-  canonicalDirectory(runDirectory, "task attempt");
-  if (!/^job_[A-Za-z0-9_-]{4,123}$/u.test(jobId)) throw new Error("invalid custody job");
-  const recovered = await recoverTaskCustody(runtime);
-  if (recovered.status !== "clear") throw new Error("task custody quarantined; containment reconciliation required");
-  const directory = import_node_path9.default.join(runtime, "custody.lock");
-  import_node_fs8.default.mkdirSync(directory, { mode: 448 });
-  record(directory, "owner.json", { process: processIdentity(process.pid), job_id: jobId, attempt: runDirectory });
-  let guardian = null;
-  let guardianExit = null;
-  let closed = false;
-  let closing = false;
-  let guardianLost = false;
-  return {
-    async track(pid) {
-      const native = processIdentity(pid);
-      if (!native || native.pid !== native.pgid) throw new Error("native process lacks isolated group");
-      record(directory, "native.json", native);
-      const entry = process.argv[1] || "";
-      const worker = workerPath || import_node_path9.default.join(import_node_path9.default.dirname(entry), entry.endsWith(".cjs") ? "task-custody-worker.cjs" : "agent-host/task-custody-worker.js");
-      guardian = (0, import_node_child_process2.spawn)(process.execPath, [worker, directory], { detached: true, stdio: ["ignore", "ignore", "ignore", "ipc"], env: { PATH: "/usr/bin:/bin" } });
-      guardianExit = new Promise((resolve4) => guardian.once("exit", (code) => {
-        if (!closing || code !== 0) {
-          guardianLost = true;
-          void stopOwnedNative(directory).catch(() => {
-          });
-        }
-        resolve4(code);
-      }));
-      await new Promise((resolve4, reject) => {
-        const timer = setTimeout(() => reject(new Error("custody watchdog startup timed out")), 5e3);
-        guardian.once("error", (error) => {
-          clearTimeout(timer);
-          reject(error);
-        });
-        guardian.once("exit", () => {
-          clearTimeout(timer);
-          reject(new Error("custody watchdog exited"));
-        });
-        guardian.once("message", (message) => {
-          clearTimeout(timer);
-          if (message === "ready") resolve4();
-          else reject(new Error("invalid watchdog response"));
-        });
-      });
-    },
-    async close() {
-      if (closed) return;
-      if (import_node_fs8.default.existsSync(import_node_path9.default.join(directory, "quarantine.json"))) throw new Error("task custody quarantined");
-      closing = true;
-      if (import_node_fs8.default.existsSync(import_node_path9.default.join(directory, "native.json"))) await stopOwnedNative(directory);
-      if (guardian?.connected) guardian.send("done");
-      if (guardianExit) {
-        let timer;
-        try {
-          await Promise.race([guardianExit, new Promise((_, reject) => {
-            timer = setTimeout(() => reject(new Error("watchdog shutdown unconfirmed")), 9e3);
-          })]);
-        } finally {
-          clearTimeout(timer);
-        }
-      }
-      if (guardianLost) throw new Error("watchdog custody lost");
-      if (import_node_fs8.default.existsSync(import_node_path9.default.join(directory, "quarantine.json"))) throw new Error("task custody quarantined");
-      if (guardian && read(directory, "orphan-cleanup.json").mode !== "normal") throw new Error("watchdog normal completion unconfirmed");
-      record(directory, "closed.json", { at: (/* @__PURE__ */ new Date()).toISOString(), native_group_gone: true });
-      import_node_fs8.default.renameSync(directory, import_node_path9.default.join(runDirectory, "custody"));
-      closed = true;
-    }
-  };
 }
 
 // src/agent-host/events/providers/claude.js
@@ -26177,9 +26260,9 @@ function renderAgentEvent(event) {
 }
 
 // src/agent-host/private-automation-profile.js
-var import_node_fs9 = __toESM(require("node:fs"), 1);
-var import_node_path10 = __toESM(require("node:path"), 1);
-var import_node_child_process3 = require("node:child_process");
+var import_node_fs11 = __toESM(require("node:fs"), 1);
+var import_node_path12 = __toESM(require("node:path"), 1);
+var import_node_child_process5 = require("node:child_process");
 var import_ajv = __toESM(require_ajv(), 1);
 var PRIVATE_AUTOMATION_PROFILE_ID = "private-automation-v1";
 var PRIVATE_AUTOMATION_MAX_PROMPT_BYTES = 2e5;
@@ -26264,10 +26347,10 @@ function containsSchemaReference(value) {
   return Object.values(value).some(containsSchemaReference);
 }
 function readOutputSchema(outputSchemaPath) {
-  const requested = import_node_path10.default.resolve(requiredText(outputSchemaPath, "output schema path"));
+  const requested = import_node_path12.default.resolve(requiredText(outputSchemaPath, "output schema path"));
   let stat;
   try {
-    stat = import_node_fs9.default.lstatSync(requested);
+    stat = import_node_fs11.default.lstatSync(requested);
   } catch {
     throw new Error(`private automation output schema does not exist: ${requested}`);
   }
@@ -26279,7 +26362,7 @@ function readOutputSchema(outputSchemaPath) {
   }
   let schema;
   try {
-    schema = JSON.parse(import_node_fs9.default.readFileSync(requested, "utf8"));
+    schema = JSON.parse(import_node_fs11.default.readFileSync(requested, "utf8"));
   } catch {
     throw new Error("private automation output schema must contain valid JSON");
   }
@@ -26306,7 +26389,7 @@ function readOutputSchema(outputSchemaPath) {
   }
   return Object.freeze({
     canonical: JSON.stringify(schema),
-    path: import_node_fs9.default.realpathSync(requested),
+    path: import_node_fs11.default.realpathSync(requested),
     schema: Object.freeze(schema),
     validate
   });
@@ -26469,7 +26552,7 @@ function semverAtLeast(actual, minimum) {
   return true;
 }
 function assertPrivateAutomationHostCapabilities({ binaryPath, profile }, dependencies = {}) {
-  const spawnSyncImpl = dependencies.spawnSyncImpl || import_node_child_process3.spawnSync;
+  const spawnSyncImpl = dependencies.spawnSyncImpl || import_node_child_process5.spawnSync;
   if (!profile || profile.id !== PRIVATE_AUTOMATION_PROFILE_ID) {
     throw new Error("private automation profile is required for capability preflight");
   }
@@ -26502,7 +26585,7 @@ function assertPrivateAutomationHostCapabilities({ binaryPath, profile }, depend
       "--color",
       "never",
       "-C",
-      import_node_path10.default.dirname(profile.outputSchema.path),
+      import_node_path12.default.dirname(profile.outputSchema.path),
       "-m",
       profile.model,
       "--output-schema",
@@ -26614,7 +26697,8 @@ function executeForegroundLaunch({
   launchId,
   onSpawn = null,
   plan,
-  spawnImpl = import_node_child_process4.spawn,
+  spawnImpl = import_node_child_process6.spawn,
+  taskStop = null,
   stderr = process.stderr,
   stdout = process.stdout,
   store,
@@ -26648,6 +26732,12 @@ function executeForegroundLaunch({
     let privateRawOutputBytes = 0;
     let privateUsage = null;
     function terminateProvider(signal) {
+      if (taskExecution && taskStop) {
+        void taskStop().catch(() => {
+          taskFailure = "task audit cleanup unresolved";
+        });
+        return true;
+      }
       if (taskExecution) {
         try {
           if (!taskIdentity || JSON.stringify(processIdentity(child.pid)) !== JSON.stringify(taskIdentity)) {
@@ -26996,6 +27086,7 @@ function executeForegroundLaunch({
       for (const line of lines) consumeLine(line);
     });
     child.stderr.on("data", (chunk) => {
+      if (taskExecution) stderrTail = boundedAppend(stderrTail, chunk.toString());
       if (supervised) return;
       const text = chunk.toString();
       stderrTail = boundedAppend(stderrTail, text);
@@ -27012,8 +27103,9 @@ function executeForegroundLaunch({
         privateAutomation ? "Private automation failed: private_spawn_error" : `Provider process error: ${error.message}`
       );
     });
+    if (taskExecution && taskStop) child.once("exit", () => terminateProvider("SIGKILL"));
     child.once("close", (exitCode, signal) => {
-      if (privateProviderGroupAlive()) {
+      if (!(taskExecution && taskStop) && privateProviderGroupAlive()) {
         terminateProvider("SIGKILL");
         if (taskExecution) taskFailure = "task process group remained alive";
         privateFailure = "private_termination_unconfirmed";
@@ -27041,9 +27133,29 @@ function executeForegroundLaunch({
 }
 
 // src/agent-host/launch-store.js
-var import_node_fs10 = __toESM(require("node:fs"), 1);
-var import_node_path11 = __toESM(require("node:path"), 1);
+var import_node_fs12 = __toESM(require("node:fs"), 1);
+var import_node_path13 = __toESM(require("node:path"), 1);
 var import_better_sqlite3 = __toESM(require("better-sqlite3"), 1);
+
+// src/runtime/node-policy.js
+var SUPPORTED_NODE_DESCRIPTION = "Node 22 LTS or Node 24.22+ LTS";
+function isSupportedNodeVersion(version) {
+  const parsed = typeof version === "string" && /^v?(\d+)\.(\d+)\.\d+$/.exec(version);
+  if (!parsed) return false;
+  const major = Number(parsed[1]);
+  const minor = Number(parsed[2]);
+  return major === 22 || major === 24 && minor >= 22;
+}
+function assertSupportedNodeVersion(version = process.version) {
+  if (isSupportedNodeVersion(version)) return;
+  const error = new Error(
+    `Unsupported Node.js ${version}; use ${SUPPORTED_NODE_DESCRIPTION}. Earlier Node 24 runtimes can abort during native SQLite cleanup.`
+  );
+  error.code = "RUDI_UNSUPPORTED_NODE";
+  throw error;
+}
+
+// src/agent-host/launch-store.js
 var LAUNCH_STATUSES = Object.freeze([
   "starting",
   "running",
@@ -27225,10 +27337,11 @@ function createLaunchStore({
   databasePath = getAgentHostPaths().stateDatabase,
   now = () => (/* @__PURE__ */ new Date()).toISOString()
 } = {}) {
-  const resolvedPath = import_node_path11.default.resolve(databasePath);
-  import_node_fs10.default.mkdirSync(import_node_path11.default.dirname(resolvedPath), { recursive: true, mode: 448 });
+  assertSupportedNodeVersion();
+  const resolvedPath = import_node_path13.default.resolve(databasePath);
+  import_node_fs12.default.mkdirSync(import_node_path13.default.dirname(resolvedPath), { recursive: true, mode: 448 });
   const database = new import_better_sqlite3.default(resolvedPath);
-  import_node_fs10.default.chmodSync(resolvedPath, 384);
+  import_node_fs12.default.chmodSync(resolvedPath, 384);
   initialize(database);
   const getStatement = database.prepare("SELECT * FROM agent_launches WHERE launch_id = ?");
   function get(launchId) {
@@ -27483,13 +27596,13 @@ function createLaunchStore({
 }
 
 // src/agent-host/preflight.js
-var import_node_path15 = __toESM(require("node:path"), 1);
-var import_node_child_process6 = require("node:child_process");
+var import_node_path17 = __toESM(require("node:path"), 1);
+var import_node_child_process8 = require("node:child_process");
 
 // src/agent-host/providers/common.js
-var import_node_fs11 = __toESM(require("node:fs"), 1);
-var import_node_os3 = __toESM(require("node:os"), 1);
-var import_node_path12 = __toESM(require("node:path"), 1);
+var import_node_fs13 = __toESM(require("node:fs"), 1);
+var import_node_os4 = __toESM(require("node:os"), 1);
+var import_node_path14 = __toESM(require("node:path"), 1);
 var MAX_PROMPT_BYTES = 10 * 1024 * 1024;
 var PERMISSION_ALIASES = Object.freeze({
   "accept-edits": "acceptEdits",
@@ -27599,28 +27712,28 @@ function validateImages(images) {
   return images.map((image, index) => requiredText2(image, `images[${index}]`, 4096));
 }
 function canonicalPath2(candidate) {
-  const absolute = import_node_path12.default.resolve(candidate);
+  const absolute = import_node_path14.default.resolve(candidate);
   try {
-    return import_node_fs11.default.realpathSync(absolute);
+    return import_node_fs13.default.realpathSync(absolute);
   } catch {
     return absolute;
   }
 }
 function isInsidePath(root, candidate) {
-  const child = import_node_path12.default.relative(root, candidate);
-  return child === "" || child !== ".." && !child.startsWith(`..${import_node_path12.default.sep}`) && !import_node_path12.default.isAbsolute(child);
+  const child = import_node_path14.default.relative(root, candidate);
+  return child === "" || child !== ".." && !child.startsWith(`..${import_node_path14.default.sep}`) && !import_node_path14.default.isAbsolute(child);
 }
 function rudiOwnedPathRoots(environment) {
-  const home = environment.HOME || import_node_os3.default.homedir();
+  const home = environment.HOME || import_node_os4.default.homedir();
   return [
-    import_node_path12.default.join(home, ".rudi"),
+    import_node_path14.default.join(home, ".rudi"),
     environment.RUDI_HOME,
     process.env.RUDI_HOME
-  ].filter((root) => typeof root === "string" && import_node_path12.default.isAbsolute(root)).flatMap((root) => [import_node_path12.default.resolve(root), canonicalPath2(root)]);
+  ].filter((root) => typeof root === "string" && import_node_path14.default.isAbsolute(root)).flatMap((root) => [import_node_path14.default.resolve(root), canonicalPath2(root)]);
 }
 function isRudiOwnedPathEntry(entry, roots2) {
   if (typeof entry !== "string" || entry.length === 0) return false;
-  const lexicalEntry = import_node_path12.default.resolve(entry);
+  const lexicalEntry = import_node_path14.default.resolve(entry);
   const canonicalEntry = canonicalPath2(entry);
   return roots2.some((root) => isInsidePath(root, lexicalEntry) || isInsidePath(root, canonicalEntry));
 }
@@ -27628,10 +27741,10 @@ function buildAgentExecutableEnvironment(binaryPath, overrides = {}, baseEnviron
   const merged = { ...baseEnvironment, ...overrides };
   const rudiRoots = rudiOwnedPathRoots(merged);
   const entries = [
-    import_node_path12.default.dirname(binaryPath),
-    ...String(merged.PATH || "").split(import_node_path12.default.delimiter)
-  ].filter((entry) => entry && import_node_path12.default.isAbsolute(entry) && !isRudiOwnedPathEntry(entry, rudiRoots));
-  merged.PATH = [...new Set(entries)].join(import_node_path12.default.delimiter);
+    import_node_path14.default.dirname(binaryPath),
+    ...String(merged.PATH || "").split(import_node_path14.default.delimiter)
+  ].filter((entry) => entry && import_node_path14.default.isAbsolute(entry) && !isRudiOwnedPathEntry(entry, rudiRoots));
+  merged.PATH = [...new Set(entries)].join(import_node_path14.default.delimiter);
   return merged;
 }
 var PRIVATE_OPERATIONAL_ENVIRONMENT_KEYS = Object.freeze([
@@ -27659,10 +27772,10 @@ function buildPrivateProviderEnvironment(config, binaryPath, options = {}) {
 }
 function buildProviderEnvironment(config, options = {}) {
   const baseEnvironment = options.baseEnvironment || process.env;
-  const rudiHome = options.rudiHome || process.env.RUDI_HOME || import_node_path12.default.join(import_node_os3.default.homedir(), ".rudi");
+  const rudiHome = options.rudiHome || process.env.RUDI_HOME || import_node_path14.default.join(import_node_os4.default.homedir(), ".rudi");
   let storedSecrets = {};
   try {
-    const parsed = JSON.parse(import_node_fs11.default.readFileSync(import_node_path12.default.join(rudiHome, "secrets.json"), "utf8"));
+    const parsed = JSON.parse(import_node_fs13.default.readFileSync(import_node_path14.default.join(rudiHome, "secrets.json"), "utf8"));
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
       storedSecrets = Object.fromEntries(
         Object.entries(parsed).filter(([, value]) => typeof value === "string" && value.length > 0)
@@ -27787,14 +27900,14 @@ function buildClaudePlan(options) {
 }
 
 // src/agent-host/task-codex.js
-var import_node_fs12 = __toESM(require("node:fs"), 1);
-var import_node_os4 = __toESM(require("node:os"), 1);
-var import_node_path13 = __toESM(require("node:path"), 1);
-var import_node_child_process5 = require("node:child_process");
+var import_node_fs14 = __toESM(require("node:fs"), 1);
+var import_node_os5 = __toESM(require("node:os"), 1);
+var import_node_path15 = __toESM(require("node:path"), 1);
+var import_node_child_process7 = require("node:child_process");
 var TASK_CODEX_VERSION = "0.160.1";
 var TASK_DISABLED = getPrivateCodexDisabledFeatures().filter((feature) => !["shell_tool", "unified_exec", "code_mode_host"].includes(feature));
 function taskEnvironment(binaryPath) {
-  const result = { PATH: `${import_node_path13.default.dirname(binaryPath)}:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin` };
+  const result = { PATH: `${import_node_path15.default.dirname(binaryPath)}:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin` };
   for (const key of ["HOME", "USER", "LOGNAME", "LANG", "LC_ALL"]) {
     if (typeof process.env[key] === "string") result[key] = process.env[key];
   }
@@ -27834,15 +27947,15 @@ function taskCodexArgs(context) {
   );
   return args;
 }
-function assertTaskHostCapabilities({ binaryPath, profile }, { spawnSyncImpl = import_node_child_process5.spawnSync } = {}) {
+function assertTaskHostCapabilities({ binaryPath, profile }, { spawnSyncImpl = import_node_child_process7.spawnSync } = {}) {
   if (process.platform !== "darwin") throw new Error("task shared permissions currently qualified on macOS only");
-  for (let cursor = profile.working_directory; ; cursor = import_node_path13.default.dirname(cursor)) {
-    if (cursor !== import_node_os4.default.homedir() && import_node_fs12.default.existsSync(import_node_path13.default.join(cursor, ".codex", "config.toml"))) {
+  for (let cursor = profile.working_directory; ; cursor = import_node_path15.default.dirname(cursor)) {
+    if (cursor !== import_node_os5.default.homedir() && import_node_fs14.default.existsSync(import_node_path15.default.join(cursor, ".codex", "config.toml"))) {
       throw new Error("task workspace ancestor contains native config; explicit qualification required");
     }
-    if (cursor === import_node_path13.default.dirname(cursor)) break;
+    if (cursor === import_node_path15.default.dirname(cursor)) break;
   }
-  if (import_node_fs12.default.existsSync("/etc/codex/config.toml")) throw new Error("system Codex config requires explicit task qualification");
+  if (import_node_fs14.default.existsSync("/etc/codex/config.toml")) throw new Error("system Codex config requires explicit task qualification");
   const probe = (args2, input) => spawnSyncImpl(binaryPath, args2, { encoding: "utf8", input, timeout: 5e3, maxBuffer: 262144, env: taskEnvironment(binaryPath) });
   const version = probe(["--version"]);
   if (version.status !== 0 || String(version.stdout).trim() !== `codex-cli ${TASK_CODEX_VERSION}`) {
@@ -27852,6 +27965,22 @@ function assertTaskHostCapabilities({ binaryPath, profile }, { spawnSyncImpl = i
   const config = probe(args, "");
   if (config.error || config.status === 0 || !`${config.stdout}${config.stderr}`.includes("No prompt provided via stdin.")) {
     throw new Error("native task configuration probe failed");
+  }
+  const helper = auditHelperPath();
+  const containment = probe([
+    "sandbox",
+    "-P",
+    "rudi_task",
+    ...taskPermissionArgs({ ...profile, read_roots: [...profile.read_roots, helper] }),
+    "-C",
+    profile.working_directory,
+    "--",
+    helper,
+    "probe",
+    String(process.pid)
+  ]);
+  if (containment.status !== 0 || String(containment.stdout).trim() !== JSON.stringify({ audit_session_escape_denied: true, supervisor_signal_denied: true })) {
+    throw new Error("native audit containment capability probe failed");
   }
   return { version: TASK_CODEX_VERSION };
 }
@@ -27947,8 +28076,8 @@ function buildCodexPlan(options) {
 }
 
 // src/agent-host/providers/gemini.js
-var import_node_fs13 = __toESM(require("node:fs"), 1);
-var import_node_path14 = __toESM(require("node:path"), 1);
+var import_node_fs15 = __toESM(require("node:fs"), 1);
+var import_node_path16 = __toESM(require("node:path"), 1);
 function defaultSystemSettingsPath(platform = process.platform) {
   if (platform === "darwin") return "/Library/Application Support/GeminiCli/settings.json";
   if (platform === "win32") return "C:\\ProgramData\\gemini-cli\\settings.json";
@@ -27960,9 +28089,9 @@ function buildGeminiProviderEnvironment(config, options = {}) {
   if (!environment.GEMINI_API_KEY || !options.runtimeDirectory) return environment;
   if (baseEnvironment.GEMINI_CLI_SYSTEM_SETTINGS_PATH) return environment;
   const systemSettingsPath = options.systemSettingsPath || defaultSystemSettingsPath(options.platform);
-  if (import_node_fs13.default.existsSync(systemSettingsPath)) return environment;
-  const settingsPath = import_node_path14.default.join(options.runtimeDirectory, "gemini-system-settings.json");
-  import_node_fs13.default.writeFileSync(settingsPath, JSON.stringify({
+  if (import_node_fs15.default.existsSync(systemSettingsPath)) return environment;
+  const settingsPath = import_node_path16.default.join(options.runtimeDirectory, "gemini-system-settings.json");
+  import_node_fs15.default.writeFileSync(settingsPath, JSON.stringify({
     security: { auth: { selectedType: "gemini-api-key" } }
   }, null, 2), { encoding: "utf8", mode: 384 });
   return {
@@ -28051,10 +28180,10 @@ function hasRudiRouter(provider) {
   const agentId = MCP_AGENT_IDS[provider] || provider;
   const config = AGENT_CONFIGS.find((item) => item.id === agentId);
   if (!config) return false;
-  return readAgentMcpServers(config).some((server) => server.name === "rudi" || import_node_path15.default.basename(String(server.command)) === "rudi-router");
+  return readAgentMcpServers(config).some((server) => server.name === "rudi" || import_node_path17.default.basename(String(server.command)) === "rudi-router");
 }
 async function inspectAgentHost(provider, dependencies = {}) {
-  const { spawnSyncImpl = import_node_child_process6.spawnSync } = dependencies;
+  const { spawnSyncImpl = import_node_child_process8.spawnSync } = dependencies;
   const canonicalProvider = resolveAgentProviderId(provider);
   const summarizeSkills = dependencies.summarizeNativeSkillHostImpl || summarizeNativeSkillHost;
   let skillProjection;
@@ -28114,35 +28243,35 @@ async function assertAgentHostReady({ binaryPath, provider }, dependencies = {})
 }
 
 // src/agent-host/workspace.js
-var import_node_fs15 = __toESM(require("node:fs"), 1);
-var import_node_path17 = __toESM(require("node:path"), 1);
-var import_node_child_process7 = require("node:child_process");
+var import_node_fs17 = __toESM(require("node:fs"), 1);
+var import_node_path19 = __toESM(require("node:path"), 1);
+var import_node_child_process9 = require("node:child_process");
 
 // src/agent-host/workspace-manifest.js
-var import_node_crypto5 = __toESM(require("node:crypto"), 1);
-var import_node_fs14 = __toESM(require("node:fs"), 1);
-var import_node_path16 = __toESM(require("node:path"), 1);
+var import_node_crypto6 = __toESM(require("node:crypto"), 1);
+var import_node_fs16 = __toESM(require("node:fs"), 1);
+var import_node_path18 = __toESM(require("node:path"), 1);
 var WORKSPACE_BASELINE_FILE = "workspace-base.json";
 function shouldSkip(relativePath) {
-  const first = relativePath.split(import_node_path16.default.sep)[0];
+  const first = relativePath.split(import_node_path18.default.sep)[0];
   return first === ".git" || first === ".rudi";
 }
 function portablePath(relativePath) {
-  return relativePath.split(import_node_path16.default.sep).join("/");
+  return relativePath.split(import_node_path18.default.sep).join("/");
 }
 function hashFile(file) {
-  return import_node_crypto5.default.createHash("sha256").update(import_node_fs14.default.readFileSync(file)).digest("hex");
+  return import_node_crypto6.default.createHash("sha256").update(import_node_fs16.default.readFileSync(file)).digest("hex");
 }
 function createWorkspaceManifest(rootDirectory) {
-  const root = import_node_fs14.default.realpathSync(import_node_path16.default.resolve(rootDirectory));
+  const root = import_node_fs16.default.realpathSync(import_node_path18.default.resolve(rootDirectory));
   const entries = {};
   function visit(directory, prefix = "") {
-    const children = import_node_fs14.default.readdirSync(directory, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name));
+    const children = import_node_fs16.default.readdirSync(directory, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name));
     for (const child of children) {
-      const relative4 = prefix ? import_node_path16.default.join(prefix, child.name) : child.name;
+      const relative4 = prefix ? import_node_path18.default.join(prefix, child.name) : child.name;
       if (shouldSkip(relative4)) continue;
-      const absolute = import_node_path16.default.join(directory, child.name);
-      const stat = import_node_fs14.default.lstatSync(absolute);
+      const absolute = import_node_path18.default.join(directory, child.name);
+      const stat = import_node_fs16.default.lstatSync(absolute);
       const key = portablePath(relative4);
       if (stat.isDirectory()) {
         entries[key] = { mode: stat.mode & 511, type: "directory" };
@@ -28157,7 +28286,7 @@ function createWorkspaceManifest(rootDirectory) {
       } else if (stat.isSymbolicLink()) {
         entries[key] = {
           mode: stat.mode & 511,
-          target: import_node_fs14.default.readlinkSync(absolute),
+          target: import_node_fs16.default.readlinkSync(absolute),
           type: "symlink"
         };
       } else {
@@ -28169,24 +28298,24 @@ function createWorkspaceManifest(rootDirectory) {
   return { entries, schemaVersion: 1 };
 }
 function writeWorkspaceBaseline({ launchDirectory, workspace }) {
-  const destination = import_node_path16.default.join(import_node_path16.default.resolve(launchDirectory), WORKSPACE_BASELINE_FILE);
+  const destination = import_node_path18.default.join(import_node_path18.default.resolve(launchDirectory), WORKSPACE_BASELINE_FILE);
   const manifest = createWorkspaceManifest(workspace);
-  const handle = import_node_fs14.default.openSync(destination, "wx", 384);
+  const handle = import_node_fs16.default.openSync(destination, "wx", 384);
   try {
-    import_node_fs14.default.writeFileSync(handle, `${JSON.stringify(manifest)}
+    import_node_fs16.default.writeFileSync(handle, `${JSON.stringify(manifest)}
 `, "utf8");
   } finally {
-    import_node_fs14.default.closeSync(handle);
+    import_node_fs16.default.closeSync(handle);
   }
   return destination;
 }
 function readWorkspaceBaseline(launchDirectory) {
-  const file = import_node_path16.default.join(import_node_path16.default.resolve(launchDirectory), WORKSPACE_BASELINE_FILE);
+  const file = import_node_path18.default.join(import_node_path18.default.resolve(launchDirectory), WORKSPACE_BASELINE_FILE);
   let parsed;
   try {
-    const stat = import_node_fs14.default.lstatSync(file);
+    const stat = import_node_fs16.default.lstatSync(file);
     if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("baseline is not a regular file");
-    parsed = JSON.parse(import_node_fs14.default.readFileSync(file, "utf8"));
+    parsed = JSON.parse(import_node_fs16.default.readFileSync(file, "utf8"));
   } catch (error) {
     throw new Error(`Isolated workspace baseline is unavailable: ${error.message}`);
   }
@@ -28231,21 +28360,21 @@ var WORKSPACE_MODES = Object.freeze({
 });
 var VALID_MODES = new Set(Object.values(WORKSPACE_MODES));
 function existingDirectory2(candidate, label) {
-  const resolved = import_node_path17.default.resolve(candidate);
+  const resolved = import_node_path19.default.resolve(candidate);
   let stat;
   try {
-    stat = import_node_fs15.default.statSync(resolved);
+    stat = import_node_fs17.default.statSync(resolved);
   } catch {
     throw new Error(`${label} does not exist: ${resolved}`);
   }
   if (!stat.isDirectory()) {
     throw new Error(`${label} is not a directory: ${resolved}`);
   }
-  return import_node_fs15.default.realpathSync(resolved);
+  return import_node_fs17.default.realpathSync(resolved);
 }
 function isInside2(candidate, parent) {
-  const relative4 = import_node_path17.default.relative(parent, candidate);
-  return relative4 === "" || !relative4.startsWith(`..${import_node_path17.default.sep}`) && relative4 !== ".." && !import_node_path17.default.isAbsolute(relative4);
+  const relative4 = import_node_path19.default.relative(parent, candidate);
+  return relative4 === "" || !relative4.startsWith(`..${import_node_path19.default.sep}`) && relative4 !== ".." && !import_node_path19.default.isAbsolute(relative4);
 }
 function findGitProjectRoot(workspace, execFileSyncImpl) {
   try {
@@ -28288,7 +28417,7 @@ function createGitWorktree({
   } catch (error) {
     if (error?.message?.startsWith("Worktree branch already exists:")) throw error;
   }
-  import_node_fs15.default.mkdirSync(import_node_path17.default.dirname(destination), { recursive: true, mode: 448 });
+  import_node_fs17.default.mkdirSync(import_node_path19.default.dirname(destination), { recursive: true, mode: 448 });
   try {
     execFileSyncImpl("git", ["worktree", "add", "-b", branch, destination, baseRef], {
       cwd: projectRoot,
@@ -28302,7 +28431,7 @@ function createGitWorktree({
       });
     } catch {
     }
-    import_node_fs15.default.rmSync(destination, { recursive: true, force: true });
+    import_node_fs17.default.rmSync(destination, { recursive: true, force: true });
     try {
       execFileSyncImpl("git", ["branch", "-D", "--", branch], {
         cwd: projectRoot,
@@ -28319,15 +28448,15 @@ function copyIsolatedWorkspace({ destination, projectRoot }) {
     throw new Error("Isolated workspace destination cannot be inside the source project");
   }
   try {
-    import_node_fs15.default.cpSync(projectRoot, destination, {
+    import_node_fs17.default.cpSync(projectRoot, destination, {
       errorOnExist: true,
       filter(candidate) {
-        const relative4 = import_node_path17.default.relative(projectRoot, candidate);
-        const firstPart = relative4.split(import_node_path17.default.sep)[0];
+        const relative4 = import_node_path19.default.relative(projectRoot, candidate);
+        const firstPart = relative4.split(import_node_path19.default.sep)[0];
         if (firstPart === ".git" || firstPart === ".rudi") return false;
-        const stat = import_node_fs15.default.lstatSync(candidate);
+        const stat = import_node_fs17.default.lstatSync(candidate);
         if (stat.isSymbolicLink()) {
-          const target = import_node_fs15.default.realpathSync(candidate);
+          const target = import_node_fs17.default.realpathSync(candidate);
           if (!isInside2(target, projectRoot)) {
             throw new Error(`Workspace contains a symlink outside the project: ${candidate}`);
           }
@@ -28338,7 +28467,7 @@ function copyIsolatedWorkspace({ destination, projectRoot }) {
       recursive: true
     });
   } catch (error) {
-    import_node_fs15.default.rmSync(destination, { recursive: true, force: true });
+    import_node_fs17.default.rmSync(destination, { recursive: true, force: true });
     throw new Error(`Unable to create isolated workspace copy: ${error.message}`);
   }
 }
@@ -28353,7 +28482,7 @@ function resolveAgentWorkspace(options, dependencies = {}) {
     taskProfile = null,
     workspace = null
   } = options || {};
-  const { execFileSyncImpl = import_node_child_process7.execFileSync } = dependencies;
+  const { execFileSyncImpl = import_node_child_process9.execFileSync } = dependencies;
   assertLaunchId(launchId);
   if (mode === TASK_MODE) assertTaskProfile(taskProfile);
   if (!VALID_MODES.has(mode)) {
@@ -28366,7 +28495,7 @@ function resolveAgentWorkspace(options, dependencies = {}) {
     throw new Error("artifactsRoot is required");
   }
   const resolvedOrigin = existingDirectory2(originDirectory, "Origin directory");
-  const requestedWorkspace = workspace == null ? resolvedOrigin : import_node_path17.default.resolve(resolvedOrigin, workspace);
+  const requestedWorkspace = workspace == null ? resolvedOrigin : import_node_path19.default.resolve(resolvedOrigin, workspace);
   const validWorkspace = existingDirectory2(requestedWorkspace, "Workspace");
   const gitProjectRoot = findGitProjectRoot(validWorkspace, execFileSyncImpl);
   const projectRoot = gitProjectRoot || validWorkspace;
@@ -28374,7 +28503,7 @@ function resolveAgentWorkspace(options, dependencies = {}) {
     throw new Error("registered shared workspace differs from profile");
   }
   const isGitRepository = Boolean(gitProjectRoot);
-  const launchDirectory = outputDirectory == null ? import_node_path17.default.resolve(artifactsRoot, launchId) : import_node_path17.default.resolve(resolvedOrigin, outputDirectory);
+  const launchDirectory = outputDirectory == null ? import_node_path19.default.resolve(artifactsRoot, launchId) : import_node_path19.default.resolve(resolvedOrigin, outputDirectory);
   let resolvedMode = mode;
   if (resolvedMode === WORKSPACE_MODES.AUTO) {
     resolvedMode = isGitRepository ? WORKSPACE_MODES.WORKTREE : WORKSPACE_MODES.ISOLATED_COPY;
@@ -28383,21 +28512,21 @@ function resolveAgentWorkspace(options, dependencies = {}) {
     throw new Error("Workspace mode worktree requires a Git repository");
   }
   assertOutputOutsideProject(launchDirectory, projectRoot);
-  if (import_node_fs15.default.existsSync(launchDirectory)) {
+  if (import_node_fs17.default.existsSync(launchDirectory)) {
     throw new Error(`Output destination already exists: ${launchDirectory}`);
   }
-  import_node_fs15.default.mkdirSync(launchDirectory, { recursive: true, mode: 448 });
+  import_node_fs17.default.mkdirSync(launchDirectory, { recursive: true, mode: 448 });
   createLaunchOwnershipMarker({ launchDirectory, launchId });
   let executionWorkspace = mode === TASK_MODE ? validWorkspace : projectRoot;
   let worktreeBranch = null;
   let baseRef = null;
   try {
     if (privateAutomation === true) {
-      executionWorkspace = import_node_path17.default.join(launchDirectory, "private-workspace");
-      import_node_fs15.default.mkdirSync(executionWorkspace, { mode: 320 });
-      import_node_fs15.default.chmodSync(executionWorkspace, 320);
+      executionWorkspace = import_node_path19.default.join(launchDirectory, "private-workspace");
+      import_node_fs17.default.mkdirSync(executionWorkspace, { mode: 320 });
+      import_node_fs17.default.chmodSync(executionWorkspace, 320);
     } else if (resolvedMode === WORKSPACE_MODES.WORKTREE) {
-      executionWorkspace = import_node_path17.default.join(launchDirectory, "workspace");
+      executionWorkspace = import_node_path19.default.join(launchDirectory, "workspace");
       const created = createGitWorktree({
         destination: executionWorkspace,
         execFileSyncImpl,
@@ -28407,12 +28536,12 @@ function resolveAgentWorkspace(options, dependencies = {}) {
       worktreeBranch = created.branch;
       baseRef = created.baseRef;
     } else if (resolvedMode === WORKSPACE_MODES.ISOLATED_COPY) {
-      executionWorkspace = import_node_path17.default.join(launchDirectory, "workspace");
+      executionWorkspace = import_node_path19.default.join(launchDirectory, "workspace");
       copyIsolatedWorkspace({ destination: executionWorkspace, projectRoot });
       writeWorkspaceBaseline({ launchDirectory, workspace: executionWorkspace });
     }
   } catch (error) {
-    import_node_fs15.default.rmSync(launchDirectory, { recursive: true, force: true });
+    import_node_fs17.default.rmSync(launchDirectory, { recursive: true, force: true });
     throw error;
   }
   return Object.freeze({
@@ -28429,9 +28558,9 @@ function resolveAgentWorkspace(options, dependencies = {}) {
 }
 function cleanupUnstartedWorkspace(workspace, dependencies = {}) {
   if (!workspace || typeof workspace !== "object") return;
-  const { execFileSyncImpl = import_node_child_process7.execFileSync } = dependencies;
-  const outputDestination = import_node_path17.default.resolve(workspace.outputDestination);
-  const executionWorkspace = import_node_path17.default.resolve(workspace.executionWorkspace);
+  const { execFileSyncImpl = import_node_child_process9.execFileSync } = dependencies;
+  const outputDestination = import_node_path19.default.resolve(workspace.outputDestination);
+  const executionWorkspace = import_node_path19.default.resolve(workspace.executionWorkspace);
   if (!isInside2(executionWorkspace, outputDestination) && ![WORKSPACE_MODES.READ_ONLY, TASK_MODE].includes(workspace.mode)) {
     throw new Error("Refusing to clean an execution workspace outside its launch output destination");
   }
@@ -28454,12 +28583,12 @@ function cleanupUnstartedWorkspace(workspace, dependencies = {}) {
     } catch {
     }
   }
-  import_node_fs15.default.rmSync(outputDestination, { recursive: true, force: true });
+  import_node_fs17.default.rmSync(outputDestination, { recursive: true, force: true });
 }
 
 // src/agent-host/launch.js
 function createLaunchId() {
-  return `launch_${import_node_crypto6.default.randomUUID().replaceAll("-", "")}`;
+  return `launch_${import_node_crypto7.default.randomUUID().replaceAll("-", "")}`;
 }
 async function launchAgent(options, dependencies = {}) {
   const {
@@ -28473,6 +28602,7 @@ async function launchAgent(options, dependencies = {}) {
     taskPreflightImpl = assertTaskHostCapabilities,
     resolveBinaryImpl = resolveAgentProviderBinary,
     spawnImpl,
+    taskStop,
     stderr = process.stderr,
     stdout = process.stdout,
     signalEmitter = process,
@@ -28559,6 +28689,7 @@ async function launchAgent(options, dependencies = {}) {
       onSpawn,
       plan,
       spawnImpl,
+      taskStop,
       stderr,
       stdout,
       store,
@@ -28583,10 +28714,10 @@ function pinnedNative(environment) {
   const binary = environment.RUDI_AGENT_TASK_CODEX_PATH;
   const digest = environment.RUDI_AGENT_TASK_CODEX_SHA256;
   if (binary === void 0 && digest === void 0) return null;
-  if (typeof binary !== "string" || !import_node_path18.default.isAbsolute(binary) || !/^[a-f0-9]{64}$/u.test(digest || "") || import_node_fs16.default.realpathSync(binary) !== binary || sha2562(readTaskRegularFile(binary, 512 * 1024 * 1024, true)) !== digest) {
+  if (typeof binary !== "string" || !import_node_path20.default.isAbsolute(binary) || !/^[a-f0-9]{64}$/u.test(digest || "") || import_node_fs18.default.realpathSync(binary) !== binary || sha2562(readTaskRegularFile(binary, 512 * 1024 * 1024, true)) !== digest) {
     throw new Error("task native executable pin mismatch");
   }
-  import_node_fs16.default.accessSync(binary, import_node_fs16.default.constants.X_OK);
+  import_node_fs18.default.accessSync(binary, import_node_fs18.default.constants.X_OK);
   return binary;
 }
 function readAgentTask(reference, environment = process.env) {
@@ -28609,18 +28740,6 @@ function readAgentTask(reference, environment = process.env) {
   }
   return { request, profile, instructions, nativeBinary };
 }
-function writeReceipt(filename, value) {
-  const bytes = `${JSON.stringify(value, null, 2)}
-`;
-  const fd = import_node_fs16.default.openSync(filename, "wx", 384);
-  try {
-    import_node_fs16.default.writeFileSync(fd, bytes);
-    import_node_fs16.default.fsyncSync(fd);
-  } finally {
-    import_node_fs16.default.closeSync(fd);
-  }
-  return { path: filename, sha256: sha2562(bytes) };
-}
 function computeBinding(environment) {
   const job = environment.RUDI_COMPUTE_JOB_ID;
   const attempt = environment.RUDI_COMPUTE_ATTEMPT;
@@ -28630,105 +28749,12 @@ function computeBinding(environment) {
   }
   return { job_id: job, attempt: 1, spec_sha256: hash };
 }
-function verifyOutputs(manifest, profile) {
-  exactFields(manifest, ["outcome", "outputs"], "task final manifest");
-  if (!["complete", "no_work", "partial", "needs_evidence"].includes(manifest.outcome) || !Array.isArray(manifest.outputs) || manifest.outputs.length > 64 || manifest.outcome === "complete" && manifest.outputs.length === 0 || manifest.outcome === "no_work" && manifest.outputs.length !== 0 || new Set(manifest.outputs).size !== manifest.outputs.length) throw new Error("invalid task output manifest");
-  return manifest.outputs.map((filename) => {
-    taskText(filename, "output path");
-    if (!import_node_path18.default.isAbsolute(filename) || import_node_fs16.default.realpathSync(filename) !== filename || !profile.write_roots.some((root) => inside(filename, root))) throw new Error("output path outside declared roots or aliased");
-    const bytes = readTaskRegularFile(filename, 32 * 1024 * 1024, true);
-    return { path: filename, sha256: sha2562(bytes), bytes: bytes.length };
-  });
-}
 async function runAgentTask(reference, dependencies = {}) {
-  const { request, profile, instructions, nativeBinary } = readAgentTask(reference, dependencies.environment || process.env);
-  const compute = computeBinding(dependencies.environment || process.env);
-  const runDirectory = import_node_path18.default.join(request.outputs.runtime, `${compute.job_id}-attempt-1`);
-  import_node_fs16.default.mkdirSync(runDirectory, { mode: 448 });
-  const base = {
-    schema_version: 1,
-    task: request.task,
-    request: reference,
-    compute,
-    instructions: request.instructions,
-    execution_profile: request.execution_profile
-  };
-  const store = createLaunchStore({ databasePath: import_node_path18.default.join(request.outputs.runtime, "agent-hosts.db") });
-  let custody;
-  try {
-    custody = await openTaskCustody({
-      runtime: request.outputs.runtime,
-      runDirectory,
-      jobId: compute.job_id,
-      workerPath: dependencies.custodyWorkerPath
-    });
-  } catch (error2) {
-    store.close();
-    throw error2;
-  }
-  let launchReference = null;
-  let launch = null;
-  let outputs = [];
-  let error = null;
-  const recordLaunch = (value) => {
-    if (!launchReference) launchReference = writeReceipt(import_node_path18.default.join(runDirectory, "launch.json"), {
-      ...base,
-      launch_id: value.launchId,
-      provider: profile.provider,
-      model: profile.model,
-      working_directory: request.working_directory,
-      workspace_mode: profile.workspace_mode
-    });
-  };
-  try {
-    const launchImpl = dependencies.launchImpl || launchAgent;
-    launch = await launchImpl({
-      provider: profile.provider,
-      model: profile.model,
-      taskProfile: profile,
-      workspaceMode: profile.workspace_mode,
-      workspace: request.working_directory,
-      originDirectory: request.working_directory,
-      outputDirectory: import_node_path18.default.join(runDirectory, "host"),
-      prompt: `${instructions}
-
-Return a final JSON object with exactly outcome and outputs. outcome is complete, no_work, partial, needs_evidence, or failed. outputs is an array of absolute paths to files produced in the declared write roots. complete requires at least one file; no_work requires none. Do not include Markdown fences.
-Declared write roots: ${JSON.stringify(profile.write_roots)}`
-    }, {
-      ...dependencies.launchDependencies,
-      ...nativeBinary ? { resolveBinaryImpl: () => nativeBinary } : {},
-      store,
-      onSpawn: async (value) => {
-        await custody.track(value.pid);
-        recordLaunch(value);
-      },
-      stdout: { write() {
-      } }
-    });
-    recordLaunch(launch);
-    if (launch.status !== "completed" || !launch.nativeSessionId) throw new Error(launch.lastError || "native launch did not complete");
-    outputs = verifyOutputs(launch.taskFinalOutput, profile);
-  } catch (caught) {
-    error = String(caught.message || "task execution failed").slice(0, 2048);
-  } finally {
-    store.close();
-    try {
-      await custody.close();
-    } catch (caught) {
-      error = `Task custody unresolved: ${caught.message}`.slice(0, 2048);
-    }
-  }
-  const receipt = writeReceipt(import_node_path18.default.join(runDirectory, "completion.json"), {
-    ...base,
-    status: error ? "failed" : "completed",
-    outcome: error ? "failed" : launch.taskFinalOutput.outcome,
-    launch_receipt: launchReference,
-    launch: launch ? { id: launch.launchId, native_session_id: launch.nativeSessionId || null } : null,
-    outputs,
-    error,
-    finished_at: (/* @__PURE__ */ new Date()).toISOString()
-  });
-  return { status: error ? "failed" : "completed", receipt };
+  if (Object.keys(dependencies).some((key) => key !== "environment")) throw new Error("unsupported capsule dependency; use the explicit in-session fixture interface");
+  const environment = dependencies.environment || process.env;
+  const { request } = readAgentTask(reference, environment);
+  computeBinding(environment);
+  return runTaskCapsule(reference, request, environment);
 }
 async function recoverAgentTask(reference) {
   const { request } = readAgentTask(reference);
@@ -28819,8 +28845,8 @@ async function attachAgentLaunch(launchId, dependencies = {}) {
 }
 
 // src/agent-host/cli-inputs.js
-var import_node_fs17 = __toESM(require("node:fs"), 1);
-var import_node_path19 = __toESM(require("node:path"), 1);
+var import_node_fs19 = __toESM(require("node:fs"), 1);
+var import_node_path21 = __toESM(require("node:path"), 1);
 var MAX_PROMPT_BYTES2 = 10 * 1024 * 1024;
 function flagValue(flags, kebab, camel = null) {
   return flags[kebab] ?? (camel ? flags[camel] : void 0);
@@ -28862,16 +28888,16 @@ async function resolveAgentPrompt(flags, {
     prompt = requiredFlagString(inline, "--prompt");
   } else if (promptFile != null) {
     const fileValue = requiredFlagString(promptFile, "--prompt-file");
-    const filePath = import_node_path19.default.resolve(originDirectory, fileValue);
+    const filePath = import_node_path21.default.resolve(originDirectory, fileValue);
     let stat;
     try {
-      stat = import_node_fs17.default.statSync(filePath);
+      stat = import_node_fs19.default.statSync(filePath);
     } catch {
       throw new Error(`Prompt file does not exist: ${filePath}`);
     }
     if (!stat.isFile()) throw new Error(`Prompt file is not a regular file: ${filePath}`);
     if (stat.size > MAX_PROMPT_BYTES2) throw new Error(`Prompt file exceeds ${MAX_PROMPT_BYTES2} bytes`);
-    prompt = import_node_fs17.default.readFileSync(filePath, "utf8");
+    prompt = import_node_fs19.default.readFileSync(filePath, "utf8");
   } else if (stdin && stdin.isTTY !== true) {
     prompt = await readPromptStream(
       stdin,
@@ -28902,10 +28928,10 @@ function parseImages(flags, originDirectory) {
   const value = flags.image ?? flags.images;
   if (value == null) return [];
   return requiredFlagString(value, "--image").split(",").map((item) => item.trim()).filter(Boolean).map((item) => {
-    const imagePath = import_node_path19.default.resolve(originDirectory, item);
+    const imagePath = import_node_path21.default.resolve(originDirectory, item);
     let stat;
     try {
-      stat = import_node_fs17.default.statSync(imagePath);
+      stat = import_node_fs19.default.statSync(imagePath);
     } catch {
       throw new Error(`Image attachment does not exist: ${imagePath}`);
     }
@@ -28947,7 +28973,7 @@ function buildLaunchOptions(provider, prompt, flags, passthrough, originDirector
       flagValue(flags, "output-schema", "outputSchema"),
       "--output-schema"
     );
-    const outputSchemaPath = import_node_path19.default.resolve(originDirectory, outputSchemaValue);
+    const outputSchemaPath = import_node_path21.default.resolve(originDirectory, outputSchemaValue);
     const timeoutMs = parseTimeout(flags);
     const privateAutomationProfile = createPrivateAutomationProfile({
       model: flags.model,
@@ -29021,16 +29047,16 @@ function readGroupTaskFiles(taskFlag, originDirectory, common = {}) {
     }
     const provider = value.slice(0, separator);
     resolveAgentProviderId(provider);
-    const filePath = import_node_path19.default.resolve(originDirectory, value.slice(separator + 1));
+    const filePath = import_node_path21.default.resolve(originDirectory, value.slice(separator + 1));
     let stat;
     try {
-      stat = import_node_fs17.default.statSync(filePath);
+      stat = import_node_fs19.default.statSync(filePath);
     } catch {
       throw new Error(`Task file does not exist: ${filePath}`);
     }
     if (!stat.isFile()) throw new Error(`Task file is not a regular file: ${filePath}`);
     if (stat.size > MAX_PROMPT_BYTES2) throw new Error(`Task file exceeds ${MAX_PROMPT_BYTES2} bytes`);
-    const prompt = import_node_fs17.default.readFileSync(filePath, "utf8");
+    const prompt = import_node_fs19.default.readFileSync(filePath, "utf8");
     if (!prompt.trim()) throw new Error(`Task file must not be empty: ${filePath}`);
     if (prompt.includes("\0")) throw new Error(`Task file must not contain NUL bytes: ${filePath}`);
     return { ...common, prompt, provider };
@@ -29038,18 +29064,18 @@ function readGroupTaskFiles(taskFlag, originDirectory, common = {}) {
 }
 
 // src/agent-host/group.js
-var import_node_crypto7 = __toESM(require("node:crypto"), 1);
+var import_node_crypto8 = __toESM(require("node:crypto"), 1);
 
 // src/agent-host/detached.js
-var import_node_fs19 = __toESM(require("node:fs"), 1);
-var import_node_child_process8 = require("node:child_process");
+var import_node_fs21 = __toESM(require("node:fs"), 1);
+var import_node_child_process10 = require("node:child_process");
 
 // src/agent-host/resume.js
-var import_node_fs18 = __toESM(require("node:fs"), 1);
-var import_node_path20 = __toESM(require("node:path"), 1);
+var import_node_fs20 = __toESM(require("node:fs"), 1);
+var import_node_path22 = __toESM(require("node:path"), 1);
 function assertWorkspaceStillExists(workspace) {
   try {
-    if (import_node_fs18.default.statSync(workspace).isDirectory()) return;
+    if (import_node_fs20.default.statSync(workspace).isDirectory()) return;
   } catch {
   }
   throw new Error(`Execution workspace no longer exists: ${workspace}`);
@@ -29094,11 +29120,11 @@ async function resumeAgentWithStore(options, dependencies) {
     throw new Error(getMissingAgentProviderMessage(previous.provider));
   }
   await preflightImpl({ binaryPath, provider: previous.provider });
-  const outputDestination = dependencies.artifactsRoot ? import_node_path20.default.resolve(artifactsRoot, launchId) : getAgentHostPaths({ launchId, rudiHome: dependencies.rudiHome }).launchDirectory;
-  if (import_node_fs18.default.existsSync(outputDestination)) {
+  const outputDestination = dependencies.artifactsRoot ? import_node_path22.default.resolve(artifactsRoot, launchId) : getAgentHostPaths({ launchId, rudiHome: dependencies.rudiHome }).launchDirectory;
+  if (import_node_fs20.default.existsSync(outputDestination)) {
     throw new Error(`Output destination already exists: ${outputDestination}`);
   }
-  import_node_fs18.default.mkdirSync(outputDestination, { recursive: true, mode: 448 });
+  import_node_fs20.default.mkdirSync(outputDestination, { recursive: true, mode: 448 });
   createLaunchOwnershipMarker({ launchDirectory: outputDestination, launchId });
   const resolvedEventSink = eventSink || ((event) => appendLaunchEvent(
     getLaunchArtifactFiles(outputDestination).events,
@@ -29121,7 +29147,7 @@ async function resumeAgentWithStore(options, dependencies) {
       workspaceMode: previous.workspaceMode
     });
   } catch (error) {
-    import_node_fs18.default.rmSync(outputDestination, { recursive: true, force: true });
+    import_node_fs20.default.rmSync(outputDestination, { recursive: true, force: true });
     throw error;
   }
   store.create({
@@ -29179,13 +29205,13 @@ function discardSink() {
   } };
 }
 function appendPrivateText(file, value) {
-  const handle = import_node_fs19.default.openSync(file, "a", 384);
+  const handle = import_node_fs21.default.openSync(file, "a", 384);
   try {
-    import_node_fs19.default.writeFileSync(handle, String(value), "utf8");
+    import_node_fs21.default.writeFileSync(handle, String(value), "utf8");
   } finally {
-    import_node_fs19.default.closeSync(handle);
+    import_node_fs21.default.closeSync(handle);
   }
-  import_node_fs19.default.chmodSync(file, 384);
+  import_node_fs21.default.chmodSync(file, 384);
 }
 async function dispatchDetachedAgent({ launchId, operation, options }, dependencies = {}) {
   assertLaunchId(launchId);
@@ -29196,7 +29222,7 @@ async function dispatchDetachedAgent({ launchId, operation, options }, dependenc
   const {
     entrypoint = process.argv[1],
     nodePath = process.execPath,
-    spawnImpl = import_node_child_process8.spawn,
+    spawnImpl = import_node_child_process10.spawn,
     timeoutMs = DEFAULT_START_TIMEOUT_MS
   } = dependencies;
   if (typeof entrypoint !== "string" || entrypoint.trim() === "") {
@@ -29342,11 +29368,11 @@ async function readDetachedWorkerRequest(stdin = process.stdin) {
 }
 
 // src/agent-host/process-lifecycle.js
-var import_node_child_process9 = require("node:child_process");
+var import_node_child_process11 = require("node:child_process");
 var TERMINAL_STATUSES3 = /* @__PURE__ */ new Set(["completed", "failed", "stopped"]);
 function verifyDetachedWorkerProcess(launch, dependencies = {}) {
   if (!launch?.ownerPid || launch.executionKind !== "detached") return false;
-  const execFileSyncImpl = dependencies.execFileSyncImpl || import_node_child_process9.execFileSync;
+  const execFileSyncImpl = dependencies.execFileSyncImpl || import_node_child_process11.execFileSync;
   try {
     const command = String(execFileSyncImpl("ps", [
       "-ww",
@@ -29411,9 +29437,9 @@ async function stopAgentLaunch(launchId, dependencies = {}) {
 }
 
 // src/agent-host/workspace-lifecycle.js
-var import_node_fs20 = __toESM(require("node:fs"), 1);
-var import_node_path21 = __toESM(require("node:path"), 1);
-var import_node_child_process10 = require("node:child_process");
+var import_node_fs22 = __toESM(require("node:fs"), 1);
+var import_node_path23 = __toESM(require("node:path"), 1);
+var import_node_child_process12 = require("node:child_process");
 var TERMINAL_STATUSES4 = /* @__PURE__ */ new Set(["completed", "failed", "stopped"]);
 var MAX_DIFF_BYTES = 20 * 1024 * 1024;
 function git(execFileSyncImpl, cwd, args) {
@@ -29426,7 +29452,7 @@ function git(execFileSyncImpl, cwd, args) {
 }
 function noIndexDiff(execFileSyncImpl, left, right) {
   try {
-    return git(execFileSyncImpl, import_node_path21.default.dirname(left), [
+    return git(execFileSyncImpl, import_node_path23.default.dirname(left), [
       "diff",
       "--no-index",
       "--binary",
@@ -29441,16 +29467,16 @@ function noIndexDiff(execFileSyncImpl, left, right) {
   }
 }
 function isInside3(candidate, parent) {
-  const relative4 = import_node_path21.default.relative(parent, candidate);
-  return relative4 === "" || !relative4.startsWith(`..${import_node_path21.default.sep}`) && relative4 !== ".." && !import_node_path21.default.isAbsolute(relative4);
+  const relative4 = import_node_path23.default.relative(parent, candidate);
+  return relative4 === "" || !relative4.startsWith(`..${import_node_path23.default.sep}`) && relative4 !== ".." && !import_node_path23.default.isAbsolute(relative4);
 }
 function safeRelative(root, relativePath) {
   if (typeof relativePath !== "string" || relativePath === "" || relativePath.includes("\0")) {
     throw new Error("Launch change contains an invalid path");
   }
-  const platformPath = relativePath.split("/").join(import_node_path21.default.sep);
-  const destination = import_node_path21.default.resolve(root, platformPath);
-  if (!isInside3(destination, import_node_path21.default.resolve(root)) || destination === import_node_path21.default.resolve(root)) {
+  const platformPath = relativePath.split("/").join(import_node_path23.default.sep);
+  const destination = import_node_path23.default.resolve(root, platformPath);
+  if (!isInside3(destination, import_node_path23.default.resolve(root)) || destination === import_node_path23.default.resolve(root)) {
     throw new Error(`Launch change escapes the workspace: ${relativePath}`);
   }
   return destination;
@@ -29476,7 +29502,7 @@ function parseNullSeparated(value) {
   return String(value || "").split("\0").filter(Boolean).sort();
 }
 function getGitChangeSet(launch, execFileSyncImpl) {
-  if (!import_node_fs20.default.existsSync(launch.executionWorkspace)) {
+  if (!import_node_fs22.default.existsSync(launch.executionWorkspace)) {
     throw new Error(`Execution workspace no longer exists: ${launch.executionWorkspace}`);
   }
   const trackedPatch = git(execFileSyncImpl, launch.executionWorkspace, [
@@ -29512,19 +29538,19 @@ function getGitChangeSet(launch, execFileSyncImpl) {
   };
 }
 function assertSafeSymlinks(workspace, relativePaths) {
-  const root = import_node_fs20.default.realpathSync(workspace);
+  const root = import_node_fs22.default.realpathSync(workspace);
   for (const relativePath of relativePaths) {
     const candidate = safeRelative(root, relativePath);
     let stat;
     try {
-      stat = import_node_fs20.default.lstatSync(candidate);
+      stat = import_node_fs22.default.lstatSync(candidate);
     } catch {
       continue;
     }
     if (!stat.isSymbolicLink()) continue;
     let target;
     try {
-      target = import_node_fs20.default.realpathSync(candidate);
+      target = import_node_fs22.default.realpathSync(candidate);
     } catch {
       throw new Error(`Launch change contains a broken symlink: ${relativePath}`);
     }
@@ -29538,7 +29564,7 @@ function cleanupGitWorktree(launch, execFileSyncImpl) {
   if (launch.worktreeBranch !== expectedBranch) {
     throw new Error(`Refusing to clean unexpected worktree branch: ${launch.worktreeBranch || "none"}`);
   }
-  if (import_node_fs20.default.existsSync(launch.executionWorkspace)) {
+  if (import_node_fs22.default.existsSync(launch.executionWorkspace)) {
     git(execFileSyncImpl, launch.projectRoot, [
       "worktree",
       "remove",
@@ -29558,33 +29584,33 @@ function copyWorkspaceEntry(sourceRoot, destinationRoot, relativePath, entry) {
   const source = safeRelative(sourceRoot, relativePath);
   const destination = safeRelative(destinationRoot, relativePath);
   if (entry.type === "directory") {
-    import_node_fs20.default.mkdirSync(destination, { recursive: true, mode: entry.mode });
-    import_node_fs20.default.chmodSync(destination, entry.mode);
+    import_node_fs22.default.mkdirSync(destination, { recursive: true, mode: entry.mode });
+    import_node_fs22.default.chmodSync(destination, entry.mode);
     return;
   }
-  import_node_fs20.default.mkdirSync(import_node_path21.default.dirname(destination), { recursive: true });
-  const temporary = import_node_path21.default.join(
-    import_node_path21.default.dirname(destination),
-    `.${import_node_path21.default.basename(destination)}.rudi-promote-${process.pid}`
+  import_node_fs22.default.mkdirSync(import_node_path23.default.dirname(destination), { recursive: true });
+  const temporary = import_node_path23.default.join(
+    import_node_path23.default.dirname(destination),
+    `.${import_node_path23.default.basename(destination)}.rudi-promote-${process.pid}`
   );
-  import_node_fs20.default.rmSync(temporary, { recursive: true, force: true });
+  import_node_fs22.default.rmSync(temporary, { recursive: true, force: true });
   if (entry.type === "file") {
-    import_node_fs20.default.copyFileSync(source, temporary, import_node_fs20.default.constants.COPYFILE_EXCL);
-    import_node_fs20.default.chmodSync(temporary, entry.mode);
+    import_node_fs22.default.copyFileSync(source, temporary, import_node_fs22.default.constants.COPYFILE_EXCL);
+    import_node_fs22.default.chmodSync(temporary, entry.mode);
   } else if (entry.type === "symlink") {
-    import_node_fs20.default.symlinkSync(entry.target, temporary);
+    import_node_fs22.default.symlinkSync(entry.target, temporary);
   } else {
     throw new Error(`Unsupported promoted entry type: ${entry.type}`);
   }
-  import_node_fs20.default.rmSync(destination, { recursive: true, force: true });
-  import_node_fs20.default.renameSync(temporary, destination);
+  import_node_fs22.default.rmSync(destination, { recursive: true, force: true });
+  import_node_fs22.default.renameSync(temporary, destination);
 }
 function restoreDirectoryFromBackup(projectRoot, backup) {
-  for (const entry of import_node_fs20.default.readdirSync(projectRoot)) {
-    import_node_fs20.default.rmSync(import_node_path21.default.join(projectRoot, entry), { recursive: true, force: true });
+  for (const entry of import_node_fs22.default.readdirSync(projectRoot)) {
+    import_node_fs22.default.rmSync(import_node_path23.default.join(projectRoot, entry), { recursive: true, force: true });
   }
-  for (const entry of import_node_fs20.default.readdirSync(backup)) {
-    import_node_fs20.default.cpSync(import_node_path21.default.join(backup, entry), import_node_path21.default.join(projectRoot, entry), {
+  for (const entry of import_node_fs22.default.readdirSync(backup)) {
+    import_node_fs22.default.cpSync(import_node_path23.default.join(backup, entry), import_node_path23.default.join(projectRoot, entry), {
       errorOnExist: true,
       force: false,
       recursive: true
@@ -29598,13 +29624,13 @@ function applyIsolatedChanges(launch, baseline, current) {
   }
   assertSafeSymlinks(launch.executionWorkspace, Object.keys(current.entries));
   const changes = compareWorkspaceManifests(baseline, current);
-  const backup = import_node_path21.default.join(launch.outputDestination, "promotion-backup");
-  if (import_node_fs20.default.existsSync(backup)) throw new Error(`Promotion backup already exists: ${backup}`);
-  import_node_fs20.default.cpSync(launch.projectRoot, backup, { errorOnExist: true, force: false, recursive: true });
+  const backup = import_node_path23.default.join(launch.outputDestination, "promotion-backup");
+  if (import_node_fs22.default.existsSync(backup)) throw new Error(`Promotion backup already exists: ${backup}`);
+  import_node_fs22.default.cpSync(launch.projectRoot, backup, { errorOnExist: true, force: false, recursive: true });
   try {
     const removals = changes.filter((change) => change.after == null).sort((left, right) => right.path.split("/").length - left.path.split("/").length);
     for (const change of removals) {
-      import_node_fs20.default.rmSync(safeRelative(launch.projectRoot, change.path), { recursive: true, force: true });
+      import_node_fs22.default.rmSync(safeRelative(launch.projectRoot, change.path), { recursive: true, force: true });
     }
     const directories = changes.filter((change) => change.after?.type === "directory");
     const otherEntries = changes.filter((change) => change.after && change.after.type !== "directory");
@@ -29635,7 +29661,7 @@ function applyIsolatedChanges(launch, baseline, current) {
     }
     throw error;
   } finally {
-    import_node_fs20.default.rmSync(backup, { recursive: true, force: true });
+    import_node_fs22.default.rmSync(backup, { recursive: true, force: true });
   }
   return changes;
 }
@@ -29651,7 +29677,7 @@ function withLaunchStore(dependencies, operation) {
 function diffAgentLaunch(launchId, dependencies = {}) {
   return withLaunchStore(dependencies, (store) => {
     const launch = requireManagedLaunch(store, launchId);
-    const execFileSyncImpl = dependencies.execFileSyncImpl || import_node_child_process10.execFileSync;
+    const execFileSyncImpl = dependencies.execFileSyncImpl || import_node_child_process12.execFileSync;
     if (launch.workspaceMode === "worktree") {
       return {
         ...getGitChangeSet(launch, execFileSyncImpl),
@@ -29679,7 +29705,7 @@ function promoteAgentLaunch(launchId, dependencies = {}) {
       return { alreadyPromoted: true, changes: null, launch: existing };
     }
     const launch = requireManagedLaunch(store, launchId, { terminal: true });
-    const execFileSyncImpl = dependencies.execFileSyncImpl || import_node_child_process10.execFileSync;
+    const execFileSyncImpl = dependencies.execFileSyncImpl || import_node_child_process12.execFileSync;
     let changes;
     if (launch.workspaceMode === "worktree") {
       const targetStatus = git(execFileSyncImpl, launch.projectRoot, [
@@ -29705,7 +29731,7 @@ function promoteAgentLaunch(launchId, dependencies = {}) {
       assertSafeSymlinks(launch.executionWorkspace, [...changedTracked, ...changes.untracked]);
       for (const relativePath of changes.untracked) {
         const destination = safeRelative(launch.projectRoot, relativePath);
-        if (import_node_fs20.default.existsSync(destination)) {
+        if (import_node_fs22.default.existsSync(destination)) {
           throw new Error(`Cannot promote untracked file because the destination exists: ${relativePath}`);
         }
       }
@@ -29728,8 +29754,8 @@ function promoteAgentLaunch(launchId, dependencies = {}) {
       for (const relativePath of changes.untracked) {
         const source = safeRelative(launch.executionWorkspace, relativePath);
         const destination = safeRelative(launch.projectRoot, relativePath);
-        import_node_fs20.default.mkdirSync(import_node_path21.default.dirname(destination), { recursive: true });
-        import_node_fs20.default.cpSync(source, destination, { errorOnExist: true, force: false, recursive: true });
+        import_node_fs22.default.mkdirSync(import_node_path23.default.dirname(destination), { recursive: true });
+        import_node_fs22.default.cpSync(source, destination, { errorOnExist: true, force: false, recursive: true });
       }
       const updated = store.setDisposition(launchId, "promoted");
       cleanupGitWorktree(updated, execFileSyncImpl);
@@ -29740,7 +29766,7 @@ function promoteAgentLaunch(launchId, dependencies = {}) {
       const current = createWorkspaceManifest(launch.executionWorkspace);
       changes = applyIsolatedChanges(launch, baseline, current);
       const updated = store.setDisposition(launchId, "promoted");
-      import_node_fs20.default.rmSync(updated.executionWorkspace, { recursive: true, force: true });
+      import_node_fs22.default.rmSync(updated.executionWorkspace, { recursive: true, force: true });
       return { changes, launch: store.get(launchId) };
     }
     throw new Error("Read-only launches have no isolated changes to promote");
@@ -29753,9 +29779,9 @@ function discardAgentLaunch(launchId, dependencies = {}) {
       return { alreadyDiscarded: true, launch: existing };
     }
     const launch = requireManagedLaunch(store, launchId, { terminal: true });
-    const execFileSyncImpl = dependencies.execFileSyncImpl || import_node_child_process10.execFileSync;
+    const execFileSyncImpl = dependencies.execFileSyncImpl || import_node_child_process12.execFileSync;
     if (launch.workspaceMode === "worktree") cleanupGitWorktree(launch, execFileSyncImpl);
-    import_node_fs20.default.rmSync(launch.outputDestination, { recursive: true, force: true });
+    import_node_fs22.default.rmSync(launch.outputDestination, { recursive: true, force: true });
     const updated = store.setDisposition(launchId, "discarded");
     return { launch: updated };
   });
@@ -29794,7 +29820,7 @@ function validateTasks(tasks) {
   return validated;
 }
 function createAgentGroupId() {
-  return `group_${import_node_crypto7.default.randomUUID().replaceAll("-", "")}`;
+  return `group_${import_node_crypto8.default.randomUUID().replaceAll("-", "")}`;
 }
 async function launchDetachedAgentGroup(request, dependencies = {}) {
   const groupId = assertAgentGroupId(request?.groupId);
@@ -29860,29 +29886,29 @@ async function stopAgentGroup(groupId, dependencies = {}) {
 }
 
 // src/daemon/runtime/lifecycle.js
-var import_node_fs22 = __toESM(require("node:fs"), 1);
-var import_node_path23 = __toESM(require("node:path"), 1);
-var import_node_child_process11 = require("node:child_process");
+var import_node_fs24 = __toESM(require("node:fs"), 1);
+var import_node_path25 = __toESM(require("node:path"), 1);
+var import_node_child_process13 = require("node:child_process");
 init_src();
 
 // src/daemon/client.js
-var import_node_fs21 = __toESM(require("node:fs"), 1);
-var import_node_path22 = __toESM(require("node:path"), 1);
+var import_node_fs23 = __toESM(require("node:fs"), 1);
+var import_node_path24 = __toESM(require("node:path"), 1);
 init_src();
-var DAEMON_PORT_FILE = import_node_path22.default.join(PATHS.home, "daemon.port");
-var DAEMON_TOKEN_FILE = import_node_path22.default.join(PATHS.home, "daemon.token");
+var DAEMON_PORT_FILE = import_node_path24.default.join(PATHS.home, "daemon.port");
+var DAEMON_TOKEN_FILE = import_node_path24.default.join(PATHS.home, "daemon.token");
 function readDaemonInfo(options = {}) {
   const portFile = options.portFile || DAEMON_PORT_FILE;
   const tokenFile = options.tokenFile || DAEMON_TOKEN_FILE;
-  if (!import_node_fs21.default.existsSync(portFile) || !import_node_fs21.default.existsSync(tokenFile)) {
+  if (!import_node_fs23.default.existsSync(portFile) || !import_node_fs23.default.existsSync(tokenFile)) {
     const error = new Error("RUDI daemon is not running. Start it with: rudi daemon start");
     error.code = "DAEMON_NOT_RUNNING";
     error.portFile = portFile;
     error.tokenFile = tokenFile;
     throw error;
   }
-  const portRaw = import_node_fs21.default.readFileSync(portFile, "utf-8").trim();
-  const token = import_node_fs21.default.readFileSync(tokenFile, "utf-8").trim();
+  const portRaw = import_node_fs23.default.readFileSync(portFile, "utf-8").trim();
+  const token = import_node_fs23.default.readFileSync(tokenFile, "utf-8").trim();
   const port = Number.parseInt(portRaw, 10);
   if (!Number.isFinite(port) || port <= 0) {
     const error = new Error("Invalid daemon port file. Restart it with: rudi daemon restart");
@@ -30461,11 +30487,11 @@ function removeDaemonConnectionFiles({
   tokenFile = DAEMON_TOKEN_FILE
 } = {}) {
   try {
-    import_node_fs22.default.unlinkSync(portFile);
+    import_node_fs24.default.unlinkSync(portFile);
   } catch {
   }
   try {
-    import_node_fs22.default.unlinkSync(tokenFile);
+    import_node_fs24.default.unlinkSync(tokenFile);
   } catch {
   }
 }
@@ -30487,13 +30513,13 @@ function spawnDaemonProcess({
   logsDir = PATHS.logs,
   nodePath = process.execPath,
   serveArgs = ["serve"],
-  spawnImpl = import_node_child_process11.spawn
+  spawnImpl = import_node_child_process13.spawn
 } = {}) {
-  import_node_fs22.default.mkdirSync(logsDir, { recursive: true });
-  const stdoutPath = import_node_path23.default.join(logsDir, "daemon.out.log");
-  const stderrPath = import_node_path23.default.join(logsDir, "daemon.err.log");
-  const stdoutFd = import_node_fs22.default.openSync(stdoutPath, "a");
-  const stderrFd = import_node_fs22.default.openSync(stderrPath, "a");
+  import_node_fs24.default.mkdirSync(logsDir, { recursive: true });
+  const stdoutPath = import_node_path25.default.join(logsDir, "daemon.out.log");
+  const stderrPath = import_node_path25.default.join(logsDir, "daemon.err.log");
+  const stdoutFd = import_node_fs24.default.openSync(stdoutPath, "a");
+  const stderrFd = import_node_fs24.default.openSync(stderrPath, "a");
   try {
     const child = spawnImpl(nodePath, [entrypoint, ...serveArgs], {
       detached: true,
@@ -30504,11 +30530,11 @@ function spawnDaemonProcess({
     return { pid: child.pid, stderrPath, stdoutPath };
   } finally {
     try {
-      import_node_fs22.default.closeSync(stdoutFd);
+      import_node_fs24.default.closeSync(stdoutFd);
     } catch {
     }
     try {
-      import_node_fs22.default.closeSync(stderrFd);
+      import_node_fs24.default.closeSync(stderrFd);
     } catch {
     }
   }
@@ -31601,13 +31627,13 @@ function resolveInstallNativeSkillHosts(flags = {}, installedAgents = []) {
   return configuredNativeSkillHosts(installedAgents);
 }
 function installedSkillDescriptor(resolved, installedPath) {
-  const packagePath = path37.resolve(installedPath);
+  const packagePath = path39.resolve(installedPath);
   const isDirectory = fsSync.existsSync(packagePath) && fsSync.lstatSync(packagePath).isDirectory();
   return {
     ...resolved,
     source: resolved.source?.type ? resolved.source : "rudi",
     path: packagePath,
-    entryPath: isDirectory ? path37.join(packagePath, "SKILL.md") : packagePath
+    entryPath: isDirectory ? path39.join(packagePath, "SKILL.md") : packagePath
   };
 }
 async function reconcileInstalledSkillsAfterInstall(skills, flags = {}, dependencies = {}) {
@@ -31640,9 +31666,9 @@ function reportInstalledSkillProjection(projection) {
   }
 }
 async function loadManifest(installPath) {
-  const manifestPath = path37.join(installPath, "manifest.json");
+  const manifestPath = path39.join(installPath, "manifest.json");
   try {
-    const content = await fs35.readFile(manifestPath, "utf-8");
+    const content = await fs37.readFile(manifestPath, "utf-8");
     return JSON.parse(content);
   } catch {
     return null;
@@ -31650,15 +31676,15 @@ async function loadManifest(installPath) {
 }
 function getBundledBinary(runtime, binary) {
   const platform = process.platform;
-  const rudiHome = process.env.RUDI_HOME || path37.join(process.env.HOME || process.env.USERPROFILE, ".rudi");
+  const rudiHome = process.env.RUDI_HOME || path39.join(process.env.HOME || process.env.USERPROFILE, ".rudi");
   if (runtime === "node") {
-    const npmPath = platform === "win32" ? path37.join(rudiHome, "runtimes", "node", "npm.cmd") : path37.join(rudiHome, "runtimes", "node", "bin", "npm");
+    const npmPath = platform === "win32" ? path39.join(rudiHome, "runtimes", "node", "npm.cmd") : path39.join(rudiHome, "runtimes", "node", "bin", "npm");
     if (fsSync.existsSync(npmPath)) {
       return npmPath;
     }
   }
   if (runtime === "python") {
-    const pipPath = platform === "win32" ? path37.join(rudiHome, "runtimes", "python", "Scripts", "pip.exe") : path37.join(rudiHome, "runtimes", "python", "bin", "pip3");
+    const pipPath = platform === "win32" ? path39.join(rudiHome, "runtimes", "python", "Scripts", "pip.exe") : path39.join(rudiHome, "runtimes", "python", "bin", "pip3");
     if (fsSync.existsSync(pipPath)) {
       return pipPath;
     }
@@ -31680,9 +31706,9 @@ function getStackCommand(manifest) {
   return command;
 }
 function getNodeProjectInfo(stackPath) {
-  const candidates = [stackPath, path37.join(stackPath, "node")];
+  const candidates = [stackPath, path39.join(stackPath, "node")];
   for (const root of candidates) {
-    const packageJsonPath = path37.join(root, "package.json");
+    const packageJsonPath = path39.join(root, "package.json");
     if (!fsSync.existsSync(packageJsonPath)) continue;
     try {
       const content = fsSync.readFileSync(packageJsonPath, "utf-8");
@@ -31709,9 +31735,9 @@ async function installDependencies(stackPath, manifest, options = {}) {
       if (project.error) {
         return { installed: false, error: `Failed to read package.json: ${project.error}` };
       }
-      const nodeModulesPath = path37.join(project.root, "node_modules");
+      const nodeModulesPath = path39.join(project.root, "node_modules");
       try {
-        await fs35.access(nodeModulesPath);
+        await fs37.access(nodeModulesPath);
         return { installed: false, reason: "Dependencies already installed" };
       } catch {
       }
@@ -31724,15 +31750,15 @@ async function installDependencies(stackPath, manifest, options = {}) {
       });
       return { installed: true };
     } else if (runtime === "python") {
-      let requirementsPath = path37.join(stackPath, "python", "requirements.txt");
-      let reqCwd = path37.join(stackPath, "python");
+      let requirementsPath = path39.join(stackPath, "python", "requirements.txt");
+      let reqCwd = path39.join(stackPath, "python");
       try {
-        await fs35.access(requirementsPath);
+        await fs37.access(requirementsPath);
       } catch {
-        requirementsPath = path37.join(stackPath, "requirements.txt");
+        requirementsPath = path39.join(stackPath, "requirements.txt");
         reqCwd = stackPath;
         try {
-          await fs35.access(requirementsPath);
+          await fs37.access(requirementsPath);
         } catch {
           return { installed: false, reason: "No requirements.txt" };
         }
@@ -31866,7 +31892,7 @@ async function syncRelatedSkillWrappers(relatedSkills, installResults, installed
   );
   const skills = (relatedSkills || []).filter((skill) => successful.has(skill.id)).map((skill) => {
     const installed = successful.get(skill.id);
-    const entryPath = fsSync.existsSync(installed.path) && fsSync.statSync(installed.path).isDirectory() ? path37.join(installed.path, "SKILL.md") : installed.path;
+    const entryPath = fsSync.existsSync(installed.path) && fsSync.statSync(installed.path).isDirectory() ? path39.join(installed.path, "SKILL.md") : installed.path;
     return {
       ...skill,
       source: "rudi",
@@ -32102,12 +32128,12 @@ function getStackEntryPoint(stackPath, manifest) {
   return { entryArg: null, entryPath: null };
 }
 function resolveContainedStackPath(stackPath, value) {
-  if (typeof value !== "string" || !value || value.includes("\0") || path37.isAbsolute(value)) {
+  if (typeof value !== "string" || !value || value.includes("\0") || path39.isAbsolute(value)) {
     return { error: `Stack command path must be relative to the installed package: ${value}` };
   }
-  const root = path37.resolve(stackPath);
-  const candidate = path37.resolve(root, value);
-  if (candidate === root || !candidate.startsWith(`${root}${path37.sep}`)) {
+  const root = path39.resolve(stackPath);
+  const candidate = path39.resolve(root, value);
+  if (candidate === root || !candidate.startsWith(`${root}${path39.sep}`)) {
     return { error: `Stack command path escapes the installed package: ${value}` };
   }
   return { path: candidate };
@@ -32121,8 +32147,8 @@ function validateExternalStackCommand(stackPath, manifest) {
       error: "External stack command must reference an entry file inside the pinned package"
     };
   }
-  const relativeEntry = path37.relative(path37.resolve(stackPath), entryPoint.entryPath);
-  const rootSegment = relativeEntry.split(path37.sep)[0];
+  const relativeEntry = path39.relative(path39.resolve(stackPath), entryPoint.entryPath);
+  const rootSegment = relativeEntry.split(path39.sep)[0];
   if (rootSegment === "runs" || rootSegment === "outputs") {
     return {
       valid: false,
@@ -32234,9 +32260,9 @@ async function checkSecrets(manifest) {
   return { found, missing };
 }
 async function parseEnvExample(installPath) {
-  const examplePath = path37.join(installPath, ".env.example");
+  const examplePath = path39.join(installPath, ".env.example");
   try {
-    const content = await fs35.readFile(examplePath, "utf-8");
+    const content = await fs37.readFile(examplePath, "utf-8");
     const keys = [];
     for (const line of content.split("\n")) {
       const trimmed = line.trim();
@@ -32254,7 +32280,7 @@ async function parseEnvExample(installPath) {
 async function cleanupFailedStackInstall(stackId, stackPath, removeConfig) {
   if (stackPath) {
     try {
-      await fs35.rm(stackPath, { recursive: true, force: true });
+      await fs37.rm(stackPath, { recursive: true, force: true });
     } catch {
     }
   }
@@ -32877,11 +32903,11 @@ async function runStack(id, options = {}) {
   const startTime = Date.now();
   const packagePath = getPackagePath(id);
   const manifestPath = import_path11.default.join(packagePath, "manifest.json");
-  const { default: fs58 } = await import("fs");
-  if (!fs58.existsSync(manifestPath)) {
+  const { default: fs60 } = await import("fs");
+  if (!fs60.existsSync(manifestPath)) {
     throw new Error(`Stack manifest not found: ${id}`);
   }
-  const manifest = JSON.parse(fs58.readFileSync(manifestPath, "utf-8"));
+  const manifest = JSON.parse(fs60.readFileSync(manifestPath, "utf-8"));
   const { command, args } = resolveCommandFromManifest(manifest, packagePath);
   const secrets = await getSecrets(manifest.requires?.secrets || []);
   const runEnv = buildStackRunEnv({
@@ -33933,10 +33959,6 @@ function formatDaemonDoctorState(daemon) {
 function shouldReportDaemonIssue(daemon) {
   return daemon.reason !== "not_running" && (!daemon.reachable || !daemon.ready);
 }
-function isSupportedNodeVersion(version) {
-  const parsed = typeof version === "string" && /^v?(\d+)\.\d+\.\d+$/.exec(version);
-  return Boolean(parsed && [22, 24].includes(Number(parsed[1])));
-}
 async function cmdDoctor(args, flags) {
   console.log("RUDI Health Check");
   console.log("\u2550".repeat(50));
@@ -34045,11 +34067,11 @@ async function cmdDoctor(args, flags) {
   console.log("\n\u{1F4CD} Environment");
   const nodeVersion = process.version;
   const nodeOk = isSupportedNodeVersion(nodeVersion);
-  console.log(`  ${nodeOk ? "\u2713" : "\u2717"} Node.js: ${nodeVersion} ${nodeOk ? "" : "(supported: Node 22 or 24 LTS)"}`);
+  console.log(`  ${nodeOk ? "\u2713" : "\u2717"} Node.js: ${nodeVersion} ${nodeOk ? "" : `(supported: ${SUPPORTED_NODE_DESCRIPTION})`}`);
   console.log(`  \u2713 Platform: ${process.platform}-${process.arch}`);
   console.log(`  \u2713 RUDI Home: ${PATHS.home}`);
   if (!nodeOk) {
-    issues.push("Unsupported Node.js version (supported: Node 22 or 24 LTS; managed default: Node 24)");
+    issues.push(`Unsupported Node.js version (supported: ${SUPPORTED_NODE_DESCRIPTION})`);
   }
   console.log("\n" + "\u2500".repeat(50));
   if (issues.length === 0) {
@@ -35015,10 +35037,10 @@ function createShim(shimPath, targetPath) {
 }
 
 // src/commands/update.js
-var import_node_crypto8 = require("node:crypto");
-var import_node_fs23 = require("node:fs");
-var fs43 = __toESM(require("node:fs/promises"), 1);
-var path44 = __toESM(require("path"), 1);
+var import_node_crypto9 = require("node:crypto");
+var import_node_fs25 = require("node:fs");
+var fs45 = __toESM(require("node:fs/promises"), 1);
+var path46 = __toESM(require("path"), 1);
 init_src5();
 init_src();
 init_src3();
@@ -35035,24 +35057,24 @@ async function resolveManagedPath(candidate, rootInput, options) {
   if (typeof candidate !== "string" || candidate.trim() !== candidate || !candidate) {
     throw new Error(`${candidateLabel} is required for transactional update`);
   }
-  const root = path44.resolve(rootInput);
-  const targetPath = path44.resolve(candidate);
-  if (targetPath === root || !targetPath.startsWith(`${root}${path44.sep}`)) {
+  const root = path46.resolve(rootInput);
+  const targetPath = path46.resolve(candidate);
+  if (targetPath === root || !targetPath.startsWith(`${root}${path46.sep}`)) {
     throw new Error(`Refusing to snapshot ${candidateLabel.toLowerCase()} outside the managed ${rootLabel}: ${candidate}`);
   }
   if (createRoot) {
-    await fs43.mkdir(root, { recursive: true });
+    await fs45.mkdir(root, { recursive: true });
   }
-  const rootStat = await fs43.lstat(root);
+  const rootStat = await fs45.lstat(root);
   if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
     throw new Error(`Managed ${rootLabel} must be a real directory: ${root}`);
   }
-  const relative4 = path44.relative(root, targetPath);
+  const relative4 = path46.relative(root, targetPath);
   let current = root;
-  for (const segment of relative4.split(path44.sep)) {
-    current = path44.join(current, segment);
+  for (const segment of relative4.split(path46.sep)) {
+    current = path46.join(current, segment);
     try {
-      const stat = await fs43.lstat(current);
+      const stat = await fs45.lstat(current);
       if (stat.isSymbolicLink()) {
         throw new Error(`Refusing symlinked path within managed ${rootLabel}: ${current}`);
       }
@@ -35077,7 +35099,7 @@ function resolveManagedLockfilePath(lockfilePath, locksRoot = PATHS.locks, optio
     ...options
   });
 }
-function resolveManagedStackStatePath(stateRoot, stateStacksRoot = path44.join(PATHS.home, "state", "stacks"), options = {}) {
+function resolveManagedStackStatePath(stateRoot, stateStacksRoot = path46.join(PATHS.home, "state", "stacks"), options = {}) {
   return resolveManagedPath(stateRoot, stateStacksRoot, {
     candidateLabel: "Stack state path",
     rootLabel: "stack state root",
@@ -35089,28 +35111,28 @@ async function buildTreeManifest(rootPath, prefix = "") {
   async function visit(currentPath, relativePath) {
     let stat;
     try {
-      stat = await fs43.lstat(currentPath);
+      stat = await fs45.lstat(currentPath);
     } catch (error) {
       if (error.code === "ENOENT" && relativePath === prefix) return;
       throw error;
     }
     const manifestPath = relativePath || ".";
     if (stat.isSymbolicLink()) {
-      entries.push([manifestPath, "symlink", await fs43.readlink(currentPath)]);
+      entries.push([manifestPath, "symlink", await fs45.readlink(currentPath)]);
       return;
     }
     if (stat.isDirectory()) {
       entries.push([manifestPath, "directory", ""]);
-      const names = await fs43.readdir(currentPath);
+      const names = await fs45.readdir(currentPath);
       names.sort();
       for (const name of names) {
-        const childRelative = relativePath ? path44.join(relativePath, name) : name;
-        await visit(path44.join(currentPath, name), childRelative);
+        const childRelative = relativePath ? path46.join(relativePath, name) : name;
+        await visit(path46.join(currentPath, name), childRelative);
       }
       return;
     }
     if (stat.isFile()) {
-      const digest = (0, import_node_crypto8.createHash)("sha256").update(await fs43.readFile(currentPath)).digest("hex");
+      const digest = (0, import_node_crypto9.createHash)("sha256").update(await fs45.readFile(currentPath)).digest("hex");
       entries.push([manifestPath, "file", digest]);
       return;
     }
@@ -35142,7 +35164,7 @@ function treeManifestsEqual(left, right) {
 async function assertSnapshotComponent(componentPath, type, label) {
   let stat;
   try {
-    stat = await fs43.lstat(componentPath);
+    stat = await fs45.lstat(componentPath);
   } catch (error) {
     if (error.code === "ENOENT") throw new Error(`Missing ${label}: ${componentPath}`);
     throw error;
@@ -35153,16 +35175,16 @@ async function assertSnapshotComponent(componentPath, type, label) {
   }
 }
 async function copyPathWithoutOverwrite(sourcePath, destinationPath, label) {
-  const sourceStat = await fs43.lstat(sourcePath);
+  const sourceStat = await fs45.lstat(sourcePath);
   if (sourceStat.isSymbolicLink()) {
     throw new Error(`Refusing to copy symlinked ${label}: ${sourcePath}`);
   }
-  await fs43.mkdir(path44.dirname(destinationPath), { recursive: true });
+  await fs45.mkdir(path46.dirname(destinationPath), { recursive: true });
   const expectedManifest = await buildTreeManifest(sourcePath);
   if (sourceStat.isFile()) {
-    await fs43.copyFile(sourcePath, destinationPath, import_node_fs23.constants.COPYFILE_EXCL);
+    await fs45.copyFile(sourcePath, destinationPath, import_node_fs25.constants.COPYFILE_EXCL);
   } else if (sourceStat.isDirectory()) {
-    await fs43.cp(sourcePath, destinationPath, {
+    await fs45.cp(sourcePath, destinationPath, {
       errorOnExist: true,
       force: false,
       preserveTimestamps: true,
@@ -35192,14 +35214,14 @@ async function validateStackUpdateSnapshot(snapshot, options = {}) {
   );
   const { targetPath: stateRoot } = await resolveManagedStackStatePath(
     snapshot.stateRoot,
-    options.stateStacksRoot || snapshot.stateStacksRoot || path44.join(PATHS.home, "state", "stacks")
+    options.stateStacksRoot || snapshot.stateStacksRoot || path46.join(PATHS.home, "state", "stacks")
   );
-  const backupRoot = path44.resolve(String(snapshot.backupRoot || ""));
-  const snapshotPath = path44.resolve(String(snapshot.snapshotPath || ""));
-  const lockfileSnapshotPath = path44.resolve(String(snapshot.lockfileSnapshotPath || ""));
-  const stateSnapshotPath = path44.resolve(String(snapshot.stateSnapshotPath || ""));
-  const expectedPrefix = `.${path44.basename(targetPath)}.update-backup-`;
-  if (path44.dirname(backupRoot) !== root || !path44.basename(backupRoot).startsWith(expectedPrefix) || snapshotPath !== path44.join(backupRoot, "snapshot") || lockfileSnapshotPath !== path44.join(backupRoot, "lockfile") || stateSnapshotPath !== path44.join(backupRoot, "state")) {
+  const backupRoot = path46.resolve(String(snapshot.backupRoot || ""));
+  const snapshotPath = path46.resolve(String(snapshot.snapshotPath || ""));
+  const lockfileSnapshotPath = path46.resolve(String(snapshot.lockfileSnapshotPath || ""));
+  const stateSnapshotPath = path46.resolve(String(snapshot.stateSnapshotPath || ""));
+  const expectedPrefix = `.${path46.basename(targetPath)}.update-backup-`;
+  if (path46.dirname(backupRoot) !== root || !path46.basename(backupRoot).startsWith(expectedPrefix) || snapshotPath !== path46.join(backupRoot, "snapshot") || lockfileSnapshotPath !== path46.join(backupRoot, "lockfile") || stateSnapshotPath !== path46.join(backupRoot, "state")) {
     throw new Error("Invalid stack update snapshot paths");
   }
   await assertSnapshotComponent(backupRoot, "directory", "stack update backup root");
@@ -35225,62 +35247,62 @@ async function validateStackUpdateSnapshot(snapshot, options = {}) {
 }
 async function createStackUpdateSnapshot(stackPath, options = {}) {
   const { root, targetPath } = await resolveManagedStackPath(stackPath, options.stacksRoot);
-  const locksRoot = path44.resolve(options.locksRoot || PATHS.locks);
+  const locksRoot = path46.resolve(options.locksRoot || PATHS.locks);
   const { targetPath: lockfilePath } = await resolveManagedLockfilePath(
     options.lockfilePath,
     locksRoot,
     { createRoot: true }
   );
-  const stateStacksRoot = path44.resolve(
-    options.stateStacksRoot || (options.stacksRoot ? path44.join(path44.dirname(root), "state", "stacks") : path44.join(PATHS.home, "state", "stacks"))
+  const stateStacksRoot = path46.resolve(
+    options.stateStacksRoot || (options.stacksRoot ? path46.join(path46.dirname(root), "state", "stacks") : path46.join(PATHS.home, "state", "stacks"))
   );
   const { targetPath: stateRoot } = await resolveManagedStackStatePath(
-    options.stateRoot || path44.join(stateStacksRoot, path44.basename(targetPath)),
+    options.stateRoot || path46.join(stateStacksRoot, path46.basename(targetPath)),
     stateStacksRoot,
     { createRoot: true }
   );
-  const stackStat = await fs43.lstat(targetPath);
+  const stackStat = await fs45.lstat(targetPath);
   if (!stackStat.isDirectory() || stackStat.isSymbolicLink()) {
     throw new Error(`Installed stack path must be a real directory: ${stackPath}`);
   }
-  const backupRoot = await fs43.mkdtemp(
-    path44.join(root, `.${path44.basename(targetPath)}.update-backup-`)
+  const backupRoot = await fs45.mkdtemp(
+    path46.join(root, `.${path46.basename(targetPath)}.update-backup-`)
   );
-  const snapshotPath = path44.join(backupRoot, "snapshot");
-  const lockfileSnapshotPath = path44.join(backupRoot, "lockfile");
-  const stateSnapshotPath = path44.join(backupRoot, "state");
+  const snapshotPath = path46.join(backupRoot, "snapshot");
+  const lockfileSnapshotPath = path46.join(backupRoot, "lockfile");
+  const stateSnapshotPath = path46.join(backupRoot, "state");
   let lockfileExisted = false;
   let stateRootExisted = false;
   const stateInitialManifest = await buildTreeManifest(stateRoot);
-  const migratedRunsManifest = await buildTreeManifest(path44.join(targetPath, "runs"), "runs");
+  const migratedRunsManifest = await buildTreeManifest(path46.join(targetPath, "runs"), "runs");
   const stateExpectedManifest = mergeExpectedStateManifest(
     stateInitialManifest,
     migratedRunsManifest
   );
   try {
-    await fs43.chmod(backupRoot, 448);
-    await fs43.cp(targetPath, snapshotPath, {
+    await fs45.chmod(backupRoot, 448);
+    await fs45.cp(targetPath, snapshotPath, {
       errorOnExist: true,
       force: false,
       preserveTimestamps: true,
       recursive: true
     });
     try {
-      const lockfileStat = await fs43.lstat(lockfilePath);
+      const lockfileStat = await fs45.lstat(lockfilePath);
       if (!lockfileStat.isFile() || lockfileStat.isSymbolicLink()) {
         throw new Error(`Stack lockfile path must be a real file: ${lockfilePath}`);
       }
-      await fs43.copyFile(lockfilePath, lockfileSnapshotPath);
+      await fs45.copyFile(lockfilePath, lockfileSnapshotPath);
       lockfileExisted = true;
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
     }
     try {
-      const stateStat = await fs43.lstat(stateRoot);
+      const stateStat = await fs45.lstat(stateRoot);
       if (!stateStat.isDirectory() || stateStat.isSymbolicLink()) {
         throw new Error(`Stack state path must be a real directory: ${stateRoot}`);
       }
-      await fs43.cp(stateRoot, stateSnapshotPath, {
+      await fs45.cp(stateRoot, stateSnapshotPath, {
         errorOnExist: true,
         force: false,
         preserveTimestamps: true,
@@ -35291,7 +35313,7 @@ async function createStackUpdateSnapshot(stackPath, options = {}) {
       if (error.code !== "ENOENT") throw error;
     }
   } catch (error) {
-    await fs43.rm(backupRoot, { force: true, recursive: true });
+    await fs45.rm(backupRoot, { force: true, recursive: true });
     throw error;
   }
   return {
@@ -35353,18 +35375,18 @@ async function restoreStackUpdateSnapshot(snapshot, options = {}) {
   ];
   const stateComponent = components[0];
   for (const component of components) {
-    component.stagedPath = path44.join(backupRoot, `failed-${component.label}`);
+    component.stagedPath = path46.join(backupRoot, `failed-${component.label}`);
     component.staged = false;
     component.promoted = false;
   }
   try {
     for (const component of components) {
       try {
-        const currentStat = await fs43.lstat(component.currentPath);
+        const currentStat = await fs45.lstat(component.currentPath);
         if (currentStat.isSymbolicLink()) {
           throw new Error(`Refusing to stage symlinked ${component.label}: ${component.currentPath}`);
         }
-        await fs43.rename(component.currentPath, component.stagedPath);
+        await fs45.rename(component.currentPath, component.stagedPath);
         component.staged = true;
       } catch (error) {
         if (error.code !== "ENOENT") throw error;
@@ -35378,8 +35400,8 @@ async function restoreStackUpdateSnapshot(snapshot, options = {}) {
     }
     for (const component of components) {
       if (!component.existedBefore) continue;
-      await fs43.mkdir(path44.dirname(component.currentPath), { recursive: true });
-      await fs43.rename(component.snapshotPath, component.currentPath);
+      await fs45.mkdir(path46.dirname(component.currentPath), { recursive: true });
+      await fs45.rename(component.snapshotPath, component.currentPath);
       component.promoted = true;
     }
   } catch (error) {
@@ -35420,11 +35442,11 @@ async function restoreStackUpdateSnapshot(snapshot, options = {}) {
     }
     throw error;
   }
-  await fs43.rm(backupRoot, { force: true, recursive: true });
+  await fs45.rm(backupRoot, { force: true, recursive: true });
 }
 async function discardStackUpdateSnapshot(snapshot, options = {}) {
   const { backupRoot } = await validateStackUpdateSnapshot(snapshot, options);
-  await fs43.rm(backupRoot, { force: true, recursive: true });
+  await fs45.rm(backupRoot, { force: true, recursive: true });
 }
 var defaultDependencies = {
   fetchIndex,
@@ -35569,7 +35591,7 @@ async function updateOnePackage(pkg, flags, deps) {
     }
     if (result.backupPath) deps.log(`  Previous skill retained at ${result.backupPath}`);
     if (kind === "stack") {
-      if (path44.resolve(result.path) !== path44.resolve(snapshot.targetPath)) {
+      if (path46.resolve(result.path) !== path46.resolve(snapshot.targetPath)) {
         throw new Error(`Updated stack path changed unexpectedly for ${pkg.id}`);
       }
       const manifest = await deps.loadStackManifest(result.path);
@@ -35867,8 +35889,8 @@ async function cmdUpdate(args, flags, dependencies = {}) {
 }
 
 // src/commands/which.js
-var fs44 = __toESM(require("fs/promises"), 1);
-var path45 = __toESM(require("path"), 1);
+var fs46 = __toESM(require("fs/promises"), 1);
+var path47 = __toESM(require("path"), 1);
 init_src5();
 init_src();
 init_src4();
@@ -35950,7 +35972,7 @@ Installed stacks:`);
     if (runtimeInfo.entry) {
       console.log("");
       console.log("Run MCP server directly:");
-      const entryPath = path45.join(stackPath, runtimeInfo.entry);
+      const entryPath = path47.join(stackPath, runtimeInfo.entry);
       if (runtimeInfo.runtime === "node") {
         console.log(`  echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | node ${entryPath}`);
       } else if (runtimeInfo.runtime === "python") {
@@ -35968,32 +35990,32 @@ Installed stacks:`);
 }
 async function detectRuntime(stackPath) {
   const layouts = [
-    { runtime: "node", runtimePath: path45.join(stackPath, "node"), entryPrefix: "node/", explicit: true },
-    { runtime: "python", runtimePath: path45.join(stackPath, "python"), entryPrefix: "python/", explicit: true },
+    { runtime: "node", runtimePath: path47.join(stackPath, "node"), entryPrefix: "node/", explicit: true },
+    { runtime: "python", runtimePath: path47.join(stackPath, "python"), entryPrefix: "python/", explicit: true },
     { runtime: "node", runtimePath: stackPath, entryPrefix: "", explicit: false },
     { runtime: "python", runtimePath: stackPath, entryPrefix: "", explicit: false }
   ];
   for (const { runtime, runtimePath, entryPrefix, explicit } of layouts) {
     try {
-      await fs44.access(runtimePath);
+      await fs46.access(runtimePath);
       if (runtime === "node") {
-        const distEntry = path45.join(runtimePath, "dist", "index.js");
-        const srcEntry = path45.join(runtimePath, "src", "index.ts");
+        const distEntry = path47.join(runtimePath, "dist", "index.js");
+        const srcEntry = path47.join(runtimePath, "src", "index.ts");
         try {
-          await fs44.access(distEntry);
+          await fs46.access(distEntry);
           return { runtime: "node", entry: `${entryPrefix}dist/index.js` };
         } catch {
           try {
-            await fs44.access(srcEntry);
+            await fs46.access(srcEntry);
             return { runtime: "node", entry: `${entryPrefix}src/index.ts` };
           } catch {
             if (explicit) return { runtime: "node", entry: null };
           }
         }
       } else if (runtime === "python") {
-        const entry = path45.join(runtimePath, "src", "index.py");
+        const entry = path47.join(runtimePath, "src", "index.py");
         try {
-          await fs44.access(entry);
+          await fs46.access(entry);
           return { runtime: "python", entry: `${entryPrefix}src/index.py` };
         } catch {
           if (explicit) return { runtime: "python", entry: null };
@@ -36013,18 +36035,18 @@ async function checkAuth(stackPath, runtime, options = {}) {
     if (!rootPath || checkedRoots.has(rootPath)) return;
     checkedRoots.add(rootPath);
     try {
-      await fs44.access(path45.join(rootPath, "token.json"));
+      await fs46.access(path47.join(rootPath, "token.json"));
       authFiles.push(labelPrefix ? `${labelPrefix}/token.json` : "token.json");
       configured = true;
     } catch {
-      const accountsPath = path45.join(rootPath, "accounts");
+      const accountsPath = path47.join(rootPath, "accounts");
       try {
-        const accounts = await fs44.readdir(accountsPath);
+        const accounts = await fs46.readdir(accountsPath);
         for (const account of accounts) {
           if (account.startsWith(".")) continue;
-          const accountTokenPath = path45.join(accountsPath, account, "token.json");
+          const accountTokenPath = path47.join(accountsPath, account, "token.json");
           try {
-            await fs44.access(accountTokenPath);
+            await fs46.access(accountTokenPath);
             const label = labelPrefix ? `${labelPrefix}/accounts/${account}/token.json` : `accounts/${account}/token.json`;
             authFiles.push(label);
             configured = true;
@@ -36036,19 +36058,19 @@ async function checkAuth(stackPath, runtime, options = {}) {
     }
   }
   if (runtime === "node" || runtime === "python") {
-    await scanAuthRoot(path45.join(stackPath, runtime), runtime);
+    await scanAuthRoot(path47.join(stackPath, runtime), runtime);
     await scanAuthRoot(stackPath, "");
   }
-  const stackName = options.stackName || path45.basename(stackPath);
+  const stackName = options.stackName || path47.basename(stackPath);
   const rudiHome = options.rudiHome || PATHS.home;
   await scanAuthRoot(
-    path45.join(rudiHome, "state", "stacks", stackName),
+    path47.join(rudiHome, "state", "stacks", stackName),
     `state/stacks/${stackName}`
   );
   const envCredentialNames = /* @__PURE__ */ new Set();
-  const envPath = path45.join(stackPath, ".env");
+  const envPath = path47.join(stackPath, ".env");
   try {
-    const envContent = await fs44.readFile(envPath, "utf-8");
+    const envContent = await fs46.readFile(envPath, "utf-8");
     for (const line of envContent.split("\n")) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith("#")) continue;
@@ -36141,8 +36163,8 @@ function checkIfRunning(stackName, options = {}) {
 }
 
 // src/commands/auth.js
-var fs45 = __toESM(require("fs/promises"), 1);
-var path46 = __toESM(require("path"), 1);
+var fs47 = __toESM(require("fs/promises"), 1);
+var path48 = __toESM(require("path"), 1);
 var import_child_process8 = require("child_process");
 init_src5();
 init_src4();
@@ -36174,31 +36196,31 @@ function isPortAvailable(port) {
 }
 async function detectRuntime2(stackPath) {
   const layouts = [
-    { runtime: "node", runtimePath: path46.join(stackPath, "node") },
+    { runtime: "node", runtimePath: path48.join(stackPath, "node") },
     { runtime: "node", runtimePath: stackPath },
-    { runtime: "python", runtimePath: path46.join(stackPath, "python") },
+    { runtime: "python", runtimePath: path48.join(stackPath, "python") },
     { runtime: "python", runtimePath: stackPath }
   ];
   for (const { runtime, runtimePath } of layouts) {
     try {
-      await fs45.access(runtimePath);
+      await fs47.access(runtimePath);
       if (runtime === "node") {
-        const authTs = path46.join(runtimePath, "src", "auth.ts");
-        const authJs = path46.join(runtimePath, "dist", "auth.js");
+        const authTs = path48.join(runtimePath, "src", "auth.ts");
+        const authJs = path48.join(runtimePath, "dist", "auth.js");
         try {
-          await fs45.access(authTs);
+          await fs47.access(authTs);
           return { runtime: "node", authScript: authTs, useTsx: true };
         } catch {
           try {
-            await fs45.access(authJs);
+            await fs47.access(authJs);
             return { runtime: "node", authScript: authJs, useTsx: false };
           } catch {
           }
         }
       } else if (runtime === "python") {
-        const authPy = path46.join(runtimePath, "src", "auth.py");
+        const authPy = path48.join(runtimePath, "src", "auth.py");
         try {
-          await fs45.access(authPy);
+          await fs47.access(authPy);
           return { runtime: "python", authScript: authPy, useTsx: false };
         } catch {
         }
@@ -36301,10 +36323,10 @@ function createAuthSubprocess({
   throw new Error(`Unsupported auth runtime: ${runtime}`);
 }
 function runAuthSubprocess(plan, options = {}) {
-  const execFileSync10 = options.execFileSync || import_child_process8.execFileSync;
+  const execFileSync12 = options.execFileSync || import_child_process8.execFileSync;
   const command = requireSubprocessArg(plan?.command, "auth command");
   const args = Array.isArray(plan?.args) ? plan.args.map((arg, index) => requireSubprocessArg(arg, `auth arg ${index}`)) : [];
-  execFileSync10(command, args, {
+  execFileSync12(command, args, {
     cwd: options.cwd,
     stdio: options.stdio || "inherit",
     ...options.env ? { env: options.env } : {}
@@ -36313,7 +36335,7 @@ function runAuthSubprocess(plan, options = {}) {
 function getTempAuthScriptPath(authScript, useTsx) {
   const safeAuthScript = requireSubprocessArg(authScript, "auth script path");
   const tempExt = useTsx ? ".ts" : ".mjs";
-  return path46.join(path46.dirname(safeAuthScript), `auth-temp${tempExt}`);
+  return path48.join(path48.dirname(safeAuthScript), `auth-temp${tempExt}`);
 }
 async function cmdAuth(args, flags) {
   const stackId = args[0];
@@ -36354,14 +36376,14 @@ Installed stacks:`);
     const port = await findAvailablePort(3456);
     console.log(`Using port: ${port}`);
     console.log("");
-    const cwd = path46.dirname(authInfo.authScript);
+    const cwd = path48.dirname(authInfo.authScript);
     if (authInfo.runtime === "node") {
-      const distAuth = path46.join(cwd, "..", "dist", "auth.js");
+      const distAuth = path48.join(cwd, "..", "dist", "auth.js");
       let useBuiltInPort = false;
       let tempAuthScript = null;
       try {
-        await fs45.access(distAuth);
-        const distContent = await fs45.readFile(distAuth, "utf-8");
+        await fs47.access(distAuth);
+        const distContent = await fs47.readFile(distAuth, "utf-8");
         if (distContent.includes("findAvailablePort")) {
           console.log("Using compiled authentication script...");
           useBuiltInPort = true;
@@ -36369,10 +36391,10 @@ Installed stacks:`);
       } catch {
       }
       if (!useBuiltInPort) {
-        const authContent = await fs45.readFile(authInfo.authScript, "utf-8");
+        const authContent = await fs47.readFile(authInfo.authScript, "utf-8");
         tempAuthScript = getTempAuthScriptPath(authInfo.authScript, authInfo.useTsx);
         const modifiedContent = authContent.replace(/localhost:3456/g, `localhost:${port}`).replace(/server\.listen\(3456/g, `server.listen(${port}`);
-        await fs45.writeFile(tempAuthScript, modifiedContent);
+        await fs47.writeFile(tempAuthScript, modifiedContent);
       }
       console.log("Starting OAuth flow...");
       console.log("");
@@ -36389,12 +36411,12 @@ Installed stacks:`);
           env: authEnv
         });
         if (tempAuthScript) {
-          await fs45.unlink(tempAuthScript);
+          await fs47.unlink(tempAuthScript);
         }
       } catch (error) {
         if (tempAuthScript) {
           try {
-            await fs45.unlink(tempAuthScript);
+            await fs47.unlink(tempAuthScript);
           } catch {
           }
         }
@@ -36430,22 +36452,22 @@ Installed stacks:`);
 }
 
 // src/commands/mcp.js
-var fs46 = __toESM(require("fs"), 1);
-var path47 = __toESM(require("path"), 1);
+var fs48 = __toESM(require("fs"), 1);
+var path49 = __toESM(require("path"), 1);
 var import_child_process9 = require("child_process");
 init_src();
 init_src4();
 function getBundledRuntime(runtime) {
   const platform = process.platform;
   if (runtime === "node") {
-    const nodePath = platform === "win32" ? path47.join(PATHS.runtimes, "node", "node.exe") : path47.join(PATHS.runtimes, "node", "bin", "node");
-    if (fs46.existsSync(nodePath)) {
+    const nodePath = platform === "win32" ? path49.join(PATHS.runtimes, "node", "node.exe") : path49.join(PATHS.runtimes, "node", "bin", "node");
+    if (fs48.existsSync(nodePath)) {
       return nodePath;
     }
   }
   if (runtime === "python") {
-    const pythonPath = platform === "win32" ? path47.join(PATHS.runtimes, "python", "python.exe") : path47.join(PATHS.runtimes, "python", "bin", "python3");
-    if (fs46.existsSync(pythonPath)) {
+    const pythonPath = platform === "win32" ? path49.join(PATHS.runtimes, "python", "python.exe") : path49.join(PATHS.runtimes, "python", "bin", "python3");
+    if (fs48.existsSync(pythonPath)) {
       return pythonPath;
     }
   }
@@ -36453,18 +36475,18 @@ function getBundledRuntime(runtime) {
 }
 function getBundledNpx() {
   const platform = process.platform;
-  const npxPath = platform === "win32" ? path47.join(PATHS.runtimes, "node", "npx.cmd") : path47.join(PATHS.runtimes, "node", "bin", "npx");
-  if (fs46.existsSync(npxPath)) {
+  const npxPath = platform === "win32" ? path49.join(PATHS.runtimes, "node", "npx.cmd") : path49.join(PATHS.runtimes, "node", "bin", "npx");
+  if (fs48.existsSync(npxPath)) {
     return npxPath;
   }
   return null;
 }
 function loadManifest2(stackPath) {
-  const manifestPath = path47.join(stackPath, "manifest.json");
-  if (!fs46.existsSync(manifestPath)) {
+  const manifestPath = path49.join(stackPath, "manifest.json");
+  if (!fs48.existsSync(manifestPath)) {
     return null;
   }
-  return JSON.parse(fs46.readFileSync(manifestPath, "utf-8"));
+  return JSON.parse(fs48.readFileSync(manifestPath, "utf-8"));
 }
 function getRequiredSecrets(manifest) {
   const secrets = manifest?.requires?.secrets || manifest?.secrets || [];
@@ -36497,8 +36519,8 @@ async function cmdMcp(args, flags) {
     console.error("Example: rudi mcp slack");
     process.exit(1);
   }
-  const stackPath = path47.join(PATHS.stacks, stackName);
-  if (!fs46.existsSync(stackPath)) {
+  const stackPath = path49.join(PATHS.stacks, stackName);
+  if (!fs48.existsSync(stackPath)) {
     console.error(`Stack not found: ${stackName}`);
     console.error(`Expected at: ${stackPath}`);
     console.error("");
@@ -36547,22 +36569,22 @@ async function cmdMcp(args, flags) {
       }
       return part;
     }
-    if (part.startsWith("./") || part.startsWith("../") || !path47.isAbsolute(part)) {
-      const resolved = path47.join(stackPath, part);
-      if (fs46.existsSync(resolved)) {
+    if (part.startsWith("./") || part.startsWith("../") || !path49.isAbsolute(part)) {
+      const resolved = path49.join(stackPath, part);
+      if (fs48.existsSync(resolved)) {
         return resolved;
       }
     }
     return part;
   });
   const [cmd, ...cmdArgs] = resolvedCommand;
-  const bundledNodeBin = path47.join(PATHS.runtimes, "node", "bin");
-  const bundledPythonBin = path47.join(PATHS.runtimes, "python", "bin");
-  if (fs46.existsSync(bundledNodeBin) || fs46.existsSync(bundledPythonBin)) {
+  const bundledNodeBin = path49.join(PATHS.runtimes, "node", "bin");
+  const bundledPythonBin = path49.join(PATHS.runtimes, "python", "bin");
+  if (fs48.existsSync(bundledNodeBin) || fs48.existsSync(bundledPythonBin)) {
     const runtimePaths = [];
-    if (fs46.existsSync(bundledNodeBin)) runtimePaths.push(bundledNodeBin);
-    if (fs46.existsSync(bundledPythonBin)) runtimePaths.push(bundledPythonBin);
-    env.PATH = runtimePaths.join(path47.delimiter) + path47.delimiter + (env.PATH || "");
+    if (fs48.existsSync(bundledNodeBin)) runtimePaths.push(bundledNodeBin);
+    if (fs48.existsSync(bundledPythonBin)) runtimePaths.push(bundledPythonBin);
+    env.PATH = runtimePaths.join(path49.delimiter) + path49.delimiter + (env.PATH || "");
   }
   if (flags.debug) {
     console.error(`[rudi mcp] Stack: ${stackName}`);
@@ -36592,47 +36614,47 @@ async function cmdMcp(args, flags) {
 }
 
 // src/commands/integrate.js
-var fs47 = __toESM(require("fs"), 1);
-var path48 = __toESM(require("path"), 1);
+var fs49 = __toESM(require("fs"), 1);
+var path50 = __toESM(require("path"), 1);
 var import_os7 = __toESM(require("os"), 1);
 init_src();
 var HOME2 = import_os7.default.homedir();
-var ROUTER_SHIM_PATH = path48.join(PATHS.bins, "rudi-router");
-var LEGACY_ROUTER_SHIM_PATH = path48.join(PATHS.home, "shims", "rudi-router");
+var ROUTER_SHIM_PATH = path50.join(PATHS.bins, "rudi-router");
+var LEGACY_ROUTER_SHIM_PATH = path50.join(PATHS.home, "shims", "rudi-router");
 function checkRouterShim() {
-  if (fs47.existsSync(ROUTER_SHIM_PATH)) return ROUTER_SHIM_PATH;
-  if (fs47.existsSync(LEGACY_ROUTER_SHIM_PATH)) return LEGACY_ROUTER_SHIM_PATH;
+  if (fs49.existsSync(ROUTER_SHIM_PATH)) return ROUTER_SHIM_PATH;
+  if (fs49.existsSync(LEGACY_ROUTER_SHIM_PATH)) return LEGACY_ROUTER_SHIM_PATH;
   throw new Error(
     `Router shim not found at ${ROUTER_SHIM_PATH}
 Run: rudi shims rebuild`
   );
 }
 function backupConfig(configPath) {
-  if (!fs47.existsSync(configPath)) return null;
+  if (!fs49.existsSync(configPath)) return null;
   const backupPath = configPath + ".backup." + Date.now();
-  fs47.copyFileSync(configPath, backupPath);
+  fs49.copyFileSync(configPath, backupPath);
   return backupPath;
 }
 function readJsonConfig(configPath) {
-  if (!fs47.existsSync(configPath)) {
+  if (!fs49.existsSync(configPath)) {
     return {};
   }
   try {
-    return JSON.parse(fs47.readFileSync(configPath, "utf-8"));
+    return JSON.parse(fs49.readFileSync(configPath, "utf-8"));
   } catch {
     return {};
   }
 }
 function writeJsonConfig(configPath, config) {
-  const dir = path48.dirname(configPath);
-  if (!fs47.existsSync(dir)) {
-    fs47.mkdirSync(dir, { recursive: true });
+  const dir = path50.dirname(configPath);
+  if (!fs49.existsSync(dir)) {
+    fs49.mkdirSync(dir, { recursive: true });
   }
-  fs47.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  fs49.writeFileSync(configPath, JSON.stringify(config, null, 2));
 }
 function getAgentTargetPath(agentConfig) {
   const configPath = findAgentConfig(agentConfig);
-  return configPath || path48.join(HOME2, agentConfig.paths[process.platform]?.[0] || agentConfig.paths.darwin[0]);
+  return configPath || path50.join(HOME2, agentConfig.paths[process.platform]?.[0] || agentConfig.paths.darwin[0]);
 }
 function tomlString(value) {
   return `"${String(value).replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
@@ -36671,9 +36693,9 @@ function buildCodexRouterTomlBlock(routerPath) {
   ].join("\n");
 }
 function patchCodexTomlRouter(content, routerPath, options = {}) {
-  const rudiMcpShimPath = options.rudiMcpShimPath || path48.join(PATHS.bins, "rudi-mcp");
-  const legacyMcpShimPath = options.legacyMcpShimPath || path48.join(PATHS.home, "shims", "rudi-mcp");
-  const rudiStacksPath = options.rudiStacksPath || path48.join(PATHS.home, "stacks");
+  const rudiMcpShimPath = options.rudiMcpShimPath || path50.join(PATHS.bins, "rudi-mcp");
+  const legacyMcpShimPath = options.legacyMcpShimPath || path50.join(PATHS.home, "shims", "rudi-mcp");
+  const rudiStacksPath = options.rudiStacksPath || path50.join(PATHS.home, "stacks");
   const blocks = splitTomlBlocks(content || "");
   const removedEntries = [];
   const removedServers = /* @__PURE__ */ new Set();
@@ -36734,23 +36756,23 @@ async function integrateCodexAgent(agentConfig, targetPath, flags) {
 ${agentConfig.name}:`);
   console.log(`  Config: ${targetPath}`);
   const routerPath = checkRouterShim();
-  const existing = fs47.existsSync(targetPath) ? fs47.readFileSync(targetPath, "utf-8") : "";
+  const existing = fs49.existsSync(targetPath) ? fs49.readFileSync(targetPath, "utf-8") : "";
   const result = patchCodexTomlRouter(existing, routerPath);
   if (result.removed.length > 0) {
     console.log(`  Removed old entries: ${result.removed.join(", ")}`);
   }
   if (result.action !== "none" || result.removed.length > 0) {
-    const dir = path48.dirname(targetPath);
-    if (!fs47.existsSync(dir)) {
-      fs47.mkdirSync(dir, { recursive: true });
+    const dir = path50.dirname(targetPath);
+    if (!fs49.existsSync(dir)) {
+      fs49.mkdirSync(dir, { recursive: true });
     }
-    if (fs47.existsSync(targetPath)) {
+    if (fs49.existsSync(targetPath)) {
       const backup = backupConfig(targetPath);
       if (backup && flags.verbose) {
         console.log(`  Backup: ${backup}`);
       }
     }
-    fs47.writeFileSync(targetPath, result.content);
+    fs49.writeFileSync(targetPath, result.content);
     if (result.action !== "none") {
       console.log(`  ${result.action === "added" ? "\u2713 Added" : "\u2713 Updated"} rudi router`);
     }
@@ -36773,7 +36795,7 @@ ${agentConfig.name}:`);
   console.log(`  Config: ${targetPath}`);
   if (agentId === "codex") {
     const routerPath = checkRouterShim();
-    const existing = fs47.existsSync(targetPath) ? fs47.readFileSync(targetPath, "utf-8") : "";
+    const existing = fs49.existsSync(targetPath) ? fs49.readFileSync(targetPath, "utf-8") : "";
     const result = patchCodexTomlRouter(existing, routerPath);
     if (result.removed.length > 0) {
       console.log(`  Would remove old entries: ${result.removed.join(", ")}`);
@@ -36808,9 +36830,9 @@ ${agentConfig.name}:`);
   if (!config[key]) {
     config[key] = {};
   }
-  const rudiMcpShimPath = path48.join(PATHS.bins, "rudi-mcp");
-  const legacyMcpShimPath = path48.join(PATHS.home, "shims", "rudi-mcp");
-  const rudiStacksPath = path48.join(PATHS.home, "stacks");
+  const rudiMcpShimPath = path50.join(PATHS.bins, "rudi-mcp");
+  const legacyMcpShimPath = path50.join(PATHS.home, "shims", "rudi-mcp");
+  const rudiStacksPath = path50.join(PATHS.home, "stacks");
   const removedEntries = [];
   for (const [serverName, serverConfig] of Object.entries(config[key])) {
     if (serverName === "rudi") continue;
@@ -36849,7 +36871,7 @@ ${agentConfig.name}:`);
     action = "updated";
   }
   if (action !== "none" || removedEntries.length > 0) {
-    if (fs47.existsSync(targetPath)) {
+    if (fs49.existsSync(targetPath)) {
       const backup = backupConfig(targetPath);
       if (backup && flags.verbose) {
         console.log(`  Backup: ${backup}`);
@@ -38228,31 +38250,31 @@ var import_fs20 = __toESM(require("fs"), 1);
 var import_path19 = __toESM(require("path"), 1);
 
 // src/runtime-inspection.js
-var import_node_fs24 = __toESM(require("node:fs"), 1);
-var import_node_path24 = __toESM(require("node:path"), 1);
+var import_node_fs26 = __toESM(require("node:fs"), 1);
+var import_node_path26 = __toESM(require("node:path"), 1);
 init_src();
 function isWithinRoot(rootPath, candidatePath) {
-  const relative4 = import_node_path24.default.relative(rootPath, candidatePath);
-  return relative4 === "" || !relative4.startsWith(`..${import_node_path24.default.sep}`) && relative4 !== ".." && !import_node_path24.default.isAbsolute(relative4);
+  const relative4 = import_node_path26.default.relative(rootPath, candidatePath);
+  return relative4 === "" || !relative4.startsWith(`..${import_node_path26.default.sep}`) && relative4 !== ".." && !import_node_path26.default.isAbsolute(relative4);
 }
 function declaredRuntimeBins(manifest) {
   if (Array.isArray(manifest?.bins)) {
-    return manifest.bins.map((name) => ({ name, relativePath: import_node_path24.default.join("bin", name) }));
+    return manifest.bins.map((name) => ({ name, relativePath: import_node_path26.default.join("bin", name) }));
   }
   if (manifest?.bins && typeof manifest.bins === "object") {
     return Object.entries(manifest.bins).map(([name, descriptor]) => ({
       name,
-      relativePath: descriptor?.path || import_node_path24.default.join("bin", name)
+      relativePath: descriptor?.path || import_node_path26.default.join("bin", name)
     }));
   }
   return [];
 }
 function inspectRuntimeInstall(packageId) {
   const installRoot = getPackagePath(packageId);
-  const manifestPath = import_node_path24.default.join(installRoot, "manifest.json");
-  const rootExists = import_node_fs24.default.existsSync(installRoot);
-  const resolvedInstallRoot = rootExists ? import_node_fs24.default.realpathSync(installRoot) : installRoot;
-  const manifestPresent = import_node_fs24.default.existsSync(manifestPath);
+  const manifestPath = import_node_path26.default.join(installRoot, "manifest.json");
+  const rootExists = import_node_fs26.default.existsSync(installRoot);
+  const resolvedInstallRoot = rootExists ? import_node_fs26.default.realpathSync(installRoot) : installRoot;
+  const manifestPresent = import_node_fs26.default.existsSync(manifestPath);
   if (!manifestPresent) {
     return {
       binaries: [],
@@ -38265,7 +38287,7 @@ function inspectRuntimeInstall(packageId) {
     };
   }
   try {
-    const manifest = JSON.parse(import_node_fs24.default.readFileSync(manifestPath, "utf8"));
+    const manifest = JSON.parse(import_node_fs26.default.readFileSync(manifestPath, "utf8"));
     if (manifest.id !== packageId) {
       const actualId = Object.hasOwn(manifest, "id") ? JSON.stringify(manifest.id) : "(missing)";
       throw new Error(`Installed runtime manifest ID mismatch: expected ${packageId}, got ${actualId}`);
@@ -38274,21 +38296,21 @@ function inspectRuntimeInstall(packageId) {
       if (typeof name !== "string" || !name || typeof relativePath !== "string" || !relativePath) {
         throw new Error("Installed runtime manifest contains an invalid binary declaration");
       }
-      const binaryPath = import_node_path24.default.resolve(installRoot, relativePath);
+      const binaryPath = import_node_path26.default.resolve(installRoot, relativePath);
       if (!isWithinRoot(installRoot, binaryPath)) {
         throw new Error(`Installed runtime binary escapes its package root: ${name}`);
       }
-      if (!import_node_fs24.default.existsSync(binaryPath)) {
+      if (!import_node_fs26.default.existsSync(binaryPath)) {
         throw new Error(`Installed runtime binary is missing: ${name}`);
       }
-      const resolvedPath = import_node_fs24.default.realpathSync(binaryPath);
+      const resolvedPath = import_node_fs26.default.realpathSync(binaryPath);
       if (!isWithinRoot(resolvedInstallRoot, resolvedPath)) {
         throw new Error(`Installed runtime binary resolves outside its package root: ${name}`);
       }
-      if (!import_node_fs24.default.statSync(resolvedPath).isFile()) {
+      if (!import_node_fs26.default.statSync(resolvedPath).isFile()) {
         throw new Error(`Installed runtime binary is not a regular file: ${name}`);
       }
-      import_node_fs24.default.accessSync(resolvedPath, import_node_fs24.default.constants.X_OK);
+      import_node_fs26.default.accessSync(resolvedPath, import_node_fs26.default.constants.X_OK);
       return { name, path: binaryPath, resolvedPath };
     });
     if (binaries.length === 0) {
@@ -39448,11 +39470,11 @@ async function cmdStudio(args, flags) {
 
 // src/commands/serve.js
 var import_node_http = __toESM(require("node:http"), 1);
-var import_node_url2 = require("node:url");
+var import_node_url4 = require("node:url");
 
 // src/daemon/http/context.js
-var import_node_crypto9 = __toESM(require("node:crypto"), 1);
-var import_node_url = require("node:url");
+var import_node_crypto10 = __toESM(require("node:crypto"), 1);
+var import_node_url3 = require("node:url");
 
 // src/daemon/http/errors.js
 function defineError(code, status, defaultMessage) {
@@ -39519,11 +39541,11 @@ function createDaemonHttpContext() {
   function createRequestContext(req) {
     let pathname = "/";
     try {
-      pathname = new import_node_url.URL(req?.url || "/", "http://localhost").pathname;
+      pathname = new import_node_url3.URL(req?.url || "/", "http://localhost").pathname;
     } catch {
     }
     return {
-      requestId: import_node_crypto9.default.randomUUID(),
+      requestId: import_node_crypto10.default.randomUUID(),
       method: req?.method || null,
       path: pathname,
       startedAt: Date.now(),
@@ -39671,7 +39693,7 @@ function createDaemonHttpContext() {
     if (!token || typeof candidate !== "string") return false;
     const expected = Buffer.from(token);
     const actual = Buffer.from(candidate);
-    return expected.length === actual.length && import_node_crypto9.default.timingSafeEqual(expected, actual);
+    return expected.length === actual.length && import_node_crypto10.default.timingSafeEqual(expected, actual);
   }
   return {
     REQUEST_ID_HEADER,
@@ -39681,7 +39703,7 @@ function createDaemonHttpContext() {
     checkAuth: checkAuth2,
     createRequestContext,
     error,
-    generateToken: () => import_node_crypto9.default.randomBytes(32).toString("hex"),
+    generateToken: () => import_node_crypto10.default.randomBytes(32).toString("hex"),
     getRequestContext,
     invalidField,
     json,
@@ -39698,7 +39720,7 @@ function createDaemonHttpContext() {
 init_src5();
 
 // src/daemon/operations/health.js
-var import_node_os5 = __toESM(require("node:os"), 1);
+var import_node_os6 = __toESM(require("node:os"), 1);
 init_src();
 function requireValidResult(name, result, validation) {
   if (!validation.ok) {
@@ -39761,7 +39783,7 @@ function getDaemonStatus2(options = {}) {
     port: normalizePort(options.port),
     uptimeMs,
     rudiHome: typeof options.rudiHome === "string" && options.rudiHome.length > 0 ? options.rudiHome : PATHS.home,
-    platform: typeof options.platform === "string" && options.platform.length > 0 ? options.platform : import_node_os5.default.platform(),
+    platform: typeof options.platform === "string" && options.platform.length > 0 ? options.platform : import_node_os6.default.platform(),
     runtime: options.runtime && typeof options.runtime === "object" && !Array.isArray(options.runtime) ? options.runtime : {
       name: "node",
       version: process.version
@@ -39872,13 +39894,13 @@ function buildDaemonHealthRoutes(ctx, options = {}) {
 }
 
 // src/daemon/routes/env.js
-var import_node_os6 = __toESM(require("node:os"), 1);
+var import_node_os7 = __toESM(require("node:os"), 1);
 function buildEnvRoutes(ctx) {
   const { json } = ctx;
   return {
     handle(_req, res, url) {
       if (url.pathname !== "/env") return false;
-      json(res, { home: import_node_os6.default.homedir(), platform: import_node_os6.default.platform() });
+      json(res, { home: import_node_os7.default.homedir(), platform: import_node_os7.default.platform() });
       return true;
     }
   };
@@ -40239,7 +40261,7 @@ function buildLocalLlmRoutes(ctx, deps = {}) {
 }
 
 // src/daemon/routes/agent-host-validation.js
-var import_node_path25 = __toESM(require("node:path"), 1);
+var import_node_path27 = __toESM(require("node:path"), 1);
 var MAX_AGENT_HOST_BODY_BYTES = 12 * 1024 * 1024;
 var LAUNCH_FIELDS = /* @__PURE__ */ new Set([
   "approvalMode",
@@ -40340,7 +40362,7 @@ function validateRequest(body, allowed, { resume = false } = {}) {
   }
   if (!resume) {
     Object.assign(options, {
-      originDirectory: import_node_path25.default.resolve(requireText(body.originDirectory, "originDirectory")),
+      originDirectory: import_node_path27.default.resolve(requireText(body.originDirectory, "originDirectory")),
       outputDirectory: body.outputDirectory == null ? void 0 : requireText(body.outputDirectory, "outputDirectory"),
       provider: requireText(body.provider, "provider", 64),
       workspace: body.workspace == null ? void 0 : requireText(body.workspace, "workspace"),
@@ -40410,7 +40432,7 @@ function validateAgentGroupRequest(body) {
   });
   return {
     groupId: assertAgentGroupId(body.groupId),
-    originDirectory: import_node_path25.default.resolve(requireText(body.originDirectory, "originDirectory")),
+    originDirectory: import_node_path27.default.resolve(requireText(body.originDirectory, "originDirectory")),
     tasks,
     workspace: requireText(body.workspace, "workspace"),
     workspaceMode: body.workspaceMode == null ? "auto" : requireText(body.workspaceMode, "workspaceMode", 32)
@@ -40638,7 +40660,7 @@ function buildAgentHostRoutes(ctx, dependencies = {}) {
 
 // src/daemon/routes/packages.js
 var import_crypto2 = __toESM(require("crypto"), 1);
-var fs55 = __toESM(require("fs/promises"), 1);
+var fs57 = __toESM(require("fs/promises"), 1);
 var fsSync2 = __toESM(require("fs"), 1);
 var import_path23 = __toESM(require("path"), 1);
 init_src5();
@@ -40710,7 +40732,7 @@ var defaultDeps = {
 async function loadManifest3(installPath) {
   const manifestPath = import_path23.default.join(installPath, "manifest.json");
   try {
-    const content = await fs55.readFile(manifestPath, "utf-8");
+    const content = await fs57.readFile(manifestPath, "utf-8");
     return JSON.parse(content);
   } catch {
     return null;
@@ -40855,7 +40877,7 @@ async function checkSecrets3(manifest, deps) {
 async function parseEnvExample2(installPath) {
   const examplePath = import_path23.default.join(installPath, ".env.example");
   try {
-    const content = await fs55.readFile(examplePath, "utf-8");
+    const content = await fs57.readFile(examplePath, "utf-8");
     const keys = [];
     for (const line of content.split("\n")) {
       const trimmed = line.trim();
@@ -40871,7 +40893,7 @@ async function parseEnvExample2(installPath) {
 async function cleanupFailedStackInstall2(stackId, stackPath, removeConfig, deps) {
   if (stackPath) {
     try {
-      await fs55.rm(stackPath, { recursive: true, force: true });
+      await fs57.rm(stackPath, { recursive: true, force: true });
     } catch {
     }
   }
@@ -41419,7 +41441,7 @@ async function cmdServe(_args, flags = {}) {
     const requestContext = createRequestContext(req);
     attachRequestContext(res, requestContext);
     if (auth.handleCorsPreflight(req, res, requestContext)) return;
-    const url = new import_node_url2.URL(req.url || "/", "http://localhost");
+    const url = new import_node_url4.URL(req.url || "/", "http://localhost");
     const startedAt = Date.now();
     try {
       if (healthRoutes.handlePublic(req, res, url)) return;
