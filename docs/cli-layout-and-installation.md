@@ -120,7 +120,7 @@ logic; `rudi run` reaches the runner; MCP clients invoke the separate router.
 
 ## Fresh installation procedure
 
-Use a supported Node 22 or 24 installation with npm. pnpm is needed only when
+Use a supported Node 22 or 24.22+ installation with npm. pnpm is needed only when
 building the source checkout; the repository declares pnpm 10.22.0.
 
 ```bash
@@ -159,7 +159,9 @@ npm install prefix to verify the source-to-package boundary.
 Public npm version tested: **1.10.29**. Tests use empty temporary homes, separate
 npm prefixes/caches/config files, an allowlisted environment, and a working
 directory outside the source checkout. The existing RUDI bins and user
-configuration are excluded. Node 24.21.0 and OS utilities remain prerequisites.
+configuration are excluded. Node 24.21.0 and OS utilities were prerequisites
+for this audit. The October 16 teardown correction below raises the current
+Node 24 minimum to 24.22; it does not change what this earlier audit tested.
 The same public package is installed independently as `hoff` on the primary Mac
 and as `admin` over SSH on the admin Mac.
 
@@ -219,6 +221,14 @@ See the [fix verification ledger](swe-compliance/2026-10-15-cli-onboarding-fixes
 for red/green commands, both-host evidence and publication status.
 
 ## Node 24 candidate follow-up
+
+**Teardown correction (October 16):** the 24.21.0 candidate described below is
+historical evidence, not the current adoption target. Node 24.22.0 fixes the
+native cleanup regression reproduced by the Agent Host suite. Opening a database
+once is insufficient acceptance: run the packaged SQLite teardown probe with
+the exact selected runtime and dependency closure, followed by the full suite.
+The isolated candidate does not replace the installed runtime or registry entry.
+See [the teardown ledger](swe-compliance/2026-10-16-sqlite-teardown.md).
 
 The companion registry change pins `runtime:node` to Node 24.21.0 using the
 official Darwin/Linux arm64/x64 archives and SHA-256 values. The versioned

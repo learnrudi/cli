@@ -1,14 +1,23 @@
 # Registered shared-workspace task execution v1
 
-Unpublished source capability. The supported host is **macOS with native Codex
-0.160.1**. Other versions/providers fail closed pending qualification. This is
+Fixture candidate; GitHub source integration is separate from an npm release.
+The containment fixture currently qualifies **Darwin 24,
+x86_64, with native Codex 0.160.1**. Other hosts/providers fail closed pending qualification. This is
 not deployment, launchd acceptance, or proof of NFL research.
 
 Compute owns jobs, leases and manual admission. Agent Host owns native arguments,
 authentication checks, session pointers, permission enforcement and launch
 artifacts. The provider owns inference and native transcripts. The bridge uses
-foreground execution; no daemon, desktop, detached acknowledgement, copied
-project or replacement queue is required.
+foreground completion through a temporary launchd audit-session capsule. It requires
+the signed-in user's `gui/<uid>` domain; no RUDI daemon or copied project is required.
+
+On Node 24, use 24.22 or newer. Agent Host rejects earlier Node 24 versions before
+opening SQLite state because allocation-driven garbage collection can abort
+native addons. Qualification must run `node --max-semi-space-size=1
+scripts/verify-sqlite-teardown.mjs` from the packaged CLI with its pinned Node
+binary. This exercises GC, worker environment teardown, and database integrity
+after reopening; a one-query SQLite smoke test is insufficient. Compute's
+Python `sqlite3` job store is independent of this Node compatibility constraint.
 
 ## Execution profile
 
@@ -93,8 +102,9 @@ The request contains `schema_version`, `task` (id/revision/definition_sha256),
 `instructions`, `execution_profile`, `working_directory`, `outputs`, and
 `timeout_seconds`. The profile's native timeout must leave 20 seconds inside
 Compute's timeout. Compute additionally retains its 10-second shutdown grace.
-The provider runs in a separate process group with TERM/KILL escalation. Startup
-receipt failure, output overflow, timeout and signals enter supervised cleanup.
+The provider runs in a separate process group inside the capsule's audit session.
+Startup receipt failure, output overflow, timeout, native exit and signals enter
+supervised audit-session cleanup, including descendants that detach from that group.
 Resume, promote and discard reject registered shared launches: the shared
 workspace belongs to its operator.
 
@@ -129,20 +139,38 @@ before recording success, then stores the completion receipt path/hash/outcome
 in the existing succeeded event. Missing/mismatched receipts cause
 `task_receipt_invalid`; an exhausted single attempt is `dead`. Abrupt loss of
 the bridge or storage can leave incomplete evidence and must be reconciled,
-never silently replayed in the same directory. A hard-killed supervisor cannot
-promise full descendant cleanup. The task watchdog now records process identity,
-waits for readiness before prompt delivery, and cleans only a verified native
-process group on supervisor loss. Crash recovery retains a durable quarantine;
+never silently replayed in the same directory. The independent watchdog is armed
+before native spawn and its current identity is checked before prompt delivery.
+It drains the audit session on supervisor loss. Crash recovery retains a durable quarantine;
 subsequent execution fails closed. `rudi agent task-recover REQUEST SHA256` is the
 bounded provider-neutral reconciliation interface used by Compute before lease
 recovery. There is no automatic quarantine-clear operation.
 
-The standalone `dist/task-custody-worker.cjs` is part of the package contract.
-Normal close verifies only the original process group: a detached descendant
-can survive. This is a confirmed unattended-release blocker, not a cleanup
-guarantee. See Compute's `docs/bridge-release-prerequisites.md` for packaging,
-isolated launchd acceptance and rollback gates. No production eligibility is
-claimed by the fixture candidate `1.11.0-rc.1`.
+The package includes `dist/task-custody-worker.cjs`, `dist/task-capsule-worker.cjs`
+and the compiled `dist/task-audit-darwin` helper. Each task's temporary
+`com.learnrudi.containment.<uuid>` job uses `SessionCreate`; setsid, setpgid,
+double-fork and exec preserve its kernel audit session. Cleanup signals exact
+audit-token generations with no PID-only fallback. Output hashes are computed
+only after cleanup completes.
+
+The helper requires a complete Darwin live-process census (PID 0 sentinel),
+uses kernel creation IDs instead of wall-clock birth times, and revalidates
+creation ID and PID version around token reads. Missing or changing identities
+make the census uncertain. Two complete empty sweeps are required; uncertainty
+past the seven-second budget blocks completion. The creation counter is kept as
+uint64/decimal text and bounded below 2^63. This depends on the qualified Darwin
+24 kernel implementation, not a portable process-list guarantee.
+
+Native Codex and the two supervisors are trusted. Command tools remain inside
+Codex's native sandbox; preflight proves foreign audit-session access, session
+creation and supervisor signaling are denied. Fixture proof also rejects launchd
+job creation. No outer nested sandbox is applied. Loss of both supervisor and
+watchdog anchors, inaccessible candidates or unresolved cleanup keeps custody
+quarantined. This does not authorize automatic replay, quarantine clearing or
+production operation. Compute's existing release manifest remains ineligible.
+Compute PR #22 now records passing isolated launchd acceptance and schema-safe
+rollback. App-closed, login/boot/FileVault, other-platform and production-path
+qualification remain separate gates; source merges do not promote that manifest.
 The guarded package runner supplies `RUDI_AGENT_TASK_CODEX_PATH` and
 `RUDI_AGENT_TASK_CODEX_SHA256`. Task validation checks that canonical executable
 and its bytes, and task execution selects it instead of the ambient provider
@@ -155,10 +183,17 @@ From the CLI checkout:
 ```bash
 node --test src/__tests__/unit/agent-task-profile.test.js src/__tests__/unit/agent-task-launch.test.js src/__tests__/unit/agent-task-run.test.js
 node scripts/verify-task-permissions.mjs /absolute/native/codex /absolute/artifact-root
+node scripts/verify-task-containment.mjs normal
+node scripts/verify-task-containment.mjs double-fork
+node scripts/verify-task-containment.mjs census-race
 ```
 
 The native sandbox probe uses a disposable home and no inference. The Compute
-script `scripts/verify_agent_task_bridge.py` calls the real queue, worker,
-executor and Agent Host source with a deterministic provider fixture. It proves
-success and missing-terminal failure, not live provider authentication, NFL
-receipts, schedules, notification delivery or unattended deployment.
+script `scripts/verify_agent_task_bridge.py` predates capsule dispatch and supplies
+in-process provider overrides. Public `runAgentTask` now explicitly rejects those
+overrides before resolving a provider; that old fixture must be migrated to the
+explicit `runAgentTaskInSession` fixture interface. It cannot silently invoke real
+inference. The custody suite exercises isolated launchd jobs, crash quarantine,
+double-fork and a controlled fork/exit during census; unrelated canaries must survive.
+Native/package fixtures and immutable evidence for this change are recorded in
+`docs/swe-compliance/2026-10-16-detached-process-containment.md`.
