@@ -34349,7 +34349,7 @@ function createShim(shimPath, targetPath) {
   if (import_fs17.default.existsSync(shimPath)) {
     import_fs17.default.unlinkSync(shimPath);
   }
-  import_fs17.default.symlinkSync(targetPath, shimPath);
+  import_fs17.default.symlinkSync(import_path16.default.relative(import_path16.default.dirname(shimPath), targetPath), shimPath);
 }
 
 // src/commands/update.js
@@ -37981,7 +37981,7 @@ function createShimLink(shimPath, targetPath) {
   if (import_fs22.default.existsSync(shimPath)) {
     import_fs22.default.unlinkSync(shimPath);
   }
-  import_fs22.default.symlinkSync(targetPath, shimPath);
+  import_fs22.default.symlinkSync(import_path20.default.relative(import_path20.default.dirname(shimPath), targetPath), shimPath);
 }
 function writeShimScript(name, script) {
   const shimPath = import_path20.default.join(PATHS.bins, name);
@@ -41685,7 +41685,7 @@ async function cmdLeverage(args, flags) {
 }
 
 // src/index.js
-var VERSION = true ? "1.10.29" : process.env.npm_package_version || "0.0.0";
+var VERSION = true ? "1.10.30" : process.env.npm_package_version || "0.0.0";
 var RETIRED_COMMANDS = /* @__PURE__ */ new Map([
   ["apply", "Provider transcripts remain authoritative; organization-plan execution was removed."],
   ["database", "Use Studio only if you still need the isolated compatibility database."],
