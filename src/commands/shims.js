@@ -98,7 +98,8 @@ function createShimLink(shimPath, targetPath) {
   if (fs.existsSync(shimPath)) {
     fs.unlinkSync(shimPath);
   }
-  fs.symlinkSync(targetPath, shimPath);
+  // Keep the same target when RUDI_HOME is reached through another mount path.
+  fs.symlinkSync(path.relative(path.dirname(shimPath), targetPath), shimPath);
 }
 
 function writeShimScript(name, script) {
