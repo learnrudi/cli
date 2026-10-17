@@ -2,10 +2,60 @@
 
 Fixture candidate; GitHub source integration is separate from an npm release.
 The containment fixture currently qualifies **Darwin 24,
-x86_64, with native Codex 0.160.1**. Other hosts/providers fail closed pending qualification. This is
+x86_64, with native Codex 0.160.1**. Claude qualification is specified below; other hosts/providers fail closed. This is
 not deployment, launchd acceptance, or proof of NFL research.
 
-Compute owns jobs, leases and manual admission. Agent Host owns native arguments,
+Claude workspace tasks require an explicit account and native Claude Code
+2.1.294 on qualified Darwin 24 x86_64. Preflight verifies the selected seat,
+organization, config directory, native version and OS containment capability.
+There is no default-account fallback. Managed native policy requires separate
+qualification and fails closed.
+
+Claude uses `--safe-mode`, `--restricted`, `dontAsk`, Read/Write/Edit only,
+empty MCP/settings sources, disabled hooks and explicit write-root rules.
+An OS sandbox additionally limits data reads and writes, denies audit-session
+escape and signals to the supervisor, and follows resolved paths for symlink
+checks. The shared audit-session custody supervisor drains descendants after
+completion, timeout, cancellation or owner crash. Inference network transport
+remains enabled; `network: disabled` denies model network tools, not transport
+to Anthropic. No shell, browser, plugins, MCP or web tools are exposed.
+
+A Claude profile adds this required non-secret account object to the profile
+below (with `provider: "claude"` and an exact Claude model):
+
+```json
+"account": {
+  "id": "claude-example",
+  "email": "operator@example.test",
+  "organization_id": "native-auth-status-org-id",
+  "config_directory": "/Users/operator/.rudi/agent-identities/claude-example/claude",
+  "anthropic_directory": "/Users/operator/.rudi/agent-identities/claude-example/anthropic"
+}
+```
+
+Both directories must be canonical, owned by the execution user, private
+(mode 0700) and disjoint from all task roots. Authentication stays on that host;
+profiles contain no tokens. Native sessions are persisted under the selected
+`config_directory/projects/<encoded-workspace>/<session-id>.jsonl`. Each task
+starts a fresh session. Receipts record the selected account, observed account,
+projects directory and native session ID. Client workspaces hold work outputs,
+not login state. Per-account directories prevent accidental selection crossover;
+they are not separate macOS users or a security boundary against the operator.
+
+Claude completion requires exactly one successful result bound to the initialized
+session, no native error or permission denials, and a valid final manifest.
+The shared receipt path verifies output roots and hashes after custody closes.
+Native executable pins use `RUDI_AGENT_TASK_CLAUDE_PATH` and
+`RUDI_AGENT_TASK_CLAUDE_SHA256`; cross-provider pins are rejected.
+
+The October 17 account qualification used synthetic data: all three native
+accounts concurrently read approved inputs, wrote approved outputs and persisted
+separate sessions. OS read/write and symlink denials, audit/signal denials,
+eight generic custody modes and native owner-crash cleanup passed. See the
+[account qualification ledger](swe-compliance/2026-10-17-claude-account-selection.md).
+Qualification evidence does not itself deploy a release or activate a schedule.
+
+Compute owns jobs, leases and recurring admission. Agent Host owns native arguments,
 authentication checks, session pointers, permission enforcement and launch
 artifacts. The provider owns inference and native transcripts. The bridge uses
 foreground completion through a temporary launchd audit-session capsule. It requires
@@ -91,7 +141,7 @@ processes running under the same OS identity.
 ## Request, admission and supervision
 
 `rudi agent task-check <request-path> <sha256>` validates the closed request and
-profile. It returns a versioned `agent-task-check` response bound to that exact
+profile and rejects unqualified providers. It returns a versioned `agent-task-check` response bound to that exact
 reference. `rudi agent task-run <request-path> <sha256>` additionally requires
 Compute's job ID, spec hash and first-attempt environment bindings. It accepts
 no permission/passthrough flags or alternate session. References are bounded

@@ -24,7 +24,7 @@ export async function runTaskCapsule(reference,request,environment) {
   fs.mkdirSync(directory,{mode:0o700});
   const env={PATH:'/usr/bin:/bin'};
   for(const key of ['HOME','USER','LOGNAME','LANG','LC_ALL','RUDI_COMPUTE_JOB_ID','RUDI_COMPUTE_ATTEMPT',
-    'RUDI_COMPUTE_SPEC_HASH','RUDI_AGENT_TASK_CODEX_PATH','RUDI_AGENT_TASK_CODEX_SHA256']) {
+    'RUDI_COMPUTE_SPEC_HASH','RUDI_AGENT_TASK_CODEX_PATH','RUDI_AGENT_TASK_CODEX_SHA256','RUDI_AGENT_TASK_CLAUDE_PATH','RUDI_AGENT_TASK_CLAUDE_SHA256']) {
     if(typeof environment[key]==='string')env[key]=environment[key];
   }
   capsuleRecord(path.join(directory,'input.json'),{reference,creator,label,environment:env});

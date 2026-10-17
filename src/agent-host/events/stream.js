@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { consumeClaudeTaskEvent } from './providers/claude-task.js';
 import { parseTaskJson } from '../task-profile.js';
 import { processIdentity } from '../task-custody.js';
 
@@ -62,6 +63,7 @@ export function executeForegroundLaunch({
     let taskTerminal = false;
     let taskFailure = null;
     let taskFinalOutput = null;
+    const claudeTask = { terminal: false, sessionId: null, finalOutput: null };
     let taskIdentity = null;
     const normalizer = createAgentEventNormalizer(plan.provider);
     let child;
@@ -248,14 +250,20 @@ export function executeForegroundLaunch({
     function consumeLine(line) {
       if (!line.trim()) return;
       try {
-        const rawEvent = JSON.parse(line);
+        const rawEvent = taskExecution ? parseTaskJson(line) : JSON.parse(line);
         if (taskExecution) {
           if (!rawEvent || typeof rawEvent !== 'object' || Array.isArray(rawEvent)) throw new Error('invalid event');
-          if (rawEvent.type === 'turn.completed') taskTerminal = true;
-          if (rawEvent.type === 'turn.failed' || rawEvent.type === 'error') taskFailure = 'native terminal failure';
-          if (rawEvent.type === 'item.completed' && rawEvent.item?.type === 'agent_message') {
-            if (Buffer.byteLength(rawEvent.item.text || '') > 65536) throw new Error('final output overflow');
-            taskFinalOutput = rawEvent.item.text;
+          if (plan.provider === 'claude') {
+            consumeClaudeTaskEvent(claudeTask, rawEvent);
+            taskTerminal = claudeTask.terminal;
+            taskFinalOutput = claudeTask.finalOutput;
+          } else {
+            if (rawEvent.type === 'turn.completed') taskTerminal = true;
+            if (rawEvent.type === 'turn.failed' || rawEvent.type === 'error') taskFailure = 'native terminal failure';
+            if (rawEvent.type === 'item.completed' && rawEvent.item?.type === 'agent_message') {
+              if (Buffer.byteLength(rawEvent.item.text || '') > 65536) throw new Error('final output overflow');
+              taskFinalOutput = rawEvent.item.text;
+            }
           }
         }
         for (const result of normalizer.normalize(rawEvent)) {

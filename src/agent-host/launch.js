@@ -18,7 +18,7 @@ import {
   cleanupUnstartedWorkspace,
   resolveAgentWorkspace,
 } from './workspace.js';
-import { assertTaskHostCapabilities } from './task-codex.js';
+import { assertTaskHostCapabilities } from './task-provider.js';
 import { assertTaskProfile, assertWritableTaskRoots } from './task-profile.js';
 import { assertPrivateAutomationHostCapabilities } from './private-automation-profile.js';
 
@@ -60,12 +60,12 @@ export async function launchAgent(options, dependencies = {}) {
   if (!binaryPath) {
     throw new Error(getMissingAgentProviderMessage(provider));
   }
-  await preflightImpl({ binaryPath, provider });
+  if (!taskProfile || provider !== 'claude') await preflightImpl({ binaryPath, provider });
   if (privateAutomationProfile) {
     await privatePreflightImpl({ binaryPath, profile: privateAutomationProfile });
   }
 
-  if (taskProfile) await taskPreflightImpl({ binaryPath, profile: taskProfile });
+  const taskCapabilities = taskProfile ? await taskPreflightImpl({ binaryPath, profile: taskProfile }) : null;
 
   const workspace = workspaceResolver({
     artifactsRoot,
@@ -123,11 +123,11 @@ export async function launchAgent(options, dependencies = {}) {
     });
 
     if (taskProfile) assertWritableTaskRoots(taskProfile);
-    return await executeForegroundLaunch({
+    const result = await executeForegroundLaunch({
       eventSink: resolvedEventSink,
       jsonOutput: options.json === true,
       launchId,
-      onSpawn,
+      onSpawn: onSpawn ? value => onSpawn({...value, taskAccount: taskCapabilities?.account || null}) : null,
       plan,
       spawnImpl,
         taskStop,
@@ -137,6 +137,7 @@ export async function launchAgent(options, dependencies = {}) {
       signalEmitter,
       timeoutMs: taskProfile?.timeout_ms || options.timeoutMs || plan.timeouts.runtimeMs,
     });
+    return taskProfile ? {...result, taskAccount: taskCapabilities?.account || null} : result;
   } catch (error) {
     const current = store.get(launchId);
     if (current?.status === 'starting' || current?.status === 'running') {

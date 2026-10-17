@@ -1,4 +1,4 @@
-import { readAgentTask, runAgentTask, recoverAgentTask } from '../agent-host/task-run.js';
+import { checkAgentTask, runAgentTask, recoverAgentTask } from '../agent-host/task-run.js';
 import { attachAgentLaunch } from '../agent-host/attach.js';
 import {
   buildDetachedOptions,
@@ -140,8 +140,9 @@ export async function cmdAgent(args = [], flags = {}, passthrough = [], dependen
       throw new Error('Usage: rudi agent task-check|task-run|task-recover <request-path> <sha256> [--json]');
     }
     const reference = { path: args[1], sha256: args[2] };
+    const checkedTask = subcommand === 'task-check' ? checkAgentTask(reference) : null;
     const result = subcommand === 'task-check'
-      ? { schema_version: 1, kind: 'agent-task-check', valid: true, request: reference, provider: readAgentTask(reference).profile.provider }
+      ? { schema_version: 1, kind: 'agent-task-check', valid: true, request: reference, provider: checkedTask.profile.provider }
       : subcommand === 'task-recover' ? await recoverAgentTask(reference) : await runAgentTask(reference);
     console.log(JSON.stringify(result));
     if (result.status === 'failed') process.exitCode = 1;

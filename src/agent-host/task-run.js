@@ -4,11 +4,18 @@ import { runTaskCapsule } from './task-capsule.js';
 import { launchAgent } from './launch.js';
 import { openTaskCustody, recoverTaskCustody } from './task-custody.js';
 import { createLaunchStore } from './launch-store.js';
+import { resolveAgentProviderBinary } from './providers/index.js';
+import { assertTaskHostCapabilities, assertTaskProviderQualified } from './task-provider.js';
 import { canonicalDirectory, exactFields, inside, parseTaskJson, readTaskReference, readTaskRegularFile, sha256, taskText, validateTaskProfile } from './task-profile.js';
 
-function pinnedNative(environment) {
-  const binary = environment.RUDI_AGENT_TASK_CODEX_PATH;
-  const digest = environment.RUDI_AGENT_TASK_CODEX_SHA256;
+function pinnedNative(environment, provider) {
+  const foreign = provider === 'claude' ? 'CODEX' : 'CLAUDE';
+  if (environment[`RUDI_AGENT_TASK_${foreign}_PATH`] !== undefined
+      || environment[`RUDI_AGENT_TASK_${foreign}_SHA256`] !== undefined) {
+    throw new Error('task provider executable pin mismatch');
+  }
+  const binary = environment[`RUDI_AGENT_TASK_${provider.toUpperCase()}_PATH`];
+  const digest = environment[`RUDI_AGENT_TASK_${provider.toUpperCase()}_SHA256`];
   if (binary === undefined && digest === undefined) return null;
   if (typeof binary !== 'string' || !path.isAbsolute(binary) || !/^[a-f0-9]{64}$/u.test(digest || '')
       || fs.realpathSync(binary) !== binary
@@ -20,7 +27,6 @@ function pinnedNative(environment) {
 }
 
 export function readAgentTask(reference, environment = process.env) {
-  const nativeBinary = pinnedNative(environment);
   const request = parseTaskJson(readTaskReference(reference, 'task request'));
   exactFields(request, ['schema_version', 'task', 'instructions', 'execution_profile', 'working_directory', 'outputs', 'timeout_seconds'], 'task request');
   exactFields(request.task, ['id', 'revision', 'definition_sha256'], 'task binding');
@@ -35,6 +41,7 @@ export function readAgentTask(reference, environment = process.env) {
   const instructions = readTaskReference(request.instructions, 'task instructions');
   if (!instructions.trim()) throw new Error('empty instructions');
   const profile = validateTaskProfile(parseTaskJson(readTaskReference(request.execution_profile, 'execution profile')), request);
+  const nativeBinary = pinnedNative(environment, profile.provider);
   if (profile.timeout_ms > (request.timeout_seconds - 20) * 1000) throw new Error('native timeout must leave 20 seconds for bridge shutdown');
   if (inside(request.outputs.runtime, request.working_directory) || inside(request.working_directory, request.outputs.runtime)) throw new Error('task runtime and workspace overlap');
   for (const control of [reference.path, request.instructions.path, request.execution_profile.path]) {
@@ -79,7 +86,7 @@ function verifyOutputs(manifest, profile) {
 export async function runAgentTask(reference, dependencies = {}) {
   if(Object.keys(dependencies).some(key=>key!=='environment'))throw new Error('unsupported capsule dependency; use the explicit in-session fixture interface');
   const environment=dependencies.environment || process.env;
-  const {request}=readAgentTask(reference,environment);
+  const {request}=checkAgentTask(reference,environment);
   computeBinding(environment);
   return runTaskCapsule(reference,request,environment);
 }
@@ -90,7 +97,8 @@ export async function runAgentTaskInSession(reference, dependencies = {}) {
   const runDirectory = path.join(request.outputs.runtime, `${compute.job_id}-attempt-1`);
   fs.mkdirSync(runDirectory, { mode: 0o700 }); // Exclusive: an interrupted run is evidence, never replayed in place.
   const base = { schema_version: 1, task: request.task, request: reference, compute,
-    instructions: request.instructions, execution_profile: request.execution_profile };
+    instructions: request.instructions, execution_profile: request.execution_profile,
+    ...(profile.account ? {account:profile.account} : {}) };
   const store = createLaunchStore({ databasePath: path.join(request.outputs.runtime, 'agent-hosts.db') });
   let custody;
   try { custody = await (dependencies.custodyFactory || openTaskCustody)({capsule:dependencies.capsule,runtime:request.outputs.runtime,runDirectory,jobId:compute.job_id,
@@ -104,6 +112,7 @@ export async function runAgentTaskInSession(reference, dependencies = {}) {
     if (!launchReference) launchReference = writeReceipt(path.join(runDirectory, 'launch.json'), {
       ...base, launch_id: value.launchId, provider: profile.provider, model: profile.model,
       working_directory: request.working_directory, workspace_mode: profile.workspace_mode,
+      ...(profile.account ? {observed_account:value.taskAccount || null} : {}),
     });
   };
   try {
@@ -131,6 +140,7 @@ export async function runAgentTaskInSession(reference, dependencies = {}) {
   }
   const receipt = writeReceipt(path.join(runDirectory, 'completion.json'), {
     ...base, status: error ? 'failed' : 'completed', outcome: error ? 'failed' : launch.taskFinalOutput.outcome,
+    ...(profile.account ? {observed_account:launch?.taskAccount || null} : {}),
     launch_receipt: launchReference,
     launch: launch ? { id: launch.launchId, native_session_id: launch.nativeSessionId || null } : null,
     outputs, error, finished_at: new Date().toISOString(),
@@ -142,4 +152,16 @@ export async function recoverAgentTask(reference) {
   const {request} = readAgentTask(reference);
   return {schema_version:1,kind:'agent-task-recovery',request:reference,
     ...await recoverTaskCustody(request.outputs.runtime)};
+}
+
+
+export function checkAgentTask(reference, environment = process.env) {
+  const checked = readAgentTask(reference,environment);
+  assertTaskProviderQualified(checked.profile);
+  if (checked.profile.provider === 'claude') {
+    const binaryPath = checked.nativeBinary || resolveAgentProviderBinary('claude');
+    if (!binaryPath) throw new Error('Native Claude executable unavailable');
+    assertTaskHostCapabilities({binaryPath,profile:checked.profile});
+  }
+  return checked;
 }
