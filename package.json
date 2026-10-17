@@ -1,6 +1,6 @@
 {
   "name": "@learnrudi/cli",
-  "version": "1.10.29",
+  "version": "1.10.30",
   "packageManager": "pnpm@10.22.0",
   "description": "RUDI CLI - Install and manage local MCP stacks, runtimes, daemon lifecycle, and agent router integrations",
   "type": "module",
