@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process';
+import { parseTaskJson } from '../task-profile.js';
+import { processIdentity } from '../task-custody.js';
 
 import {
   createAgentEventNormalizer,
@@ -54,6 +56,12 @@ export function executeForegroundLaunch({
 
   return new Promise((resolve, reject) => {
     const privateAutomation = plan.privateAutomationProfile != null;
+    const taskExecution = plan.taskProfile != null;
+    const supervised = privateAutomation || taskExecution;
+    let taskTerminal = false;
+    let taskFailure = null;
+    let taskFinalOutput = null;
+    let taskIdentity = null;
     const normalizer = createAgentEventNormalizer(plan.provider);
     let child;
     let finalized = false;
@@ -77,7 +85,17 @@ export function executeForegroundLaunch({
     let privateUsage = null;
 
     function terminateProvider(signal) {
-      if (privateAutomation && Number.isSafeInteger(child?.pid) && child.pid > 0) {
+      if (taskExecution) {
+        try {
+          if (!taskIdentity || JSON.stringify(processIdentity(child.pid)) !== JSON.stringify(taskIdentity)) {
+            taskFailure = 'task process ownership unresolved';
+            return false;
+          }
+          process.kill(-taskIdentity.pgid,signal);
+          return true;
+        } catch { taskFailure = 'task process termination unconfirmed'; return false; }
+      }
+      if (supervised && Number.isSafeInteger(child?.pid) && child.pid > 0) {
         try {
           process.kill(-child.pid, signal);
           return true;
@@ -91,7 +109,7 @@ export function executeForegroundLaunch({
     }
 
     function privateProviderGroupAlive() {
-      if (!privateAutomation || !Number.isSafeInteger(child?.pid) || child.pid < 1) {
+      if (!supervised || !Number.isSafeInteger(child?.pid) || child.pid < 1) {
         return false;
       }
       try {
@@ -102,11 +120,19 @@ export function executeForegroundLaunch({
       }
     }
 
+    function armForceTimer() {
+      if (forceTimer || !supervised) return;
+      forceTimer = setTimeout(() => terminateProvider('SIGKILL'), plan.timeouts.shutdownGraceMs || 5000);
+    }
+
     function recordSinkFailure(kind, error) {
       if (sinkFailure) return;
       sinkFailure = `${kind} persistence failed: ${error.message}`;
       try { writeLine(stderr, sinkFailure); } catch {}
-      terminateProvider('SIGTERM');
+      if (!finalized) {
+        terminateProvider('SIGTERM');
+        armForceTimer();
+      }
     }
 
     function publishEvent(payload, persistedPayload = payload) {
@@ -121,10 +147,12 @@ export function executeForegroundLaunch({
     const onSigint = () => {
       requestedSignal = 'SIGINT';
       terminateProvider('SIGINT');
+      armForceTimer();
     };
     const onSigterm = () => {
       requestedSignal = 'SIGTERM';
       terminateProvider('SIGTERM');
+      armForceTimer();
     };
 
     function persistNativeSession(rawEvent, normalized) {
@@ -196,7 +224,7 @@ export function executeForegroundLaunch({
           rawEvent,
           type: 'agent.event',
         }, persistedPayload);
-      if (privateAutomation) return;
+      if (supervised) return;
       if (jsonOutput) {
         writeLine(stdout, JSON.stringify(payload));
         return;
@@ -216,10 +244,25 @@ export function executeForegroundLaunch({
       if (!line.trim()) return;
       try {
         const rawEvent = JSON.parse(line);
+        if (taskExecution) {
+          if (!rawEvent || typeof rawEvent !== 'object' || Array.isArray(rawEvent)) throw new Error('invalid event');
+          if (rawEvent.type === 'turn.completed') taskTerminal = true;
+          if (rawEvent.type === 'turn.failed' || rawEvent.type === 'error') taskFailure = 'native terminal failure';
+          if (rawEvent.type === 'item.completed' && rawEvent.item?.type === 'agent_message') {
+            if (Buffer.byteLength(rawEvent.item.text || '') > 65536) throw new Error('final output overflow');
+            taskFinalOutput = rawEvent.item.text;
+          }
+        }
         for (const result of normalizer.normalize(rawEvent)) {
           if (result?.normalized) emitEvent(result.normalized, result.raw || rawEvent);
         }
       } catch {
+        if (taskExecution) {
+          taskFailure = 'malformed native output';
+          terminateProvider('SIGTERM');
+          armForceTimer();
+          return;
+        }
         if (privateAutomation) {
           privateFailure = 'private_output_malformed';
           terminateProvider('SIGTERM');
@@ -248,12 +291,25 @@ export function executeForegroundLaunch({
     }
 
     function complete(status, exitCode, lastError = null) {
+      try { finishLaunch(status, exitCode, lastError); }
+      catch (error) {
+        terminateProvider('SIGKILL');
+        clearTimeout(runtimeTimer);
+        if (forceTimer) clearTimeout(forceTimer);
+        signalEmitter.removeListener('SIGINT', onSigint);
+        signalEmitter.removeListener('SIGTERM', onSigterm);
+        finalized = true;
+        reject(error);
+      }
+    }
+
+    function finishLaunch(status, exitCode, lastError) {
       if (finalized) return;
+      flushStdout();
       clearTimeout(runtimeTimer);
       if (forceTimer) clearTimeout(forceTimer);
       signalEmitter.removeListener('SIGINT', onSigint);
       signalEmitter.removeListener('SIGTERM', onSigterm);
-      flushStdout();
       finalized = true;
 
       if (sinkFailure) {
@@ -300,6 +356,16 @@ export function executeForegroundLaunch({
         }
       }
 
+      if (taskExecution && status === 'completed') {
+        try {
+          if (taskFailure || !taskTerminal || !store.get(launchId)?.nativeSessionId) throw new Error(taskFailure || 'missing native terminal/session evidence');
+          taskFinalOutput = parseTaskJson(taskFinalOutput);
+          if (!taskFinalOutput || !['complete', 'no_work', 'needs_evidence', 'partial', 'failed'].includes(taskFinalOutput.outcome)
+              || !Array.isArray(taskFinalOutput.outputs) || taskFinalOutput.outputs.length > 64
+              || Object.keys(taskFinalOutput).sort().join(',') !== 'outcome,outputs') throw new Error('invalid task final manifest');
+          if (taskFinalOutput.outcome === 'failed') throw new Error('task reported failure');
+        } catch (error) { status = 'failed'; lastError = error.message; }
+      }
       const current = store.get(launchId);
       if (current?.status === 'starting' && status !== 'failed') {
         store.transition(launchId, 'running', { pid: child?.pid || 0 });
@@ -309,6 +375,7 @@ export function executeForegroundLaunch({
         lastError,
       });
       const terminalEvent = publishEvent({ launch: updated, type: `launch.${status}` });
+      if (taskExecution && sinkFailure && status === 'completed') { reject(new Error(sinkFailure)); return; }
       if (privateAutomation && status === 'completed') {
         const privateResult = {
           model: privateObservedModel,
@@ -322,7 +389,7 @@ export function executeForegroundLaunch({
       if (jsonOutput) {
         if (!privateAutomation) writeLine(stdout, JSON.stringify(terminalEvent));
       }
-      resolve(updated);
+      resolve(taskExecution ? { ...updated, taskFinalOutput } : updated);
     }
 
     const runtimeTimer = setTimeout(() => {
@@ -337,9 +404,9 @@ export function executeForegroundLaunch({
     try {
       child = spawnImpl(plan.spawn.command, plan.args, {
         cwd: plan.spawn.cwd,
-        detached: privateAutomation,
-        env: privateAutomation ? plan.environment : { ...process.env, ...plan.environment },
-        stdio: [privateAutomation ? 'pipe' : 'ignore', 'pipe', 'pipe'],
+        detached: supervised,
+        env: supervised ? plan.environment : { ...process.env, ...plan.environment },
+        stdio: [supervised ? 'pipe' : 'ignore', 'pipe', 'pipe'],
       });
     } catch (error) {
       clearTimeout(runtimeTimer);
@@ -347,31 +414,45 @@ export function executeForegroundLaunch({
       return;
     }
 
-    if (privateAutomation) {
+    if (supervised) {
       child.stdin.on('error', () => {
+        if (taskExecution) taskFailure = 'task stdin error';
         privateFailure = 'private_stdin_error';
         terminateProvider('SIGTERM');
       });
-      child.stdin.end(plan.stdin);
+      if (!taskExecution) child.stdin.end(plan.stdin);
     }
 
-    child.once('spawn', () => {
-      const current = store.get(launchId);
-      if (current?.status === 'starting') {
-        const running = store.transition(launchId, 'running', { pid: child.pid || 0 });
-        onSpawn?.(running);
-      } else if (current) {
-        onSpawn?.(current);
+    child.once('spawn', async () => {
+      try {
+        if (taskExecution && Number.isSafeInteger(child.pid)) {
+          taskIdentity = processIdentity(child.pid);
+          if (!taskIdentity || taskIdentity.pgid !== child.pid) throw new Error('task process identity unavailable');
+        }
+        const current = store.get(launchId);
+        if (current?.status === 'starting') {
+          const running = store.transition(launchId, 'running', { pid: child.pid || 0 });
+          await onSpawn?.(running);
+        } else if (current) {
+          await onSpawn?.(current);
+        }
+        // No task prompt reaches the provider until durable custody and its
+        // independent parent-death watchdog acknowledge ownership.
+        if (taskExecution && !finalized) child.stdin.end(plan.stdin);
+      } catch (error) {
+        recordSinkFailure('Launch startup', error);
       }
     });
     signalEmitter.once('SIGINT', onSigint);
     signalEmitter.once('SIGTERM', onSigterm);
 
     child.stdout.on('data', (chunk) => {
-      if (privateAutomation) {
+      if (supervised) {
         privateRawOutputBytes += Buffer.byteLength(chunk);
         if (privateRawOutputBytes > plan.maxRawOutputBytes) {
+          if (taskExecution) taskFailure = 'task native output overflow';
           privateFailure = 'private_raw_output_overflow';
+          armForceTimer();
           stdoutBuffer = '';
           terminateProvider('SIGTERM');
           return;
@@ -384,7 +465,7 @@ export function executeForegroundLaunch({
     });
 
     child.stderr.on('data', (chunk) => {
-      if (privateAutomation) return;
+      if (supervised) return;
       const text = chunk.toString();
       stderrTail = boundedAppend(stderrTail, text);
       try {
@@ -405,6 +486,7 @@ export function executeForegroundLaunch({
     child.once('close', (exitCode, signal) => {
       if (privateProviderGroupAlive()) {
         terminateProvider('SIGKILL');
+        if (taskExecution) taskFailure = 'task process group remained alive';
         privateFailure = 'private_termination_unconfirmed';
       }
       if (sinkFailure) {

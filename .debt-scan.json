@@ -117,7 +117,9 @@
         "scripts/generate-manifest.js",
         "scripts/generate-daemon-openapi.js",
         "scripts/validate-publish-runtime.mjs",
-        "scripts/run-tests.js"
+        "scripts/run-tests.js",
+        "scripts/verify-task-permissions.mjs",
+        "src/agent-host/task-custody-worker.js"
       ],
       "checks": [
         "orphans",

@@ -112,6 +112,26 @@ function ensureColumn(database, name, definition) {
   if (!columns.has(name)) database.exec(`ALTER TABLE agent_launches ADD COLUMN ${name} ${definition}`);
 }
 
+function migrateSharedWorkspace(database) {
+  const sql = database.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='agent_launches'").get().sql;
+  if (sql.includes("'registered-shared'")) return;
+  const indexes = database.prepare("SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name='agent_launches' AND sql IS NOT NULL").all();
+  const replacement = sql.replace('CREATE TABLE agent_launches', 'CREATE TABLE agent_launches_next')
+    .replace("'isolated-copy'", "'isolated-copy', 'registered-shared'");
+  if (replacement === sql || !replacement.includes('CREATE TABLE agent_launches_next')) throw new Error('unrecognized Agent Host launch schema');
+  database.pragma('foreign_keys = OFF');
+  try {
+    database.transaction(() => {
+      database.exec(replacement);
+      database.exec('INSERT INTO agent_launches_next SELECT * FROM agent_launches');
+      database.exec('DROP TABLE agent_launches');
+      database.exec('ALTER TABLE agent_launches_next RENAME TO agent_launches');
+      for (const index of indexes) database.exec(index.sql);
+      if (database.pragma('foreign_key_check').length) throw new Error('Agent Host migration foreign-key failure');
+    })();
+  } finally { database.pragma('foreign_keys = ON'); }
+}
+
 function initialize(database) {
   database.pragma('journal_mode = WAL');
   database.pragma('foreign_keys = ON');
@@ -125,7 +145,7 @@ function initialize(database) {
       project_root TEXT NOT NULL,
       execution_workspace TEXT NOT NULL,
       output_destination TEXT NOT NULL,
-      workspace_mode TEXT NOT NULL CHECK (workspace_mode IN ('read-only', 'worktree', 'isolated-copy')),
+      workspace_mode TEXT NOT NULL CHECK (workspace_mode IN ('read-only', 'worktree', 'isolated-copy', 'registered-shared')),
       worktree_branch TEXT,
       base_ref TEXT,
       model TEXT NOT NULL,
@@ -167,6 +187,7 @@ function initialize(database) {
     CREATE INDEX IF NOT EXISTS idx_agent_group_launches_group
       ON agent_group_launches(group_id, ordinal);
   `);
+  migrateSharedWorkspace(database);
   ensureColumn(database, 'execution_kind', "TEXT NOT NULL DEFAULT 'foreground' CHECK (execution_kind IN ('foreground', 'detached'))");
   ensureColumn(database, 'owner_pid', 'INTEGER');
   ensureColumn(database, 'disposition', "TEXT NOT NULL DEFAULT 'retained' CHECK (disposition IN ('retained', 'promoted', 'discarded'))");
