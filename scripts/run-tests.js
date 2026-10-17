@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { isQualifiedTaskAuditHost } from '../src/agent-host/task-audit.js';
 
 const require = createRequire(import.meta.url);
@@ -142,7 +143,7 @@ function runNode(nodePath, args) {
 
 const testArgs = resolveTestArgs(process.argv.slice(2));
 if (isQualifiedTaskAuditHost()) {
-  const preparation = spawnSync(process.execPath, ['scripts/build-task-audit.mjs'], {
+  const preparation = spawnSync(process.execPath, [fileURLToPath(new URL('./build-task-audit.mjs', import.meta.url))], {
     cwd: WORKDIR,
     stdio: 'inherit',
   });

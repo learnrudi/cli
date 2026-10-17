@@ -10,7 +10,8 @@ const repo = fileURLToPath(new URL('../../../', import.meta.url));
 const qualified = process.platform === 'darwin'
   && os.release().startsWith('24.') && process.arch === 'x64';
 
-test('test entrypoint compiles a missing native fixture helper in a fresh tree',
+for (const relativeCwd of ['', 'packages/mcp']) {
+test(`test entrypoint compiles a missing native fixture helper from ${relativeCwd || 'root'}`,
   { skip: !qualified, timeout: 30000 }, t => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rudi-fresh-native-test-'));
     t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -22,23 +23,27 @@ test('test entrypoint compiles a missing native fixture helper in a fresh tree',
     }
     fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ type: 'module' }));
     fs.symlinkSync(path.join(repo, 'node_modules'), path.join(root, 'node_modules'), 'dir');
-    fs.writeFileSync(path.join(root, 'probe.test.js'), `
+    const workingDirectory = path.join(root, relativeCwd);
+    fs.mkdirSync(workingDirectory, { recursive: true });
+    fs.writeFileSync(path.join(workingDirectory, 'probe.test.js'), `
       import fs from 'node:fs';
       import assert from 'node:assert/strict';
-      assert.ok(fs.existsSync('dist/task-audit-darwin'), 'native helper missing before tests');
-      fs.accessSync('dist/task-audit-darwin', fs.constants.X_OK);
+      const helper = ${JSON.stringify(path.join(root, 'dist/task-audit-darwin'))};
+      assert.ok(fs.existsSync(helper), 'native helper missing before tests');
+      fs.accessSync(helper, fs.constants.X_OK);
       fs.writeFileSync('probe-ran', 'yes');
     `);
     assert.equal(fs.existsSync(path.join(root, 'dist/task-audit-darwin')), false);
     const environment = { ...process.env, RUDI_CLI_TEST_WRAPPER_ACTIVE: '1' };
     delete environment.NODE_TEST_CONTEXT;
-    const result = spawnSync(process.execPath, ['scripts/run-tests.js', 'probe.test.js'], {
-      cwd: root, encoding: 'utf8', timeout: 25000,
+    const result = spawnSync(process.execPath, [path.join(root, 'scripts/run-tests.js'), 'probe.test.js'], {
+      cwd: workingDirectory, encoding: 'utf8', timeout: 25000,
       env: environment,
     });
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.equal(fs.existsSync(path.join(root, 'probe-ran')), true);
+    assert.equal(fs.existsSync(path.join(workingDirectory, 'probe-ran')), true);
   });
+}
 
 for (const host of [
   { platform: 'darwin', arch: 'arm64', release: '24.0.0' },
