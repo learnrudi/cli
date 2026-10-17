@@ -1,4 +1,6 @@
+import { claudeSandboxPlan } from '../task-claude-sandbox.js';
 import { buildArgs } from './catalog.js';
+import { taskClaudeArgs, taskClaudeEnvironment } from '../task-claude.js';
 import {
   buildPrivateProviderEnvironment,
   finishPlan,
@@ -9,6 +11,13 @@ import {
 
 export function buildClaudePlan(options) {
   const context = providerContext(options, 'claude');
+  if (context.taskProfile) {
+    if ((options.extraArgs || []).length || (options.images || []).length
+        || options.approvalMode != null || options.permissionMode != null || options.privateAutomationProfile) {
+      throw new Error('task execution forbids permission overrides, images, private profiles and passthrough arguments');
+    }
+    return claudeSandboxPlan(context, finishPlan(context, taskClaudeArgs(context), 'registered-shared', taskClaudeEnvironment(context.binaryPath, context.taskProfile)));
+  }
   if (context.privateAutomationProfile) {
     if ((options.extraArgs || []).length > 0 || (options.images || []).length > 0) {
       throw new Error('private automation forbids Claude passthrough arguments and images');

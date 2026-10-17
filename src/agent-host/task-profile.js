@@ -83,11 +83,11 @@ function roots(value, label) {
 
 export function validateTaskProfile(value, binding) {
   exactFields(value, ['schema_version', 'provider', 'model', 'workspace_mode', 'working_directory',
-    'read_roots', 'write_roots', 'network', 'timeout_ms'], 'execution profile');
-  if (value.schema_version !== 1 || value.provider !== 'codex' || value.workspace_mode !== TASK_MODE) {
+    'read_roots', 'write_roots', 'network', 'timeout_ms', ...(value?.provider === 'claude' ? ['account'] : [])], 'execution profile');
+  if (value.schema_version !== 1 || !['codex', 'claude'].includes(value.provider) || value.workspace_mode !== TASK_MODE) {
     throw new Error('unsupported task provider/profile version/workspace mode');
   }
-  if (getModelDef(loadProviderConfig('codex'), value.model)?.id !== value.model) throw new Error('task requires an exact configured model');
+  if (getModelDef(loadProviderConfig(value.provider), value.model)?.id !== value.model) throw new Error('task requires an exact configured model');
   if (!['enabled', 'disabled'].includes(value.network)) throw new Error('network must be enabled or disabled');
   if (!Number.isSafeInteger(value.timeout_ms) || value.timeout_ms < 1 || value.timeout_ms > 3600000) throw new Error('invalid task timeout');
   const project = canonicalDirectory(value.working_directory, 'working_directory');
@@ -100,7 +100,8 @@ export function validateTaskProfile(value, binding) {
       || write.some(root => inside(project, root) || inside(runtime, root) || inside(root, runtime))) {
     throw new Error('write roots must exactly match deliverables and exclude project/control roots');
   }
-  const profile = Object.freeze({ ...value, read_roots: Object.freeze(read), write_roots: Object.freeze(write) });
+  const account = value.provider === 'claude' ? validateClaudeAccount(value.account, [...read, ...write, runtime]) : null;
+  const profile = Object.freeze({ ...value, ...(account ? { account } : {}), read_roots: Object.freeze(read), write_roots: Object.freeze(write) });
   assertWritableTaskRoots(profile);
   validatedProfiles.add(profile);
   return profile;
@@ -151,4 +152,22 @@ export function parseTaskJson(source) {
     }
   }
   return value;
+}
+
+// Credentials and transcripts are host state, never part of a task workspace.
+function validateClaudeAccount(value, workspaceRoots) {
+  exactFields(value, ['id','email','organization_id','config_directory','anthropic_directory'], 'Claude account');
+  if (typeof value.id !== 'string' || !/^claude-[a-z0-9][a-z0-9-]{0,47}$/u.test(value.id)) throw new Error('invalid Claude account id');
+  taskText(value.email, 'Claude account email', 254);
+  taskText(value.organization_id, 'Claude organization id', 128);
+  if (!/^[^\s@]+@[^\s@]+$/u.test(value.email)) throw new Error('invalid Claude account email');
+  const directories = [value.config_directory, value.anthropic_directory];
+  for (const directory of directories) {
+    canonicalDirectory(directory, 'Claude account directory');
+    const stat = fs.statSync(directory);
+    if (stat.uid !== process.getuid() || (stat.mode & 0o077) !== 0) throw new Error('Claude account directory must be private and owned by this user');
+    if (workspaceRoots.some(root => inside(root, directory) || inside(directory, root))) throw new Error('Claude account directory overlaps task roots');
+  }
+  if (inside(directories[0],directories[1]) || inside(directories[1],directories[0])) throw new Error('Claude account directories overlap');
+  return Object.freeze({...value});
 }
