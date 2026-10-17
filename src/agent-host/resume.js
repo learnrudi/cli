@@ -52,6 +52,7 @@ async function resumeAgentWithStore(options, dependencies) {
 
   const previous = store.get(options?.launchId);
   if (!previous) throw new Error(`Launch not found: ${options?.launchId}`);
+  if (previous.workspaceMode === 'registered-shared') throw new Error('registered task launches require fresh sessions; resume is forbidden');
   if (previous.status === 'starting' || previous.status === 'running') {
     throw new Error(`Launch is still active: ${previous.launchId}`);
   }

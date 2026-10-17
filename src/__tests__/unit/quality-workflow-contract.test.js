@@ -35,7 +35,8 @@ test('GitHub quality workflow blocks unverified changes', () => {
   assert.match(workflow, /actions\/checkout@v5/);
   assert.match(workflow, /actions\/setup-node@v6/);
   assert.match(workflow, /node: \[22, 24\]/);
-  assert.match(workflow, /node-version: \$\{\{ matrix\.node \}\}/);
+  assert.match(workflow, /include:\s+- node: 24\s+runtime: ['"]24\.22\.0['"]/);
+  assert.match(workflow, /node-version: \$\{\{ matrix\.runtime \|\| matrix\.node \}\}/);
   assert.match(workflow, /RUDI_CLI_TEST_WRAPPER_ACTIVE: ['"]1['"]/);
   assert.match(workflow, /fetch-depth: 0/);
   assert.match(workflow, /pnpm install --frozen-lockfile/);

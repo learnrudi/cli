@@ -3,6 +3,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 import { assertLaunchId, createLaunchOwnershipMarker } from './artifacts.js';
+import { assertTaskProfile, TASK_MODE } from './task-profile.js';
 import { writeWorkspaceBaseline } from './workspace-manifest.js';
 
 export const WORKSPACE_MODES = Object.freeze({
@@ -10,6 +11,7 @@ export const WORKSPACE_MODES = Object.freeze({
   ISOLATED_COPY: 'isolated-copy',
   READ_ONLY: 'read-only',
   WORKTREE: 'worktree',
+  REGISTERED_SHARED: TASK_MODE,
 });
 
 const VALID_MODES = new Set(Object.values(WORKSPACE_MODES));
@@ -144,11 +146,13 @@ export function resolveAgentWorkspace(options, dependencies = {}) {
     originDirectory = process.cwd(),
     outputDirectory = null,
     privateAutomation = false,
+    taskProfile = null,
     workspace = null,
   } = options || {};
   const { execFileSyncImpl = execFileSync } = dependencies;
 
   assertLaunchId(launchId);
+  if (mode === TASK_MODE) assertTaskProfile(taskProfile);
   if (!VALID_MODES.has(mode)) {
     throw new Error(`Unknown workspace mode: ${mode}. Available: ${[...VALID_MODES].join(', ')}`);
   }
@@ -166,6 +170,9 @@ export function resolveAgentWorkspace(options, dependencies = {}) {
   const validWorkspace = existingDirectory(requestedWorkspace, 'Workspace');
   const gitProjectRoot = findGitProjectRoot(validWorkspace, execFileSyncImpl);
   const projectRoot = gitProjectRoot || validWorkspace;
+  if (mode === TASK_MODE && validWorkspace !== taskProfile.working_directory) {
+    throw new Error("registered shared workspace differs from profile");
+  }
   const isGitRepository = Boolean(gitProjectRoot);
   const launchDirectory = outputDirectory == null
     ? path.resolve(artifactsRoot, launchId)
@@ -189,7 +196,7 @@ export function resolveAgentWorkspace(options, dependencies = {}) {
   fs.mkdirSync(launchDirectory, { recursive: true, mode: 0o700 });
   createLaunchOwnershipMarker({ launchDirectory, launchId });
 
-  let executionWorkspace = projectRoot;
+  let executionWorkspace = mode === TASK_MODE ? validWorkspace : projectRoot;
   let worktreeBranch = null;
   let baseRef = null;
 
@@ -236,7 +243,7 @@ export function cleanupUnstartedWorkspace(workspace, dependencies = {}) {
   const { execFileSyncImpl = execFileSync } = dependencies;
   const outputDestination = path.resolve(workspace.outputDestination);
   const executionWorkspace = path.resolve(workspace.executionWorkspace);
-  if (!isInside(executionWorkspace, outputDestination) && workspace.mode !== WORKSPACE_MODES.READ_ONLY) {
+  if (!isInside(executionWorkspace, outputDestination) && ! [WORKSPACE_MODES.READ_ONLY, TASK_MODE].includes(workspace.mode)) {
     throw new Error('Refusing to clean an execution workspace outside its launch output destination');
   }
 

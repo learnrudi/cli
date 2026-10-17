@@ -222,13 +222,13 @@ function createPackageId(kind, name) {
   return `${kind}:${name}`;
 }
 function getSkillDiscoveryRoots(options = {}) {
-  const roots = [
+  const roots2 = [
     { source: "rudi", path: PATHS.skills }
   ];
   if (options.includeExternal) {
-    roots.push({ source: "claude", path: import_path.default.join(CLAUDE_HOME, "skills") });
+    roots2.push({ source: "claude", path: import_path.default.join(CLAUDE_HOME, "skills") });
   }
-  return roots;
+  return roots2;
 }
 function readSkillCandidates(root) {
   if (!root?.path || !import_fs.default.existsSync(root.path)) return [];
@@ -671,9 +671,9 @@ function resolveRegistryPackageForPlatform(value, platformArch) {
   if (!pkg.delivery || !pkg.install?.source) {
     return pkg;
   }
-  const os14 = platformArch.slice(0, platformArch.lastIndexOf("-"));
+  const os16 = platformArch.slice(0, platformArch.lastIndexOf("-"));
   const platforms = pkg.install.platforms || {};
-  const platformKey = [platformArch, os14, "default"].find((key) => platforms[key]);
+  const platformKey = [platformArch, os16, "default"].find((key) => platforms[key]);
   const platform = platformKey ? platforms[platformKey] : void 0;
   const install = {
     ...pkg.install,
@@ -688,7 +688,7 @@ function resolveRegistryPackageForPlatform(value, platformArch) {
     _resolved: {
       platform,
       platformKey,
-      keysTried: [platformArch, os14, "default"]
+      keysTried: [platformArch, os16, "default"]
     }
   });
   if (install.source === "download") {
@@ -1264,9 +1264,9 @@ function normalizeCommandPlan(plan) {
   return { command, args };
 }
 function runRegistryCommandPlan(plan, options = {}) {
-  const { execFileSync: execFileSync9 = import_child_process.execFileSync, ...execOptions } = options;
+  const { execFileSync: execFileSync12 = import_child_process.execFileSync, ...execOptions } = options;
   const { command, args } = normalizeCommandPlan(plan);
-  return execFileSync9(command, args, execOptions);
+  return execFileSync12(command, args, execOptions);
 }
 function createRegistryArchiveExtractCommand(archiveType, archivePath, destPath, options = {}) {
   const archive = assertCommandArg(archivePath, "archive path");
@@ -1317,14 +1317,14 @@ function createCurlDownloadCommand(url, destPath) {
   };
 }
 function getRegistryRootCandidates(startDir) {
-  const roots = [];
+  const roots2 = [];
   let current = import_path3.default.resolve(startDir);
   while (true) {
-    roots.push(import_path3.default.join(current, "registry"));
-    roots.push(import_path3.default.join(current, "apps", "registry"));
+    roots2.push(import_path3.default.join(current, "registry"));
+    roots2.push(import_path3.default.join(current, "apps", "registry"));
     const parent = import_path3.default.dirname(current);
     if (parent === current) {
-      return roots;
+      return roots2;
     }
     current = parent;
   }
@@ -1335,12 +1335,12 @@ function getLocalRegistryRoots() {
   }
   const cwd = process.cwd();
   const workspaceRoot = process.env.RUDI_WORKSPACE_ROOT;
-  const roots = [
+  const roots2 = [
     process.env.RUDI_REGISTRY_ROOT,
     workspaceRoot ? import_path3.default.join(workspaceRoot, "apps", "registry") : null,
     ...getRegistryRootCandidates(cwd)
   ].filter(Boolean);
-  return [...new Set(roots.map((registryPath) => import_path3.default.resolve(registryPath)))];
+  return [...new Set(roots2.map((registryPath) => import_path3.default.resolve(registryPath)))];
 }
 function getLocalRegistryPaths() {
   return getLocalRegistryRoots().map((registryRoot) => import_path3.default.join(registryRoot, "index.json"));
@@ -2473,17 +2473,17 @@ var require_visit = __commonJS({
     visit.BREAK = BREAK;
     visit.SKIP = SKIP;
     visit.REMOVE = REMOVE;
-    function visit_(key, node, visitor, path57) {
-      const ctrl = callVisitor(key, node, visitor, path57);
+    function visit_(key, node, visitor, path63) {
+      const ctrl = callVisitor(key, node, visitor, path63);
       if (identity.isNode(ctrl) || identity.isPair(ctrl)) {
-        replaceNode(key, path57, ctrl);
-        return visit_(key, ctrl, visitor, path57);
+        replaceNode(key, path63, ctrl);
+        return visit_(key, ctrl, visitor, path63);
       }
       if (typeof ctrl !== "symbol") {
         if (identity.isCollection(node)) {
-          path57 = Object.freeze(path57.concat(node));
+          path63 = Object.freeze(path63.concat(node));
           for (let i = 0; i < node.items.length; ++i) {
-            const ci = visit_(i, node.items[i], visitor, path57);
+            const ci = visit_(i, node.items[i], visitor, path63);
             if (typeof ci === "number")
               i = ci - 1;
             else if (ci === BREAK)
@@ -2494,13 +2494,13 @@ var require_visit = __commonJS({
             }
           }
         } else if (identity.isPair(node)) {
-          path57 = Object.freeze(path57.concat(node));
-          const ck = visit_("key", node.key, visitor, path57);
+          path63 = Object.freeze(path63.concat(node));
+          const ck = visit_("key", node.key, visitor, path63);
           if (ck === BREAK)
             return BREAK;
           else if (ck === REMOVE)
             node.key = null;
-          const cv = visit_("value", node.value, visitor, path57);
+          const cv = visit_("value", node.value, visitor, path63);
           if (cv === BREAK)
             return BREAK;
           else if (cv === REMOVE)
@@ -2521,17 +2521,17 @@ var require_visit = __commonJS({
     visitAsync.BREAK = BREAK;
     visitAsync.SKIP = SKIP;
     visitAsync.REMOVE = REMOVE;
-    async function visitAsync_(key, node, visitor, path57) {
-      const ctrl = await callVisitor(key, node, visitor, path57);
+    async function visitAsync_(key, node, visitor, path63) {
+      const ctrl = await callVisitor(key, node, visitor, path63);
       if (identity.isNode(ctrl) || identity.isPair(ctrl)) {
-        replaceNode(key, path57, ctrl);
-        return visitAsync_(key, ctrl, visitor, path57);
+        replaceNode(key, path63, ctrl);
+        return visitAsync_(key, ctrl, visitor, path63);
       }
       if (typeof ctrl !== "symbol") {
         if (identity.isCollection(node)) {
-          path57 = Object.freeze(path57.concat(node));
+          path63 = Object.freeze(path63.concat(node));
           for (let i = 0; i < node.items.length; ++i) {
-            const ci = await visitAsync_(i, node.items[i], visitor, path57);
+            const ci = await visitAsync_(i, node.items[i], visitor, path63);
             if (typeof ci === "number")
               i = ci - 1;
             else if (ci === BREAK)
@@ -2542,13 +2542,13 @@ var require_visit = __commonJS({
             }
           }
         } else if (identity.isPair(node)) {
-          path57 = Object.freeze(path57.concat(node));
-          const ck = await visitAsync_("key", node.key, visitor, path57);
+          path63 = Object.freeze(path63.concat(node));
+          const ck = await visitAsync_("key", node.key, visitor, path63);
           if (ck === BREAK)
             return BREAK;
           else if (ck === REMOVE)
             node.key = null;
-          const cv = await visitAsync_("value", node.value, visitor, path57);
+          const cv = await visitAsync_("value", node.value, visitor, path63);
           if (cv === BREAK)
             return BREAK;
           else if (cv === REMOVE)
@@ -2575,23 +2575,23 @@ var require_visit = __commonJS({
       }
       return visitor;
     }
-    function callVisitor(key, node, visitor, path57) {
+    function callVisitor(key, node, visitor, path63) {
       if (typeof visitor === "function")
-        return visitor(key, node, path57);
+        return visitor(key, node, path63);
       if (identity.isMap(node))
-        return visitor.Map?.(key, node, path57);
+        return visitor.Map?.(key, node, path63);
       if (identity.isSeq(node))
-        return visitor.Seq?.(key, node, path57);
+        return visitor.Seq?.(key, node, path63);
       if (identity.isPair(node))
-        return visitor.Pair?.(key, node, path57);
+        return visitor.Pair?.(key, node, path63);
       if (identity.isScalar(node))
-        return visitor.Scalar?.(key, node, path57);
+        return visitor.Scalar?.(key, node, path63);
       if (identity.isAlias(node))
-        return visitor.Alias?.(key, node, path57);
+        return visitor.Alias?.(key, node, path63);
       return void 0;
     }
-    function replaceNode(key, path57, node) {
-      const parent = path57[path57.length - 1];
+    function replaceNode(key, path63, node) {
+      const parent = path63[path63.length - 1];
       if (identity.isCollection(parent)) {
         parent.items[key] = node;
       } else if (identity.isPair(parent)) {
@@ -3201,10 +3201,10 @@ var require_Collection = __commonJS({
     var createNode = require_createNode();
     var identity = require_identity();
     var Node = require_Node();
-    function collectionFromPath(schema, path57, value) {
+    function collectionFromPath(schema, path63, value) {
       let v = value;
-      for (let i = path57.length - 1; i >= 0; --i) {
-        const k = path57[i];
+      for (let i = path63.length - 1; i >= 0; --i) {
+        const k = path63[i];
         if (typeof k === "number" && Number.isInteger(k) && k >= 0) {
           const a = [];
           a[k] = v;
@@ -3223,7 +3223,7 @@ var require_Collection = __commonJS({
         sourceObjects: /* @__PURE__ */ new Map()
       });
     }
-    var isEmptyPath = (path57) => path57 == null || typeof path57 === "object" && !!path57[Symbol.iterator]().next().done;
+    var isEmptyPath = (path63) => path63 == null || typeof path63 === "object" && !!path63[Symbol.iterator]().next().done;
     var Collection = class extends Node.NodeBase {
       constructor(type, schema) {
         super(type);
@@ -3253,11 +3253,11 @@ var require_Collection = __commonJS({
        * be a Pair instance or a `{ key, value }` object, which may not have a key
        * that already exists in the map.
        */
-      addIn(path57, value) {
-        if (isEmptyPath(path57))
+      addIn(path63, value) {
+        if (isEmptyPath(path63))
           this.add(value);
         else {
-          const [key, ...rest] = path57;
+          const [key, ...rest] = path63;
           const node = this.get(key, true);
           if (identity.isCollection(node))
             node.addIn(rest, value);
@@ -3271,8 +3271,8 @@ var require_Collection = __commonJS({
        * Removes a value from the collection.
        * @returns `true` if the item was found and removed.
        */
-      deleteIn(path57) {
-        const [key, ...rest] = path57;
+      deleteIn(path63) {
+        const [key, ...rest] = path63;
         if (rest.length === 0)
           return this.delete(key);
         const node = this.get(key, true);
@@ -3286,8 +3286,8 @@ var require_Collection = __commonJS({
        * scalar values from their surrounding node; to disable set `keepScalar` to
        * `true` (collections are always returned intact).
        */
-      getIn(path57, keepScalar) {
-        const [key, ...rest] = path57;
+      getIn(path63, keepScalar) {
+        const [key, ...rest] = path63;
         const node = this.get(key, true);
         if (rest.length === 0)
           return !keepScalar && identity.isScalar(node) ? node.value : node;
@@ -3305,8 +3305,8 @@ var require_Collection = __commonJS({
       /**
        * Checks if the collection includes a value with the key `key`.
        */
-      hasIn(path57) {
-        const [key, ...rest] = path57;
+      hasIn(path63) {
+        const [key, ...rest] = path63;
         if (rest.length === 0)
           return this.has(key);
         const node = this.get(key, true);
@@ -3316,8 +3316,8 @@ var require_Collection = __commonJS({
        * Sets a value in this collection. For `!!set`, `value` needs to be a
        * boolean to add/remove the item from the set.
        */
-      setIn(path57, value) {
-        const [key, ...rest] = path57;
+      setIn(path63, value) {
+        const [key, ...rest] = path63;
         if (rest.length === 0) {
           this.set(key, value);
         } else {
@@ -5832,9 +5832,9 @@ var require_Document = __commonJS({
           this.contents.add(value);
       }
       /** Adds a value to the document. */
-      addIn(path57, value) {
+      addIn(path63, value) {
         if (assertCollection(this.contents))
-          this.contents.addIn(path57, value);
+          this.contents.addIn(path63, value);
       }
       /**
        * Create a new `Alias` node, ensuring that the target `node` has the required anchor.
@@ -5909,14 +5909,14 @@ var require_Document = __commonJS({
        * Removes a value from the document.
        * @returns `true` if the item was found and removed.
        */
-      deleteIn(path57) {
-        if (Collection.isEmptyPath(path57)) {
+      deleteIn(path63) {
+        if (Collection.isEmptyPath(path63)) {
           if (this.contents == null)
             return false;
           this.contents = null;
           return true;
         }
-        return assertCollection(this.contents) ? this.contents.deleteIn(path57) : false;
+        return assertCollection(this.contents) ? this.contents.deleteIn(path63) : false;
       }
       /**
        * Returns item at `key`, or `undefined` if not found. By default unwraps
@@ -5931,10 +5931,10 @@ var require_Document = __commonJS({
        * scalar values from their surrounding node; to disable set `keepScalar` to
        * `true` (collections are always returned intact).
        */
-      getIn(path57, keepScalar) {
-        if (Collection.isEmptyPath(path57))
+      getIn(path63, keepScalar) {
+        if (Collection.isEmptyPath(path63))
           return !keepScalar && identity.isScalar(this.contents) ? this.contents.value : this.contents;
-        return identity.isCollection(this.contents) ? this.contents.getIn(path57, keepScalar) : void 0;
+        return identity.isCollection(this.contents) ? this.contents.getIn(path63, keepScalar) : void 0;
       }
       /**
        * Checks if the document includes a value with the key `key`.
@@ -5945,10 +5945,10 @@ var require_Document = __commonJS({
       /**
        * Checks if the document includes a value at `path`.
        */
-      hasIn(path57) {
-        if (Collection.isEmptyPath(path57))
+      hasIn(path63) {
+        if (Collection.isEmptyPath(path63))
           return this.contents !== void 0;
-        return identity.isCollection(this.contents) ? this.contents.hasIn(path57) : false;
+        return identity.isCollection(this.contents) ? this.contents.hasIn(path63) : false;
       }
       /**
        * Sets a value in this document. For `!!set`, `value` needs to be a
@@ -5965,13 +5965,13 @@ var require_Document = __commonJS({
        * Sets a value in this document. For `!!set`, `value` needs to be a
        * boolean to add/remove the item from the set.
        */
-      setIn(path57, value) {
-        if (Collection.isEmptyPath(path57)) {
+      setIn(path63, value) {
+        if (Collection.isEmptyPath(path63)) {
           this.contents = value;
         } else if (this.contents == null) {
-          this.contents = Collection.collectionFromPath(this.schema, Array.from(path57), value);
+          this.contents = Collection.collectionFromPath(this.schema, Array.from(path63), value);
         } else if (assertCollection(this.contents)) {
-          this.contents.setIn(path57, value);
+          this.contents.setIn(path63, value);
         }
       }
       /**
@@ -7931,9 +7931,9 @@ var require_cst_visit = __commonJS({
     visit.BREAK = BREAK;
     visit.SKIP = SKIP;
     visit.REMOVE = REMOVE;
-    visit.itemAtPath = (cst, path57) => {
+    visit.itemAtPath = (cst, path63) => {
       let item = cst;
-      for (const [field, index] of path57) {
+      for (const [field, index] of path63) {
         const tok = item?.[field];
         if (tok && "items" in tok) {
           item = tok.items[index];
@@ -7942,23 +7942,23 @@ var require_cst_visit = __commonJS({
       }
       return item;
     };
-    visit.parentCollection = (cst, path57) => {
-      const parent = visit.itemAtPath(cst, path57.slice(0, -1));
-      const field = path57[path57.length - 1][0];
+    visit.parentCollection = (cst, path63) => {
+      const parent = visit.itemAtPath(cst, path63.slice(0, -1));
+      const field = path63[path63.length - 1][0];
       const coll = parent?.[field];
       if (coll && "items" in coll)
         return coll;
       throw new Error("Parent collection not found");
     };
-    function _visit(path57, item, visitor) {
-      let ctrl = visitor(item, path57);
+    function _visit(path63, item, visitor) {
+      let ctrl = visitor(item, path63);
       if (typeof ctrl === "symbol")
         return ctrl;
       for (const field of ["key", "value"]) {
         const token = item[field];
         if (token && "items" in token) {
           for (let i = 0; i < token.items.length; ++i) {
-            const ci = _visit(Object.freeze(path57.concat([[field, i]])), token.items[i], visitor);
+            const ci = _visit(Object.freeze(path63.concat([[field, i]])), token.items[i], visitor);
             if (typeof ci === "number")
               i = ci - 1;
             else if (ci === BREAK)
@@ -7969,10 +7969,10 @@ var require_cst_visit = __commonJS({
             }
           }
           if (typeof ctrl === "function" && field === "key")
-            ctrl = ctrl(item, path57);
+            ctrl = ctrl(item, path63);
         }
       }
-      return typeof ctrl === "function" ? ctrl(item, path57) : ctrl;
+      return typeof ctrl === "function" ? ctrl(item, path63) : ctrl;
     }
     exports2.visit = visit;
   }
@@ -9274,14 +9274,14 @@ var require_parser = __commonJS({
             case "scalar":
             case "single-quoted-scalar":
             case "double-quoted-scalar": {
-              const fs54 = this.flowScalar(this.type);
+              const fs60 = this.flowScalar(this.type);
               if (atNextItem || it.value) {
-                map.items.push({ start, key: fs54, sep: [] });
+                map.items.push({ start, key: fs60, sep: [] });
                 this.onKeyLine = true;
               } else if (it.sep) {
-                this.stack.push(fs54);
+                this.stack.push(fs60);
               } else {
-                Object.assign(it, { key: fs54, sep: [] });
+                Object.assign(it, { key: fs60, sep: [] });
                 this.onKeyLine = true;
               }
               return;
@@ -9409,13 +9409,13 @@ var require_parser = __commonJS({
             case "scalar":
             case "single-quoted-scalar":
             case "double-quoted-scalar": {
-              const fs54 = this.flowScalar(this.type);
+              const fs60 = this.flowScalar(this.type);
               if (!it || it.value)
-                fc.items.push({ start: [], key: fs54, sep: [] });
+                fc.items.push({ start: [], key: fs60, sep: [] });
               else if (it.sep)
-                this.stack.push(fs54);
+                this.stack.push(fs60);
               else
-                Object.assign(it, { key: fs54, sep: [] });
+                Object.assign(it, { key: fs60, sep: [] });
               return;
             }
             case "flow-map-end":
@@ -10909,9 +10909,9 @@ function normalizeCommandPlan2(plan) {
   return { command, args };
 }
 function runCommandPlan(plan, options = {}) {
-  const { execFileSync: execFileSync9 = import_child_process2.execFileSync, ...execOptions } = options;
+  const { execFileSync: execFileSync12 = import_child_process2.execFileSync, ...execOptions } = options;
   const { command, args } = normalizeCommandPlan2(plan);
-  return execFileSync9(command, args, execOptions);
+  return execFileSync12(command, args, execOptions);
 }
 function createArchiveExtractCommand(extractType, archivePath, destPath, options = {}) {
   const archive = assertCommandArg2(archivePath, "archive path");
@@ -11610,7 +11610,7 @@ async function installBinaryStack(pkg, installPath, options = {}) {
     throw new Error(`No binary for ${platformArch}. Supported: ${supported}`);
   }
   const platform = platforms[platformArch];
-  const { url, sha256: sha2562, extractType = "tar.gz" } = platform;
+  const { url, sha256: sha2563, extractType = "tar.gz" } = platform;
   const binaryName = platform.binary || pkg.command?.[0]?.replace(/^\.\//, "") || pkg.id;
   const cacheDir = import_path6.default.join(PATHS.cache, "downloads");
   import_fs5.default.mkdirSync(cacheDir, { recursive: true });
@@ -11622,9 +11622,9 @@ async function installBinaryStack(pkg, installPath, options = {}) {
       throw new Error(`Download failed: HTTP ${response.status} from ${url}`);
     }
     await (0, import_promises.pipeline)(response.body, (0, import_fs6.createWriteStream)(tempFile));
-    if (sha2562) {
+    if (sha2563) {
       onProgress?.({ phase: "verifying", package: pkg.id });
-      const valid = await verifyHash(tempFile, sha2562);
+      const valid = await verifyHash(tempFile, sha2563);
       if (!valid) {
         throw new Error(`Checksum verification failed for ${pkg.id}`);
       }
@@ -12933,9 +12933,9 @@ function acquireLock(timeoutMs = LOCK_TIMEOUT_MS) {
           }
         } catch {
         }
-        const delay = Math.min(50, timeoutMs - (Date.now() - startTime));
-        if (delay > 0) {
-          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delay);
+        const delay3 = Math.min(50, timeoutMs - (Date.now() - startTime));
+        if (delay3 > 0) {
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delay3);
         }
       } else {
         throw err;
@@ -17489,8 +17489,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path57) {
-      let input = path57;
+    function removeDotSegments(path63) {
+      let input = path63;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -17899,8 +17899,8 @@ var require_schemes = __commonJS({
       }
       if (wsComponent.resourceName) {
         const queryIndex = wsComponent.resourceName.indexOf("?");
-        const path57 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
-        wsComponent.path = path57 && path57 !== "/" ? path57 : void 0;
+        const path63 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
+        wsComponent.path = path63 && path63 !== "/" ? path63 : void 0;
         wsComponent.query = queryIndex === -1 ? void 0 : wsComponent.resourceName.slice(queryIndex + 1);
         wsComponent.resourceName = void 0;
       }
@@ -21413,12 +21413,12 @@ var require_dist2 = __commonJS({
         throw new Error(`Unknown format "${name}"`);
       return f;
     };
-    function addFormats2(ajv2, list, fs54, exportName) {
+    function addFormats2(ajv2, list, fs60, exportName) {
       var _a;
       var _b;
       (_a = (_b = ajv2.opts.code).formats) !== null && _a !== void 0 ? _a : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
       for (const f of list)
-        ajv2.addFormat(f, fs54[f]);
+        ajv2.addFormat(f, fs60[f]);
     }
     module2.exports = exports2 = formatsPlugin;
     Object.defineProperty(exports2, "__esModule", { value: true });
@@ -22276,9 +22276,9 @@ Total: ${totalCount} package(s) available`);
 }
 
 // src/commands/install.js
-var fs31 = __toESM(require("fs/promises"), 1);
+var fs37 = __toESM(require("fs/promises"), 1);
 var fsSync = __toESM(require("fs"), 1);
-var path33 = __toESM(require("path"), 1);
+var path39 = __toESM(require("path"), 1);
 init_src5();
 init_src4();
 
@@ -22741,15 +22741,15 @@ function createWhichCommand(commandName) {
   return createCommandPlan("which", [commandName]);
 }
 function runCommand(command, args = [], options = {}) {
-  const { execFileSync: execFileSync9 = import_node_child_process.execFileSync, ...execOptions } = options;
+  const { execFileSync: execFileSync12 = import_node_child_process.execFileSync, ...execOptions } = options;
   const plan = createCommandPlan(command, args);
-  return execFileSync9(plan.command, plan.args, execOptions);
+  return execFileSync12(plan.command, plan.args, execOptions);
 }
 function runCommandPlan2(plan, options = {}) {
-  const { execFileSync: execFileSync9 = import_node_child_process.execFileSync, ...execOptions } = options;
+  const { execFileSync: execFileSync12 = import_node_child_process.execFileSync, ...execOptions } = options;
   const normalized = createCommandPlan(plan?.command, plan?.args || []);
   const mergedOptions = plan?.cwd ? { cwd: assertCommandValue(plan.cwd, "cwd"), ...execOptions } : execOptions;
-  return execFileSync9(normalized.command, normalized.args, mergedOptions);
+  return execFileSync12(normalized.command, normalized.args, mergedOptions);
 }
 
 // src/native-skills/lifecycle.js
@@ -23892,1376 +23892,89 @@ init_src5();
 // src/commands/list.js
 init_src5();
 
-// src/agent-host/artifacts.js
-var import_node_fs5 = __toESM(require("node:fs"), 1);
-var import_node_path6 = __toESM(require("node:path"), 1);
-init_src();
-var LAUNCH_ID_PATTERN = /^launch_[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
-var OWNERSHIP_MARKER = ".rudi-agent-launch.json";
-var EVENTS_FILE = "events.jsonl";
-var STDERR_FILE = "stderr.log";
-var MAX_EVENT_BYTES = 1024 * 1024;
-var MAX_EVENT_PAGE_BYTES = 10 * 1024 * 1024;
-function assertLaunchId(launchId) {
-  if (typeof launchId !== "string" || !LAUNCH_ID_PATTERN.test(launchId)) {
-    throw new Error("Invalid launch ID");
-  }
-  return launchId;
-}
-function getAgentHostPaths({
-  launchId = null,
-  rudiHome = PATHS.home
-} = {}) {
-  const home = import_node_path6.default.resolve(rudiHome);
-  const stateDirectory = import_node_path6.default.join(home, "state");
-  const artifactsRoot = import_node_path6.default.join(home, "artifacts", "agent-launches");
-  const result = {
-    artifactsRoot,
-    stateDatabase: import_node_path6.default.join(stateDirectory, "agent-hosts.db"),
-    stateDirectory
-  };
-  if (launchId != null) {
-    assertLaunchId(launchId);
-    result.launchDirectory = import_node_path6.default.join(artifactsRoot, launchId);
-    result.workspaceDirectory = import_node_path6.default.join(result.launchDirectory, "workspace");
-  }
-  return result;
-}
-function getLaunchArtifactFiles(launchDirectory) {
-  const directory = import_node_path6.default.resolve(launchDirectory);
-  return Object.freeze({
-    events: import_node_path6.default.join(directory, EVENTS_FILE),
-    marker: import_node_path6.default.join(directory, OWNERSHIP_MARKER),
-    stderr: import_node_path6.default.join(directory, STDERR_FILE)
-  });
-}
-function createLaunchOwnershipMarker({ launchDirectory, launchId }) {
-  assertLaunchId(launchId);
-  const directory = import_node_path6.default.resolve(launchDirectory);
-  const stat = import_node_fs5.default.statSync(directory);
-  if (!stat.isDirectory()) throw new Error(`Launch artifact path is not a directory: ${directory}`);
-  const { marker } = getLaunchArtifactFiles(directory);
-  const payload = `${JSON.stringify({ launchId, schemaVersion: 1 })}
-`;
-  const handle = import_node_fs5.default.openSync(marker, "wx", 384);
-  try {
-    import_node_fs5.default.writeFileSync(handle, payload, "utf8");
-  } finally {
-    import_node_fs5.default.closeSync(handle);
-  }
-  return marker;
-}
-function assertOwnedLaunchDirectory({ launchDirectory, launchId }) {
-  assertLaunchId(launchId);
-  const directory = import_node_path6.default.resolve(launchDirectory);
-  const { marker } = getLaunchArtifactFiles(directory);
-  let parsed;
-  try {
-    const stat = import_node_fs5.default.lstatSync(marker);
-    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("marker is not a regular file");
-    parsed = JSON.parse(import_node_fs5.default.readFileSync(marker, "utf8"));
-  } catch (error) {
-    throw new Error(`Launch artifact ownership marker is invalid: ${error.message}`);
-  }
-  if (parsed?.schemaVersion !== 1 || parsed?.launchId !== launchId) {
-    throw new Error(`Launch artifact ownership marker does not match ${launchId}`);
-  }
-  return directory;
-}
-function appendLaunchEvent(eventFile, event) {
-  const serialized = `${JSON.stringify(event)}
-`;
-  if (Buffer.byteLength(serialized, "utf8") > MAX_EVENT_BYTES) {
-    throw new Error(`Agent event exceeds ${MAX_EVENT_BYTES} bytes`);
-  }
-  const file = import_node_path6.default.resolve(eventFile);
-  const handle = import_node_fs5.default.openSync(file, "a", 384);
-  try {
-    import_node_fs5.default.writeFileSync(handle, serialized, "utf8");
-  } finally {
-    import_node_fs5.default.closeSync(handle);
-  }
-  import_node_fs5.default.chmodSync(file, 384);
-}
-function readLaunchEvents({ eventFile, limitBytes = 1024 * 1024, offset = 0 }) {
-  const file = import_node_path6.default.resolve(eventFile);
-  const validOffset = Number(offset);
-  const validLimit = Number(limitBytes);
-  if (!Number.isSafeInteger(validOffset) || validOffset < 0) {
-    throw new Error("event offset must be a non-negative integer");
-  }
-  if (!Number.isSafeInteger(validLimit) || validLimit < 1 || validLimit > MAX_EVENT_PAGE_BYTES) {
-    throw new Error(`event limitBytes must be between 1 and ${MAX_EVENT_PAGE_BYTES}`);
-  }
-  let stat;
-  try {
-    stat = import_node_fs5.default.statSync(file);
-  } catch (error) {
-    if (error.code === "ENOENT") return { data: "", eof: true, nextOffset: validOffset };
-    throw error;
-  }
-  if (!stat.isFile()) throw new Error(`Agent event path is not a file: ${file}`);
-  if (validOffset > stat.size) throw new Error("event offset exceeds file size");
-  if (validOffset === stat.size) return { data: "", eof: true, nextOffset: validOffset };
-  const remaining = stat.size - validOffset;
-  const bytesToRead = Math.min(remaining, validLimit + MAX_EVENT_BYTES);
-  const buffer = Buffer.allocUnsafe(bytesToRead);
-  const handle = import_node_fs5.default.openSync(file, "r");
-  let bytesRead;
-  try {
-    bytesRead = import_node_fs5.default.readSync(handle, buffer, 0, bytesToRead, validOffset);
-  } finally {
-    import_node_fs5.default.closeSync(handle);
-  }
-  let pageBytes = bytesRead;
-  if (remaining > validLimit) {
-    const beforeLimit = buffer.lastIndexOf(10, Math.min(validLimit - 1, bytesRead - 1));
-    if (beforeLimit >= 0) {
-      pageBytes = beforeLimit + 1;
-    } else {
-      const afterLimit = buffer.indexOf(10, Math.min(validLimit, bytesRead));
-      if (afterLimit < 0) throw new Error(`Agent event exceeds ${MAX_EVENT_BYTES} bytes`);
-      pageBytes = afterLimit + 1;
-    }
-  }
-  const page = buffer.subarray(0, pageBytes);
-  return {
-    data: page.toString("utf8"),
-    eof: validOffset + pageBytes >= stat.size,
-    nextOffset: validOffset + pageBytes
-  };
-}
+// src/agent-host/task-run.js
+var import_node_fs18 = __toESM(require("node:fs"), 1);
+var import_node_path20 = __toESM(require("node:path"), 1);
 
-// src/agent-host/launch-store.js
-var import_node_fs6 = __toESM(require("node:fs"), 1);
-var import_node_path7 = __toESM(require("node:path"), 1);
-var import_better_sqlite3 = __toESM(require("better-sqlite3"), 1);
-var LAUNCH_STATUSES = Object.freeze([
-  "starting",
-  "running",
-  "completed",
-  "failed",
-  "stopped"
-]);
-var LAUNCH_DISPOSITIONS = Object.freeze(["retained", "promoted", "discarded"]);
-var LAUNCH_EXECUTION_KINDS = Object.freeze(["foreground", "detached"]);
-var GROUP_ID_PATTERN = /^group_[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
-var TERMINAL_STATUSES = /* @__PURE__ */ new Set(["completed", "failed", "stopped"]);
-var TRANSITIONS = Object.freeze({
-  starting: /* @__PURE__ */ new Set(["running", "failed", "stopped"]),
-  running: /* @__PURE__ */ new Set(["completed", "failed", "stopped"]),
-  completed: /* @__PURE__ */ new Set(),
-  failed: /* @__PURE__ */ new Set(),
-  stopped: /* @__PURE__ */ new Set()
-});
-function requiredString(value, field, maxLength = 4096) {
-  if (typeof value !== "string" || value.trim() === "" || value.includes("\0")) {
-    throw new Error(`${field} must be a non-empty string without NUL bytes`);
-  }
-  if (value.length > maxLength) {
-    throw new Error(`${field} exceeds ${maxLength} characters`);
-  }
-  return value;
-}
-function optionalString(value, field, maxLength = 4096) {
-  if (value == null) return null;
-  return requiredString(value, field, maxLength);
-}
-function mapLaunch(row) {
-  if (!row) return null;
-  return {
-    baseRef: row.base_ref,
-    disposition: row.disposition,
-    executionKind: row.execution_kind,
-    executionWorkspace: row.execution_workspace,
-    exitCode: row.exit_code,
-    finishedAt: row.finished_at,
-    lastError: row.last_error,
-    launchId: row.launch_id,
-    model: row.model,
-    nativeSessionId: row.native_session_id,
-    originDirectory: row.origin_directory,
-    ownerPid: row.owner_pid,
-    outputDestination: row.output_destination,
-    parentLaunchId: row.parent_launch_id,
-    pid: row.pid,
-    projectRoot: row.project_root,
-    provider: row.provider,
-    startedAt: row.started_at,
-    status: row.status,
-    updatedAt: row.updated_at,
-    workspaceMode: row.workspace_mode,
-    worktreeBranch: row.worktree_branch
-  };
-}
-function validateStatus(status) {
-  if (!LAUNCH_STATUSES.includes(status)) {
-    throw new Error(`Unknown launch status: ${status}`);
-  }
-  return status;
-}
-function validateEnum(value, field, allowed) {
-  if (!allowed.includes(value)) {
-    throw new Error(`Unknown ${field}: ${value}`);
-  }
-  return value;
-}
-function optionalPid(value, field) {
-  if (value == null) return null;
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 1) {
-    throw new Error(`${field} must be a positive integer`);
-  }
-  return parsed;
-}
-function assertAgentGroupId(groupId) {
-  if (typeof groupId !== "string" || !GROUP_ID_PATTERN.test(groupId)) {
-    throw new Error("Invalid Agent Host group ID");
-  }
-  return groupId;
-}
-function deriveGroupStatus(launches) {
-  const statuses = launches.map((launch) => launch.status);
-  if (statuses.includes("running")) return "running";
-  if (statuses.includes("starting")) return "starting";
-  if (statuses.every((status) => status === "completed")) return "completed";
-  if (statuses.some((status) => status === "completed")) return "partial";
-  if (statuses.every((status) => status === "stopped")) return "stopped";
-  return "failed";
-}
-function ensureColumn(database, name, definition) {
-  const columns = new Set(database.prepare("PRAGMA table_info(agent_launches)").all().map((row) => row.name));
-  if (!columns.has(name)) database.exec(`ALTER TABLE agent_launches ADD COLUMN ${name} ${definition}`);
-}
-function initialize(database) {
-  database.pragma("journal_mode = WAL");
-  database.pragma("foreign_keys = ON");
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS agent_launches (
-      launch_id TEXT PRIMARY KEY,
-      parent_launch_id TEXT REFERENCES agent_launches(launch_id),
-      provider TEXT NOT NULL,
-      native_session_id TEXT,
-      origin_directory TEXT NOT NULL,
-      project_root TEXT NOT NULL,
-      execution_workspace TEXT NOT NULL,
-      output_destination TEXT NOT NULL,
-      workspace_mode TEXT NOT NULL CHECK (workspace_mode IN ('read-only', 'worktree', 'isolated-copy')),
-      worktree_branch TEXT,
-      base_ref TEXT,
-      model TEXT NOT NULL,
-      execution_kind TEXT NOT NULL DEFAULT 'foreground' CHECK (execution_kind IN ('foreground', 'detached')),
-      owner_pid INTEGER,
-      disposition TEXT NOT NULL DEFAULT 'retained' CHECK (disposition IN ('retained', 'promoted', 'discarded')),
-      status TEXT NOT NULL CHECK (status IN ('starting', 'running', 'completed', 'failed', 'stopped')),
-      pid INTEGER,
-      exit_code INTEGER,
-      started_at TEXT NOT NULL,
-      finished_at TEXT,
-      updated_at TEXT NOT NULL,
-      last_error TEXT
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_agent_launches_status_started
-      ON agent_launches(status, started_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_agent_launches_native_session
-      ON agent_launches(provider, native_session_id);
-
-    CREATE TABLE IF NOT EXISTS agent_groups (
-      group_id TEXT PRIMARY KEY,
-      origin_directory TEXT NOT NULL,
-      workspace TEXT NOT NULL,
-      workspace_mode TEXT NOT NULL CHECK (workspace_mode IN ('auto', 'read-only', 'worktree', 'isolated-copy')),
-      started_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS agent_group_launches (
-      group_id TEXT NOT NULL REFERENCES agent_groups(group_id) ON DELETE CASCADE,
-      ordinal INTEGER NOT NULL,
-      launch_id TEXT NOT NULL UNIQUE,
-      provider TEXT NOT NULL,
-      last_error TEXT,
-      PRIMARY KEY (group_id, ordinal)
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_agent_group_launches_group
-      ON agent_group_launches(group_id, ordinal);
-  `);
-  ensureColumn(database, "execution_kind", "TEXT NOT NULL DEFAULT 'foreground' CHECK (execution_kind IN ('foreground', 'detached'))");
-  ensureColumn(database, "owner_pid", "INTEGER");
-  ensureColumn(database, "disposition", "TEXT NOT NULL DEFAULT 'retained' CHECK (disposition IN ('retained', 'promoted', 'discarded'))");
-}
-function createLaunchStore({
-  databasePath = getAgentHostPaths().stateDatabase,
-  now = () => (/* @__PURE__ */ new Date()).toISOString()
-} = {}) {
-  const resolvedPath = import_node_path7.default.resolve(databasePath);
-  import_node_fs6.default.mkdirSync(import_node_path7.default.dirname(resolvedPath), { recursive: true, mode: 448 });
-  const database = new import_better_sqlite3.default(resolvedPath);
-  import_node_fs6.default.chmodSync(resolvedPath, 384);
-  initialize(database);
-  const getStatement = database.prepare("SELECT * FROM agent_launches WHERE launch_id = ?");
-  function get(launchId) {
-    assertLaunchId(launchId);
-    return mapLaunch(getStatement.get(launchId));
-  }
-  function create(projection) {
-    const launchId = assertLaunchId(projection?.launchId);
-    const status = validateStatus(projection?.status || "starting");
-    if (status !== "starting") {
-      throw new Error("New launches must start in the starting state");
-    }
-    const timestamp = now();
-    const record = {
-      baseRef: optionalString(projection.baseRef, "baseRef", 512),
-      disposition: validateEnum(projection.disposition || "retained", "launch disposition", LAUNCH_DISPOSITIONS),
-      executionKind: validateEnum(projection.executionKind || "foreground", "execution kind", LAUNCH_EXECUTION_KINDS),
-      executionWorkspace: requiredString(projection.executionWorkspace, "executionWorkspace"),
-      launchId,
-      model: requiredString(projection.model, "model", 512),
-      nativeSessionId: optionalString(projection.nativeSessionId, "nativeSessionId", 1024),
-      originDirectory: requiredString(projection.originDirectory, "originDirectory"),
-      ownerPid: optionalPid(projection.ownerPid, "ownerPid"),
-      outputDestination: requiredString(projection.outputDestination, "outputDestination"),
-      parentLaunchId: projection.parentLaunchId == null ? null : assertLaunchId(projection.parentLaunchId),
-      projectRoot: requiredString(projection.projectRoot, "projectRoot"),
-      provider: requiredString(projection.provider, "provider", 64),
-      status,
-      workspaceMode: requiredString(projection.workspaceMode, "workspaceMode", 32),
-      worktreeBranch: optionalString(projection.worktreeBranch, "worktreeBranch", 512)
-    };
-    database.prepare(`
-      INSERT INTO agent_launches (
-        launch_id, parent_launch_id, provider, native_session_id,
-        origin_directory, project_root, execution_workspace, output_destination,
-        workspace_mode, worktree_branch, base_ref, model, status,
-        execution_kind, owner_pid, disposition, started_at, updated_at
-      ) VALUES (
-        @launchId, @parentLaunchId, @provider, @nativeSessionId,
-        @originDirectory, @projectRoot, @executionWorkspace, @outputDestination,
-        @workspaceMode, @worktreeBranch, @baseRef, @model, @status,
-        @executionKind, @ownerPid, @disposition, @startedAt, @updatedAt
-      )
-    `).run({ ...record, startedAt: timestamp, updatedAt: timestamp });
-    return get(launchId);
-  }
-  function transition(launchId, nextStatus, patch = {}) {
-    assertLaunchId(launchId);
-    validateStatus(nextStatus);
-    const current = get(launchId);
-    if (!current) throw new Error(`Launch not found: ${launchId}`);
-    if (!TRANSITIONS[current.status].has(nextStatus)) {
-      throw new Error(`Invalid launch transition: ${current.status} -> ${nextStatus}`);
-    }
-    const timestamp = now();
-    const pid = patch.pid == null ? current.pid : Number(patch.pid);
-    const exitCode = patch.exitCode == null ? current.exitCode : Number(patch.exitCode);
-    if (pid != null && (!Number.isSafeInteger(pid) || pid < 0)) {
-      throw new Error("pid must be a non-negative integer");
-    }
-    if (exitCode != null && !Number.isSafeInteger(exitCode)) {
-      throw new Error("exitCode must be an integer");
-    }
-    database.prepare(`
-      UPDATE agent_launches
-      SET status = @status,
-          pid = @pid,
-          owner_pid = @ownerPid,
-          exit_code = @exitCode,
-          native_session_id = COALESCE(@nativeSessionId, native_session_id),
-          last_error = @lastError,
-          finished_at = @finishedAt,
-          updated_at = @updatedAt
-      WHERE launch_id = @launchId
-    `).run({
-      exitCode,
-      finishedAt: TERMINAL_STATUSES.has(nextStatus) ? timestamp : null,
-      lastError: optionalString(patch.lastError, "lastError", 4096),
-      launchId,
-      nativeSessionId: optionalString(patch.nativeSessionId, "nativeSessionId", 1024),
-      ownerPid: TERMINAL_STATUSES.has(nextStatus) ? null : optionalPid(patch.ownerPid == null ? current.ownerPid : patch.ownerPid, "ownerPid"),
-      pid,
-      status: nextStatus,
-      updatedAt: timestamp
-    });
-    return get(launchId);
-  }
-  function setDisposition(launchId, disposition) {
-    assertLaunchId(launchId);
-    const next = validateEnum(disposition, "launch disposition", LAUNCH_DISPOSITIONS);
-    const current = get(launchId);
-    if (!current) throw new Error(`Launch not found: ${launchId}`);
-    if (current.disposition === next) return current;
-    if (current.disposition !== "retained") {
-      throw new Error(`Launch is already ${current.disposition}: ${launchId}`);
-    }
-    if (next === "retained") return current;
-    database.prepare(`
-      UPDATE agent_launches
-      SET disposition = ?, updated_at = ?
-      WHERE launch_id = ?
-    `).run(next, now(), launchId);
-    return get(launchId);
-  }
-  function setNativeSessionId(launchId, nativeSessionId) {
-    assertLaunchId(launchId);
-    const validNativeId = requiredString(nativeSessionId, "nativeSessionId", 1024);
-    const result = database.prepare(`
-      UPDATE agent_launches
-      SET native_session_id = ?, updated_at = ?
-      WHERE launch_id = ?
-    `).run(validNativeId, now(), launchId);
-    if (result.changes === 0) throw new Error(`Launch not found: ${launchId}`);
-    return get(launchId);
-  }
-  function list({ limit = 50, status = null } = {}) {
-    const numericLimit = Number(limit);
-    if (!Number.isSafeInteger(numericLimit) || numericLimit < 1 || numericLimit > 1e3) {
-      throw new Error("limit must be an integer between 1 and 1000");
-    }
-    if (status != null) validateStatus(status);
-    const rows = status == null ? database.prepare(`
-          SELECT * FROM agent_launches
-          ORDER BY started_at DESC, rowid DESC
-          LIMIT ?
-        `).all(numericLimit) : database.prepare(`
-          SELECT * FROM agent_launches
-          WHERE status = ?
-          ORDER BY started_at DESC, rowid DESC
-          LIMIT ?
-        `).all(status, numericLimit);
-    return rows.map(mapLaunch);
-  }
-  function getGroup(groupId) {
-    assertAgentGroupId(groupId);
-    const row = database.prepare("SELECT * FROM agent_groups WHERE group_id = ?").get(groupId);
-    if (!row) return null;
-    const taskRows = database.prepare(`
-      SELECT launch_id, provider, last_error
-      FROM agent_group_launches
-      WHERE group_id = ?
-      ORDER BY ordinal ASC
-    `).all(groupId);
-    const launches = taskRows.map((task) => {
-      const launch = get(task.launch_id);
-      if (launch) return launch;
-      return {
-        lastError: task.last_error,
-        launchId: task.launch_id,
-        provider: task.provider,
-        status: task.last_error ? "failed" : "starting"
-      };
-    });
-    const status = deriveGroupStatus(launches);
-    const finishedAt = ["completed", "partial", "failed", "stopped"].includes(status) ? launches.map((launch) => launch.finishedAt).filter(Boolean).sort().at(-1) || row.updated_at : null;
-    return {
-      finishedAt,
-      groupId: row.group_id,
-      launches,
-      originDirectory: row.origin_directory,
-      startedAt: row.started_at,
-      status,
-      updatedAt: row.updated_at,
-      workspace: row.workspace,
-      workspaceMode: row.workspace_mode
-    };
-  }
-  function createGroup(projection) {
-    const groupId = assertAgentGroupId(projection?.groupId);
-    const tasks = projection?.tasks;
-    if (!Array.isArray(tasks) || tasks.length < 2 || tasks.length > 10) {
-      throw new Error("Agent Host group requires between 2 and 10 tasks");
-    }
-    const validatedTasks = tasks.map((task, ordinal) => ({
-      launchId: assertLaunchId(task?.launchId),
-      ordinal,
-      provider: requiredString(task?.provider, `tasks[${ordinal}].provider`, 64)
-    }));
-    if (new Set(validatedTasks.map((task) => task.launchId)).size !== validatedTasks.length) {
-      throw new Error("Agent Host group launch IDs must be unique");
-    }
-    const timestamp = now();
-    const record = {
-      groupId,
-      originDirectory: requiredString(projection.originDirectory, "originDirectory"),
-      startedAt: timestamp,
-      updatedAt: timestamp,
-      workspace: requiredString(projection.workspace, "workspace"),
-      workspaceMode: validateEnum(
-        projection.workspaceMode || "auto",
-        "group workspace mode",
-        ["auto", "read-only", "worktree", "isolated-copy"]
-      )
-    };
-    database.transaction(() => {
-      database.prepare(`
-        INSERT INTO agent_groups (
-          group_id, origin_directory, workspace, workspace_mode, started_at, updated_at
-        ) VALUES (
-          @groupId, @originDirectory, @workspace, @workspaceMode, @startedAt, @updatedAt
-        )
-      `).run(record);
-      const insertTask = database.prepare(`
-        INSERT INTO agent_group_launches (group_id, ordinal, launch_id, provider)
-        VALUES (?, ?, ?, ?)
-      `);
-      for (const task of validatedTasks) {
-        insertTask.run(groupId, task.ordinal, task.launchId, task.provider);
-      }
-    })();
-    return getGroup(groupId);
-  }
-  function setGroupLaunchError(groupId, launchId, lastError) {
-    assertAgentGroupId(groupId);
-    assertLaunchId(launchId);
-    const result = database.prepare(`
-      UPDATE agent_group_launches
-      SET last_error = ?
-      WHERE group_id = ? AND launch_id = ?
-    `).run(requiredString(lastError, "lastError", 4096), groupId, launchId);
-    if (result.changes === 0) throw new Error(`Group launch not found: ${groupId}/${launchId}`);
-    database.prepare("UPDATE agent_groups SET updated_at = ? WHERE group_id = ?").run(now(), groupId);
-    return getGroup(groupId);
-  }
-  function listGroups({ limit = 50 } = {}) {
-    const numericLimit = Number(limit);
-    if (!Number.isSafeInteger(numericLimit) || numericLimit < 1 || numericLimit > 1e3) {
-      throw new Error("limit must be an integer between 1 and 1000");
-    }
-    return database.prepare(`
-      SELECT group_id FROM agent_groups
-      ORDER BY started_at DESC, rowid DESC
-      LIMIT ?
-    `).all(numericLimit).map((row) => getGroup(row.group_id));
-  }
-  return {
-    close() {
-      if (database.open) database.close();
-    },
-    create,
-    createGroup,
-    database,
-    get,
-    getGroup,
-    list,
-    listGroups,
-    setDisposition,
-    setGroupLaunchError,
-    setNativeSessionId,
-    transition
-  };
-}
-
-// src/agent-host/events/providers/claude.js
-var claude_exports = {};
-__export(claude_exports, {
-  normalize: () => normalize
-});
-function toNumber(value, fallback = 0) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-function toString(value, fallback = "") {
-  return typeof value === "string" ? value : fallback;
-}
-function toUsage(rawUsage) {
-  if (!rawUsage || typeof rawUsage !== "object") return void 0;
-  const inputTokens = rawUsage.inputTokens ?? rawUsage.input_tokens;
-  const outputTokens = rawUsage.outputTokens ?? rawUsage.output_tokens;
-  if (typeof inputTokens !== "number" || typeof outputTokens !== "number") return void 0;
-  const usage2 = {
-    inputTokens: toNumber(inputTokens),
-    outputTokens: toNumber(outputTokens)
-  };
-  const cacheReadTokens = rawUsage.cacheReadTokens ?? rawUsage.cache_read_input_tokens ?? rawUsage.cached_input_tokens;
-  if (typeof cacheReadTokens === "number") {
-    usage2.cacheReadTokens = toNumber(cacheReadTokens);
-  }
-  const cacheCreationTokens = rawUsage.cacheCreationTokens ?? rawUsage.cache_creation_input_tokens;
-  if (typeof cacheCreationTokens === "number") {
-    usage2.cacheCreationTokens = toNumber(cacheCreationTokens);
-  }
-  return usage2;
-}
-function normalizeContentBlock(block) {
-  if (!block || typeof block !== "object") return null;
-  if (block.type === "text") {
-    return { type: "text", text: toString(block.text) };
-  }
-  if (block.type === "thinking") {
-    return { type: "thinking", thinking: toString(block.thinking) };
-  }
-  if (block.type === "tool_use") {
-    return {
-      type: "tool_use",
-      id: toString(block.id),
-      name: toString(block.name, "unknown"),
-      input: block.input && typeof block.input === "object" ? block.input : {}
-    };
-  }
-  if (block.type === "tool_result") {
-    const normalized = {
-      type: "tool_result",
-      toolUseId: toString(block.toolUseId ?? block.tool_use_id),
-      content: block.content ?? ""
-    };
-    const isError = block.isError ?? block.is_error;
-    if (typeof isError === "boolean") normalized.isError = isError;
-    return normalized;
-  }
-  return null;
-}
-function normalizeAssistantEvent(event) {
-  const message = event.message && typeof event.message === "object" ? event.message : null;
-  const rawContent = Array.isArray(event.content) ? event.content : Array.isArray(message?.content) ? message.content : [];
-  const content = rawContent.map(normalizeContentBlock).filter(Boolean);
-  const usage2 = toUsage(event.usage || message?.usage);
-  const model = toString(event.model || message?.model, "");
-  const finishReason = toString(event.finishReason || event.stopReason || message?.stop_reason, "");
-  const normalized = {
-    type: "assistant",
-    content
-  };
-  if (usage2) normalized.usage = usage2;
-  if (model) normalized.model = model;
-  if (finishReason) normalized.finishReason = finishReason;
-  if (event.error) normalized.error = event.error;
-  return normalized;
-}
-function normalizeResultEvent(event) {
-  const message = event.message && typeof event.message === "object" ? event.message : null;
-  const usage2 = toUsage(event.usage || message?.usage);
-  const model = toString(event.model || message?.model, "");
-  const finishReason = toString(event.finishReason || event.stopReason || message?.stop_reason, "");
-  const normalized = {
-    type: "result"
-  };
-  const providerSessionId = event.providerSessionId ?? event.session_id;
-  if (typeof providerSessionId === "string" && providerSessionId) {
-    normalized.providerSessionId = providerSessionId;
-  }
-  const costUsd = event.costUsd ?? event.total_cost_usd;
-  if (typeof costUsd === "number") normalized.costUsd = costUsd;
-  const durationMs = event.durationMs ?? event.duration_ms;
-  if (typeof durationMs === "number") normalized.durationMs = durationMs;
-  const numTurns = event.numTurns ?? event.num_turns;
-  if (typeof numTurns === "number") normalized.numTurns = numTurns;
-  const result = event.result;
-  if (typeof result === "string") normalized.result = result;
-  if (usage2) normalized.usage = usage2;
-  if (model) normalized.model = model;
-  if (finishReason) normalized.finishReason = finishReason;
-  if (event.is_error === true) normalized.isError = true;
-  return normalized;
-}
-function normalizeSystemEvent(event) {
-  const subtype = toString(event.subtype, "unknown");
-  const normalized = {
-    type: "system",
-    subtype,
-    message: toString(event.message, "System event")
-  };
-  const rawCompaction = event.compaction || event.microcompactMetadata || event.compactMetadata;
-  if (rawCompaction && typeof rawCompaction === "object") {
-    const compaction = {
-      trigger: toString(rawCompaction.trigger, "unknown"),
-      preTokens: toNumber(rawCompaction.preTokens ?? rawCompaction.pre_tokens),
-      tokensSaved: toNumber(rawCompaction.tokensSaved ?? rawCompaction.tokens_saved)
-    };
-    const compactedToolIds = rawCompaction.compactedToolIds ?? rawCompaction.compacted_tool_ids;
-    if (Array.isArray(compactedToolIds)) {
-      compaction.compactedToolIds = compactedToolIds.filter((id) => typeof id === "string");
-    }
-    normalized.compaction = compaction;
-  }
-  const isPermissionEvent = subtype === "permission_request";
-  const rawPermission = event.permission && typeof event.permission === "object" ? event.permission : event;
-  const requestId = rawPermission.requestId ?? rawPermission.request_id;
-  if (isPermissionEvent && typeof requestId === "string" && requestId) {
-    const permission = { requestId };
-    const batchId = rawPermission.batchId ?? rawPermission.batch_id;
-    const toolName = rawPermission.toolName ?? rawPermission.tool_name;
-    const toolInput = rawPermission.toolInput ?? rawPermission.tool_input;
-    if (typeof batchId === "string") permission.batchId = batchId;
-    if (typeof toolName === "string") permission.toolName = toolName;
-    if (toolInput && typeof toolInput === "object") {
-      permission.toolInput = toolInput;
-    }
-    normalized.permission = permission;
-  }
-  return normalized;
-}
-function normalizeRateLimitEvent(event) {
-  const raw = event.rate_limit_info && typeof event.rate_limit_info === "object" ? event.rate_limit_info : {};
-  const status = toString(raw.status, "unknown");
-  const rateLimit = { status };
-  if (Number.isFinite(raw.resetsAt)) rateLimit.resetsAt = raw.resetsAt;
-  if (typeof raw.rateLimitType === "string") rateLimit.rateLimitType = raw.rateLimitType;
-  if (typeof raw.overageStatus === "string") rateLimit.overageStatus = raw.overageStatus;
-  if (Number.isFinite(raw.overageResetsAt)) rateLimit.overageResetsAt = raw.overageResetsAt;
-  if (typeof raw.isUsingOverage === "boolean") rateLimit.isUsingOverage = raw.isUsingOverage;
-  return {
-    type: "system",
-    subtype: "rate_limit",
-    message: `Claude rate limit status: ${status}`,
-    rateLimit
-  };
-}
-function normalizeErrorEvent(event) {
-  const rawError = event.error && typeof event.error === "object" ? event.error : null;
-  const message = toString(
-    event.message || rawError?.message,
-    "Unknown error"
-  );
-  const normalized = {
-    type: "error",
-    message
-  };
-  const code = event.code || rawError?.code;
-  if (typeof code === "string" && code) normalized.code = code;
-  const details = event.details ?? rawError?.details ?? rawError;
-  if (details !== void 0) normalized.details = details;
-  return normalized;
-}
-function normalize(event) {
-  if (!event || typeof event !== "object") {
-    return { type: "error", message: "Invalid event payload" };
-  }
-  if (event.type === "assistant") return normalizeAssistantEvent(event);
-  if (event.type === "result") return normalizeResultEvent(event);
-  if (event.type === "system") return normalizeSystemEvent(event);
-  if (event.type === "rate_limit_event") return normalizeRateLimitEvent(event);
-  if (event.type === "error") return normalizeErrorEvent(event);
-  return {
-    type: "system",
-    subtype: "unknown",
-    message: `Unrecognized Claude event: ${toString(event.type, "unknown")}`
-  };
-}
-
-// src/agent-host/events/providers/codex.js
-var UNKNOWN_EVENT_RAW_PAYLOAD_MAX_CHARS = 16e3;
-var CodexNormalizer = class {
-  constructor() {
-    this.pendingItems = /* @__PURE__ */ new Map();
-    this.sessionId = null;
-  }
-  /**
-   * Normalize a raw Codex event into 0+ RudiEvent objects.
-   * @param {object} rawEvent
-   * @returns {Array<{ normalized: object, raw: object }>}
-   */
-  normalize(rawEvent) {
-    if (!rawEvent || typeof rawEvent !== "object") return [];
-    const type = rawEvent.type;
-    if (type === "thread.started") {
-      this.sessionId = rawEvent.thread_id || null;
-      return [this._wrap({
-        type: "system",
-        subtype: "thread_started",
-        message: "Thread started"
-      }, rawEvent)];
-    }
-    if (type === "turn.started") {
-      return [this._wrap({
-        type: "system",
-        subtype: "turn_started",
-        message: `Turn ${rawEvent.turn_number || 1} started`
-      }, rawEvent)];
-    }
-    if (type === "item.started") return this._handleItemStarted(rawEvent);
-    if (type === "item.updated") return this._handleItemUpdated(rawEvent);
-    if (type === "item.completed") return this._handleItemCompleted(rawEvent);
-    if (type === "turn.completed") return this._handleTurnCompleted(rawEvent);
-    if (type === "turn.failed") {
-      const normalized = {
-        type: "result",
-        result: rawEvent.error?.message || "Turn failed",
-        usage: this._normalizeUsage({})
-      };
-      const sid = this._sid(rawEvent);
-      if (sid) normalized.providerSessionId = sid;
-      if (typeof rawEvent.model === "string" && rawEvent.model) normalized.model = rawEvent.model;
-      return [this._wrap(normalized, rawEvent)];
-    }
-    if (type === "error") {
-      const normalized = {
-        type: "error",
-        message: rawEvent.error?.message || rawEvent.message || "Unknown error"
-      };
-      const code = rawEvent.error?.code || rawEvent.code;
-      if (typeof code === "string" && code) normalized.code = code;
-      const details = rawEvent.error || rawEvent.details;
-      if (details !== void 0) normalized.details = details;
-      return [this._wrap(normalized, rawEvent)];
-    }
-    return [this._wrap(this._normalizeUnknownEvent(rawEvent), rawEvent)];
-  }
-  /**
-   * Flush any remaining buffered items.
-   * @returns {Array<{ normalized: object, raw: object }>}
-   */
-  flush() {
-    const results = [];
-    for (const [itemId, pending] of this.pendingItems) {
-      const flushed = this._flushItem(itemId, pending, pending.startEvent);
-      if (flushed) results.push(flushed);
-    }
-    this.pendingItems.clear();
-    return results;
-  }
-  /**
-   * Reset state between turns.
-   */
-  reset() {
-    this.pendingItems.clear();
-  }
-  // ---- Private helpers ----
-  _wrap(normalized, raw) {
-    return { normalized, raw };
-  }
-  _sid(event) {
-    return this.sessionId || event.thread_id || null;
-  }
-  _toString(value, fallback = "") {
-    return typeof value === "string" ? value : fallback;
-  }
-  _toText(value) {
-    if (typeof value === "string") return value;
-    if (value == null) return "";
-    try {
-      return JSON.stringify(value);
-    } catch {
-      return String(value);
-    }
-  }
-  _serializeUnknownPayload(rawEvent) {
-    try {
-      const rawPayload = JSON.stringify(rawEvent);
-      if (typeof rawPayload !== "string") {
-        return { rawPayloadUnavailable: true };
-      }
-      if (rawPayload.length > UNKNOWN_EVENT_RAW_PAYLOAD_MAX_CHARS) {
-        return {
-          rawPayload: rawPayload.slice(0, UNKNOWN_EVENT_RAW_PAYLOAD_MAX_CHARS),
-          rawPayloadTruncated: true
-        };
-      }
-      return { rawPayload };
-    } catch (error) {
-      return {
-        rawPayloadUnavailable: true,
-        rawPayloadError: error instanceof Error ? error.message : "serialization_failed"
-      };
-    }
-  }
-  _normalizeUnknownEvent(rawEvent) {
-    const providerEventType = this._toString(rawEvent?.type);
-    const providerItemType = this._toString(rawEvent?.item?.type || rawEvent?.payload?.type);
-    const unknownReason = providerEventType ? "unknown_event_type" : "malformed_event";
-    const normalized = {
-      type: "system",
-      subtype: "unknown",
-      message: providerEventType ? `Unrecognized Codex event: ${providerEventType}` : "Malformed Codex event",
-      unknownReason,
-      ...this._serializeUnknownPayload(rawEvent)
-    };
-    if (providerEventType) normalized.providerEventType = providerEventType;
-    if (providerItemType) normalized.providerItemType = providerItemType;
-    return normalized;
-  }
-  _normalizeUsage(rawUsage = {}) {
-    const usage2 = {
-      inputTokens: typeof rawUsage.input_tokens === "number" ? rawUsage.input_tokens : 0,
-      outputTokens: typeof rawUsage.output_tokens === "number" ? rawUsage.output_tokens : 0
-    };
-    const cacheRead = rawUsage.cache_read_input_tokens ?? rawUsage.cached_input_tokens;
-    if (typeof cacheRead === "number") usage2.cacheReadTokens = cacheRead;
-    if (typeof rawUsage.cache_creation_input_tokens === "number") {
-      usage2.cacheCreationTokens = rawUsage.cache_creation_input_tokens;
-    }
-    return usage2;
-  }
-  _ensureRecord(value) {
-    if (value && typeof value === "object" && !Array.isArray(value)) return value;
-    return {};
-  }
-  _itemId(item, rawEvent) {
-    return this._toString(item?.id || rawEvent.item_id);
-  }
-  _toolName(item) {
-    return this._toString(item.tool || item.command || item.name, "unknown");
-  }
-  _extractDeltaText(rawEvent, item) {
-    if (typeof rawEvent.delta === "string") return rawEvent.delta;
-    if (rawEvent.delta && typeof rawEvent.delta === "object") {
-      if (typeof rawEvent.delta.text === "string") return rawEvent.delta.text;
-      if (Array.isArray(rawEvent.delta.content)) {
-        return rawEvent.delta.content.map((block) => block && typeof block.text === "string" ? block.text : "").join("");
-      }
-    }
-    if (typeof item?.text === "string") return item.text;
-    if (Array.isArray(item?.content)) {
-      return item.content.map((block) => block && typeof block.text === "string" ? block.text : "").join("");
-    }
-    return "";
-  }
-  _assistantWithContent(rawEvent, content) {
-    const normalized = {
-      type: "assistant",
-      content
-    };
-    const model = rawEvent.item?.model || rawEvent.model;
-    if (typeof model === "string" && model) normalized.model = model;
-    return this._wrap(normalized, rawEvent);
-  }
-  _handleItemStarted(rawEvent) {
-    const item = rawEvent.item || {};
-    const itemId = this._itemId(item, rawEvent);
-    const itemType = item.type;
-    if (!itemId) return [];
-    if (itemType === "agent_message" || itemType === "reasoning") {
-      this.pendingItems.set(itemId, {
-        type: itemType,
-        name: itemType,
-        contentBuffer: this._extractDeltaText(rawEvent, item),
-        startEvent: rawEvent
-      });
-      return [];
-    }
-    if (itemType === "command_execution" || itemType === "mcp_tool_call") {
-      this.pendingItems.set(itemId, {
-        type: itemType,
-        name: this._toolName(item),
-        contentBuffer: "",
-        startEvent: rawEvent
-      });
-      return [this._assistantWithContent(rawEvent, [{
-        type: "tool_use",
-        id: itemId,
-        name: this._toolName(item),
-        input: this._ensureRecord(item.arguments || item.input || item.args)
-      }])];
-    }
-    this.pendingItems.set(itemId, {
-      type: itemType || "unknown",
-      name: itemType || "unknown",
-      contentBuffer: this._extractDeltaText(rawEvent, item),
-      startEvent: rawEvent
-    });
-    return [];
-  }
-  _handleItemUpdated(rawEvent) {
-    const item = rawEvent.item || {};
-    const itemId = this._itemId(item, rawEvent);
-    if (!itemId) return [];
-    const pending = this.pendingItems.get(itemId);
-    if (!pending) return [];
-    const delta = this._extractDeltaText(rawEvent, item);
-    if (delta) pending.contentBuffer += delta;
-    return [];
-  }
-  _handleItemCompleted(rawEvent) {
-    const item = rawEvent.item || {};
-    const itemId = this._itemId(item, rawEvent);
-    const itemType = item.type;
-    if (!itemId) return [];
-    const pending = this.pendingItems.get(itemId);
-    if (itemType === "agent_message" || itemType === "reasoning") {
-      const text2 = this._extractDeltaText(rawEvent, item) || pending?.contentBuffer || "";
-      this.pendingItems.delete(itemId);
-      const blockType = itemType === "reasoning" ? "thinking" : "text";
-      const content = [{
-        type: blockType,
-        [blockType === "thinking" ? "thinking" : "text"]: text2
-      }];
-      return [this._assistantWithContent(rawEvent, content)];
-    }
-    if (itemType === "command_execution" || itemType === "mcp_tool_call") {
-      this.pendingItems.delete(itemId);
-      const output = item.output ?? item.result?.content?.[0]?.text ?? item.result ?? pending?.contentBuffer ?? "";
-      return [this._assistantWithContent(rawEvent, [{
-        type: "tool_result",
-        toolUseId: itemId,
-        content: this._toText(output),
-        isError: !!(item.error || item.exit_code != null && item.exit_code !== 0)
-      }])];
-    }
-    if (itemType === "file_change") {
-      this.pendingItems.delete(itemId);
-      const changes = Array.isArray(item.changes) ? item.changes : [];
-      const summary = changes.map((c) => `${c.kind || "change"}: ${c.path || "unknown"}`).join("\n");
-      return [this._assistantWithContent(rawEvent, [{
-        type: "text",
-        text: summary || this._toText(item)
-      }])];
-    }
-    this.pendingItems.delete(itemId);
-    const text = this._extractDeltaText(rawEvent, item) || pending?.contentBuffer || this._toText(item);
-    return [this._assistantWithContent(rawEvent, [{
-      type: "text",
-      text
-    }])];
-  }
-  _handleTurnCompleted(rawEvent) {
-    const flushed = this.flush();
-    const normalized = {
-      type: "result",
-      numTurns: typeof rawEvent.turn_number === "number" ? rawEvent.turn_number : 1,
-      usage: this._normalizeUsage(rawEvent.usage || {})
-    };
-    const sid = this._sid(rawEvent);
-    if (sid) normalized.providerSessionId = sid;
-    if (typeof rawEvent.cost_usd === "number") normalized.costUsd = rawEvent.cost_usd;
-    if (typeof rawEvent.duration_ms === "number") normalized.durationMs = rawEvent.duration_ms;
-    if (typeof rawEvent.model === "string" && rawEvent.model) normalized.model = rawEvent.model;
-    if (typeof rawEvent.result === "string") normalized.result = rawEvent.result;
-    flushed.push(this._wrap(normalized, rawEvent));
-    return flushed;
-  }
-  /**
-   * Flush one buffered item into an assistant event.
-   * Used when a turn completes before item.completed arrives.
-   */
-  _flushItem(itemId, pending, rawEvent) {
-    const isTool = pending.type === "command_execution" || pending.type === "mcp_tool_call";
-    if (!pending.contentBuffer && !isTool) return null;
-    if (pending.type === "agent_message" || pending.type === "reasoning") {
-      const blockType = pending.type === "reasoning" ? "thinking" : "text";
-      return this._assistantWithContent(rawEvent, [{
-        type: blockType,
-        [blockType === "thinking" ? "thinking" : "text"]: pending.contentBuffer
-      }]);
-    }
-    if (isTool) {
-      return this._assistantWithContent(rawEvent, [{
-        type: "tool_result",
-        toolUseId: itemId,
-        content: pending.contentBuffer || "(no output)",
-        isError: false
-      }]);
-    }
-    return this._assistantWithContent(rawEvent, [{
-      type: "text",
-      text: pending.contentBuffer
-    }]);
-  }
-};
-
-// src/agent-host/events/providers/index.js
-var NORMALIZERS = {
-  claude: claude_exports
-};
-function createNormalizer(provider) {
-  if (provider === "codex") return new CodexNormalizer();
-  return null;
-}
-function getNormalizer(provider) {
-  const normalizer = NORMALIZERS[provider];
-  if (normalizer && typeof normalizer.normalize === "function") {
-    return normalizer.normalize;
-  }
-  return (event) => event;
-}
-function normalizeEvent(provider, rawEvent, normalizer) {
-  if (normalizer) {
-    return normalizer.normalize(rawEvent);
-  }
-  const normalize2 = getNormalizer(provider);
-  const normalized = normalize2(rawEvent);
-  return [{ normalized, raw: rawEvent }];
-}
-
-// src/agent-host/events/antigravity.js
-function usage(raw) {
-  if (!raw || typeof raw !== "object") return void 0;
-  if (typeof raw.input_tokens !== "number" || typeof raw.output_tokens !== "number") return void 0;
-  const normalized = {
-    inputTokens: raw.input_tokens,
-    outputTokens: raw.output_tokens
-  };
-  if (typeof raw.cache_read_tokens === "number") normalized.cacheReadTokens = raw.cache_read_tokens;
-  return normalized;
-}
-function normalizeAntigravityEvent(rawEvent) {
-  if (!rawEvent || typeof rawEvent !== "object") {
-    return { message: "Invalid Antigravity event", type: "error" };
-  }
-  if (rawEvent.event === "init") {
-    return {
-      message: "Antigravity conversation initialized",
-      subtype: "init",
-      type: "system"
-    };
-  }
-  if (rawEvent.event === "step_update") {
-    const step = rawEvent.step_update || {};
-    if (step.step_type === "agent_response" && typeof step.text_delta === "string") {
-      const normalized = {
-        content: [{ text: step.text_delta, type: "text" }],
-        type: "assistant"
-      };
-      const normalizedUsage = usage(step.usage);
-      if (normalizedUsage) normalized.usage = normalizedUsage;
-      return normalized;
-    }
-    return {
-      message: `Antigravity step ${step.step_type || "unknown"}: ${step.state || "unknown"}`,
-      subtype: "step_update",
-      type: "system"
-    };
-  }
-  if (rawEvent.event === "result") {
-    const result = rawEvent.result || {};
-    const normalized = {
-      providerSessionId: result.conversation_id,
-      result: typeof result.response === "string" ? result.response : void 0,
-      type: "result"
-    };
-    if (typeof result.duration_seconds === "number") normalized.durationMs = Math.round(result.duration_seconds * 1e3);
-    if (typeof result.num_turns === "number") normalized.numTurns = result.num_turns;
-    const normalizedUsage = usage(result.usage);
-    if (normalizedUsage) normalized.usage = normalizedUsage;
-    if (result.status && result.status !== "SUCCESS") normalized.isError = true;
-    return normalized;
-  }
-  if (rawEvent.event === "error") {
-    return {
-      message: rawEvent.error?.message || rawEvent.message || "Antigravity error",
-      type: "error"
-    };
-  }
-  return {
-    message: `Unrecognized Antigravity event: ${rawEvent.event || "unknown"}`,
-    subtype: "unknown",
-    type: "system"
-  };
-}
-
-// src/agent-host/events/gemini.js
-function usageFromStats(stats) {
-  const raw = stats?.usage || stats;
-  if (!raw || typeof raw !== "object") return void 0;
-  const inputTokens = raw.input_tokens ?? raw.inputTokens;
-  const outputTokens = raw.output_tokens ?? raw.outputTokens;
-  if (typeof inputTokens !== "number" || typeof outputTokens !== "number") return void 0;
-  const usage2 = { inputTokens, outputTokens };
-  const cacheReadTokens = raw.cache_read_tokens ?? raw.cacheReadTokens;
-  if (typeof cacheReadTokens === "number") usage2.cacheReadTokens = cacheReadTokens;
-  return usage2;
-}
-function normalizeGeminiEvent(rawEvent) {
-  if (!rawEvent || typeof rawEvent !== "object") {
-    return { message: "Invalid Gemini event", type: "error" };
-  }
-  if (rawEvent.type === "init") {
-    return {
-      message: "Gemini session initialized",
-      subtype: "init",
-      type: "system"
-    };
-  }
-  if (rawEvent.type === "message") {
-    if (rawEvent.role === "assistant" && typeof rawEvent.content === "string") {
-      return {
-        content: [{ text: rawEvent.content, type: "text" }],
-        type: "assistant"
-      };
-    }
-    return {
-      message: `Gemini ${rawEvent.role || "unknown"} message`,
-      subtype: "message",
-      type: "system"
-    };
-  }
-  if (rawEvent.type === "tool_use") {
-    return {
-      content: [{
-        id: rawEvent.tool_id || "",
-        input: rawEvent.parameters && typeof rawEvent.parameters === "object" ? rawEvent.parameters : {},
-        name: rawEvent.tool_name || "unknown",
-        type: "tool_use"
-      }],
-      type: "assistant"
-    };
-  }
-  if (rawEvent.type === "tool_result") {
-    return {
-      content: [{
-        content: rawEvent.output || rawEvent.error?.message || "",
-        isError: rawEvent.status === "error",
-        toolUseId: rawEvent.tool_id || "",
-        type: "tool_result"
-      }],
-      type: "assistant"
-    };
-  }
-  if (rawEvent.type === "error") {
-    return {
-      message: rawEvent.message || "Gemini error",
-      type: "error"
-    };
-  }
-  if (rawEvent.type === "result") {
-    const normalized = { type: "result" };
-    const durationMs = rawEvent.stats?.duration_ms ?? rawEvent.stats?.durationMs;
-    if (typeof durationMs === "number") normalized.durationMs = durationMs;
-    const normalizedUsage = usageFromStats(rawEvent.stats);
-    if (normalizedUsage) normalized.usage = normalizedUsage;
-    if (rawEvent.status && rawEvent.status !== "success") normalized.isError = true;
-    return normalized;
-  }
-  return {
-    message: `Unrecognized Gemini event: ${rawEvent.type || "unknown"}`,
-    subtype: "unknown",
-    type: "system"
-  };
-}
-
-// src/agent-host/events/normalize.js
-var SESSION_ID_KEYS = [
-  "session_id",
-  "sessionId",
-  "thread_id",
-  "threadId",
-  "conversation_id",
-  "conversationId"
-];
-function extractNativeSessionId(rawEvent) {
-  if (!rawEvent || typeof rawEvent !== "object") return null;
-  for (const key of SESSION_ID_KEYS) {
-    if (typeof rawEvent[key] === "string" && rawEvent[key].trim()) return rawEvent[key];
-  }
-  for (const containerKey of ["session", "thread", "conversation", "init", "step_update", "result"]) {
-    const container = rawEvent[containerKey];
-    if (container && typeof container === "object") {
-      const value = container.id || container.session_id || container.thread_id || container.conversation_id;
-      if (typeof value === "string" && value.trim()) return value;
-    }
-  }
-  return null;
-}
-function createAgentEventNormalizer(provider) {
-  const directNormalizer = provider === "antigravity" ? normalizeAntigravityEvent : provider === "gemini" ? normalizeGeminiEvent : null;
-  const stateful = createNormalizer(provider);
-  return {
-    flush() {
-      return typeof stateful?.flush === "function" ? stateful.flush() : [];
-    },
-    normalize(rawEvent) {
-      if (directNormalizer) {
-        return [{ normalized: directNormalizer(rawEvent), raw: rawEvent }];
-      }
-      return normalizeEvent(provider, rawEvent, stateful);
-    }
-  };
-}
-function renderAgentEvent(event) {
-  if (!event || typeof event !== "object") return [];
-  if (event.type === "assistant" && Array.isArray(event.content)) {
-    return event.content.flatMap((block) => {
-      if (block?.type === "text" && typeof block.text === "string" && block.text) return [block.text];
-      return [];
-    });
-  }
-  if (event.type === "result" && typeof event.result === "string" && event.result) {
-    return [event.result];
-  }
-  return [];
-}
-
-// src/agent-host/attach.js
-var TERMINAL_STATUSES2 = /* @__PURE__ */ new Set(["completed", "failed", "stopped"]);
-function writeLine(stream, value) {
-  stream.write(value.endsWith("\n") ? value : `${value}
-`);
-}
-async function attachAgentLaunch(launchId, dependencies = {}) {
-  assertLaunchId(launchId);
-  const pollIntervalMs = dependencies.pollIntervalMs || 250;
-  if (!Number.isSafeInteger(pollIntervalMs) || pollIntervalMs < 10 || pollIntervalMs > 5e3) {
-    throw new Error("attach pollIntervalMs must be between 10 and 5000");
-  }
-  const ownsStore = !dependencies.store;
-  const store = dependencies.store || createLaunchStore();
-  const stdout = dependencies.stdout || process.stdout;
-  const signalEmitter = dependencies.signalEmitter || process;
-  const follow = dependencies.follow !== false;
-  const jsonOutput = dependencies.jsonOutput === true;
-  let interrupted = false;
-  let offset = 0;
-  let buffered = "";
-  let sawAssistantText = false;
-  const onInterrupt = () => {
-    interrupted = true;
-  };
-  signalEmitter.once("SIGINT", onInterrupt);
-  signalEmitter.once("SIGTERM", onInterrupt);
-  function renderLine(line) {
-    if (!line.trim()) return;
-    if (jsonOutput) {
-      writeLine(stdout, line);
-      return;
-    }
-    let payload;
-    try {
-      payload = JSON.parse(line);
-    } catch {
-      writeLine(stdout, line);
-      return;
-    }
-    if (payload.type !== "agent.event" || !payload.event) return;
-    const rendered = renderAgentEvent(payload.event);
-    if (payload.event.type === "assistant" && rendered.length > 0) sawAssistantText = true;
-    if (payload.event.type === "result" && sawAssistantText) return;
-    const isDelta = payload.rawEvent?.type === "message" && payload.rawEvent.delta === true || payload.rawEvent?.event === "step_update" && payload.rawEvent.step_update?.step_type === "agent_response";
-    for (const value of rendered) {
-      if (isDelta) stdout.write(value);
-      else writeLine(stdout, value);
-    }
-  }
-  try {
-    let launch = store.get(launchId);
-    if (!launch) throw new Error(`Launch not found: ${launchId}`);
-    assertOwnedLaunchDirectory({ launchDirectory: launch.outputDestination, launchId });
-    const eventFile = getLaunchArtifactFiles(launch.outputDestination).events;
-    while (!interrupted) {
-      const page = readLaunchEvents({ eventFile, offset });
-      offset = page.nextOffset;
-      buffered += page.data;
-      const lines = buffered.split("\n");
-      buffered = lines.pop() || "";
-      for (const line of lines) renderLine(line);
-      launch = store.get(launchId);
-      if (!launch) throw new Error(`Launch disappeared while attaching: ${launchId}`);
-      if (TERMINAL_STATUSES2.has(launch.status) && page.eof || !follow) {
-        if (buffered.trim()) renderLine(buffered);
-        return launch;
-      }
-      await new Promise((resolve4) => setTimeout(resolve4, pollIntervalMs));
-    }
-    return store.get(launchId);
-  } finally {
-    signalEmitter.removeListener("SIGINT", onInterrupt);
-    signalEmitter.removeListener("SIGTERM", onInterrupt);
-    if (ownsStore) store.close();
-  }
-}
-
-// src/agent-host/cli-inputs.js
-var import_node_fs11 = __toESM(require("node:fs"), 1);
-var import_node_path12 = __toESM(require("node:path"), 1);
-
-// src/agent-host/private-automation-profile.js
+// src/agent-host/task-capsule.js
 var import_node_fs8 = __toESM(require("node:fs"), 1);
 var import_node_path9 = __toESM(require("node:path"), 1);
+var import_node_crypto4 = __toESM(require("node:crypto"), 1);
+var import_node_url2 = require("node:url");
+var import_node_child_process3 = require("node:child_process");
+
+// src/agent-host/task-audit.js
+var import_node_fs5 = __toESM(require("node:fs"), 1);
+var import_node_path6 = __toESM(require("node:path"), 1);
+var import_node_os2 = __toESM(require("node:os"), 1);
+var import_node_url = require("node:url");
 var import_node_child_process2 = require("node:child_process");
-var import_ajv = __toESM(require_ajv(), 1);
+var import_meta = {};
+function isQualifiedTaskAuditHost() {
+  return process.platform === "darwin" && import_node_os2.default.release().startsWith("24.") && process.arch === "x64";
+}
+function auditHelperPath() {
+  if (!isQualifiedTaskAuditHost()) throw new Error("task audit containment requires the qualified Darwin 24 x64 host");
+  const entry = process.argv[1] || "";
+  const helper = entry.endsWith(".cjs") ? import_node_path6.default.join(import_node_path6.default.dirname(entry), "task-audit-darwin") : (0, import_node_url.fileURLToPath)(new URL("../../dist/task-audit-darwin", import_meta.url));
+  const stat = import_node_fs5.default.lstatSync(helper);
+  if (!stat.isFile() || stat.nlink !== 1 || import_node_fs5.default.realpathSync(helper) !== helper) throw new Error("invalid task audit helper");
+  import_node_fs5.default.accessSync(helper, import_node_fs5.default.constants.X_OK);
+  return helper;
+}
+function invoke(args) {
+  return JSON.parse((0, import_node_child_process2.execFileSync)(auditHelperPath(), args, {
+    encoding: "utf8",
+    timeout: 5e3,
+    maxBuffer: 16384,
+    env: { PATH: "/usr/bin:/bin" },
+    stdio: ["ignore", "pipe", "pipe"]
+  }));
+}
+function auditIdentity(pid) {
+  return invoke(["identity", String(pid)]);
+}
+function validateAuditIdentity(value) {
+  if (!value || Object.keys(value).sort().join(",") !== "asid,pid,uid,unique,version" || ![value.pid, value.version, value.asid, value.uid].every(Number.isSafeInteger) || value.pid < 2 || value.version < 1 || value.asid < 1e5 || value.uid !== process.getuid() || !/^[1-9][0-9]{0,19}$/u.test(value.unique) || BigInt(value.unique) > 18446744073709551615n) throw new Error("invalid task audit identity");
+  return value;
+}
+async function drainAuditScope(scope, guardian = null) {
+  if (scope?.schema_version !== 1) throw new Error("invalid audit scope");
+  const owner = validateAuditIdentity(scope.owner);
+  if (guardian && validateAuditIdentity(guardian).asid !== owner.asid) throw new Error("guardian audit scope mismatch");
+  const args = [
+    "sweep",
+    owner.asid,
+    owner.unique,
+    owner.pid,
+    owner.version,
+    guardian?.pid || 0,
+    guardian?.version || 0,
+    9
+  ].map(String);
+  const end = Date.now() + 7e3;
+  let quiet = false;
+  let last;
+  while (Date.now() < end) {
+    const result = invoke(args);
+    last = result;
+    const empty = result.members === 0 && result.uncertain === 0;
+    if (empty && quiet) return;
+    quiet = empty;
+    await new Promise((resolve4) => setTimeout(resolve4, 25));
+  }
+  throw new Error(`audit session drain unconfirmed; custody blocked: ${JSON.stringify(last)}`);
+}
+
+// src/agent-host/task-profile.js
+var import_node_fs7 = __toESM(require("node:fs"), 1);
+var import_node_path8 = __toESM(require("node:path"), 1);
+var import_node_crypto3 = __toESM(require("node:crypto"), 1);
 
 // src/agent-host/providers/catalog.js
-var import_node_fs7 = require("node:fs");
-var import_node_path8 = require("node:path");
-var import_node_os2 = require("node:os");
+var import_node_fs6 = require("node:fs");
+var import_node_path7 = require("node:path");
+var import_node_os3 = require("node:os");
 
 // src/agent-host/providers/config/claude.json
 var claude_default = {
@@ -26206,7 +24919,7 @@ function loadProviderConfig(providerId) {
   return config;
 }
 function canonicalPath(candidate, realpathSyncImpl) {
-  const absolute = (0, import_node_path8.resolve)(candidate);
+  const absolute = (0, import_node_path7.resolve)(candidate);
   try {
     return realpathSyncImpl(absolute);
   } catch {
@@ -26214,23 +24927,23 @@ function canonicalPath(candidate, realpathSyncImpl) {
   }
 }
 function isInside(root, candidate) {
-  const child = (0, import_node_path8.relative)(root, candidate);
-  return child === "" || child !== ".." && !child.startsWith(`..${import_node_path8.sep}`) && !(0, import_node_path8.isAbsolute)(child);
+  const child = (0, import_node_path7.relative)(root, candidate);
+  return child === "" || child !== ".." && !child.startsWith(`..${import_node_path7.sep}`) && !(0, import_node_path7.isAbsolute)(child);
 }
 function isExternalAgentBinaryPath(candidate, options = {}) {
-  if (typeof candidate !== "string" || !(0, import_node_path8.isAbsolute)(candidate.trim()) || candidate.length > 4096 || /[\r\n\0]/u.test(candidate)) return false;
-  const home = options.home || (0, import_node_os2.homedir)();
-  const realpathSyncImpl = options.realpathSyncImpl || import_node_fs7.realpathSync;
-  const lexicalCandidate = (0, import_node_path8.resolve)(candidate.trim());
+  if (typeof candidate !== "string" || !(0, import_node_path7.isAbsolute)(candidate.trim()) || candidate.length > 4096 || /[\r\n\0]/u.test(candidate)) return false;
+  const home = options.home || (0, import_node_os3.homedir)();
+  const realpathSyncImpl = options.realpathSyncImpl || import_node_fs6.realpathSync;
+  const lexicalCandidate = (0, import_node_path7.resolve)(candidate.trim());
   const canonicalCandidate = canonicalPath(lexicalCandidate, realpathSyncImpl);
-  const rudiRoots = [(0, import_node_path8.join)(home, ".rudi"), options.rudiHome || process.env.RUDI_HOME].filter((root) => typeof root === "string" && (0, import_node_path8.isAbsolute)(root) && root.length <= 4096 && !/[\r\n\0]/u.test(root)).flatMap((root) => [(0, import_node_path8.resolve)(root), canonicalPath(root, realpathSyncImpl)]);
+  const rudiRoots = [(0, import_node_path7.join)(home, ".rudi"), options.rudiHome || process.env.RUDI_HOME].filter((root) => typeof root === "string" && (0, import_node_path7.isAbsolute)(root) && root.length <= 4096 && !/[\r\n\0]/u.test(root)).flatMap((root) => [(0, import_node_path7.resolve)(root), canonicalPath(root, realpathSyncImpl)]);
   return !rudiRoots.some((root) => isInside(root, lexicalCandidate) || isInside(root, canonicalCandidate));
 }
 function resolveProviderBinary(config, dependencies = {}) {
-  const home = dependencies.home || (0, import_node_os2.homedir)();
+  const home = dependencies.home || (0, import_node_os3.homedir)();
   const arch = process.arch;
-  const accessSyncImpl = dependencies.accessSyncImpl || import_node_fs7.accessSync;
-  const existsSyncImpl = dependencies.existsSyncImpl || import_node_fs7.existsSync;
+  const accessSyncImpl = dependencies.accessSyncImpl || import_node_fs6.accessSync;
+  const existsSyncImpl = dependencies.existsSyncImpl || import_node_fs6.existsSync;
   const runCommandPlanImpl = dependencies.runCommandPlanImpl || runCommandPlan2;
   const externalPathCheck = dependencies.isExternalAgentBinaryPathImpl || ((candidate) => isExternalAgentBinaryPath(candidate, {
     home,
@@ -26239,7 +24952,7 @@ function resolveProviderBinary(config, dependencies = {}) {
   }));
   const isExecutable = (candidate) => {
     try {
-      accessSyncImpl(candidate, import_node_fs7.constants.X_OK);
+      accessSyncImpl(candidate, import_node_fs6.constants.X_OK);
       return true;
     } catch {
       return false;
@@ -26353,7 +25066,1204 @@ function expandTemplate(str, options) {
   });
 }
 
+// src/agent-host/task-profile.js
+var validatedProfiles = /* @__PURE__ */ new WeakSet();
+var TASK_MODE = "registered-shared";
+var TASK_MAX_BYTES = 262144;
+function exactFields(value, fields, label) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).sort().join(",") !== [...fields].sort().join(",")) {
+    throw new Error(`${label} has invalid fields`);
+  }
+}
+function taskText(value, label, max = 4096) {
+  if (typeof value !== "string" || !value.trim() || !value.isWellFormed() || /[\u0000-\u001f\u007f]/u.test(value) || Buffer.byteLength(value) > max) {
+    throw new Error(`${label} must be bounded valid text`);
+  }
+  return value;
+}
+function inside(candidate, root) {
+  const relative4 = import_node_path8.default.relative(root, candidate);
+  return relative4 === "" || !relative4.startsWith(`..${import_node_path8.default.sep}`) && relative4 !== ".." && !import_node_path8.default.isAbsolute(relative4);
+}
+function canonicalDirectory(value, label) {
+  taskText(value, label);
+  if (!import_node_path8.default.isAbsolute(value) || import_node_path8.default.normalize(value) !== value || /[\*?\[\]]/u.test(value) || import_node_fs7.default.realpathSync(value) !== value || !import_node_fs7.default.statSync(value).isDirectory()) {
+    throw new Error(`${label} must be an existing canonical directory without aliases or glob characters`);
+  }
+  return value;
+}
+function sha2562(bytes) {
+  return import_node_crypto3.default.createHash("sha256").update(bytes).digest("hex");
+}
+function readTaskReference(reference, label) {
+  exactFields(reference, ["path", "sha256"], label);
+  taskText(reference.path, `${label} path`);
+  if (!/^[a-f0-9]{64}$/u.test(reference.sha256)) throw new Error(`${label} requires SHA-256`);
+  const name = reference.path;
+  if (!import_node_path8.default.isAbsolute(name) || import_node_fs7.default.realpathSync(name) !== name) throw new Error(`${label} path must be canonical`);
+  const bytes = readTaskRegularFile(name, TASK_MAX_BYTES);
+  if (bytes.length < 1 || sha2562(bytes) !== reference.sha256) throw new Error(`${label} hash mismatch`);
+  return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+}
+function readTaskRegularFile(filename, maximum, singleLink = false) {
+  const flags = import_node_fs7.default.constants.O_RDONLY | import_node_fs7.default.constants.O_NOFOLLOW | import_node_fs7.default.constants.O_NONBLOCK;
+  const fd = import_node_fs7.default.openSync(filename, flags);
+  try {
+    const before = import_node_fs7.default.fstatSync(fd);
+    if (!before.isFile() || before.size > maximum || singleLink && before.nlink !== 1) {
+      throw new Error("invalid bounded regular file or hardlink");
+    }
+    const buffer = Buffer.alloc(maximum + 1);
+    let size = 0;
+    while (size <= maximum) {
+      const count = import_node_fs7.default.readSync(fd, buffer, size, buffer.length - size, null);
+      if (!count) break;
+      size += count;
+    }
+    const after = import_node_fs7.default.fstatSync(fd);
+    if (size > maximum || before.size !== after.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs) {
+      throw new Error("file overflow or changed during verification");
+    }
+    return buffer.subarray(0, size);
+  } finally {
+    import_node_fs7.default.closeSync(fd);
+  }
+}
+function roots(value, label) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 16) throw new Error(`${label} requires 1..16 roots`);
+  const result = value.map((entry) => canonicalDirectory(entry, label));
+  if (new Set(result).size !== result.length) throw new Error(`${label} duplicates`);
+  return result;
+}
+function validateTaskProfile(value, binding) {
+  exactFields(value, [
+    "schema_version",
+    "provider",
+    "model",
+    "workspace_mode",
+    "working_directory",
+    "read_roots",
+    "write_roots",
+    "network",
+    "timeout_ms"
+  ], "execution profile");
+  if (value.schema_version !== 1 || value.provider !== "codex" || value.workspace_mode !== TASK_MODE) {
+    throw new Error("unsupported task provider/profile version/workspace mode");
+  }
+  if (getModelDef(loadProviderConfig("codex"), value.model)?.id !== value.model) throw new Error("task requires an exact configured model");
+  if (!["enabled", "disabled"].includes(value.network)) throw new Error("network must be enabled or disabled");
+  if (!Number.isSafeInteger(value.timeout_ms) || value.timeout_ms < 1 || value.timeout_ms > 36e5) throw new Error("invalid task timeout");
+  const project = canonicalDirectory(value.working_directory, "working_directory");
+  const read2 = roots(value.read_roots, "read roots");
+  const write = roots(value.write_roots, "write roots");
+  const runtime = canonicalDirectory(binding.outputs.runtime, "runtime");
+  const deliverables = roots(binding.outputs.deliverables, "deliverables");
+  if (project !== binding.working_directory || !read2.includes(project)) throw new Error("shared working directory must match and be a read root");
+  if ([...write].sort().join("\0") !== [...deliverables].sort().join("\0") || write.some((root) => inside(project, root) || inside(runtime, root) || inside(root, runtime))) {
+    throw new Error("write roots must exactly match deliverables and exclude project/control roots");
+  }
+  const profile = Object.freeze({ ...value, read_roots: Object.freeze(read2), write_roots: Object.freeze(write) });
+  assertWritableTaskRoots(profile);
+  validatedProfiles.add(profile);
+  return profile;
+}
+function assertTaskProfile(profile) {
+  if (!validatedProfiles.has(profile)) throw new Error("registered shared workspace requires a validated task profile");
+}
+function assertWritableTaskRoots(profile) {
+  const pending = [...profile.write_roots];
+  let visited = 0;
+  while (pending.length) {
+    if (++visited > 1e5) throw new Error("task writable tree exceeds preflight limit");
+    const filename = pending.pop();
+    const entry = import_node_fs7.default.lstatSync(filename);
+    if (entry.isSymbolicLink() || !entry.isDirectory() && !entry.isFile()) {
+      throw new Error("task writable tree contains a symlink or special file");
+    }
+    if (entry.isFile() && entry.nlink !== 1) throw new Error("task writable tree contains a hardlink");
+    if (entry.isDirectory()) {
+      for (const name of import_node_fs7.default.readdirSync(filename)) pending.push(import_node_path8.default.join(filename, name));
+    }
+  }
+}
+function parseTaskJson(source) {
+  const value = JSON.parse(source, (_key, entry) => {
+    if (typeof entry === "number" && !Number.isFinite(entry)) throw new Error("non-finite task JSON");
+    return entry;
+  });
+  const stack = [];
+  for (const [token] of source.matchAll(/"(?:\\.|[^"\\])*"|[{}\[\],:]/gu)) {
+    const frame = stack.at(-1);
+    if (token === "{") stack.push({ keys: /* @__PURE__ */ new Set(), key: true });
+    else if (token === "[") stack.push(null);
+    else if (token === "}" || token === "]") stack.pop();
+    else if (token === "," && frame) frame.key = true;
+    else if (token.startsWith('"') && frame?.key) {
+      const key = JSON.parse(token);
+      if (frame.keys.has(key)) throw new Error("duplicate task JSON key");
+      frame.keys.add(key);
+      frame.key = false;
+    }
+  }
+  return value;
+}
+
+// src/agent-host/task-capsule.js
+var import_meta2 = {};
+var delay = (ms) => new Promise((resolve4) => setTimeout(resolve4, ms));
+function capsuleWorkerPath() {
+  const entry = process.argv[1] || "";
+  return entry.endsWith(".cjs") ? import_node_path9.default.join(import_node_path9.default.dirname(entry), "task-capsule-worker.cjs") : (0, import_node_url2.fileURLToPath)(new URL("./task-capsule-worker.js", import_meta2.url));
+}
+function capsuleRecord(filename, value) {
+  const fd = import_node_fs8.default.openSync(filename, "wx", 384);
+  try {
+    import_node_fs8.default.writeFileSync(fd, JSON.stringify(value) + "\n");
+    import_node_fs8.default.fsyncSync(fd);
+  } finally {
+    import_node_fs8.default.closeSync(fd);
+  }
+}
+async function runTaskCapsule(reference, request, environment) {
+  auditHelperPath();
+  const creator = auditIdentity(process.pid);
+  const id = import_node_crypto4.default.randomUUID();
+  const label = `com.learnrudi.containment.${id}`;
+  const directory = import_node_path9.default.join(request.outputs.runtime, `capsule-${id}`);
+  import_node_fs8.default.mkdirSync(directory, { mode: 448 });
+  const env = { PATH: "/usr/bin:/bin" };
+  for (const key of [
+    "HOME",
+    "USER",
+    "LOGNAME",
+    "LANG",
+    "LC_ALL",
+    "RUDI_COMPUTE_JOB_ID",
+    "RUDI_COMPUTE_ATTEMPT",
+    "RUDI_COMPUTE_SPEC_HASH",
+    "RUDI_AGENT_TASK_CODEX_PATH",
+    "RUDI_AGENT_TASK_CODEX_SHA256"
+  ]) {
+    if (typeof environment[key] === "string") env[key] = environment[key];
+  }
+  capsuleRecord(import_node_path9.default.join(directory, "input.json"), { reference, creator, label, environment: env });
+  const target = `gui/${process.getuid()}/${label}`;
+  capsuleRecord(import_node_path9.default.join(directory, "job.json"), {
+    Label: label,
+    SessionCreate: true,
+    RunAtLoad: true,
+    KeepAlive: false,
+    AbandonProcessGroup: false,
+    ExitTimeOut: 10,
+    ProgramArguments: [process.execPath, capsuleWorkerPath(), directory],
+    EnvironmentVariables: env,
+    StandardOutPath: import_node_path9.default.join(directory, "stdout"),
+    StandardErrorPath: import_node_path9.default.join(directory, "stderr")
+  });
+  (0, import_node_child_process3.execFileSync)("/usr/bin/plutil", ["-convert", "xml1", "-o", import_node_path9.default.join(directory, "job.plist"), import_node_path9.default.join(directory, "job.json")], { stdio: "pipe" });
+  let complete = false;
+  try {
+    (0, import_node_child_process3.execFileSync)("/bin/launchctl", ["bootstrap", `gui/${process.getuid()}`, import_node_path9.default.join(directory, "job.plist")], { stdio: "pipe", timeout: 5e3 });
+    const end = Date.now() + (request.timeout_seconds + 15) * 1e3;
+    while (Date.now() < end) {
+      if (import_node_fs8.default.existsSync(import_node_path9.default.join(directory, "result.json"))) {
+        const result = parseTaskJson(readTaskRegularFile(import_node_path9.default.join(directory, "result.json"), 32768, true).toString("utf8"));
+        complete = true;
+        if (result.error) throw new Error(result.error);
+        return result.value;
+      }
+      await delay(100);
+    }
+    (0, import_node_child_process3.spawnSync)("/bin/launchctl", ["kill", "SIGTERM", target], { timeout: 5e3, stdio: "pipe" });
+    throw new Error(`task capsule timed out; retain custody evidence at ${directory}`);
+  } finally {
+    if (complete) (0, import_node_child_process3.spawnSync)("/bin/launchctl", ["bootout", target], { timeout: 15e3, stdio: "pipe" });
+  }
+}
+
+// src/agent-host/launch.js
+var import_node_crypto7 = __toESM(require("node:crypto"), 1);
+
+// src/agent-host/artifacts.js
+var import_node_fs9 = __toESM(require("node:fs"), 1);
+var import_node_path10 = __toESM(require("node:path"), 1);
+init_src();
+var LAUNCH_ID_PATTERN = /^launch_[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+var OWNERSHIP_MARKER = ".rudi-agent-launch.json";
+var EVENTS_FILE = "events.jsonl";
+var STDERR_FILE = "stderr.log";
+var MAX_EVENT_BYTES = 1024 * 1024;
+var MAX_EVENT_PAGE_BYTES = 10 * 1024 * 1024;
+function assertLaunchId(launchId) {
+  if (typeof launchId !== "string" || !LAUNCH_ID_PATTERN.test(launchId)) {
+    throw new Error("Invalid launch ID");
+  }
+  return launchId;
+}
+function getAgentHostPaths({
+  launchId = null,
+  rudiHome = PATHS.home
+} = {}) {
+  const home = import_node_path10.default.resolve(rudiHome);
+  const stateDirectory = import_node_path10.default.join(home, "state");
+  const artifactsRoot = import_node_path10.default.join(home, "artifacts", "agent-launches");
+  const result = {
+    artifactsRoot,
+    stateDatabase: import_node_path10.default.join(stateDirectory, "agent-hosts.db"),
+    stateDirectory
+  };
+  if (launchId != null) {
+    assertLaunchId(launchId);
+    result.launchDirectory = import_node_path10.default.join(artifactsRoot, launchId);
+    result.workspaceDirectory = import_node_path10.default.join(result.launchDirectory, "workspace");
+  }
+  return result;
+}
+function getLaunchArtifactFiles(launchDirectory) {
+  const directory = import_node_path10.default.resolve(launchDirectory);
+  return Object.freeze({
+    events: import_node_path10.default.join(directory, EVENTS_FILE),
+    marker: import_node_path10.default.join(directory, OWNERSHIP_MARKER),
+    stderr: import_node_path10.default.join(directory, STDERR_FILE)
+  });
+}
+function createLaunchOwnershipMarker({ launchDirectory, launchId }) {
+  assertLaunchId(launchId);
+  const directory = import_node_path10.default.resolve(launchDirectory);
+  const stat = import_node_fs9.default.statSync(directory);
+  if (!stat.isDirectory()) throw new Error(`Launch artifact path is not a directory: ${directory}`);
+  const { marker } = getLaunchArtifactFiles(directory);
+  const payload = `${JSON.stringify({ launchId, schemaVersion: 1 })}
+`;
+  const handle = import_node_fs9.default.openSync(marker, "wx", 384);
+  try {
+    import_node_fs9.default.writeFileSync(handle, payload, "utf8");
+  } finally {
+    import_node_fs9.default.closeSync(handle);
+  }
+  return marker;
+}
+function assertOwnedLaunchDirectory({ launchDirectory, launchId }) {
+  assertLaunchId(launchId);
+  const directory = import_node_path10.default.resolve(launchDirectory);
+  const { marker } = getLaunchArtifactFiles(directory);
+  let parsed;
+  try {
+    const stat = import_node_fs9.default.lstatSync(marker);
+    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("marker is not a regular file");
+    parsed = JSON.parse(import_node_fs9.default.readFileSync(marker, "utf8"));
+  } catch (error) {
+    throw new Error(`Launch artifact ownership marker is invalid: ${error.message}`);
+  }
+  if (parsed?.schemaVersion !== 1 || parsed?.launchId !== launchId) {
+    throw new Error(`Launch artifact ownership marker does not match ${launchId}`);
+  }
+  return directory;
+}
+function appendLaunchEvent(eventFile, event) {
+  const serialized = `${JSON.stringify(event)}
+`;
+  if (Buffer.byteLength(serialized, "utf8") > MAX_EVENT_BYTES) {
+    throw new Error(`Agent event exceeds ${MAX_EVENT_BYTES} bytes`);
+  }
+  const file = import_node_path10.default.resolve(eventFile);
+  const handle = import_node_fs9.default.openSync(file, "a", 384);
+  try {
+    import_node_fs9.default.writeFileSync(handle, serialized, "utf8");
+  } finally {
+    import_node_fs9.default.closeSync(handle);
+  }
+  import_node_fs9.default.chmodSync(file, 384);
+}
+function readLaunchEvents({ eventFile, limitBytes = 1024 * 1024, offset = 0 }) {
+  const file = import_node_path10.default.resolve(eventFile);
+  const validOffset = Number(offset);
+  const validLimit = Number(limitBytes);
+  if (!Number.isSafeInteger(validOffset) || validOffset < 0) {
+    throw new Error("event offset must be a non-negative integer");
+  }
+  if (!Number.isSafeInteger(validLimit) || validLimit < 1 || validLimit > MAX_EVENT_PAGE_BYTES) {
+    throw new Error(`event limitBytes must be between 1 and ${MAX_EVENT_PAGE_BYTES}`);
+  }
+  let stat;
+  try {
+    stat = import_node_fs9.default.statSync(file);
+  } catch (error) {
+    if (error.code === "ENOENT") return { data: "", eof: true, nextOffset: validOffset };
+    throw error;
+  }
+  if (!stat.isFile()) throw new Error(`Agent event path is not a file: ${file}`);
+  if (validOffset > stat.size) throw new Error("event offset exceeds file size");
+  if (validOffset === stat.size) return { data: "", eof: true, nextOffset: validOffset };
+  const remaining = stat.size - validOffset;
+  const bytesToRead = Math.min(remaining, validLimit + MAX_EVENT_BYTES);
+  const buffer = Buffer.allocUnsafe(bytesToRead);
+  const handle = import_node_fs9.default.openSync(file, "r");
+  let bytesRead;
+  try {
+    bytesRead = import_node_fs9.default.readSync(handle, buffer, 0, bytesToRead, validOffset);
+  } finally {
+    import_node_fs9.default.closeSync(handle);
+  }
+  let pageBytes = bytesRead;
+  if (remaining > validLimit) {
+    const beforeLimit = buffer.lastIndexOf(10, Math.min(validLimit - 1, bytesRead - 1));
+    if (beforeLimit >= 0) {
+      pageBytes = beforeLimit + 1;
+    } else {
+      const afterLimit = buffer.indexOf(10, Math.min(validLimit, bytesRead));
+      if (afterLimit < 0) throw new Error(`Agent event exceeds ${MAX_EVENT_BYTES} bytes`);
+      pageBytes = afterLimit + 1;
+    }
+  }
+  const page = buffer.subarray(0, pageBytes);
+  return {
+    data: page.toString("utf8"),
+    eof: validOffset + pageBytes >= stat.size,
+    nextOffset: validOffset + pageBytes
+  };
+}
+
+// src/agent-host/events/stream.js
+var import_node_child_process6 = require("node:child_process");
+
+// src/agent-host/task-custody.js
+var import_node_fs10 = __toESM(require("node:fs"), 1);
+var import_node_path11 = __toESM(require("node:path"), 1);
+var import_node_crypto5 = __toESM(require("node:crypto"), 1);
+var import_node_child_process4 = require("node:child_process");
+var delay2 = (ms) => new Promise((resolve4) => setTimeout(resolve4, ms));
+function processIdentity(pid) {
+  if (!Number.isSafeInteger(pid) || pid < 2) throw new Error("invalid custody PID");
+  try {
+    const value = (0, import_node_child_process4.execFileSync)(
+      "/bin/ps",
+      ["-p", String(pid), "-o", "pid=,pgid=,uid=,lstart="],
+      { encoding: "utf8", timeout: 2e3, maxBuffer: 4096, env: { PATH: "/usr/bin:/bin", LC_ALL: "C" }, stdio: ["ignore", "pipe", "pipe"] }
+    ).trim();
+    const match = value.match(/^(\d+)\s+(\d+)\s+(\d+)\s+(.+)$/u);
+    if (!match) throw new Error("invalid process identity");
+    const boot = process.platform === "linux" ? import_node_fs10.default.readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim() : (0, import_node_child_process4.execFileSync)(
+      "/usr/sbin/sysctl",
+      ["-n", "kern.bootsessionuuid"],
+      { encoding: "utf8", timeout: 2e3, maxBuffer: 4096, stdio: ["ignore", "pipe", "pipe"] }
+    ).trim();
+    return { pid: Number(match[1]), pgid: Number(match[2]), uid: Number(match[3]), started: match[4], boot };
+  } catch (error) {
+    if (error.status === 1 && !String(error.stdout || "").trim()) return null;
+    throw new Error("cannot establish process identity");
+  }
+}
+function sameProcess(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+function record(directory, name, value) {
+  const fd = import_node_fs10.default.openSync(import_node_path11.default.join(directory, name), "wx", 384);
+  try {
+    import_node_fs10.default.writeFileSync(fd, `${JSON.stringify(value)}
+`);
+    import_node_fs10.default.fsyncSync(fd);
+  } finally {
+    import_node_fs10.default.closeSync(fd);
+  }
+}
+function read(directory, name) {
+  return parseTaskJson(readTaskRegularFile(import_node_path11.default.join(directory, name), 16384, true).toString("utf8"));
+}
+function quarantineTaskCustody(directory, reason) {
+  try {
+    record(directory, "quarantine.json", { reason, at: (/* @__PURE__ */ new Date()).toISOString() });
+  } catch (error) {
+    if (error.code !== "EEXIST") throw error;
+    read(directory, "quarantine.json");
+  }
+}
+function validateIdentity(value) {
+  if (!value || !Number.isSafeInteger(value.pid) || value.pid < 2 || !Number.isSafeInteger(value.pgid) || value.uid !== process.getuid() || typeof value.started !== "string" || typeof value.boot !== "string" || Object.keys(value).sort().join(",") !== "boot,pgid,pid,started,uid") throw new Error("invalid custody identity");
+  return value;
+}
+function groupAlive(pgid) {
+  try {
+    process.kill(-pgid, 0);
+    return true;
+  } catch (error) {
+    if (error.code === "ESRCH") return false;
+    throw error;
+  }
+}
+async function stopOwnedNative(directory) {
+  if (import_node_fs10.default.existsSync(import_node_path11.default.join(directory, "session.json"))) {
+    const scope = read(directory, "session.json");
+    if (read(directory, "owner.json").process.boot !== processIdentity(process.pid).boot) return;
+    const guardian = import_node_fs10.default.existsSync(import_node_path11.default.join(directory, "guardian-audit.json")) ? read(directory, "guardian-audit.json") : null;
+    await drainAuditScope(scope, guardian);
+    return;
+  }
+  const native = validateIdentity(read(directory, "native.json"));
+  if (native.pid !== native.pgid) throw new Error("native custody requires its own process group");
+  const currentBoot = processIdentity(process.pid).boot;
+  if (native.boot !== currentBoot) return;
+  for (const [signal, budget] of [["SIGTERM", 5e3], ["SIGKILL", 2e3]]) {
+    if (!groupAlive(native.pgid)) return;
+    if (!sameProcess(processIdentity(native.pid), native)) throw new Error("native group ownership ambiguous; custody blocked");
+    process.kill(-native.pgid, signal);
+    const end = Date.now() + budget;
+    while (Date.now() < end) {
+      if (!groupAlive(native.pgid)) return;
+      await delay2(50);
+    }
+  }
+  throw new Error("native process group did not exit; custody blocked");
+}
+async function recoverTaskCustody(runtime) {
+  canonicalDirectory(runtime, "task runtime");
+  const directory = import_node_path11.default.join(runtime, "custody.lock");
+  if (!import_node_fs10.default.existsSync(directory)) return { status: "clear" };
+  canonicalDirectory(directory, "custody directory");
+  const gate = import_node_path11.default.join(runtime, "custody-recovery.lock");
+  import_node_fs10.default.mkdirSync(gate, { mode: 448 });
+  try {
+    const owner = read(directory, "owner.json");
+    validateIdentity(owner.process);
+    if (sameProcess(processIdentity(owner.process.pid), owner.process)) throw new Error("active task custody");
+    quarantineTaskCustody(directory, "owner lost; task outcome requires reconciliation");
+    if (import_node_fs10.default.existsSync(import_node_path11.default.join(directory, "guardian.json"))) {
+      const guardian = validateIdentity(read(directory, "guardian.json"));
+      const end = Date.now() + 8e3;
+      while (sameProcess(processIdentity(guardian.pid), guardian) && Date.now() < end) await delay2(100);
+      if (sameProcess(processIdentity(guardian.pid), guardian)) throw new Error("active guardian custody");
+    }
+    const cleaned = import_node_fs10.default.existsSync(import_node_path11.default.join(directory, "orphan-cleanup.json")) && read(directory, "orphan-cleanup.json").audit_session_drained === true;
+    if (!cleaned) await stopOwnedNative(directory);
+    record(directory, `recovery-${import_node_crypto5.default.randomUUID()}.json`, { native_group_gone: true, at: (/* @__PURE__ */ new Date()).toISOString() });
+    return { status: "quarantined", evidence: directory };
+  } finally {
+    import_node_fs10.default.rmdirSync(gate);
+  }
+}
+
+// src/agent-host/events/providers/claude.js
+var claude_exports = {};
+__export(claude_exports, {
+  normalize: () => normalize
+});
+function toNumber(value, fallback = 0) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+function toString(value, fallback = "") {
+  return typeof value === "string" ? value : fallback;
+}
+function toUsage(rawUsage) {
+  if (!rawUsage || typeof rawUsage !== "object") return void 0;
+  const inputTokens = rawUsage.inputTokens ?? rawUsage.input_tokens;
+  const outputTokens = rawUsage.outputTokens ?? rawUsage.output_tokens;
+  if (typeof inputTokens !== "number" || typeof outputTokens !== "number") return void 0;
+  const usage2 = {
+    inputTokens: toNumber(inputTokens),
+    outputTokens: toNumber(outputTokens)
+  };
+  const cacheReadTokens = rawUsage.cacheReadTokens ?? rawUsage.cache_read_input_tokens ?? rawUsage.cached_input_tokens;
+  if (typeof cacheReadTokens === "number") {
+    usage2.cacheReadTokens = toNumber(cacheReadTokens);
+  }
+  const cacheCreationTokens = rawUsage.cacheCreationTokens ?? rawUsage.cache_creation_input_tokens;
+  if (typeof cacheCreationTokens === "number") {
+    usage2.cacheCreationTokens = toNumber(cacheCreationTokens);
+  }
+  return usage2;
+}
+function normalizeContentBlock(block) {
+  if (!block || typeof block !== "object") return null;
+  if (block.type === "text") {
+    return { type: "text", text: toString(block.text) };
+  }
+  if (block.type === "thinking") {
+    return { type: "thinking", thinking: toString(block.thinking) };
+  }
+  if (block.type === "tool_use") {
+    return {
+      type: "tool_use",
+      id: toString(block.id),
+      name: toString(block.name, "unknown"),
+      input: block.input && typeof block.input === "object" ? block.input : {}
+    };
+  }
+  if (block.type === "tool_result") {
+    const normalized = {
+      type: "tool_result",
+      toolUseId: toString(block.toolUseId ?? block.tool_use_id),
+      content: block.content ?? ""
+    };
+    const isError = block.isError ?? block.is_error;
+    if (typeof isError === "boolean") normalized.isError = isError;
+    return normalized;
+  }
+  return null;
+}
+function normalizeAssistantEvent(event) {
+  const message = event.message && typeof event.message === "object" ? event.message : null;
+  const rawContent = Array.isArray(event.content) ? event.content : Array.isArray(message?.content) ? message.content : [];
+  const content = rawContent.map(normalizeContentBlock).filter(Boolean);
+  const usage2 = toUsage(event.usage || message?.usage);
+  const model = toString(event.model || message?.model, "");
+  const finishReason = toString(event.finishReason || event.stopReason || message?.stop_reason, "");
+  const normalized = {
+    type: "assistant",
+    content
+  };
+  if (usage2) normalized.usage = usage2;
+  if (model) normalized.model = model;
+  if (finishReason) normalized.finishReason = finishReason;
+  if (event.error) normalized.error = event.error;
+  return normalized;
+}
+function normalizeResultEvent(event) {
+  const message = event.message && typeof event.message === "object" ? event.message : null;
+  const usage2 = toUsage(event.usage || message?.usage);
+  const model = toString(event.model || message?.model, "");
+  const finishReason = toString(event.finishReason || event.stopReason || message?.stop_reason, "");
+  const normalized = {
+    type: "result"
+  };
+  const providerSessionId = event.providerSessionId ?? event.session_id;
+  if (typeof providerSessionId === "string" && providerSessionId) {
+    normalized.providerSessionId = providerSessionId;
+  }
+  const costUsd = event.costUsd ?? event.total_cost_usd;
+  if (typeof costUsd === "number") normalized.costUsd = costUsd;
+  const durationMs = event.durationMs ?? event.duration_ms;
+  if (typeof durationMs === "number") normalized.durationMs = durationMs;
+  const numTurns = event.numTurns ?? event.num_turns;
+  if (typeof numTurns === "number") normalized.numTurns = numTurns;
+  const result = event.result;
+  if (typeof result === "string") normalized.result = result;
+  if (usage2) normalized.usage = usage2;
+  if (model) normalized.model = model;
+  if (finishReason) normalized.finishReason = finishReason;
+  if (event.is_error === true) normalized.isError = true;
+  return normalized;
+}
+function normalizeSystemEvent(event) {
+  const subtype = toString(event.subtype, "unknown");
+  const normalized = {
+    type: "system",
+    subtype,
+    message: toString(event.message, "System event")
+  };
+  const rawCompaction = event.compaction || event.microcompactMetadata || event.compactMetadata;
+  if (rawCompaction && typeof rawCompaction === "object") {
+    const compaction = {
+      trigger: toString(rawCompaction.trigger, "unknown"),
+      preTokens: toNumber(rawCompaction.preTokens ?? rawCompaction.pre_tokens),
+      tokensSaved: toNumber(rawCompaction.tokensSaved ?? rawCompaction.tokens_saved)
+    };
+    const compactedToolIds = rawCompaction.compactedToolIds ?? rawCompaction.compacted_tool_ids;
+    if (Array.isArray(compactedToolIds)) {
+      compaction.compactedToolIds = compactedToolIds.filter((id) => typeof id === "string");
+    }
+    normalized.compaction = compaction;
+  }
+  const isPermissionEvent = subtype === "permission_request";
+  const rawPermission = event.permission && typeof event.permission === "object" ? event.permission : event;
+  const requestId = rawPermission.requestId ?? rawPermission.request_id;
+  if (isPermissionEvent && typeof requestId === "string" && requestId) {
+    const permission = { requestId };
+    const batchId = rawPermission.batchId ?? rawPermission.batch_id;
+    const toolName = rawPermission.toolName ?? rawPermission.tool_name;
+    const toolInput = rawPermission.toolInput ?? rawPermission.tool_input;
+    if (typeof batchId === "string") permission.batchId = batchId;
+    if (typeof toolName === "string") permission.toolName = toolName;
+    if (toolInput && typeof toolInput === "object") {
+      permission.toolInput = toolInput;
+    }
+    normalized.permission = permission;
+  }
+  return normalized;
+}
+function normalizeRateLimitEvent(event) {
+  const raw = event.rate_limit_info && typeof event.rate_limit_info === "object" ? event.rate_limit_info : {};
+  const status = toString(raw.status, "unknown");
+  const rateLimit = { status };
+  if (Number.isFinite(raw.resetsAt)) rateLimit.resetsAt = raw.resetsAt;
+  if (typeof raw.rateLimitType === "string") rateLimit.rateLimitType = raw.rateLimitType;
+  if (typeof raw.overageStatus === "string") rateLimit.overageStatus = raw.overageStatus;
+  if (Number.isFinite(raw.overageResetsAt)) rateLimit.overageResetsAt = raw.overageResetsAt;
+  if (typeof raw.isUsingOverage === "boolean") rateLimit.isUsingOverage = raw.isUsingOverage;
+  return {
+    type: "system",
+    subtype: "rate_limit",
+    message: `Claude rate limit status: ${status}`,
+    rateLimit
+  };
+}
+function normalizeErrorEvent(event) {
+  const rawError = event.error && typeof event.error === "object" ? event.error : null;
+  const message = toString(
+    event.message || rawError?.message,
+    "Unknown error"
+  );
+  const normalized = {
+    type: "error",
+    message
+  };
+  const code = event.code || rawError?.code;
+  if (typeof code === "string" && code) normalized.code = code;
+  const details = event.details ?? rawError?.details ?? rawError;
+  if (details !== void 0) normalized.details = details;
+  return normalized;
+}
+function normalize(event) {
+  if (!event || typeof event !== "object") {
+    return { type: "error", message: "Invalid event payload" };
+  }
+  if (event.type === "assistant") return normalizeAssistantEvent(event);
+  if (event.type === "result") return normalizeResultEvent(event);
+  if (event.type === "system") return normalizeSystemEvent(event);
+  if (event.type === "rate_limit_event") return normalizeRateLimitEvent(event);
+  if (event.type === "error") return normalizeErrorEvent(event);
+  return {
+    type: "system",
+    subtype: "unknown",
+    message: `Unrecognized Claude event: ${toString(event.type, "unknown")}`
+  };
+}
+
+// src/agent-host/events/providers/codex.js
+var UNKNOWN_EVENT_RAW_PAYLOAD_MAX_CHARS = 16e3;
+var CodexNormalizer = class {
+  constructor() {
+    this.pendingItems = /* @__PURE__ */ new Map();
+    this.sessionId = null;
+  }
+  /**
+   * Normalize a raw Codex event into 0+ RudiEvent objects.
+   * @param {object} rawEvent
+   * @returns {Array<{ normalized: object, raw: object }>}
+   */
+  normalize(rawEvent) {
+    if (!rawEvent || typeof rawEvent !== "object") return [];
+    const type = rawEvent.type;
+    if (type === "thread.started") {
+      this.sessionId = rawEvent.thread_id || null;
+      return [this._wrap({
+        type: "system",
+        subtype: "thread_started",
+        message: "Thread started"
+      }, rawEvent)];
+    }
+    if (type === "turn.started") {
+      return [this._wrap({
+        type: "system",
+        subtype: "turn_started",
+        message: `Turn ${rawEvent.turn_number || 1} started`
+      }, rawEvent)];
+    }
+    if (type === "item.started") return this._handleItemStarted(rawEvent);
+    if (type === "item.updated") return this._handleItemUpdated(rawEvent);
+    if (type === "item.completed") return this._handleItemCompleted(rawEvent);
+    if (type === "turn.completed") return this._handleTurnCompleted(rawEvent);
+    if (type === "turn.failed") {
+      const normalized = {
+        type: "result",
+        result: rawEvent.error?.message || "Turn failed",
+        usage: this._normalizeUsage({})
+      };
+      const sid = this._sid(rawEvent);
+      if (sid) normalized.providerSessionId = sid;
+      if (typeof rawEvent.model === "string" && rawEvent.model) normalized.model = rawEvent.model;
+      return [this._wrap(normalized, rawEvent)];
+    }
+    if (type === "error") {
+      const normalized = {
+        type: "error",
+        message: rawEvent.error?.message || rawEvent.message || "Unknown error"
+      };
+      const code = rawEvent.error?.code || rawEvent.code;
+      if (typeof code === "string" && code) normalized.code = code;
+      const details = rawEvent.error || rawEvent.details;
+      if (details !== void 0) normalized.details = details;
+      return [this._wrap(normalized, rawEvent)];
+    }
+    return [this._wrap(this._normalizeUnknownEvent(rawEvent), rawEvent)];
+  }
+  /**
+   * Flush any remaining buffered items.
+   * @returns {Array<{ normalized: object, raw: object }>}
+   */
+  flush() {
+    const results = [];
+    for (const [itemId, pending] of this.pendingItems) {
+      const flushed = this._flushItem(itemId, pending, pending.startEvent);
+      if (flushed) results.push(flushed);
+    }
+    this.pendingItems.clear();
+    return results;
+  }
+  /**
+   * Reset state between turns.
+   */
+  reset() {
+    this.pendingItems.clear();
+  }
+  // ---- Private helpers ----
+  _wrap(normalized, raw) {
+    return { normalized, raw };
+  }
+  _sid(event) {
+    return this.sessionId || event.thread_id || null;
+  }
+  _toString(value, fallback = "") {
+    return typeof value === "string" ? value : fallback;
+  }
+  _toText(value) {
+    if (typeof value === "string") return value;
+    if (value == null) return "";
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  _serializeUnknownPayload(rawEvent) {
+    try {
+      const rawPayload = JSON.stringify(rawEvent);
+      if (typeof rawPayload !== "string") {
+        return { rawPayloadUnavailable: true };
+      }
+      if (rawPayload.length > UNKNOWN_EVENT_RAW_PAYLOAD_MAX_CHARS) {
+        return {
+          rawPayload: rawPayload.slice(0, UNKNOWN_EVENT_RAW_PAYLOAD_MAX_CHARS),
+          rawPayloadTruncated: true
+        };
+      }
+      return { rawPayload };
+    } catch (error) {
+      return {
+        rawPayloadUnavailable: true,
+        rawPayloadError: error instanceof Error ? error.message : "serialization_failed"
+      };
+    }
+  }
+  _normalizeUnknownEvent(rawEvent) {
+    const providerEventType = this._toString(rawEvent?.type);
+    const providerItemType = this._toString(rawEvent?.item?.type || rawEvent?.payload?.type);
+    const unknownReason = providerEventType ? "unknown_event_type" : "malformed_event";
+    const normalized = {
+      type: "system",
+      subtype: "unknown",
+      message: providerEventType ? `Unrecognized Codex event: ${providerEventType}` : "Malformed Codex event",
+      unknownReason,
+      ...this._serializeUnknownPayload(rawEvent)
+    };
+    if (providerEventType) normalized.providerEventType = providerEventType;
+    if (providerItemType) normalized.providerItemType = providerItemType;
+    return normalized;
+  }
+  _normalizeUsage(rawUsage = {}) {
+    const usage2 = {
+      inputTokens: typeof rawUsage.input_tokens === "number" ? rawUsage.input_tokens : 0,
+      outputTokens: typeof rawUsage.output_tokens === "number" ? rawUsage.output_tokens : 0
+    };
+    const cacheRead = rawUsage.cache_read_input_tokens ?? rawUsage.cached_input_tokens;
+    if (typeof cacheRead === "number") usage2.cacheReadTokens = cacheRead;
+    if (typeof rawUsage.cache_creation_input_tokens === "number") {
+      usage2.cacheCreationTokens = rawUsage.cache_creation_input_tokens;
+    }
+    return usage2;
+  }
+  _ensureRecord(value) {
+    if (value && typeof value === "object" && !Array.isArray(value)) return value;
+    return {};
+  }
+  _itemId(item, rawEvent) {
+    return this._toString(item?.id || rawEvent.item_id);
+  }
+  _toolName(item) {
+    return this._toString(item.tool || item.command || item.name, "unknown");
+  }
+  _extractDeltaText(rawEvent, item) {
+    if (typeof rawEvent.delta === "string") return rawEvent.delta;
+    if (rawEvent.delta && typeof rawEvent.delta === "object") {
+      if (typeof rawEvent.delta.text === "string") return rawEvent.delta.text;
+      if (Array.isArray(rawEvent.delta.content)) {
+        return rawEvent.delta.content.map((block) => block && typeof block.text === "string" ? block.text : "").join("");
+      }
+    }
+    if (typeof item?.text === "string") return item.text;
+    if (Array.isArray(item?.content)) {
+      return item.content.map((block) => block && typeof block.text === "string" ? block.text : "").join("");
+    }
+    return "";
+  }
+  _assistantWithContent(rawEvent, content) {
+    const normalized = {
+      type: "assistant",
+      content
+    };
+    const model = rawEvent.item?.model || rawEvent.model;
+    if (typeof model === "string" && model) normalized.model = model;
+    return this._wrap(normalized, rawEvent);
+  }
+  _handleItemStarted(rawEvent) {
+    const item = rawEvent.item || {};
+    const itemId = this._itemId(item, rawEvent);
+    const itemType = item.type;
+    if (!itemId) return [];
+    if (itemType === "agent_message" || itemType === "reasoning") {
+      this.pendingItems.set(itemId, {
+        type: itemType,
+        name: itemType,
+        contentBuffer: this._extractDeltaText(rawEvent, item),
+        startEvent: rawEvent
+      });
+      return [];
+    }
+    if (itemType === "command_execution" || itemType === "mcp_tool_call") {
+      this.pendingItems.set(itemId, {
+        type: itemType,
+        name: this._toolName(item),
+        contentBuffer: "",
+        startEvent: rawEvent
+      });
+      return [this._assistantWithContent(rawEvent, [{
+        type: "tool_use",
+        id: itemId,
+        name: this._toolName(item),
+        input: this._ensureRecord(item.arguments || item.input || item.args)
+      }])];
+    }
+    this.pendingItems.set(itemId, {
+      type: itemType || "unknown",
+      name: itemType || "unknown",
+      contentBuffer: this._extractDeltaText(rawEvent, item),
+      startEvent: rawEvent
+    });
+    return [];
+  }
+  _handleItemUpdated(rawEvent) {
+    const item = rawEvent.item || {};
+    const itemId = this._itemId(item, rawEvent);
+    if (!itemId) return [];
+    const pending = this.pendingItems.get(itemId);
+    if (!pending) return [];
+    const delta = this._extractDeltaText(rawEvent, item);
+    if (delta) pending.contentBuffer += delta;
+    return [];
+  }
+  _handleItemCompleted(rawEvent) {
+    const item = rawEvent.item || {};
+    const itemId = this._itemId(item, rawEvent);
+    const itemType = item.type;
+    if (!itemId) return [];
+    const pending = this.pendingItems.get(itemId);
+    if (itemType === "agent_message" || itemType === "reasoning") {
+      const text2 = this._extractDeltaText(rawEvent, item) || pending?.contentBuffer || "";
+      this.pendingItems.delete(itemId);
+      const blockType = itemType === "reasoning" ? "thinking" : "text";
+      const content = [{
+        type: blockType,
+        [blockType === "thinking" ? "thinking" : "text"]: text2
+      }];
+      return [this._assistantWithContent(rawEvent, content)];
+    }
+    if (itemType === "command_execution" || itemType === "mcp_tool_call") {
+      this.pendingItems.delete(itemId);
+      const output = item.output ?? item.result?.content?.[0]?.text ?? item.result ?? pending?.contentBuffer ?? "";
+      return [this._assistantWithContent(rawEvent, [{
+        type: "tool_result",
+        toolUseId: itemId,
+        content: this._toText(output),
+        isError: !!(item.error || item.exit_code != null && item.exit_code !== 0)
+      }])];
+    }
+    if (itemType === "file_change") {
+      this.pendingItems.delete(itemId);
+      const changes = Array.isArray(item.changes) ? item.changes : [];
+      const summary = changes.map((c) => `${c.kind || "change"}: ${c.path || "unknown"}`).join("\n");
+      return [this._assistantWithContent(rawEvent, [{
+        type: "text",
+        text: summary || this._toText(item)
+      }])];
+    }
+    this.pendingItems.delete(itemId);
+    const text = this._extractDeltaText(rawEvent, item) || pending?.contentBuffer || this._toText(item);
+    return [this._assistantWithContent(rawEvent, [{
+      type: "text",
+      text
+    }])];
+  }
+  _handleTurnCompleted(rawEvent) {
+    const flushed = this.flush();
+    const normalized = {
+      type: "result",
+      numTurns: typeof rawEvent.turn_number === "number" ? rawEvent.turn_number : 1,
+      usage: this._normalizeUsage(rawEvent.usage || {})
+    };
+    const sid = this._sid(rawEvent);
+    if (sid) normalized.providerSessionId = sid;
+    if (typeof rawEvent.cost_usd === "number") normalized.costUsd = rawEvent.cost_usd;
+    if (typeof rawEvent.duration_ms === "number") normalized.durationMs = rawEvent.duration_ms;
+    if (typeof rawEvent.model === "string" && rawEvent.model) normalized.model = rawEvent.model;
+    if (typeof rawEvent.result === "string") normalized.result = rawEvent.result;
+    flushed.push(this._wrap(normalized, rawEvent));
+    return flushed;
+  }
+  /**
+   * Flush one buffered item into an assistant event.
+   * Used when a turn completes before item.completed arrives.
+   */
+  _flushItem(itemId, pending, rawEvent) {
+    const isTool = pending.type === "command_execution" || pending.type === "mcp_tool_call";
+    if (!pending.contentBuffer && !isTool) return null;
+    if (pending.type === "agent_message" || pending.type === "reasoning") {
+      const blockType = pending.type === "reasoning" ? "thinking" : "text";
+      return this._assistantWithContent(rawEvent, [{
+        type: blockType,
+        [blockType === "thinking" ? "thinking" : "text"]: pending.contentBuffer
+      }]);
+    }
+    if (isTool) {
+      return this._assistantWithContent(rawEvent, [{
+        type: "tool_result",
+        toolUseId: itemId,
+        content: pending.contentBuffer || "(no output)",
+        isError: false
+      }]);
+    }
+    return this._assistantWithContent(rawEvent, [{
+      type: "text",
+      text: pending.contentBuffer
+    }]);
+  }
+};
+
+// src/agent-host/events/providers/index.js
+var NORMALIZERS = {
+  claude: claude_exports
+};
+function createNormalizer(provider) {
+  if (provider === "codex") return new CodexNormalizer();
+  return null;
+}
+function getNormalizer(provider) {
+  const normalizer = NORMALIZERS[provider];
+  if (normalizer && typeof normalizer.normalize === "function") {
+    return normalizer.normalize;
+  }
+  return (event) => event;
+}
+function normalizeEvent(provider, rawEvent, normalizer) {
+  if (normalizer) {
+    return normalizer.normalize(rawEvent);
+  }
+  const normalize2 = getNormalizer(provider);
+  const normalized = normalize2(rawEvent);
+  return [{ normalized, raw: rawEvent }];
+}
+
+// src/agent-host/events/antigravity.js
+function usage(raw) {
+  if (!raw || typeof raw !== "object") return void 0;
+  if (typeof raw.input_tokens !== "number" || typeof raw.output_tokens !== "number") return void 0;
+  const normalized = {
+    inputTokens: raw.input_tokens,
+    outputTokens: raw.output_tokens
+  };
+  if (typeof raw.cache_read_tokens === "number") normalized.cacheReadTokens = raw.cache_read_tokens;
+  return normalized;
+}
+function normalizeAntigravityEvent(rawEvent) {
+  if (!rawEvent || typeof rawEvent !== "object") {
+    return { message: "Invalid Antigravity event", type: "error" };
+  }
+  if (rawEvent.event === "init") {
+    return {
+      message: "Antigravity conversation initialized",
+      subtype: "init",
+      type: "system"
+    };
+  }
+  if (rawEvent.event === "step_update") {
+    const step = rawEvent.step_update || {};
+    if (step.step_type === "agent_response" && typeof step.text_delta === "string") {
+      const normalized = {
+        content: [{ text: step.text_delta, type: "text" }],
+        type: "assistant"
+      };
+      const normalizedUsage = usage(step.usage);
+      if (normalizedUsage) normalized.usage = normalizedUsage;
+      return normalized;
+    }
+    return {
+      message: `Antigravity step ${step.step_type || "unknown"}: ${step.state || "unknown"}`,
+      subtype: "step_update",
+      type: "system"
+    };
+  }
+  if (rawEvent.event === "result") {
+    const result = rawEvent.result || {};
+    const normalized = {
+      providerSessionId: result.conversation_id,
+      result: typeof result.response === "string" ? result.response : void 0,
+      type: "result"
+    };
+    if (typeof result.duration_seconds === "number") normalized.durationMs = Math.round(result.duration_seconds * 1e3);
+    if (typeof result.num_turns === "number") normalized.numTurns = result.num_turns;
+    const normalizedUsage = usage(result.usage);
+    if (normalizedUsage) normalized.usage = normalizedUsage;
+    if (result.status && result.status !== "SUCCESS") normalized.isError = true;
+    return normalized;
+  }
+  if (rawEvent.event === "error") {
+    return {
+      message: rawEvent.error?.message || rawEvent.message || "Antigravity error",
+      type: "error"
+    };
+  }
+  return {
+    message: `Unrecognized Antigravity event: ${rawEvent.event || "unknown"}`,
+    subtype: "unknown",
+    type: "system"
+  };
+}
+
+// src/agent-host/events/gemini.js
+function usageFromStats(stats) {
+  const raw = stats?.usage || stats;
+  if (!raw || typeof raw !== "object") return void 0;
+  const inputTokens = raw.input_tokens ?? raw.inputTokens;
+  const outputTokens = raw.output_tokens ?? raw.outputTokens;
+  if (typeof inputTokens !== "number" || typeof outputTokens !== "number") return void 0;
+  const usage2 = { inputTokens, outputTokens };
+  const cacheReadTokens = raw.cache_read_tokens ?? raw.cacheReadTokens;
+  if (typeof cacheReadTokens === "number") usage2.cacheReadTokens = cacheReadTokens;
+  return usage2;
+}
+function normalizeGeminiEvent(rawEvent) {
+  if (!rawEvent || typeof rawEvent !== "object") {
+    return { message: "Invalid Gemini event", type: "error" };
+  }
+  if (rawEvent.type === "init") {
+    return {
+      message: "Gemini session initialized",
+      subtype: "init",
+      type: "system"
+    };
+  }
+  if (rawEvent.type === "message") {
+    if (rawEvent.role === "assistant" && typeof rawEvent.content === "string") {
+      return {
+        content: [{ text: rawEvent.content, type: "text" }],
+        type: "assistant"
+      };
+    }
+    return {
+      message: `Gemini ${rawEvent.role || "unknown"} message`,
+      subtype: "message",
+      type: "system"
+    };
+  }
+  if (rawEvent.type === "tool_use") {
+    return {
+      content: [{
+        id: rawEvent.tool_id || "",
+        input: rawEvent.parameters && typeof rawEvent.parameters === "object" ? rawEvent.parameters : {},
+        name: rawEvent.tool_name || "unknown",
+        type: "tool_use"
+      }],
+      type: "assistant"
+    };
+  }
+  if (rawEvent.type === "tool_result") {
+    return {
+      content: [{
+        content: rawEvent.output || rawEvent.error?.message || "",
+        isError: rawEvent.status === "error",
+        toolUseId: rawEvent.tool_id || "",
+        type: "tool_result"
+      }],
+      type: "assistant"
+    };
+  }
+  if (rawEvent.type === "error") {
+    return {
+      message: rawEvent.message || "Gemini error",
+      type: "error"
+    };
+  }
+  if (rawEvent.type === "result") {
+    const normalized = { type: "result" };
+    const durationMs = rawEvent.stats?.duration_ms ?? rawEvent.stats?.durationMs;
+    if (typeof durationMs === "number") normalized.durationMs = durationMs;
+    const normalizedUsage = usageFromStats(rawEvent.stats);
+    if (normalizedUsage) normalized.usage = normalizedUsage;
+    if (rawEvent.status && rawEvent.status !== "success") normalized.isError = true;
+    return normalized;
+  }
+  return {
+    message: `Unrecognized Gemini event: ${rawEvent.type || "unknown"}`,
+    subtype: "unknown",
+    type: "system"
+  };
+}
+
+// src/agent-host/events/normalize.js
+var SESSION_ID_KEYS = [
+  "session_id",
+  "sessionId",
+  "thread_id",
+  "threadId",
+  "conversation_id",
+  "conversationId"
+];
+function extractNativeSessionId(rawEvent) {
+  if (!rawEvent || typeof rawEvent !== "object") return null;
+  for (const key of SESSION_ID_KEYS) {
+    if (typeof rawEvent[key] === "string" && rawEvent[key].trim()) return rawEvent[key];
+  }
+  for (const containerKey of ["session", "thread", "conversation", "init", "step_update", "result"]) {
+    const container = rawEvent[containerKey];
+    if (container && typeof container === "object") {
+      const value = container.id || container.session_id || container.thread_id || container.conversation_id;
+      if (typeof value === "string" && value.trim()) return value;
+    }
+  }
+  return null;
+}
+function createAgentEventNormalizer(provider) {
+  const directNormalizer = provider === "antigravity" ? normalizeAntigravityEvent : provider === "gemini" ? normalizeGeminiEvent : null;
+  const stateful = createNormalizer(provider);
+  return {
+    flush() {
+      return typeof stateful?.flush === "function" ? stateful.flush() : [];
+    },
+    normalize(rawEvent) {
+      if (directNormalizer) {
+        return [{ normalized: directNormalizer(rawEvent), raw: rawEvent }];
+      }
+      return normalizeEvent(provider, rawEvent, stateful);
+    }
+  };
+}
+function renderAgentEvent(event) {
+  if (!event || typeof event !== "object") return [];
+  if (event.type === "assistant" && Array.isArray(event.content)) {
+    return event.content.flatMap((block) => {
+      if (block?.type === "text" && typeof block.text === "string" && block.text) return [block.text];
+      return [];
+    });
+  }
+  if (event.type === "result" && typeof event.result === "string" && event.result) {
+    return [event.result];
+  }
+  return [];
+}
+
 // src/agent-host/private-automation-profile.js
+var import_node_fs11 = __toESM(require("node:fs"), 1);
+var import_node_path12 = __toESM(require("node:path"), 1);
+var import_node_child_process5 = require("node:child_process");
+var import_ajv = __toESM(require_ajv(), 1);
 var PRIVATE_AUTOMATION_PROFILE_ID = "private-automation-v1";
 var PRIVATE_AUTOMATION_MAX_PROMPT_BYTES = 2e5;
 var PRIVATE_AUTOMATION_MAX_FINAL_OUTPUT_BYTES = 64 * 1024;
@@ -26437,10 +26347,10 @@ function containsSchemaReference(value) {
   return Object.values(value).some(containsSchemaReference);
 }
 function readOutputSchema(outputSchemaPath) {
-  const requested = import_node_path9.default.resolve(requiredText(outputSchemaPath, "output schema path"));
+  const requested = import_node_path12.default.resolve(requiredText(outputSchemaPath, "output schema path"));
   let stat;
   try {
-    stat = import_node_fs8.default.lstatSync(requested);
+    stat = import_node_fs11.default.lstatSync(requested);
   } catch {
     throw new Error(`private automation output schema does not exist: ${requested}`);
   }
@@ -26452,7 +26362,7 @@ function readOutputSchema(outputSchemaPath) {
   }
   let schema;
   try {
-    schema = JSON.parse(import_node_fs8.default.readFileSync(requested, "utf8"));
+    schema = JSON.parse(import_node_fs11.default.readFileSync(requested, "utf8"));
   } catch {
     throw new Error("private automation output schema must contain valid JSON");
   }
@@ -26479,7 +26389,7 @@ function readOutputSchema(outputSchemaPath) {
   }
   return Object.freeze({
     canonical: JSON.stringify(schema),
-    path: import_node_fs8.default.realpathSync(requested),
+    path: import_node_fs11.default.realpathSync(requested),
     schema: Object.freeze(schema),
     validate
   });
@@ -26642,7 +26552,7 @@ function semverAtLeast(actual, minimum) {
   return true;
 }
 function assertPrivateAutomationHostCapabilities({ binaryPath, profile }, dependencies = {}) {
-  const spawnSyncImpl = dependencies.spawnSyncImpl || import_node_child_process2.spawnSync;
+  const spawnSyncImpl = dependencies.spawnSyncImpl || import_node_child_process5.spawnSync;
   if (!profile || profile.id !== PRIVATE_AUTOMATION_PROFILE_ID) {
     throw new Error("private automation profile is required for capability preflight");
   }
@@ -26675,7 +26585,7 @@ function assertPrivateAutomationHostCapabilities({ binaryPath, profile }, depend
       "--color",
       "never",
       "-C",
-      import_node_path9.default.dirname(profile.outputSchema.path),
+      import_node_path12.default.dirname(profile.outputSchema.path),
       "-m",
       profile.model,
       "--output-schema",
@@ -26757,10 +26667,942 @@ function assertPrivateAutomationHostCapabilities({ binaryPath, profile }, depend
   return true;
 }
 
+// src/agent-host/events/stream.js
+function boundedAppend(current, value, maxLength = 4096) {
+  const combined = `${current}${value}`;
+  return combined.length <= maxLength ? combined : combined.slice(-maxLength);
+}
+function writeLine(stream, value) {
+  stream.write(value.endsWith("\n") ? value : `${value}
+`);
+}
+function parsePrivateFinalOutput(value) {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    const fenced = trimmed.match(/^```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/u);
+    if (!fenced) throw new Error("invalid");
+    try {
+      return JSON.parse(fenced[1]);
+    } catch {
+      throw new Error("invalid");
+    }
+  }
+}
+function executeForegroundLaunch({
+  eventSink = null,
+  jsonOutput = false,
+  launchId,
+  onSpawn = null,
+  plan,
+  spawnImpl = import_node_child_process6.spawn,
+  taskStop = null,
+  stderr = process.stderr,
+  stdout = process.stdout,
+  store,
+  timeoutMs = plan.timeouts.runtimeMs,
+  signalEmitter = process
+}) {
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 24 * 60 * 60 * 1e3) {
+    throw new Error("timeoutMs must be an integer between 1 and 86400000");
+  }
+  return new Promise((resolve4, reject) => {
+    const privateAutomation = plan.privateAutomationProfile != null;
+    const taskExecution = plan.taskProfile != null;
+    const supervised = privateAutomation || taskExecution;
+    let taskTerminal = false;
+    let taskFailure = null;
+    let taskFinalOutput = null;
+    let taskIdentity = null;
+    const normalizer = createAgentEventNormalizer(plan.provider);
+    let child;
+    let finalized = false;
+    let stdoutBuffer = "";
+    let stderrTail = "";
+    let sawAssistantText = false;
+    let timedOut = false;
+    let forceTimer = null;
+    let requestedSignal = null;
+    let sinkFailure = null;
+    let privateFailure = null;
+    let privateFinalOutput = null;
+    let privateObservedModel = privateAutomation && plan.provider === "codex" ? plan.model : null;
+    let privateRawOutputBytes = 0;
+    let privateUsage = null;
+    function terminateProvider(signal) {
+      if (taskExecution && taskStop) {
+        void taskStop().catch(() => {
+          taskFailure = "task audit cleanup unresolved";
+        });
+        return true;
+      }
+      if (taskExecution) {
+        try {
+          if (!taskIdentity || JSON.stringify(processIdentity(child.pid)) !== JSON.stringify(taskIdentity)) {
+            taskFailure = "task process ownership unresolved";
+            return false;
+          }
+          process.kill(-taskIdentity.pgid, signal);
+          return true;
+        } catch {
+          taskFailure = "task process termination unconfirmed";
+          return false;
+        }
+      }
+      if (supervised && Number.isSafeInteger(child?.pid) && child.pid > 0) {
+        try {
+          process.kill(-child.pid, signal);
+          return true;
+        } catch {
+        }
+      }
+      try {
+        return child?.kill(signal) === true;
+      } catch {
+        return false;
+      }
+    }
+    function privateProviderGroupAlive() {
+      if (!supervised || !Number.isSafeInteger(child?.pid) || child.pid < 1) {
+        return false;
+      }
+      try {
+        process.kill(-child.pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    function armForceTimer() {
+      if (forceTimer || !supervised) return;
+      forceTimer = setTimeout(() => terminateProvider("SIGKILL"), plan.timeouts.shutdownGraceMs || 5e3);
+    }
+    function recordSinkFailure(kind, error) {
+      if (sinkFailure) return;
+      sinkFailure = `${kind} persistence failed: ${error.message}`;
+      try {
+        writeLine(stderr, sinkFailure);
+      } catch {
+      }
+      if (!finalized) {
+        terminateProvider("SIGTERM");
+        armForceTimer();
+      }
+    }
+    function publishEvent(payload, persistedPayload = payload) {
+      try {
+        eventSink?.(persistedPayload);
+      } catch (error) {
+        recordSinkFailure("Agent event", error);
+      }
+      return payload;
+    }
+    const onSigint = () => {
+      requestedSignal = "SIGINT";
+      terminateProvider("SIGINT");
+      armForceTimer();
+    };
+    const onSigterm = () => {
+      requestedSignal = "SIGTERM";
+      terminateProvider("SIGTERM");
+      armForceTimer();
+    };
+    function persistNativeSession(rawEvent, normalized) {
+      if (privateAutomation) return;
+      const nativeSessionId = extractNativeSessionId(rawEvent) || normalized?.providerSessionId || null;
+      if (!nativeSessionId) return;
+      const current = store.get(launchId);
+      if (current?.nativeSessionId !== nativeSessionId) {
+        store.setNativeSessionId(launchId, nativeSessionId);
+      }
+    }
+    function emitEvent(normalized, rawEvent) {
+      persistNativeSession(rawEvent, normalized);
+      const isDelta = rawEvent?.type === "message" && rawEvent.delta === true || rawEvent?.event === "step_update" && rawEvent.step_update?.step_type === "agent_response";
+      let persistedEvent = normalized;
+      if (privateAutomation) {
+        try {
+          assertPrivateAutomationRawEvent(plan.provider, rawEvent, plan.model);
+          persistedEvent = projectPrivateAutomationEventMetadata(normalized);
+        } catch (error) {
+          privateFailure = String(error?.message || "").includes("model usage") ? "private_model_mismatch" : "private_tool_event";
+          terminateProvider("SIGTERM");
+          return;
+        }
+        if (normalized.model) {
+          if (normalized.model !== plan.model) {
+            privateFailure = "private_model_mismatch";
+            terminateProvider("SIGTERM");
+            return;
+          }
+          privateObservedModel = normalized.model;
+        }
+        if (normalized.usage) privateUsage = persistedEvent.usage || privateUsage;
+        const structuredOutput = rawEvent?.structured_output ?? rawEvent?.structuredOutput;
+        if (structuredOutput && typeof structuredOutput === "object" && !Array.isArray(structuredOutput)) {
+          privateFinalOutput = structuredOutput;
+        } else if (normalized.type === "assistant" && Array.isArray(normalized.content)) {
+          const text = normalized.content.filter((block) => block?.type === "text" && typeof block.text === "string").map((block) => block.text).join("");
+          if (text) privateFinalOutput = text;
+        } else if (normalized.type === "result" && typeof normalized.result === "string") {
+          privateFinalOutput = normalized.result;
+        }
+      }
+      const persistedPayload = {
+        delta: isDelta,
+        event: persistedEvent,
+        launchId,
+        provider: plan.provider,
+        type: "agent.event"
+      };
+      const payload = privateAutomation ? publishEvent(persistedPayload) : publishEvent({
+        event: normalized,
+        launchId,
+        provider: plan.provider,
+        rawEvent,
+        type: "agent.event"
+      }, persistedPayload);
+      if (supervised) return;
+      if (jsonOutput) {
+        writeLine(stdout, JSON.stringify(payload));
+        return;
+      }
+      const rendered = renderAgentEvent(normalized);
+      if (normalized?.type === "assistant" && rendered.length > 0) sawAssistantText = true;
+      if (normalized?.type === "result" && sawAssistantText) return;
+      for (const text of rendered) {
+        if (isDelta) stdout.write(text);
+        else writeLine(stdout, text);
+      }
+      if (normalized?.type === "error" && normalized.message) writeLine(stderr, normalized.message);
+    }
+    function consumeLine(line) {
+      if (!line.trim()) return;
+      try {
+        const rawEvent = JSON.parse(line);
+        if (taskExecution) {
+          if (!rawEvent || typeof rawEvent !== "object" || Array.isArray(rawEvent)) throw new Error("invalid event");
+          if (rawEvent.type === "turn.completed") taskTerminal = true;
+          if (rawEvent.type === "turn.failed" || rawEvent.type === "error") taskFailure = "native terminal failure";
+          if (rawEvent.type === "item.completed" && rawEvent.item?.type === "agent_message") {
+            if (Buffer.byteLength(rawEvent.item.text || "") > 65536) throw new Error("final output overflow");
+            taskFinalOutput = rawEvent.item.text;
+          }
+        }
+        for (const result of normalizer.normalize(rawEvent)) {
+          if (result?.normalized) emitEvent(result.normalized, result.raw || rawEvent);
+        }
+      } catch {
+        if (taskExecution) {
+          taskFailure = "malformed native output";
+          terminateProvider("SIGTERM");
+          armForceTimer();
+          return;
+        }
+        if (privateAutomation) {
+          privateFailure = "private_output_malformed";
+          terminateProvider("SIGTERM");
+          return;
+        }
+        const payload = publishEvent({
+          event: { message: line, subtype: "provider_stdout", type: "system" },
+          launchId,
+          provider: plan.provider,
+          type: "agent.event"
+        });
+        if (jsonOutput) {
+          writeLine(stdout, JSON.stringify(payload));
+        } else {
+          writeLine(stdout, line);
+        }
+      }
+    }
+    function flushStdout() {
+      if (stdoutBuffer.trim()) consumeLine(stdoutBuffer);
+      stdoutBuffer = "";
+      for (const result of normalizer.flush()) {
+        if (result?.normalized) emitEvent(result.normalized, result.raw || {});
+      }
+    }
+    function complete(status, exitCode, lastError = null) {
+      try {
+        finishLaunch(status, exitCode, lastError);
+      } catch (error) {
+        terminateProvider("SIGKILL");
+        clearTimeout(runtimeTimer);
+        if (forceTimer) clearTimeout(forceTimer);
+        signalEmitter.removeListener("SIGINT", onSigint);
+        signalEmitter.removeListener("SIGTERM", onSigterm);
+        finalized = true;
+        reject(error);
+      }
+    }
+    function finishLaunch(status, exitCode, lastError) {
+      if (finalized) return;
+      flushStdout();
+      clearTimeout(runtimeTimer);
+      if (forceTimer) clearTimeout(forceTimer);
+      signalEmitter.removeListener("SIGINT", onSigint);
+      signalEmitter.removeListener("SIGTERM", onSigterm);
+      finalized = true;
+      if (sinkFailure) {
+        status = "failed";
+        lastError = sinkFailure;
+      }
+      if (privateAutomation) {
+        if (privateFailure) {
+          status = "failed";
+          lastError = `Private automation failed: ${privateFailure}`;
+        } else if (status === "completed" && privateObservedModel === null) {
+          status = "failed";
+          lastError = "Private automation failed: private_model_unobserved";
+        } else if (status === "completed") {
+          try {
+            const parsed = parsePrivateFinalOutput(privateFinalOutput);
+            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+              throw new Error("not_object");
+            }
+            const serialized = JSON.stringify(parsed);
+            if (Buffer.byteLength(serialized, "utf8") > plan.maxFinalOutputBytes) {
+              throw new Error("too_large");
+            }
+            if (!plan.privateAutomationProfile.outputSchema.validate(parsed)) {
+              throw new Error("schema");
+            }
+            privateFinalOutput = parsed;
+          } catch (error) {
+            status = "failed";
+            const reason = error.message === "too_large" ? "private_final_output_overflow" : error.message === "schema" ? "private_final_output_schema_invalid" : "private_final_output_invalid";
+            lastError = `Private automation failed: ${reason}`;
+          }
+        } else {
+          lastError = timedOut ? "Private automation failed: private_timeout" : requestedSignal ? "Private automation failed: private_stopped" : "Private automation failed: private_provider_error";
+        }
+      }
+      if (taskExecution && status === "completed") {
+        try {
+          if (taskFailure || !taskTerminal || !store.get(launchId)?.nativeSessionId) throw new Error(taskFailure || "missing native terminal/session evidence");
+          taskFinalOutput = parseTaskJson(taskFinalOutput);
+          if (!taskFinalOutput || !["complete", "no_work", "needs_evidence", "partial", "failed"].includes(taskFinalOutput.outcome) || !Array.isArray(taskFinalOutput.outputs) || taskFinalOutput.outputs.length > 64 || Object.keys(taskFinalOutput).sort().join(",") !== "outcome,outputs") throw new Error("invalid task final manifest");
+          if (taskFinalOutput.outcome === "failed") throw new Error("task reported failure");
+        } catch (error) {
+          status = "failed";
+          lastError = error.message;
+        }
+      }
+      const current = store.get(launchId);
+      if (current?.status === "starting" && status !== "failed") {
+        store.transition(launchId, "running", { pid: child?.pid || 0 });
+      }
+      const updated = store.transition(launchId, status, {
+        exitCode,
+        lastError
+      });
+      const terminalEvent = publishEvent({ launch: updated, type: `launch.${status}` });
+      if (taskExecution && sinkFailure && status === "completed") {
+        reject(new Error(sinkFailure));
+        return;
+      }
+      if (privateAutomation && status === "completed") {
+        const privateResult = {
+          model: privateObservedModel,
+          output: privateFinalOutput,
+          provider: plan.provider,
+          type: "private-automation.result",
+          ...privateUsage ? { usage: privateUsage } : {}
+        };
+        writeLine(stdout, jsonOutput ? JSON.stringify(privateResult) : JSON.stringify(privateFinalOutput));
+      }
+      if (jsonOutput) {
+        if (!privateAutomation) writeLine(stdout, JSON.stringify(terminalEvent));
+      }
+      resolve4(taskExecution ? { ...updated, taskFinalOutput } : updated);
+    }
+    const runtimeTimer = setTimeout(() => {
+      timedOut = true;
+      terminateProvider("SIGTERM");
+      forceTimer = setTimeout(
+        () => terminateProvider("SIGKILL"),
+        plan.timeouts.shutdownGraceMs || 5e3
+      );
+    }, timeoutMs);
+    try {
+      child = spawnImpl(plan.spawn.command, plan.args, {
+        cwd: plan.spawn.cwd,
+        detached: supervised,
+        env: supervised ? plan.environment : { ...process.env, ...plan.environment },
+        stdio: [supervised ? "pipe" : "ignore", "pipe", "pipe"]
+      });
+    } catch (error) {
+      clearTimeout(runtimeTimer);
+      reject(error);
+      return;
+    }
+    if (supervised) {
+      child.stdin.on("error", () => {
+        if (taskExecution) taskFailure = "task stdin error";
+        privateFailure = "private_stdin_error";
+        terminateProvider("SIGTERM");
+      });
+      if (!taskExecution) child.stdin.end(plan.stdin);
+    }
+    child.once("spawn", async () => {
+      try {
+        if (taskExecution && Number.isSafeInteger(child.pid)) {
+          taskIdentity = processIdentity(child.pid);
+          if (!taskIdentity || taskIdentity.pgid !== child.pid) throw new Error("task process identity unavailable");
+        }
+        const current = store.get(launchId);
+        if (current?.status === "starting") {
+          const running = store.transition(launchId, "running", { pid: child.pid || 0 });
+          await onSpawn?.(running);
+        } else if (current) {
+          await onSpawn?.(current);
+        }
+        if (taskExecution && !finalized) child.stdin.end(plan.stdin);
+      } catch (error) {
+        recordSinkFailure("Launch startup", error);
+      }
+    });
+    signalEmitter.once("SIGINT", onSigint);
+    signalEmitter.once("SIGTERM", onSigterm);
+    child.stdout.on("data", (chunk) => {
+      if (supervised) {
+        privateRawOutputBytes += Buffer.byteLength(chunk);
+        if (privateRawOutputBytes > plan.maxRawOutputBytes) {
+          if (taskExecution) taskFailure = "task native output overflow";
+          privateFailure = "private_raw_output_overflow";
+          armForceTimer();
+          stdoutBuffer = "";
+          terminateProvider("SIGTERM");
+          return;
+        }
+      }
+      stdoutBuffer += chunk.toString();
+      const lines = stdoutBuffer.split("\n");
+      stdoutBuffer = lines.pop() || "";
+      for (const line of lines) consumeLine(line);
+    });
+    child.stderr.on("data", (chunk) => {
+      if (taskExecution) stderrTail = boundedAppend(stderrTail, chunk.toString());
+      if (supervised) return;
+      const text = chunk.toString();
+      stderrTail = boundedAppend(stderrTail, text);
+      try {
+        stderr.write(text);
+      } catch (error) {
+        recordSinkFailure("Provider stderr", error);
+      }
+    });
+    child.once("error", (error) => {
+      complete(
+        "failed",
+        null,
+        privateAutomation ? "Private automation failed: private_spawn_error" : `Provider process error: ${error.message}`
+      );
+    });
+    if (taskExecution && taskStop) child.once("exit", () => terminateProvider("SIGKILL"));
+    child.once("close", (exitCode, signal) => {
+      if (!(taskExecution && taskStop) && privateProviderGroupAlive()) {
+        terminateProvider("SIGKILL");
+        if (taskExecution) taskFailure = "task process group remained alive";
+        privateFailure = "private_termination_unconfirmed";
+      }
+      if (sinkFailure) {
+        complete("failed", exitCode, sinkFailure);
+        return;
+      }
+      if (timedOut) {
+        complete("failed", exitCode, `Provider process timed out after ${timeoutMs}ms`);
+        return;
+      }
+      if (requestedSignal) {
+        complete("stopped", exitCode, `Provider process stopped by ${requestedSignal}`);
+        return;
+      }
+      if (exitCode === 0) {
+        complete("completed", 0);
+        return;
+      }
+      const detail = stderrTail.trim() || `Provider process exited with code ${exitCode}${signal ? ` (${signal})` : ""}`;
+      complete("failed", exitCode, detail);
+    });
+  });
+}
+
+// src/agent-host/launch-store.js
+var import_node_fs12 = __toESM(require("node:fs"), 1);
+var import_node_path13 = __toESM(require("node:path"), 1);
+var import_better_sqlite3 = __toESM(require("better-sqlite3"), 1);
+
+// src/runtime/node-policy.js
+var SUPPORTED_NODE_DESCRIPTION = "Node 22 LTS or Node 24.22+ LTS";
+function isSupportedNodeVersion(version) {
+  const parsed = typeof version === "string" && /^v?(\d+)\.(\d+)\.\d+$/.exec(version);
+  if (!parsed) return false;
+  const major = Number(parsed[1]);
+  const minor = Number(parsed[2]);
+  return major === 22 || major === 24 && minor >= 22;
+}
+function assertSupportedNodeVersion(version = process.version) {
+  if (isSupportedNodeVersion(version)) return;
+  const error = new Error(
+    `Unsupported Node.js ${version}; use ${SUPPORTED_NODE_DESCRIPTION}. Earlier Node 24 runtimes can abort during native SQLite cleanup.`
+  );
+  error.code = "RUDI_UNSUPPORTED_NODE";
+  throw error;
+}
+
+// src/agent-host/launch-store.js
+var LAUNCH_STATUSES = Object.freeze([
+  "starting",
+  "running",
+  "completed",
+  "failed",
+  "stopped"
+]);
+var LAUNCH_DISPOSITIONS = Object.freeze(["retained", "promoted", "discarded"]);
+var LAUNCH_EXECUTION_KINDS = Object.freeze(["foreground", "detached"]);
+var GROUP_ID_PATTERN = /^group_[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+var TERMINAL_STATUSES = /* @__PURE__ */ new Set(["completed", "failed", "stopped"]);
+var TRANSITIONS = Object.freeze({
+  starting: /* @__PURE__ */ new Set(["running", "failed", "stopped"]),
+  running: /* @__PURE__ */ new Set(["completed", "failed", "stopped"]),
+  completed: /* @__PURE__ */ new Set(),
+  failed: /* @__PURE__ */ new Set(),
+  stopped: /* @__PURE__ */ new Set()
+});
+function requiredString(value, field, maxLength = 4096) {
+  if (typeof value !== "string" || value.trim() === "" || value.includes("\0")) {
+    throw new Error(`${field} must be a non-empty string without NUL bytes`);
+  }
+  if (value.length > maxLength) {
+    throw new Error(`${field} exceeds ${maxLength} characters`);
+  }
+  return value;
+}
+function optionalString(value, field, maxLength = 4096) {
+  if (value == null) return null;
+  return requiredString(value, field, maxLength);
+}
+function mapLaunch(row) {
+  if (!row) return null;
+  return {
+    baseRef: row.base_ref,
+    disposition: row.disposition,
+    executionKind: row.execution_kind,
+    executionWorkspace: row.execution_workspace,
+    exitCode: row.exit_code,
+    finishedAt: row.finished_at,
+    lastError: row.last_error,
+    launchId: row.launch_id,
+    model: row.model,
+    nativeSessionId: row.native_session_id,
+    originDirectory: row.origin_directory,
+    ownerPid: row.owner_pid,
+    outputDestination: row.output_destination,
+    parentLaunchId: row.parent_launch_id,
+    pid: row.pid,
+    projectRoot: row.project_root,
+    provider: row.provider,
+    startedAt: row.started_at,
+    status: row.status,
+    updatedAt: row.updated_at,
+    workspaceMode: row.workspace_mode,
+    worktreeBranch: row.worktree_branch
+  };
+}
+function validateStatus(status) {
+  if (!LAUNCH_STATUSES.includes(status)) {
+    throw new Error(`Unknown launch status: ${status}`);
+  }
+  return status;
+}
+function validateEnum(value, field, allowed) {
+  if (!allowed.includes(value)) {
+    throw new Error(`Unknown ${field}: ${value}`);
+  }
+  return value;
+}
+function optionalPid(value, field) {
+  if (value == null) return null;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) {
+    throw new Error(`${field} must be a positive integer`);
+  }
+  return parsed;
+}
+function assertAgentGroupId(groupId) {
+  if (typeof groupId !== "string" || !GROUP_ID_PATTERN.test(groupId)) {
+    throw new Error("Invalid Agent Host group ID");
+  }
+  return groupId;
+}
+function deriveGroupStatus(launches) {
+  const statuses = launches.map((launch) => launch.status);
+  if (statuses.includes("running")) return "running";
+  if (statuses.includes("starting")) return "starting";
+  if (statuses.every((status) => status === "completed")) return "completed";
+  if (statuses.some((status) => status === "completed")) return "partial";
+  if (statuses.every((status) => status === "stopped")) return "stopped";
+  return "failed";
+}
+function ensureColumn(database, name, definition) {
+  const columns = new Set(database.prepare("PRAGMA table_info(agent_launches)").all().map((row) => row.name));
+  if (!columns.has(name)) database.exec(`ALTER TABLE agent_launches ADD COLUMN ${name} ${definition}`);
+}
+function migrateSharedWorkspace(database) {
+  const sql = database.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='agent_launches'").get().sql;
+  if (sql.includes("'registered-shared'")) return;
+  const indexes = database.prepare("SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name='agent_launches' AND sql IS NOT NULL").all();
+  const replacement = sql.replace("CREATE TABLE agent_launches", "CREATE TABLE agent_launches_next").replace("'isolated-copy'", "'isolated-copy', 'registered-shared'");
+  if (replacement === sql || !replacement.includes("CREATE TABLE agent_launches_next")) throw new Error("unrecognized Agent Host launch schema");
+  database.pragma("foreign_keys = OFF");
+  try {
+    database.transaction(() => {
+      database.exec(replacement);
+      database.exec("INSERT INTO agent_launches_next SELECT * FROM agent_launches");
+      database.exec("DROP TABLE agent_launches");
+      database.exec("ALTER TABLE agent_launches_next RENAME TO agent_launches");
+      for (const index of indexes) database.exec(index.sql);
+      if (database.pragma("foreign_key_check").length) throw new Error("Agent Host migration foreign-key failure");
+    })();
+  } finally {
+    database.pragma("foreign_keys = ON");
+  }
+}
+function initialize(database) {
+  database.pragma("journal_mode = WAL");
+  database.pragma("foreign_keys = ON");
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS agent_launches (
+      launch_id TEXT PRIMARY KEY,
+      parent_launch_id TEXT REFERENCES agent_launches(launch_id),
+      provider TEXT NOT NULL,
+      native_session_id TEXT,
+      origin_directory TEXT NOT NULL,
+      project_root TEXT NOT NULL,
+      execution_workspace TEXT NOT NULL,
+      output_destination TEXT NOT NULL,
+      workspace_mode TEXT NOT NULL CHECK (workspace_mode IN ('read-only', 'worktree', 'isolated-copy', 'registered-shared')),
+      worktree_branch TEXT,
+      base_ref TEXT,
+      model TEXT NOT NULL,
+      execution_kind TEXT NOT NULL DEFAULT 'foreground' CHECK (execution_kind IN ('foreground', 'detached')),
+      owner_pid INTEGER,
+      disposition TEXT NOT NULL DEFAULT 'retained' CHECK (disposition IN ('retained', 'promoted', 'discarded')),
+      status TEXT NOT NULL CHECK (status IN ('starting', 'running', 'completed', 'failed', 'stopped')),
+      pid INTEGER,
+      exit_code INTEGER,
+      started_at TEXT NOT NULL,
+      finished_at TEXT,
+      updated_at TEXT NOT NULL,
+      last_error TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_agent_launches_status_started
+      ON agent_launches(status, started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_agent_launches_native_session
+      ON agent_launches(provider, native_session_id);
+
+    CREATE TABLE IF NOT EXISTS agent_groups (
+      group_id TEXT PRIMARY KEY,
+      origin_directory TEXT NOT NULL,
+      workspace TEXT NOT NULL,
+      workspace_mode TEXT NOT NULL CHECK (workspace_mode IN ('auto', 'read-only', 'worktree', 'isolated-copy')),
+      started_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS agent_group_launches (
+      group_id TEXT NOT NULL REFERENCES agent_groups(group_id) ON DELETE CASCADE,
+      ordinal INTEGER NOT NULL,
+      launch_id TEXT NOT NULL UNIQUE,
+      provider TEXT NOT NULL,
+      last_error TEXT,
+      PRIMARY KEY (group_id, ordinal)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_agent_group_launches_group
+      ON agent_group_launches(group_id, ordinal);
+  `);
+  migrateSharedWorkspace(database);
+  ensureColumn(database, "execution_kind", "TEXT NOT NULL DEFAULT 'foreground' CHECK (execution_kind IN ('foreground', 'detached'))");
+  ensureColumn(database, "owner_pid", "INTEGER");
+  ensureColumn(database, "disposition", "TEXT NOT NULL DEFAULT 'retained' CHECK (disposition IN ('retained', 'promoted', 'discarded'))");
+}
+function createLaunchStore({
+  databasePath = getAgentHostPaths().stateDatabase,
+  now = () => (/* @__PURE__ */ new Date()).toISOString()
+} = {}) {
+  assertSupportedNodeVersion();
+  const resolvedPath = import_node_path13.default.resolve(databasePath);
+  import_node_fs12.default.mkdirSync(import_node_path13.default.dirname(resolvedPath), { recursive: true, mode: 448 });
+  const database = new import_better_sqlite3.default(resolvedPath);
+  import_node_fs12.default.chmodSync(resolvedPath, 384);
+  initialize(database);
+  const getStatement = database.prepare("SELECT * FROM agent_launches WHERE launch_id = ?");
+  function get(launchId) {
+    assertLaunchId(launchId);
+    return mapLaunch(getStatement.get(launchId));
+  }
+  function create(projection) {
+    const launchId = assertLaunchId(projection?.launchId);
+    const status = validateStatus(projection?.status || "starting");
+    if (status !== "starting") {
+      throw new Error("New launches must start in the starting state");
+    }
+    const timestamp = now();
+    const record2 = {
+      baseRef: optionalString(projection.baseRef, "baseRef", 512),
+      disposition: validateEnum(projection.disposition || "retained", "launch disposition", LAUNCH_DISPOSITIONS),
+      executionKind: validateEnum(projection.executionKind || "foreground", "execution kind", LAUNCH_EXECUTION_KINDS),
+      executionWorkspace: requiredString(projection.executionWorkspace, "executionWorkspace"),
+      launchId,
+      model: requiredString(projection.model, "model", 512),
+      nativeSessionId: optionalString(projection.nativeSessionId, "nativeSessionId", 1024),
+      originDirectory: requiredString(projection.originDirectory, "originDirectory"),
+      ownerPid: optionalPid(projection.ownerPid, "ownerPid"),
+      outputDestination: requiredString(projection.outputDestination, "outputDestination"),
+      parentLaunchId: projection.parentLaunchId == null ? null : assertLaunchId(projection.parentLaunchId),
+      projectRoot: requiredString(projection.projectRoot, "projectRoot"),
+      provider: requiredString(projection.provider, "provider", 64),
+      status,
+      workspaceMode: requiredString(projection.workspaceMode, "workspaceMode", 32),
+      worktreeBranch: optionalString(projection.worktreeBranch, "worktreeBranch", 512)
+    };
+    database.prepare(`
+      INSERT INTO agent_launches (
+        launch_id, parent_launch_id, provider, native_session_id,
+        origin_directory, project_root, execution_workspace, output_destination,
+        workspace_mode, worktree_branch, base_ref, model, status,
+        execution_kind, owner_pid, disposition, started_at, updated_at
+      ) VALUES (
+        @launchId, @parentLaunchId, @provider, @nativeSessionId,
+        @originDirectory, @projectRoot, @executionWorkspace, @outputDestination,
+        @workspaceMode, @worktreeBranch, @baseRef, @model, @status,
+        @executionKind, @ownerPid, @disposition, @startedAt, @updatedAt
+      )
+    `).run({ ...record2, startedAt: timestamp, updatedAt: timestamp });
+    return get(launchId);
+  }
+  function transition(launchId, nextStatus, patch = {}) {
+    assertLaunchId(launchId);
+    validateStatus(nextStatus);
+    const current = get(launchId);
+    if (!current) throw new Error(`Launch not found: ${launchId}`);
+    if (!TRANSITIONS[current.status].has(nextStatus)) {
+      throw new Error(`Invalid launch transition: ${current.status} -> ${nextStatus}`);
+    }
+    const timestamp = now();
+    const pid = patch.pid == null ? current.pid : Number(patch.pid);
+    const exitCode = patch.exitCode == null ? current.exitCode : Number(patch.exitCode);
+    if (pid != null && (!Number.isSafeInteger(pid) || pid < 0)) {
+      throw new Error("pid must be a non-negative integer");
+    }
+    if (exitCode != null && !Number.isSafeInteger(exitCode)) {
+      throw new Error("exitCode must be an integer");
+    }
+    database.prepare(`
+      UPDATE agent_launches
+      SET status = @status,
+          pid = @pid,
+          owner_pid = @ownerPid,
+          exit_code = @exitCode,
+          native_session_id = COALESCE(@nativeSessionId, native_session_id),
+          last_error = @lastError,
+          finished_at = @finishedAt,
+          updated_at = @updatedAt
+      WHERE launch_id = @launchId
+    `).run({
+      exitCode,
+      finishedAt: TERMINAL_STATUSES.has(nextStatus) ? timestamp : null,
+      lastError: optionalString(patch.lastError, "lastError", 4096),
+      launchId,
+      nativeSessionId: optionalString(patch.nativeSessionId, "nativeSessionId", 1024),
+      ownerPid: TERMINAL_STATUSES.has(nextStatus) ? null : optionalPid(patch.ownerPid == null ? current.ownerPid : patch.ownerPid, "ownerPid"),
+      pid,
+      status: nextStatus,
+      updatedAt: timestamp
+    });
+    return get(launchId);
+  }
+  function setDisposition(launchId, disposition) {
+    assertLaunchId(launchId);
+    const next = validateEnum(disposition, "launch disposition", LAUNCH_DISPOSITIONS);
+    const current = get(launchId);
+    if (!current) throw new Error(`Launch not found: ${launchId}`);
+    if (current.disposition === next) return current;
+    if (current.disposition !== "retained") {
+      throw new Error(`Launch is already ${current.disposition}: ${launchId}`);
+    }
+    if (next === "retained") return current;
+    database.prepare(`
+      UPDATE agent_launches
+      SET disposition = ?, updated_at = ?
+      WHERE launch_id = ?
+    `).run(next, now(), launchId);
+    return get(launchId);
+  }
+  function setNativeSessionId(launchId, nativeSessionId) {
+    assertLaunchId(launchId);
+    const validNativeId = requiredString(nativeSessionId, "nativeSessionId", 1024);
+    const result = database.prepare(`
+      UPDATE agent_launches
+      SET native_session_id = ?, updated_at = ?
+      WHERE launch_id = ?
+    `).run(validNativeId, now(), launchId);
+    if (result.changes === 0) throw new Error(`Launch not found: ${launchId}`);
+    return get(launchId);
+  }
+  function list({ limit = 50, status = null } = {}) {
+    const numericLimit = Number(limit);
+    if (!Number.isSafeInteger(numericLimit) || numericLimit < 1 || numericLimit > 1e3) {
+      throw new Error("limit must be an integer between 1 and 1000");
+    }
+    if (status != null) validateStatus(status);
+    const rows = status == null ? database.prepare(`
+          SELECT * FROM agent_launches
+          ORDER BY started_at DESC, rowid DESC
+          LIMIT ?
+        `).all(numericLimit) : database.prepare(`
+          SELECT * FROM agent_launches
+          WHERE status = ?
+          ORDER BY started_at DESC, rowid DESC
+          LIMIT ?
+        `).all(status, numericLimit);
+    return rows.map(mapLaunch);
+  }
+  function getGroup(groupId) {
+    assertAgentGroupId(groupId);
+    const row = database.prepare("SELECT * FROM agent_groups WHERE group_id = ?").get(groupId);
+    if (!row) return null;
+    const taskRows = database.prepare(`
+      SELECT launch_id, provider, last_error
+      FROM agent_group_launches
+      WHERE group_id = ?
+      ORDER BY ordinal ASC
+    `).all(groupId);
+    const launches = taskRows.map((task) => {
+      const launch = get(task.launch_id);
+      if (launch) return launch;
+      return {
+        lastError: task.last_error,
+        launchId: task.launch_id,
+        provider: task.provider,
+        status: task.last_error ? "failed" : "starting"
+      };
+    });
+    const status = deriveGroupStatus(launches);
+    const finishedAt = ["completed", "partial", "failed", "stopped"].includes(status) ? launches.map((launch) => launch.finishedAt).filter(Boolean).sort().at(-1) || row.updated_at : null;
+    return {
+      finishedAt,
+      groupId: row.group_id,
+      launches,
+      originDirectory: row.origin_directory,
+      startedAt: row.started_at,
+      status,
+      updatedAt: row.updated_at,
+      workspace: row.workspace,
+      workspaceMode: row.workspace_mode
+    };
+  }
+  function createGroup(projection) {
+    const groupId = assertAgentGroupId(projection?.groupId);
+    const tasks = projection?.tasks;
+    if (!Array.isArray(tasks) || tasks.length < 2 || tasks.length > 10) {
+      throw new Error("Agent Host group requires between 2 and 10 tasks");
+    }
+    const validatedTasks = tasks.map((task, ordinal) => ({
+      launchId: assertLaunchId(task?.launchId),
+      ordinal,
+      provider: requiredString(task?.provider, `tasks[${ordinal}].provider`, 64)
+    }));
+    if (new Set(validatedTasks.map((task) => task.launchId)).size !== validatedTasks.length) {
+      throw new Error("Agent Host group launch IDs must be unique");
+    }
+    const timestamp = now();
+    const record2 = {
+      groupId,
+      originDirectory: requiredString(projection.originDirectory, "originDirectory"),
+      startedAt: timestamp,
+      updatedAt: timestamp,
+      workspace: requiredString(projection.workspace, "workspace"),
+      workspaceMode: validateEnum(
+        projection.workspaceMode || "auto",
+        "group workspace mode",
+        ["auto", "read-only", "worktree", "isolated-copy"]
+      )
+    };
+    database.transaction(() => {
+      database.prepare(`
+        INSERT INTO agent_groups (
+          group_id, origin_directory, workspace, workspace_mode, started_at, updated_at
+        ) VALUES (
+          @groupId, @originDirectory, @workspace, @workspaceMode, @startedAt, @updatedAt
+        )
+      `).run(record2);
+      const insertTask = database.prepare(`
+        INSERT INTO agent_group_launches (group_id, ordinal, launch_id, provider)
+        VALUES (?, ?, ?, ?)
+      `);
+      for (const task of validatedTasks) {
+        insertTask.run(groupId, task.ordinal, task.launchId, task.provider);
+      }
+    })();
+    return getGroup(groupId);
+  }
+  function setGroupLaunchError(groupId, launchId, lastError) {
+    assertAgentGroupId(groupId);
+    assertLaunchId(launchId);
+    const result = database.prepare(`
+      UPDATE agent_group_launches
+      SET last_error = ?
+      WHERE group_id = ? AND launch_id = ?
+    `).run(requiredString(lastError, "lastError", 4096), groupId, launchId);
+    if (result.changes === 0) throw new Error(`Group launch not found: ${groupId}/${launchId}`);
+    database.prepare("UPDATE agent_groups SET updated_at = ? WHERE group_id = ?").run(now(), groupId);
+    return getGroup(groupId);
+  }
+  function listGroups({ limit = 50 } = {}) {
+    const numericLimit = Number(limit);
+    if (!Number.isSafeInteger(numericLimit) || numericLimit < 1 || numericLimit > 1e3) {
+      throw new Error("limit must be an integer between 1 and 1000");
+    }
+    return database.prepare(`
+      SELECT group_id FROM agent_groups
+      ORDER BY started_at DESC, rowid DESC
+      LIMIT ?
+    `).all(numericLimit).map((row) => getGroup(row.group_id));
+  }
+  return {
+    close() {
+      if (database.open) database.close();
+    },
+    create,
+    createGroup,
+    database,
+    get,
+    getGroup,
+    list,
+    listGroups,
+    setDisposition,
+    setGroupLaunchError,
+    setNativeSessionId,
+    transition
+  };
+}
+
+// src/agent-host/preflight.js
+var import_node_path17 = __toESM(require("node:path"), 1);
+var import_node_child_process8 = require("node:child_process");
+
 // src/agent-host/providers/common.js
-var import_node_fs9 = __toESM(require("node:fs"), 1);
-var import_node_os3 = __toESM(require("node:os"), 1);
-var import_node_path10 = __toESM(require("node:path"), 1);
+var import_node_fs13 = __toESM(require("node:fs"), 1);
+var import_node_os4 = __toESM(require("node:os"), 1);
+var import_node_path14 = __toESM(require("node:path"), 1);
 var MAX_PROMPT_BYTES = 10 * 1024 * 1024;
 var PERMISSION_ALIASES = Object.freeze({
   "accept-edits": "acceptEdits",
@@ -26797,6 +27639,13 @@ function validateExtraArgs(value) {
 }
 function providerContext(options, provider) {
   const config = loadProviderConfig(provider);
+  const taskProfile = options.taskProfile || null;
+  if (taskProfile) {
+    assertTaskProfile(taskProfile);
+    if (provider !== taskProfile.provider || options.model !== taskProfile.model || options.nativeSessionId || options.workspaceMode !== TASK_MODE || options.cwd !== taskProfile.working_directory) {
+      throw new Error("task execution binding mismatch or resume forbidden");
+    }
+  } else if (options.workspaceMode === TASK_MODE) assertTaskProfile(null);
   const privateAutomationProfile = options.privateAutomationProfile || null;
   if (privateAutomationProfile != null) {
     if (privateAutomationProfile.id !== PRIVATE_AUTOMATION_PROFILE_ID) {
@@ -26825,7 +27674,7 @@ function providerContext(options, provider) {
     throw new Error(`Unknown model '${requestedModel}' for ${provider}. Run: rudi agent models ${provider}`);
   }
   const workspaceMode = options.workspaceMode;
-  if (!["read-only", "worktree", "isolated-copy"].includes(workspaceMode)) {
+  if (!["read-only", "worktree", "isolated-copy", TASK_MODE].includes(workspaceMode)) {
     throw new Error(`Unknown resolved workspace mode: ${workspaceMode}`);
   }
   return {
@@ -26837,6 +27686,7 @@ function providerContext(options, provider) {
     nativeSessionId: options.nativeSessionId == null ? null : requiredText2(options.nativeSessionId, "nativeSessionId", 1024),
     prompt,
     privateAutomationProfile,
+    taskProfile,
     provider,
     runtimeDirectory: options.runtimeDirectory == null ? null : requiredText2(options.runtimeDirectory, "runtimeDirectory", 4096),
     workspaceMode
@@ -26862,39 +27712,39 @@ function validateImages(images) {
   return images.map((image, index) => requiredText2(image, `images[${index}]`, 4096));
 }
 function canonicalPath2(candidate) {
-  const absolute = import_node_path10.default.resolve(candidate);
+  const absolute = import_node_path14.default.resolve(candidate);
   try {
-    return import_node_fs9.default.realpathSync(absolute);
+    return import_node_fs13.default.realpathSync(absolute);
   } catch {
     return absolute;
   }
 }
 function isInsidePath(root, candidate) {
-  const child = import_node_path10.default.relative(root, candidate);
-  return child === "" || child !== ".." && !child.startsWith(`..${import_node_path10.default.sep}`) && !import_node_path10.default.isAbsolute(child);
+  const child = import_node_path14.default.relative(root, candidate);
+  return child === "" || child !== ".." && !child.startsWith(`..${import_node_path14.default.sep}`) && !import_node_path14.default.isAbsolute(child);
 }
 function rudiOwnedPathRoots(environment) {
-  const home = environment.HOME || import_node_os3.default.homedir();
+  const home = environment.HOME || import_node_os4.default.homedir();
   return [
-    import_node_path10.default.join(home, ".rudi"),
+    import_node_path14.default.join(home, ".rudi"),
     environment.RUDI_HOME,
     process.env.RUDI_HOME
-  ].filter((root) => typeof root === "string" && import_node_path10.default.isAbsolute(root)).flatMap((root) => [import_node_path10.default.resolve(root), canonicalPath2(root)]);
+  ].filter((root) => typeof root === "string" && import_node_path14.default.isAbsolute(root)).flatMap((root) => [import_node_path14.default.resolve(root), canonicalPath2(root)]);
 }
-function isRudiOwnedPathEntry(entry, roots) {
+function isRudiOwnedPathEntry(entry, roots2) {
   if (typeof entry !== "string" || entry.length === 0) return false;
-  const lexicalEntry = import_node_path10.default.resolve(entry);
+  const lexicalEntry = import_node_path14.default.resolve(entry);
   const canonicalEntry = canonicalPath2(entry);
-  return roots.some((root) => isInsidePath(root, lexicalEntry) || isInsidePath(root, canonicalEntry));
+  return roots2.some((root) => isInsidePath(root, lexicalEntry) || isInsidePath(root, canonicalEntry));
 }
 function buildAgentExecutableEnvironment(binaryPath, overrides = {}, baseEnvironment = process.env) {
   const merged = { ...baseEnvironment, ...overrides };
   const rudiRoots = rudiOwnedPathRoots(merged);
   const entries = [
-    import_node_path10.default.dirname(binaryPath),
-    ...String(merged.PATH || "").split(import_node_path10.default.delimiter)
-  ].filter((entry) => entry && import_node_path10.default.isAbsolute(entry) && !isRudiOwnedPathEntry(entry, rudiRoots));
-  merged.PATH = [...new Set(entries)].join(import_node_path10.default.delimiter);
+    import_node_path14.default.dirname(binaryPath),
+    ...String(merged.PATH || "").split(import_node_path14.default.delimiter)
+  ].filter((entry) => entry && import_node_path14.default.isAbsolute(entry) && !isRudiOwnedPathEntry(entry, rudiRoots));
+  merged.PATH = [...new Set(entries)].join(import_node_path14.default.delimiter);
   return merged;
 }
 var PRIVATE_OPERATIONAL_ENVIRONMENT_KEYS = Object.freeze([
@@ -26922,10 +27772,10 @@ function buildPrivateProviderEnvironment(config, binaryPath, options = {}) {
 }
 function buildProviderEnvironment(config, options = {}) {
   const baseEnvironment = options.baseEnvironment || process.env;
-  const rudiHome = options.rudiHome || process.env.RUDI_HOME || import_node_path10.default.join(import_node_os3.default.homedir(), ".rudi");
+  const rudiHome = options.rudiHome || process.env.RUDI_HOME || import_node_path14.default.join(import_node_os4.default.homedir(), ".rudi");
   let storedSecrets = {};
   try {
-    const parsed = JSON.parse(import_node_fs9.default.readFileSync(import_node_path10.default.join(rudiHome, "secrets.json"), "utf8"));
+    const parsed = JSON.parse(import_node_fs13.default.readFileSync(import_node_path14.default.join(rudiHome, "secrets.json"), "utf8"));
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
       storedSecrets = Object.fromEntries(
         Object.entries(parsed).filter(([, value]) => typeof value === "string" && value.length > 0)
@@ -26937,7 +27787,7 @@ function buildProviderEnvironment(config, options = {}) {
 }
 function finishPlan(context, args, permissionMode, providerEnvironment = null) {
   const resolvedProviderEnvironment = providerEnvironment || (context.privateAutomationProfile ? buildPrivateProviderEnvironment(context.config, context.binaryPath) : buildProviderEnvironment(context.config));
-  const environment = context.privateAutomationProfile ? resolvedProviderEnvironment : buildAgentExecutableEnvironment(context.binaryPath, resolvedProviderEnvironment);
+  const environment = context.privateAutomationProfile || context.taskProfile ? resolvedProviderEnvironment : buildAgentExecutableEnvironment(context.binaryPath, resolvedProviderEnvironment);
   return Object.freeze({
     args,
     environment,
@@ -26947,6 +27797,7 @@ function finishPlan(context, args, permissionMode, providerEnvironment = null) {
       privateAutomationProfile: context.privateAutomationProfile,
       stdin: context.prompt
     } : {},
+    ...context.taskProfile ? { taskProfile: context.taskProfile, stdin: context.prompt, maxRawOutputBytes: 8 * 1024 * 1024 } : {},
     model: context.model,
     permissionMode,
     provider: context.provider,
@@ -27048,6 +27899,92 @@ function buildClaudePlan(options) {
   return finishPlan(context, args, permission.mode);
 }
 
+// src/agent-host/task-codex.js
+var import_node_fs14 = __toESM(require("node:fs"), 1);
+var import_node_os5 = __toESM(require("node:os"), 1);
+var import_node_path15 = __toESM(require("node:path"), 1);
+var import_node_child_process7 = require("node:child_process");
+var TASK_CODEX_VERSION = "0.160.1";
+var TASK_DISABLED = getPrivateCodexDisabledFeatures().filter((feature) => !["shell_tool", "unified_exec", "code_mode_host"].includes(feature));
+function taskEnvironment(binaryPath) {
+  const result = { PATH: `${import_node_path15.default.dirname(binaryPath)}:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin` };
+  for (const key of ["HOME", "USER", "LOGNAME", "LANG", "LC_ALL"]) {
+    if (typeof process.env[key] === "string") result[key] = process.env[key];
+  }
+  return result;
+}
+function taskPermissionArgs(profile) {
+  const filesystem = { ":minimal": "read" };
+  for (const root of profile.read_roots) filesystem[root] = "read";
+  for (const root of profile.write_roots) filesystem[root] = "write";
+  const rules = Object.entries(filesystem).map(([key, value]) => `${JSON.stringify(key)}=${JSON.stringify(value)}`).join(",");
+  return ["-c", 'default_permissions="rudi_task"', "-c", `permissions={rudi_task={filesystem={${rules}},network={enabled=${profile.network === "enabled"}}}}`];
+}
+function taskCodexArgs(context) {
+  const args = ["--ask-for-approval", "never", "--no-daemon", "--enable", "code_mode_host"];
+  for (const feature of TASK_DISABLED) args.push("--disable", feature);
+  args.push(
+    ...taskPermissionArgs(context.taskProfile),
+    "-c",
+    "mcp_servers={}",
+    "-c",
+    'shell_environment_policy.inherit="none"',
+    "-c",
+    'web_search="disabled"',
+    "exec",
+    "-",
+    "--json",
+    "--skip-git-repo-check",
+    "--color",
+    "never",
+    "--strict-config",
+    "--ignore-user-config",
+    "--ignore-rules",
+    "-C",
+    context.cwd,
+    "-m",
+    context.model
+  );
+  return args;
+}
+function assertTaskHostCapabilities({ binaryPath, profile }, { spawnSyncImpl = import_node_child_process7.spawnSync } = {}) {
+  if (process.platform !== "darwin") throw new Error("task shared permissions currently qualified on macOS only");
+  for (let cursor = profile.working_directory; ; cursor = import_node_path15.default.dirname(cursor)) {
+    if (cursor !== import_node_os5.default.homedir() && import_node_fs14.default.existsSync(import_node_path15.default.join(cursor, ".codex", "config.toml"))) {
+      throw new Error("task workspace ancestor contains native config; explicit qualification required");
+    }
+    if (cursor === import_node_path15.default.dirname(cursor)) break;
+  }
+  if (import_node_fs14.default.existsSync("/etc/codex/config.toml")) throw new Error("system Codex config requires explicit task qualification");
+  const probe = (args2, input) => spawnSyncImpl(binaryPath, args2, { encoding: "utf8", input, timeout: 5e3, maxBuffer: 262144, env: taskEnvironment(binaryPath) });
+  const version = probe(["--version"]);
+  if (version.status !== 0 || String(version.stdout).trim() !== `codex-cli ${TASK_CODEX_VERSION}`) {
+    throw new Error("native Codex version is not qualified for task permissions");
+  }
+  const args = taskCodexArgs({ taskProfile: profile, cwd: profile.working_directory, model: profile.model });
+  const config = probe(args, "");
+  if (config.error || config.status === 0 || !`${config.stdout}${config.stderr}`.includes("No prompt provided via stdin.")) {
+    throw new Error("native task configuration probe failed");
+  }
+  const helper = auditHelperPath();
+  const containment = probe([
+    "sandbox",
+    "-P",
+    "rudi_task",
+    ...taskPermissionArgs({ ...profile, read_roots: [...profile.read_roots, helper] }),
+    "-C",
+    profile.working_directory,
+    "--",
+    helper,
+    "probe",
+    String(process.pid)
+  ]);
+  if (containment.status !== 0 || String(containment.stdout).trim() !== JSON.stringify({ audit_session_escape_denied: true, supervisor_signal_denied: true })) {
+    throw new Error("native audit containment capability probe failed");
+  }
+  return { version: TASK_CODEX_VERSION };
+}
+
 // src/agent-host/providers/codex.js
 var APPROVAL_ALIASES = Object.freeze({
   onRequest: "on-request",
@@ -27065,6 +28002,12 @@ function approvalPolicy(value) {
 }
 function buildCodexPlan(options) {
   const context = providerContext(options, "codex");
+  if (context.taskProfile) {
+    if ((options.extraArgs || []).length || (options.images || []).length || options.approvalMode || options.permissionMode) {
+      throw new Error("task execution forbids permission overrides, images and passthrough arguments");
+    }
+    return finishPlan(context, taskCodexArgs(context), "registered-shared", taskEnvironment(context.binaryPath));
+  }
   if (context.privateAutomationProfile) {
     if ((options.extraArgs || []).length > 0 || (options.images || []).length > 0) {
       throw new Error("private automation forbids Codex passthrough arguments and images");
@@ -27133,8 +28076,8 @@ function buildCodexPlan(options) {
 }
 
 // src/agent-host/providers/gemini.js
-var import_node_fs10 = __toESM(require("node:fs"), 1);
-var import_node_path11 = __toESM(require("node:path"), 1);
+var import_node_fs15 = __toESM(require("node:fs"), 1);
+var import_node_path16 = __toESM(require("node:path"), 1);
 function defaultSystemSettingsPath(platform = process.platform) {
   if (platform === "darwin") return "/Library/Application Support/GeminiCli/settings.json";
   if (platform === "win32") return "C:\\ProgramData\\gemini-cli\\settings.json";
@@ -27146,9 +28089,9 @@ function buildGeminiProviderEnvironment(config, options = {}) {
   if (!environment.GEMINI_API_KEY || !options.runtimeDirectory) return environment;
   if (baseEnvironment.GEMINI_CLI_SYSTEM_SETTINGS_PATH) return environment;
   const systemSettingsPath = options.systemSettingsPath || defaultSystemSettingsPath(options.platform);
-  if (import_node_fs10.default.existsSync(systemSettingsPath)) return environment;
-  const settingsPath = import_node_path11.default.join(options.runtimeDirectory, "gemini-system-settings.json");
-  import_node_fs10.default.writeFileSync(settingsPath, JSON.stringify({
+  if (import_node_fs15.default.existsSync(systemSettingsPath)) return environment;
+  const settingsPath = import_node_path16.default.join(options.runtimeDirectory, "gemini-system-settings.json");
+  import_node_fs15.default.writeFileSync(settingsPath, JSON.stringify({
     security: { auth: { selectedType: "gemini-api-key" } }
   }, null, 2), { encoding: "utf8", mode: 384 });
   return {
@@ -27217,7 +28160,693 @@ function buildProviderProcessPlan(options) {
   return BUILDERS[provider]({ ...options, provider });
 }
 
+// src/agent-host/preflight.js
+var MCP_AGENT_IDS = Object.freeze({ claude: "claude-code" });
+function commandArgs(configuredCommand) {
+  return Array.isArray(configuredCommand) ? configuredCommand.slice(1) : [];
+}
+function runCheck(binaryPath, args, spawnSyncImpl, timeout = 5e3) {
+  const result = spawnSyncImpl(binaryPath, args, {
+    encoding: "utf8",
+    env: buildAgentExecutableEnvironment(binaryPath),
+    timeout
+  });
+  return {
+    ok: !result.error && result.status === 0,
+    output: String(result.stdout || result.stderr || "").trim().slice(0, 512)
+  };
+}
+function hasRudiRouter(provider) {
+  const agentId = MCP_AGENT_IDS[provider] || provider;
+  const config = AGENT_CONFIGS.find((item) => item.id === agentId);
+  if (!config) return false;
+  return readAgentMcpServers(config).some((server) => server.name === "rudi" || import_node_path17.default.basename(String(server.command)) === "rudi-router");
+}
+async function inspectAgentHost(provider, dependencies = {}) {
+  const { spawnSyncImpl = import_node_child_process8.spawnSync } = dependencies;
+  const canonicalProvider = resolveAgentProviderId(provider);
+  const summarizeSkills = dependencies.summarizeNativeSkillHostImpl || summarizeNativeSkillHost;
+  let skillProjection;
+  try {
+    skillProjection = await summarizeSkills(canonicalProvider);
+  } catch (error) {
+    skillProjection = {
+      current: 0,
+      drifted: 0,
+      missing: 0,
+      failed: 1,
+      totalManaged: 0,
+      skillsSynchronized: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+  const config = getAgentProviderConfig(canonicalProvider);
+  const binaryPath = dependencies.binaryPath || resolveAgentProviderBinary(canonicalProvider);
+  if (!binaryPath) {
+    return {
+      authenticated: false,
+      authentication: "unavailable",
+      installed: false,
+      provider: canonicalProvider,
+      routerConfigured: hasRudiRouter(canonicalProvider),
+      skillProjection,
+      skillsSynchronized: skillProjection.skillsSynchronized,
+      version: null
+    };
+  }
+  const version = runCheck(binaryPath, commandArgs(config.binary.checkCommand), spawnSyncImpl);
+  const authArgs = commandArgs(config.binary.authCheck);
+  const versionArgs = commandArgs(config.binary.checkCommand);
+  const authIsObservable = JSON.stringify(authArgs) !== JSON.stringify(versionArgs);
+  const auth = authIsObservable ? runCheck(binaryPath, authArgs, spawnSyncImpl) : { ok: null };
+  return {
+    authenticated: auth.ok,
+    authentication: auth.ok == null ? "unknown" : auth.ok ? "authenticated" : "unauthenticated",
+    binaryPath,
+    installed: version.ok,
+    provider: canonicalProvider,
+    routerConfigured: hasRudiRouter(canonicalProvider),
+    skillProjection,
+    skillsSynchronized: skillProjection.skillsSynchronized,
+    version: version.output.split("\n")[0] || null
+  };
+}
+async function assertAgentHostReady({ binaryPath, provider }, dependencies = {}) {
+  const inspected = await inspectAgentHost(provider, { ...dependencies, binaryPath });
+  if (!inspected.installed) {
+    throw new Error(`${provider} host is not installed or did not pass its version check`);
+  }
+  if (inspected.authenticated === false) {
+    throw new Error(`${provider} host is not authenticated`);
+  }
+  return inspected;
+}
+
+// src/agent-host/workspace.js
+var import_node_fs17 = __toESM(require("node:fs"), 1);
+var import_node_path19 = __toESM(require("node:path"), 1);
+var import_node_child_process9 = require("node:child_process");
+
+// src/agent-host/workspace-manifest.js
+var import_node_crypto6 = __toESM(require("node:crypto"), 1);
+var import_node_fs16 = __toESM(require("node:fs"), 1);
+var import_node_path18 = __toESM(require("node:path"), 1);
+var WORKSPACE_BASELINE_FILE = "workspace-base.json";
+function shouldSkip(relativePath) {
+  const first = relativePath.split(import_node_path18.default.sep)[0];
+  return first === ".git" || first === ".rudi";
+}
+function portablePath(relativePath) {
+  return relativePath.split(import_node_path18.default.sep).join("/");
+}
+function hashFile(file) {
+  return import_node_crypto6.default.createHash("sha256").update(import_node_fs16.default.readFileSync(file)).digest("hex");
+}
+function createWorkspaceManifest(rootDirectory) {
+  const root = import_node_fs16.default.realpathSync(import_node_path18.default.resolve(rootDirectory));
+  const entries = {};
+  function visit(directory, prefix = "") {
+    const children = import_node_fs16.default.readdirSync(directory, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name));
+    for (const child of children) {
+      const relative4 = prefix ? import_node_path18.default.join(prefix, child.name) : child.name;
+      if (shouldSkip(relative4)) continue;
+      const absolute = import_node_path18.default.join(directory, child.name);
+      const stat = import_node_fs16.default.lstatSync(absolute);
+      const key = portablePath(relative4);
+      if (stat.isDirectory()) {
+        entries[key] = { mode: stat.mode & 511, type: "directory" };
+        visit(absolute, relative4);
+      } else if (stat.isFile()) {
+        entries[key] = {
+          hash: hashFile(absolute),
+          mode: stat.mode & 511,
+          size: stat.size,
+          type: "file"
+        };
+      } else if (stat.isSymbolicLink()) {
+        entries[key] = {
+          mode: stat.mode & 511,
+          target: import_node_fs16.default.readlinkSync(absolute),
+          type: "symlink"
+        };
+      } else {
+        throw new Error(`Unsupported workspace entry type: ${absolute}`);
+      }
+    }
+  }
+  visit(root);
+  return { entries, schemaVersion: 1 };
+}
+function writeWorkspaceBaseline({ launchDirectory, workspace }) {
+  const destination = import_node_path18.default.join(import_node_path18.default.resolve(launchDirectory), WORKSPACE_BASELINE_FILE);
+  const manifest = createWorkspaceManifest(workspace);
+  const handle = import_node_fs16.default.openSync(destination, "wx", 384);
+  try {
+    import_node_fs16.default.writeFileSync(handle, `${JSON.stringify(manifest)}
+`, "utf8");
+  } finally {
+    import_node_fs16.default.closeSync(handle);
+  }
+  return destination;
+}
+function readWorkspaceBaseline(launchDirectory) {
+  const file = import_node_path18.default.join(import_node_path18.default.resolve(launchDirectory), WORKSPACE_BASELINE_FILE);
+  let parsed;
+  try {
+    const stat = import_node_fs16.default.lstatSync(file);
+    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("baseline is not a regular file");
+    parsed = JSON.parse(import_node_fs16.default.readFileSync(file, "utf8"));
+  } catch (error) {
+    throw new Error(`Isolated workspace baseline is unavailable: ${error.message}`);
+  }
+  if (parsed?.schemaVersion !== 1 || !parsed.entries || typeof parsed.entries !== "object") {
+    throw new Error("Isolated workspace baseline has an unsupported schema");
+  }
+  return parsed;
+}
+function sameEntry(left, right) {
+  return JSON.stringify(left || null) === JSON.stringify(right || null);
+}
+function compareWorkspaceManifests(baseline, current) {
+  const paths = /* @__PURE__ */ new Set([
+    ...Object.keys(baseline?.entries || {}),
+    ...Object.keys(current?.entries || {})
+  ]);
+  const changes = [];
+  for (const relativePath of [...paths].sort()) {
+    const before = baseline.entries[relativePath];
+    const after = current.entries[relativePath];
+    if (sameEntry(before, after)) continue;
+    changes.push({
+      after: after || null,
+      before: before || null,
+      path: relativePath,
+      status: before == null ? "added" : after == null ? "deleted" : "modified"
+    });
+  }
+  return changes;
+}
+function workspaceManifestsEqual(left, right) {
+  return compareWorkspaceManifests(left, right).length === 0;
+}
+
+// src/agent-host/workspace.js
+var WORKSPACE_MODES = Object.freeze({
+  AUTO: "auto",
+  ISOLATED_COPY: "isolated-copy",
+  READ_ONLY: "read-only",
+  WORKTREE: "worktree",
+  REGISTERED_SHARED: TASK_MODE
+});
+var VALID_MODES = new Set(Object.values(WORKSPACE_MODES));
+function existingDirectory2(candidate, label) {
+  const resolved = import_node_path19.default.resolve(candidate);
+  let stat;
+  try {
+    stat = import_node_fs17.default.statSync(resolved);
+  } catch {
+    throw new Error(`${label} does not exist: ${resolved}`);
+  }
+  if (!stat.isDirectory()) {
+    throw new Error(`${label} is not a directory: ${resolved}`);
+  }
+  return import_node_fs17.default.realpathSync(resolved);
+}
+function isInside2(candidate, parent) {
+  const relative4 = import_node_path19.default.relative(parent, candidate);
+  return relative4 === "" || !relative4.startsWith(`..${import_node_path19.default.sep}`) && relative4 !== ".." && !import_node_path19.default.isAbsolute(relative4);
+}
+function findGitProjectRoot(workspace, execFileSyncImpl) {
+  try {
+    const output = execFileSyncImpl("git", ["rev-parse", "--show-toplevel"], {
+      cwd: workspace,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    return existingDirectory2(String(output).trim(), "Git project root");
+  } catch {
+    return null;
+  }
+}
+function gitOutput(execFileSyncImpl, cwd, args) {
+  return String(execFileSyncImpl("git", args, {
+    cwd,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"]
+  })).trim();
+}
+function assertOutputOutsideProject(outputDestination, projectRoot) {
+  if (isInside2(outputDestination, projectRoot)) {
+    throw new Error(`Output destination must be outside the project: ${outputDestination}`);
+  }
+}
+function createGitWorktree({
+  destination,
+  execFileSyncImpl,
+  launchId,
+  projectRoot
+}) {
+  const branch = `rudi/agent/${launchId}`;
+  const baseRef = gitOutput(execFileSyncImpl, projectRoot, ["rev-parse", "--verify", "HEAD"]);
+  try {
+    execFileSyncImpl("git", ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], {
+      cwd: projectRoot,
+      stdio: "ignore"
+    });
+    throw new Error(`Worktree branch already exists: ${branch}`);
+  } catch (error) {
+    if (error?.message?.startsWith("Worktree branch already exists:")) throw error;
+  }
+  import_node_fs17.default.mkdirSync(import_node_path19.default.dirname(destination), { recursive: true, mode: 448 });
+  try {
+    execFileSyncImpl("git", ["worktree", "add", "-b", branch, destination, baseRef], {
+      cwd: projectRoot,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+  } catch (error) {
+    try {
+      execFileSyncImpl("git", ["worktree", "remove", "--force", destination], {
+        cwd: projectRoot,
+        stdio: "ignore"
+      });
+    } catch {
+    }
+    import_node_fs17.default.rmSync(destination, { recursive: true, force: true });
+    try {
+      execFileSyncImpl("git", ["branch", "-D", "--", branch], {
+        cwd: projectRoot,
+        stdio: "ignore"
+      });
+    } catch {
+    }
+    throw new Error(`Unable to create isolated Git worktree: ${error.message}`);
+  }
+  return { baseRef, branch };
+}
+function copyIsolatedWorkspace({ destination, projectRoot }) {
+  if (isInside2(destination, projectRoot)) {
+    throw new Error("Isolated workspace destination cannot be inside the source project");
+  }
+  try {
+    import_node_fs17.default.cpSync(projectRoot, destination, {
+      errorOnExist: true,
+      filter(candidate) {
+        const relative4 = import_node_path19.default.relative(projectRoot, candidate);
+        const firstPart = relative4.split(import_node_path19.default.sep)[0];
+        if (firstPart === ".git" || firstPart === ".rudi") return false;
+        const stat = import_node_fs17.default.lstatSync(candidate);
+        if (stat.isSymbolicLink()) {
+          const target = import_node_fs17.default.realpathSync(candidate);
+          if (!isInside2(target, projectRoot)) {
+            throw new Error(`Workspace contains a symlink outside the project: ${candidate}`);
+          }
+        }
+        return true;
+      },
+      force: false,
+      recursive: true
+    });
+  } catch (error) {
+    import_node_fs17.default.rmSync(destination, { recursive: true, force: true });
+    throw new Error(`Unable to create isolated workspace copy: ${error.message}`);
+  }
+}
+function resolveAgentWorkspace(options, dependencies = {}) {
+  const {
+    artifactsRoot,
+    launchId,
+    mode = WORKSPACE_MODES.AUTO,
+    originDirectory = process.cwd(),
+    outputDirectory = null,
+    privateAutomation = false,
+    taskProfile = null,
+    workspace = null
+  } = options || {};
+  const { execFileSyncImpl = import_node_child_process9.execFileSync } = dependencies;
+  assertLaunchId(launchId);
+  if (mode === TASK_MODE) assertTaskProfile(taskProfile);
+  if (!VALID_MODES.has(mode)) {
+    throw new Error(`Unknown workspace mode: ${mode}. Available: ${[...VALID_MODES].join(", ")}`);
+  }
+  if (privateAutomation === true && mode !== WORKSPACE_MODES.READ_ONLY) {
+    throw new Error("private automation requires read-only workspace mode");
+  }
+  if (typeof artifactsRoot !== "string" || artifactsRoot.trim() === "") {
+    throw new Error("artifactsRoot is required");
+  }
+  const resolvedOrigin = existingDirectory2(originDirectory, "Origin directory");
+  const requestedWorkspace = workspace == null ? resolvedOrigin : import_node_path19.default.resolve(resolvedOrigin, workspace);
+  const validWorkspace = existingDirectory2(requestedWorkspace, "Workspace");
+  const gitProjectRoot = findGitProjectRoot(validWorkspace, execFileSyncImpl);
+  const projectRoot = gitProjectRoot || validWorkspace;
+  if (mode === TASK_MODE && validWorkspace !== taskProfile.working_directory) {
+    throw new Error("registered shared workspace differs from profile");
+  }
+  const isGitRepository = Boolean(gitProjectRoot);
+  const launchDirectory = outputDirectory == null ? import_node_path19.default.resolve(artifactsRoot, launchId) : import_node_path19.default.resolve(resolvedOrigin, outputDirectory);
+  let resolvedMode = mode;
+  if (resolvedMode === WORKSPACE_MODES.AUTO) {
+    resolvedMode = isGitRepository ? WORKSPACE_MODES.WORKTREE : WORKSPACE_MODES.ISOLATED_COPY;
+  }
+  if (resolvedMode === WORKSPACE_MODES.WORKTREE && !isGitRepository) {
+    throw new Error("Workspace mode worktree requires a Git repository");
+  }
+  assertOutputOutsideProject(launchDirectory, projectRoot);
+  if (import_node_fs17.default.existsSync(launchDirectory)) {
+    throw new Error(`Output destination already exists: ${launchDirectory}`);
+  }
+  import_node_fs17.default.mkdirSync(launchDirectory, { recursive: true, mode: 448 });
+  createLaunchOwnershipMarker({ launchDirectory, launchId });
+  let executionWorkspace = mode === TASK_MODE ? validWorkspace : projectRoot;
+  let worktreeBranch = null;
+  let baseRef = null;
+  try {
+    if (privateAutomation === true) {
+      executionWorkspace = import_node_path19.default.join(launchDirectory, "private-workspace");
+      import_node_fs17.default.mkdirSync(executionWorkspace, { mode: 320 });
+      import_node_fs17.default.chmodSync(executionWorkspace, 320);
+    } else if (resolvedMode === WORKSPACE_MODES.WORKTREE) {
+      executionWorkspace = import_node_path19.default.join(launchDirectory, "workspace");
+      const created = createGitWorktree({
+        destination: executionWorkspace,
+        execFileSyncImpl,
+        launchId,
+        projectRoot
+      });
+      worktreeBranch = created.branch;
+      baseRef = created.baseRef;
+    } else if (resolvedMode === WORKSPACE_MODES.ISOLATED_COPY) {
+      executionWorkspace = import_node_path19.default.join(launchDirectory, "workspace");
+      copyIsolatedWorkspace({ destination: executionWorkspace, projectRoot });
+      writeWorkspaceBaseline({ launchDirectory, workspace: executionWorkspace });
+    }
+  } catch (error) {
+    import_node_fs17.default.rmSync(launchDirectory, { recursive: true, force: true });
+    throw error;
+  }
+  return Object.freeze({
+    baseRef,
+    executionWorkspace: existingDirectory2(executionWorkspace, "Execution workspace"),
+    isGitRepository,
+    mode: resolvedMode,
+    originDirectory: resolvedOrigin,
+    outputDestination: launchDirectory,
+    projectRoot,
+    privateAutomation: privateAutomation === true,
+    worktreeBranch
+  });
+}
+function cleanupUnstartedWorkspace(workspace, dependencies = {}) {
+  if (!workspace || typeof workspace !== "object") return;
+  const { execFileSyncImpl = import_node_child_process9.execFileSync } = dependencies;
+  const outputDestination = import_node_path19.default.resolve(workspace.outputDestination);
+  const executionWorkspace = import_node_path19.default.resolve(workspace.executionWorkspace);
+  if (!isInside2(executionWorkspace, outputDestination) && ![WORKSPACE_MODES.READ_ONLY, TASK_MODE].includes(workspace.mode)) {
+    throw new Error("Refusing to clean an execution workspace outside its launch output destination");
+  }
+  if (workspace.mode === WORKSPACE_MODES.WORKTREE) {
+    if (!/^rudi\/agent\/launch_[A-Za-z0-9_-]+$/.test(workspace.worktreeBranch || "")) {
+      throw new Error("Refusing to clean an unexpected worktree branch");
+    }
+    try {
+      execFileSyncImpl("git", ["worktree", "remove", "--force", executionWorkspace], {
+        cwd: workspace.projectRoot,
+        stdio: "ignore"
+      });
+    } catch {
+    }
+    try {
+      execFileSyncImpl("git", ["branch", "-D", "--", workspace.worktreeBranch], {
+        cwd: workspace.projectRoot,
+        stdio: "ignore"
+      });
+    } catch {
+    }
+  }
+  import_node_fs17.default.rmSync(outputDestination, { recursive: true, force: true });
+}
+
+// src/agent-host/launch.js
+function createLaunchId() {
+  return `launch_${import_node_crypto7.default.randomUUID().replaceAll("-", "")}`;
+}
+async function launchAgent(options, dependencies = {}) {
+  const {
+    artifactsRoot = getAgentHostPaths().artifactsRoot,
+    eventSink = null,
+    idFactory = createLaunchId,
+    ownerPid = null,
+    onSpawn = null,
+    preflightImpl = assertAgentHostReady,
+    privatePreflightImpl = assertPrivateAutomationHostCapabilities,
+    taskPreflightImpl = assertTaskHostCapabilities,
+    resolveBinaryImpl = resolveAgentProviderBinary,
+    spawnImpl,
+    taskStop,
+    stderr = process.stderr,
+    stdout = process.stdout,
+    signalEmitter = process,
+    workspaceResolver = resolveAgentWorkspace
+  } = dependencies;
+  const launchId = idFactory();
+  const privateAutomationProfile = options?.privateAutomationProfile || null;
+  if (privateAutomationProfile && options?.executionKind && options.executionKind !== "foreground") {
+    throw new Error("private automation supports foreground execution only");
+  }
+  const taskProfile = options?.taskProfile || null;
+  if (taskProfile) {
+    assertTaskProfile(taskProfile);
+    if (options.executionKind && options.executionKind !== "foreground") throw new Error("task execution is foreground only");
+  }
+  const provider = resolveAgentProviderId(options?.provider);
+  const binaryPath = resolveBinaryImpl(provider);
+  if (!binaryPath) {
+    throw new Error(getMissingAgentProviderMessage(provider));
+  }
+  await preflightImpl({ binaryPath, provider });
+  if (privateAutomationProfile) {
+    await privatePreflightImpl({ binaryPath, profile: privateAutomationProfile });
+  }
+  if (taskProfile) await taskPreflightImpl({ binaryPath, profile: taskProfile });
+  const workspace = workspaceResolver({
+    artifactsRoot,
+    launchId,
+    mode: options.workspaceMode || "auto",
+    originDirectory: options.originDirectory || process.cwd(),
+    outputDirectory: options.outputDirectory || null,
+    privateAutomation: privateAutomationProfile != null,
+    taskProfile,
+    workspace: options.workspace || null
+  });
+  const resolvedEventSink = eventSink || ((event) => appendLaunchEvent(
+    getLaunchArtifactFiles(workspace.outputDestination).events,
+    event
+  ));
+  let plan;
+  try {
+    plan = buildProviderProcessPlan({
+      approvalMode: options.approvalMode,
+      binaryPath,
+      cwd: workspace.executionWorkspace,
+      extraArgs: options.extraArgs,
+      images: options.images,
+      model: options.model,
+      permissionMode: options.permissionMode,
+      privateAutomationProfile,
+      taskProfile,
+      prompt: options.prompt,
+      provider,
+      runtimeDirectory: workspace.outputDestination,
+      workspaceMode: workspace.mode
+    });
+  } catch (error) {
+    cleanupUnstartedWorkspace(workspace);
+    throw error;
+  }
+  const ownsStore = !dependencies.store;
+  const store = dependencies.store || createLaunchStore();
+  try {
+    store.create({
+      baseRef: workspace.baseRef,
+      executionKind: options.executionKind || "foreground",
+      executionWorkspace: workspace.executionWorkspace,
+      launchId,
+      model: plan.model,
+      originDirectory: workspace.originDirectory,
+      ownerPid,
+      outputDestination: workspace.outputDestination,
+      projectRoot: workspace.projectRoot,
+      provider,
+      status: "starting",
+      workspaceMode: workspace.mode,
+      worktreeBranch: workspace.worktreeBranch
+    });
+    if (taskProfile) assertWritableTaskRoots(taskProfile);
+    return await executeForegroundLaunch({
+      eventSink: resolvedEventSink,
+      jsonOutput: options.json === true,
+      launchId,
+      onSpawn,
+      plan,
+      spawnImpl,
+      taskStop,
+      stderr,
+      stdout,
+      store,
+      signalEmitter,
+      timeoutMs: taskProfile?.timeout_ms || options.timeoutMs || plan.timeouts.runtimeMs
+    });
+  } catch (error) {
+    const current = store.get(launchId);
+    if (current?.status === "starting" || current?.status === "running") {
+      store.transition(launchId, "failed", { lastError: error.message });
+    } else if (!current) {
+      cleanupUnstartedWorkspace(workspace);
+    }
+    throw error;
+  } finally {
+    if (ownsStore) store.close();
+  }
+}
+
+// src/agent-host/task-run.js
+function pinnedNative(environment) {
+  const binary = environment.RUDI_AGENT_TASK_CODEX_PATH;
+  const digest = environment.RUDI_AGENT_TASK_CODEX_SHA256;
+  if (binary === void 0 && digest === void 0) return null;
+  if (typeof binary !== "string" || !import_node_path20.default.isAbsolute(binary) || !/^[a-f0-9]{64}$/u.test(digest || "") || import_node_fs18.default.realpathSync(binary) !== binary || sha2562(readTaskRegularFile(binary, 512 * 1024 * 1024, true)) !== digest) {
+    throw new Error("task native executable pin mismatch");
+  }
+  import_node_fs18.default.accessSync(binary, import_node_fs18.default.constants.X_OK);
+  return binary;
+}
+function readAgentTask(reference, environment = process.env) {
+  const nativeBinary = pinnedNative(environment);
+  const request = parseTaskJson(readTaskReference(reference, "task request"));
+  exactFields(request, ["schema_version", "task", "instructions", "execution_profile", "working_directory", "outputs", "timeout_seconds"], "task request");
+  exactFields(request.task, ["id", "revision", "definition_sha256"], "task binding");
+  exactFields(request.outputs, ["deliverables", "runtime"], "task outputs");
+  if (request.schema_version !== 1 || !/^[a-z][a-z0-9-]{0,63}$/u.test(request.task.id) || !Number.isSafeInteger(request.task.revision) || request.task.revision < 1 || !/^[a-f0-9]{64}$/u.test(request.task.definition_sha256) || !Number.isSafeInteger(request.timeout_seconds) || request.timeout_seconds < 21 || request.timeout_seconds > 3620) {
+    throw new Error("invalid task request identity/version/budget");
+  }
+  canonicalDirectory(request.working_directory, "task working directory");
+  const instructions = readTaskReference(request.instructions, "task instructions");
+  if (!instructions.trim()) throw new Error("empty instructions");
+  const profile = validateTaskProfile(parseTaskJson(readTaskReference(request.execution_profile, "execution profile")), request);
+  if (profile.timeout_ms > (request.timeout_seconds - 20) * 1e3) throw new Error("native timeout must leave 20 seconds for bridge shutdown");
+  if (inside(request.outputs.runtime, request.working_directory) || inside(request.working_directory, request.outputs.runtime)) throw new Error("task runtime and workspace overlap");
+  for (const control of [reference.path, request.instructions.path, request.execution_profile.path]) {
+    if (profile.write_roots.some((root) => inside(control, root))) throw new Error("task control references cannot be writable outputs");
+  }
+  return { request, profile, instructions, nativeBinary };
+}
+function computeBinding(environment) {
+  const job = environment.RUDI_COMPUTE_JOB_ID;
+  const attempt = environment.RUDI_COMPUTE_ATTEMPT;
+  const hash = environment.RUDI_COMPUTE_SPEC_HASH;
+  if (!/^job_[A-Za-z0-9_-]{4,123}$/u.test(job || "") || attempt !== "1" || !/^[a-f0-9]{64}$/u.test(hash || "")) {
+    throw new Error("task runner requires a valid Compute job/spec binding and first attempt");
+  }
+  return { job_id: job, attempt: 1, spec_sha256: hash };
+}
+async function runAgentTask(reference, dependencies = {}) {
+  if (Object.keys(dependencies).some((key) => key !== "environment")) throw new Error("unsupported capsule dependency; use the explicit in-session fixture interface");
+  const environment = dependencies.environment || process.env;
+  const { request } = readAgentTask(reference, environment);
+  computeBinding(environment);
+  return runTaskCapsule(reference, request, environment);
+}
+async function recoverAgentTask(reference) {
+  const { request } = readAgentTask(reference);
+  return {
+    schema_version: 1,
+    kind: "agent-task-recovery",
+    request: reference,
+    ...await recoverTaskCustody(request.outputs.runtime)
+  };
+}
+
+// src/agent-host/attach.js
+var TERMINAL_STATUSES2 = /* @__PURE__ */ new Set(["completed", "failed", "stopped"]);
+function writeLine2(stream, value) {
+  stream.write(value.endsWith("\n") ? value : `${value}
+`);
+}
+async function attachAgentLaunch(launchId, dependencies = {}) {
+  assertLaunchId(launchId);
+  const pollIntervalMs = dependencies.pollIntervalMs || 250;
+  if (!Number.isSafeInteger(pollIntervalMs) || pollIntervalMs < 10 || pollIntervalMs > 5e3) {
+    throw new Error("attach pollIntervalMs must be between 10 and 5000");
+  }
+  const ownsStore = !dependencies.store;
+  const store = dependencies.store || createLaunchStore();
+  const stdout = dependencies.stdout || process.stdout;
+  const signalEmitter = dependencies.signalEmitter || process;
+  const follow = dependencies.follow !== false;
+  const jsonOutput = dependencies.jsonOutput === true;
+  let interrupted = false;
+  let offset = 0;
+  let buffered = "";
+  let sawAssistantText = false;
+  const onInterrupt = () => {
+    interrupted = true;
+  };
+  signalEmitter.once("SIGINT", onInterrupt);
+  signalEmitter.once("SIGTERM", onInterrupt);
+  function renderLine(line) {
+    if (!line.trim()) return;
+    if (jsonOutput) {
+      writeLine2(stdout, line);
+      return;
+    }
+    let payload;
+    try {
+      payload = JSON.parse(line);
+    } catch {
+      writeLine2(stdout, line);
+      return;
+    }
+    if (payload.type !== "agent.event" || !payload.event) return;
+    const rendered = renderAgentEvent(payload.event);
+    if (payload.event.type === "assistant" && rendered.length > 0) sawAssistantText = true;
+    if (payload.event.type === "result" && sawAssistantText) return;
+    const isDelta = payload.rawEvent?.type === "message" && payload.rawEvent.delta === true || payload.rawEvent?.event === "step_update" && payload.rawEvent.step_update?.step_type === "agent_response";
+    for (const value of rendered) {
+      if (isDelta) stdout.write(value);
+      else writeLine2(stdout, value);
+    }
+  }
+  try {
+    let launch = store.get(launchId);
+    if (!launch) throw new Error(`Launch not found: ${launchId}`);
+    assertOwnedLaunchDirectory({ launchDirectory: launch.outputDestination, launchId });
+    const eventFile = getLaunchArtifactFiles(launch.outputDestination).events;
+    while (!interrupted) {
+      const page = readLaunchEvents({ eventFile, offset });
+      offset = page.nextOffset;
+      buffered += page.data;
+      const lines = buffered.split("\n");
+      buffered = lines.pop() || "";
+      for (const line of lines) renderLine(line);
+      launch = store.get(launchId);
+      if (!launch) throw new Error(`Launch disappeared while attaching: ${launchId}`);
+      if (TERMINAL_STATUSES2.has(launch.status) && page.eof || !follow) {
+        if (buffered.trim()) renderLine(buffered);
+        return launch;
+      }
+      await new Promise((resolve4) => setTimeout(resolve4, pollIntervalMs));
+    }
+    return store.get(launchId);
+  } finally {
+    signalEmitter.removeListener("SIGINT", onInterrupt);
+    signalEmitter.removeListener("SIGTERM", onInterrupt);
+    if (ownsStore) store.close();
+  }
+}
+
 // src/agent-host/cli-inputs.js
+var import_node_fs19 = __toESM(require("node:fs"), 1);
+var import_node_path21 = __toESM(require("node:path"), 1);
 var MAX_PROMPT_BYTES2 = 10 * 1024 * 1024;
 function flagValue(flags, kebab, camel = null) {
   return flags[kebab] ?? (camel ? flags[camel] : void 0);
@@ -27259,16 +28888,16 @@ async function resolveAgentPrompt(flags, {
     prompt = requiredFlagString(inline, "--prompt");
   } else if (promptFile != null) {
     const fileValue = requiredFlagString(promptFile, "--prompt-file");
-    const filePath = import_node_path12.default.resolve(originDirectory, fileValue);
+    const filePath = import_node_path21.default.resolve(originDirectory, fileValue);
     let stat;
     try {
-      stat = import_node_fs11.default.statSync(filePath);
+      stat = import_node_fs19.default.statSync(filePath);
     } catch {
       throw new Error(`Prompt file does not exist: ${filePath}`);
     }
     if (!stat.isFile()) throw new Error(`Prompt file is not a regular file: ${filePath}`);
     if (stat.size > MAX_PROMPT_BYTES2) throw new Error(`Prompt file exceeds ${MAX_PROMPT_BYTES2} bytes`);
-    prompt = import_node_fs11.default.readFileSync(filePath, "utf8");
+    prompt = import_node_fs19.default.readFileSync(filePath, "utf8");
   } else if (stdin && stdin.isTTY !== true) {
     prompt = await readPromptStream(
       stdin,
@@ -27299,10 +28928,10 @@ function parseImages(flags, originDirectory) {
   const value = flags.image ?? flags.images;
   if (value == null) return [];
   return requiredFlagString(value, "--image").split(",").map((item) => item.trim()).filter(Boolean).map((item) => {
-    const imagePath = import_node_path12.default.resolve(originDirectory, item);
+    const imagePath = import_node_path21.default.resolve(originDirectory, item);
     let stat;
     try {
-      stat = import_node_fs11.default.statSync(imagePath);
+      stat = import_node_fs19.default.statSync(imagePath);
     } catch {
       throw new Error(`Image attachment does not exist: ${imagePath}`);
     }
@@ -27344,7 +28973,7 @@ function buildLaunchOptions(provider, prompt, flags, passthrough, originDirector
       flagValue(flags, "output-schema", "outputSchema"),
       "--output-schema"
     );
-    const outputSchemaPath = import_node_path12.default.resolve(originDirectory, outputSchemaValue);
+    const outputSchemaPath = import_node_path21.default.resolve(originDirectory, outputSchemaValue);
     const timeoutMs = parseTimeout(flags);
     const privateAutomationProfile = createPrivateAutomationProfile({
       model: flags.model,
@@ -27418,16 +29047,16 @@ function readGroupTaskFiles(taskFlag, originDirectory, common = {}) {
     }
     const provider = value.slice(0, separator);
     resolveAgentProviderId(provider);
-    const filePath = import_node_path12.default.resolve(originDirectory, value.slice(separator + 1));
+    const filePath = import_node_path21.default.resolve(originDirectory, value.slice(separator + 1));
     let stat;
     try {
-      stat = import_node_fs11.default.statSync(filePath);
+      stat = import_node_fs19.default.statSync(filePath);
     } catch {
       throw new Error(`Task file does not exist: ${filePath}`);
     }
     if (!stat.isFile()) throw new Error(`Task file is not a regular file: ${filePath}`);
     if (stat.size > MAX_PROMPT_BYTES2) throw new Error(`Task file exceeds ${MAX_PROMPT_BYTES2} bytes`);
-    const prompt = import_node_fs11.default.readFileSync(filePath, "utf8");
+    const prompt = import_node_fs19.default.readFileSync(filePath, "utf8");
     if (!prompt.trim()) throw new Error(`Task file must not be empty: ${filePath}`);
     if (prompt.includes("\0")) throw new Error(`Task file must not contain NUL bytes: ${filePath}`);
     return { ...common, prompt, provider };
@@ -27435,927 +29064,18 @@ function readGroupTaskFiles(taskFlag, originDirectory, common = {}) {
 }
 
 // src/agent-host/group.js
-var import_node_crypto5 = __toESM(require("node:crypto"), 1);
+var import_node_crypto8 = __toESM(require("node:crypto"), 1);
 
 // src/agent-host/detached.js
-var import_node_fs15 = __toESM(require("node:fs"), 1);
-var import_node_child_process6 = require("node:child_process");
-
-// src/agent-host/launch.js
-var import_node_crypto4 = __toESM(require("node:crypto"), 1);
-
-// src/agent-host/events/stream.js
-var import_node_child_process3 = require("node:child_process");
-function boundedAppend(current, value, maxLength = 4096) {
-  const combined = `${current}${value}`;
-  return combined.length <= maxLength ? combined : combined.slice(-maxLength);
-}
-function writeLine2(stream, value) {
-  stream.write(value.endsWith("\n") ? value : `${value}
-`);
-}
-function parsePrivateFinalOutput(value) {
-  if (typeof value !== "string") return value;
-  const trimmed = value.trim();
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    const fenced = trimmed.match(/^```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/u);
-    if (!fenced) throw new Error("invalid");
-    try {
-      return JSON.parse(fenced[1]);
-    } catch {
-      throw new Error("invalid");
-    }
-  }
-}
-function executeForegroundLaunch({
-  eventSink = null,
-  jsonOutput = false,
-  launchId,
-  onSpawn = null,
-  plan,
-  spawnImpl = import_node_child_process3.spawn,
-  stderr = process.stderr,
-  stdout = process.stdout,
-  store,
-  timeoutMs = plan.timeouts.runtimeMs,
-  signalEmitter = process
-}) {
-  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 24 * 60 * 60 * 1e3) {
-    throw new Error("timeoutMs must be an integer between 1 and 86400000");
-  }
-  return new Promise((resolve4, reject) => {
-    const privateAutomation = plan.privateAutomationProfile != null;
-    const normalizer = createAgentEventNormalizer(plan.provider);
-    let child;
-    let finalized = false;
-    let stdoutBuffer = "";
-    let stderrTail = "";
-    let sawAssistantText = false;
-    let timedOut = false;
-    let forceTimer = null;
-    let requestedSignal = null;
-    let sinkFailure = null;
-    let privateFailure = null;
-    let privateFinalOutput = null;
-    let privateObservedModel = privateAutomation && plan.provider === "codex" ? plan.model : null;
-    let privateRawOutputBytes = 0;
-    let privateUsage = null;
-    function terminateProvider(signal) {
-      if (privateAutomation && Number.isSafeInteger(child?.pid) && child.pid > 0) {
-        try {
-          process.kill(-child.pid, signal);
-          return true;
-        } catch {
-        }
-      }
-      try {
-        return child?.kill(signal) === true;
-      } catch {
-        return false;
-      }
-    }
-    function privateProviderGroupAlive() {
-      if (!privateAutomation || !Number.isSafeInteger(child?.pid) || child.pid < 1) {
-        return false;
-      }
-      try {
-        process.kill(-child.pid, 0);
-        return true;
-      } catch {
-        return false;
-      }
-    }
-    function recordSinkFailure(kind, error) {
-      if (sinkFailure) return;
-      sinkFailure = `${kind} persistence failed: ${error.message}`;
-      try {
-        writeLine2(stderr, sinkFailure);
-      } catch {
-      }
-      terminateProvider("SIGTERM");
-    }
-    function publishEvent(payload, persistedPayload = payload) {
-      try {
-        eventSink?.(persistedPayload);
-      } catch (error) {
-        recordSinkFailure("Agent event", error);
-      }
-      return payload;
-    }
-    const onSigint = () => {
-      requestedSignal = "SIGINT";
-      terminateProvider("SIGINT");
-    };
-    const onSigterm = () => {
-      requestedSignal = "SIGTERM";
-      terminateProvider("SIGTERM");
-    };
-    function persistNativeSession(rawEvent, normalized) {
-      if (privateAutomation) return;
-      const nativeSessionId = extractNativeSessionId(rawEvent) || normalized?.providerSessionId || null;
-      if (!nativeSessionId) return;
-      const current = store.get(launchId);
-      if (current?.nativeSessionId !== nativeSessionId) {
-        store.setNativeSessionId(launchId, nativeSessionId);
-      }
-    }
-    function emitEvent(normalized, rawEvent) {
-      persistNativeSession(rawEvent, normalized);
-      const isDelta = rawEvent?.type === "message" && rawEvent.delta === true || rawEvent?.event === "step_update" && rawEvent.step_update?.step_type === "agent_response";
-      let persistedEvent = normalized;
-      if (privateAutomation) {
-        try {
-          assertPrivateAutomationRawEvent(plan.provider, rawEvent, plan.model);
-          persistedEvent = projectPrivateAutomationEventMetadata(normalized);
-        } catch (error) {
-          privateFailure = String(error?.message || "").includes("model usage") ? "private_model_mismatch" : "private_tool_event";
-          terminateProvider("SIGTERM");
-          return;
-        }
-        if (normalized.model) {
-          if (normalized.model !== plan.model) {
-            privateFailure = "private_model_mismatch";
-            terminateProvider("SIGTERM");
-            return;
-          }
-          privateObservedModel = normalized.model;
-        }
-        if (normalized.usage) privateUsage = persistedEvent.usage || privateUsage;
-        const structuredOutput = rawEvent?.structured_output ?? rawEvent?.structuredOutput;
-        if (structuredOutput && typeof structuredOutput === "object" && !Array.isArray(structuredOutput)) {
-          privateFinalOutput = structuredOutput;
-        } else if (normalized.type === "assistant" && Array.isArray(normalized.content)) {
-          const text = normalized.content.filter((block) => block?.type === "text" && typeof block.text === "string").map((block) => block.text).join("");
-          if (text) privateFinalOutput = text;
-        } else if (normalized.type === "result" && typeof normalized.result === "string") {
-          privateFinalOutput = normalized.result;
-        }
-      }
-      const persistedPayload = {
-        delta: isDelta,
-        event: persistedEvent,
-        launchId,
-        provider: plan.provider,
-        type: "agent.event"
-      };
-      const payload = privateAutomation ? publishEvent(persistedPayload) : publishEvent({
-        event: normalized,
-        launchId,
-        provider: plan.provider,
-        rawEvent,
-        type: "agent.event"
-      }, persistedPayload);
-      if (privateAutomation) return;
-      if (jsonOutput) {
-        writeLine2(stdout, JSON.stringify(payload));
-        return;
-      }
-      const rendered = renderAgentEvent(normalized);
-      if (normalized?.type === "assistant" && rendered.length > 0) sawAssistantText = true;
-      if (normalized?.type === "result" && sawAssistantText) return;
-      for (const text of rendered) {
-        if (isDelta) stdout.write(text);
-        else writeLine2(stdout, text);
-      }
-      if (normalized?.type === "error" && normalized.message) writeLine2(stderr, normalized.message);
-    }
-    function consumeLine(line) {
-      if (!line.trim()) return;
-      try {
-        const rawEvent = JSON.parse(line);
-        for (const result of normalizer.normalize(rawEvent)) {
-          if (result?.normalized) emitEvent(result.normalized, result.raw || rawEvent);
-        }
-      } catch {
-        if (privateAutomation) {
-          privateFailure = "private_output_malformed";
-          terminateProvider("SIGTERM");
-          return;
-        }
-        const payload = publishEvent({
-          event: { message: line, subtype: "provider_stdout", type: "system" },
-          launchId,
-          provider: plan.provider,
-          type: "agent.event"
-        });
-        if (jsonOutput) {
-          writeLine2(stdout, JSON.stringify(payload));
-        } else {
-          writeLine2(stdout, line);
-        }
-      }
-    }
-    function flushStdout() {
-      if (stdoutBuffer.trim()) consumeLine(stdoutBuffer);
-      stdoutBuffer = "";
-      for (const result of normalizer.flush()) {
-        if (result?.normalized) emitEvent(result.normalized, result.raw || {});
-      }
-    }
-    function complete(status, exitCode, lastError = null) {
-      if (finalized) return;
-      clearTimeout(runtimeTimer);
-      if (forceTimer) clearTimeout(forceTimer);
-      signalEmitter.removeListener("SIGINT", onSigint);
-      signalEmitter.removeListener("SIGTERM", onSigterm);
-      flushStdout();
-      finalized = true;
-      if (sinkFailure) {
-        status = "failed";
-        lastError = sinkFailure;
-      }
-      if (privateAutomation) {
-        if (privateFailure) {
-          status = "failed";
-          lastError = `Private automation failed: ${privateFailure}`;
-        } else if (status === "completed" && privateObservedModel === null) {
-          status = "failed";
-          lastError = "Private automation failed: private_model_unobserved";
-        } else if (status === "completed") {
-          try {
-            const parsed = parsePrivateFinalOutput(privateFinalOutput);
-            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-              throw new Error("not_object");
-            }
-            const serialized = JSON.stringify(parsed);
-            if (Buffer.byteLength(serialized, "utf8") > plan.maxFinalOutputBytes) {
-              throw new Error("too_large");
-            }
-            if (!plan.privateAutomationProfile.outputSchema.validate(parsed)) {
-              throw new Error("schema");
-            }
-            privateFinalOutput = parsed;
-          } catch (error) {
-            status = "failed";
-            const reason = error.message === "too_large" ? "private_final_output_overflow" : error.message === "schema" ? "private_final_output_schema_invalid" : "private_final_output_invalid";
-            lastError = `Private automation failed: ${reason}`;
-          }
-        } else {
-          lastError = timedOut ? "Private automation failed: private_timeout" : requestedSignal ? "Private automation failed: private_stopped" : "Private automation failed: private_provider_error";
-        }
-      }
-      const current = store.get(launchId);
-      if (current?.status === "starting" && status !== "failed") {
-        store.transition(launchId, "running", { pid: child?.pid || 0 });
-      }
-      const updated = store.transition(launchId, status, {
-        exitCode,
-        lastError
-      });
-      const terminalEvent = publishEvent({ launch: updated, type: `launch.${status}` });
-      if (privateAutomation && status === "completed") {
-        const privateResult = {
-          model: privateObservedModel,
-          output: privateFinalOutput,
-          provider: plan.provider,
-          type: "private-automation.result",
-          ...privateUsage ? { usage: privateUsage } : {}
-        };
-        writeLine2(stdout, jsonOutput ? JSON.stringify(privateResult) : JSON.stringify(privateFinalOutput));
-      }
-      if (jsonOutput) {
-        if (!privateAutomation) writeLine2(stdout, JSON.stringify(terminalEvent));
-      }
-      resolve4(updated);
-    }
-    const runtimeTimer = setTimeout(() => {
-      timedOut = true;
-      terminateProvider("SIGTERM");
-      forceTimer = setTimeout(
-        () => terminateProvider("SIGKILL"),
-        plan.timeouts.shutdownGraceMs || 5e3
-      );
-    }, timeoutMs);
-    try {
-      child = spawnImpl(plan.spawn.command, plan.args, {
-        cwd: plan.spawn.cwd,
-        detached: privateAutomation,
-        env: privateAutomation ? plan.environment : { ...process.env, ...plan.environment },
-        stdio: [privateAutomation ? "pipe" : "ignore", "pipe", "pipe"]
-      });
-    } catch (error) {
-      clearTimeout(runtimeTimer);
-      reject(error);
-      return;
-    }
-    if (privateAutomation) {
-      child.stdin.on("error", () => {
-        privateFailure = "private_stdin_error";
-        terminateProvider("SIGTERM");
-      });
-      child.stdin.end(plan.stdin);
-    }
-    child.once("spawn", () => {
-      const current = store.get(launchId);
-      if (current?.status === "starting") {
-        const running = store.transition(launchId, "running", { pid: child.pid || 0 });
-        onSpawn?.(running);
-      } else if (current) {
-        onSpawn?.(current);
-      }
-    });
-    signalEmitter.once("SIGINT", onSigint);
-    signalEmitter.once("SIGTERM", onSigterm);
-    child.stdout.on("data", (chunk) => {
-      if (privateAutomation) {
-        privateRawOutputBytes += Buffer.byteLength(chunk);
-        if (privateRawOutputBytes > plan.maxRawOutputBytes) {
-          privateFailure = "private_raw_output_overflow";
-          stdoutBuffer = "";
-          terminateProvider("SIGTERM");
-          return;
-        }
-      }
-      stdoutBuffer += chunk.toString();
-      const lines = stdoutBuffer.split("\n");
-      stdoutBuffer = lines.pop() || "";
-      for (const line of lines) consumeLine(line);
-    });
-    child.stderr.on("data", (chunk) => {
-      if (privateAutomation) return;
-      const text = chunk.toString();
-      stderrTail = boundedAppend(stderrTail, text);
-      try {
-        stderr.write(text);
-      } catch (error) {
-        recordSinkFailure("Provider stderr", error);
-      }
-    });
-    child.once("error", (error) => {
-      complete(
-        "failed",
-        null,
-        privateAutomation ? "Private automation failed: private_spawn_error" : `Provider process error: ${error.message}`
-      );
-    });
-    child.once("close", (exitCode, signal) => {
-      if (privateProviderGroupAlive()) {
-        terminateProvider("SIGKILL");
-        privateFailure = "private_termination_unconfirmed";
-      }
-      if (sinkFailure) {
-        complete("failed", exitCode, sinkFailure);
-        return;
-      }
-      if (timedOut) {
-        complete("failed", exitCode, `Provider process timed out after ${timeoutMs}ms`);
-        return;
-      }
-      if (requestedSignal) {
-        complete("stopped", exitCode, `Provider process stopped by ${requestedSignal}`);
-        return;
-      }
-      if (exitCode === 0) {
-        complete("completed", 0);
-        return;
-      }
-      const detail = stderrTail.trim() || `Provider process exited with code ${exitCode}${signal ? ` (${signal})` : ""}`;
-      complete("failed", exitCode, detail);
-    });
-  });
-}
-
-// src/agent-host/preflight.js
-var import_node_path13 = __toESM(require("node:path"), 1);
-var import_node_child_process4 = require("node:child_process");
-var MCP_AGENT_IDS = Object.freeze({ claude: "claude-code" });
-function commandArgs(configuredCommand) {
-  return Array.isArray(configuredCommand) ? configuredCommand.slice(1) : [];
-}
-function runCheck(binaryPath, args, spawnSyncImpl, timeout = 5e3) {
-  const result = spawnSyncImpl(binaryPath, args, {
-    encoding: "utf8",
-    env: buildAgentExecutableEnvironment(binaryPath),
-    timeout
-  });
-  return {
-    ok: !result.error && result.status === 0,
-    output: String(result.stdout || result.stderr || "").trim().slice(0, 512)
-  };
-}
-function hasRudiRouter(provider) {
-  const agentId = MCP_AGENT_IDS[provider] || provider;
-  const config = AGENT_CONFIGS.find((item) => item.id === agentId);
-  if (!config) return false;
-  return readAgentMcpServers(config).some((server) => server.name === "rudi" || import_node_path13.default.basename(String(server.command)) === "rudi-router");
-}
-async function inspectAgentHost(provider, dependencies = {}) {
-  const { spawnSyncImpl = import_node_child_process4.spawnSync } = dependencies;
-  const canonicalProvider = resolveAgentProviderId(provider);
-  const summarizeSkills = dependencies.summarizeNativeSkillHostImpl || summarizeNativeSkillHost;
-  let skillProjection;
-  try {
-    skillProjection = await summarizeSkills(canonicalProvider);
-  } catch (error) {
-    skillProjection = {
-      current: 0,
-      drifted: 0,
-      missing: 0,
-      failed: 1,
-      totalManaged: 0,
-      skillsSynchronized: false,
-      error: error instanceof Error ? error.message : String(error)
-    };
-  }
-  const config = getAgentProviderConfig(canonicalProvider);
-  const binaryPath = dependencies.binaryPath || resolveAgentProviderBinary(canonicalProvider);
-  if (!binaryPath) {
-    return {
-      authenticated: false,
-      authentication: "unavailable",
-      installed: false,
-      provider: canonicalProvider,
-      routerConfigured: hasRudiRouter(canonicalProvider),
-      skillProjection,
-      skillsSynchronized: skillProjection.skillsSynchronized,
-      version: null
-    };
-  }
-  const version = runCheck(binaryPath, commandArgs(config.binary.checkCommand), spawnSyncImpl);
-  const authArgs = commandArgs(config.binary.authCheck);
-  const versionArgs = commandArgs(config.binary.checkCommand);
-  const authIsObservable = JSON.stringify(authArgs) !== JSON.stringify(versionArgs);
-  const auth = authIsObservable ? runCheck(binaryPath, authArgs, spawnSyncImpl) : { ok: null };
-  return {
-    authenticated: auth.ok,
-    authentication: auth.ok == null ? "unknown" : auth.ok ? "authenticated" : "unauthenticated",
-    binaryPath,
-    installed: version.ok,
-    provider: canonicalProvider,
-    routerConfigured: hasRudiRouter(canonicalProvider),
-    skillProjection,
-    skillsSynchronized: skillProjection.skillsSynchronized,
-    version: version.output.split("\n")[0] || null
-  };
-}
-async function assertAgentHostReady({ binaryPath, provider }, dependencies = {}) {
-  const inspected = await inspectAgentHost(provider, { ...dependencies, binaryPath });
-  if (!inspected.installed) {
-    throw new Error(`${provider} host is not installed or did not pass its version check`);
-  }
-  if (inspected.authenticated === false) {
-    throw new Error(`${provider} host is not authenticated`);
-  }
-  return inspected;
-}
-
-// src/agent-host/workspace.js
-var import_node_fs13 = __toESM(require("node:fs"), 1);
-var import_node_path15 = __toESM(require("node:path"), 1);
-var import_node_child_process5 = require("node:child_process");
-
-// src/agent-host/workspace-manifest.js
-var import_node_crypto3 = __toESM(require("node:crypto"), 1);
-var import_node_fs12 = __toESM(require("node:fs"), 1);
-var import_node_path14 = __toESM(require("node:path"), 1);
-var WORKSPACE_BASELINE_FILE = "workspace-base.json";
-function shouldSkip(relativePath) {
-  const first = relativePath.split(import_node_path14.default.sep)[0];
-  return first === ".git" || first === ".rudi";
-}
-function portablePath(relativePath) {
-  return relativePath.split(import_node_path14.default.sep).join("/");
-}
-function hashFile(file) {
-  return import_node_crypto3.default.createHash("sha256").update(import_node_fs12.default.readFileSync(file)).digest("hex");
-}
-function createWorkspaceManifest(rootDirectory) {
-  const root = import_node_fs12.default.realpathSync(import_node_path14.default.resolve(rootDirectory));
-  const entries = {};
-  function visit(directory, prefix = "") {
-    const children = import_node_fs12.default.readdirSync(directory, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name));
-    for (const child of children) {
-      const relative4 = prefix ? import_node_path14.default.join(prefix, child.name) : child.name;
-      if (shouldSkip(relative4)) continue;
-      const absolute = import_node_path14.default.join(directory, child.name);
-      const stat = import_node_fs12.default.lstatSync(absolute);
-      const key = portablePath(relative4);
-      if (stat.isDirectory()) {
-        entries[key] = { mode: stat.mode & 511, type: "directory" };
-        visit(absolute, relative4);
-      } else if (stat.isFile()) {
-        entries[key] = {
-          hash: hashFile(absolute),
-          mode: stat.mode & 511,
-          size: stat.size,
-          type: "file"
-        };
-      } else if (stat.isSymbolicLink()) {
-        entries[key] = {
-          mode: stat.mode & 511,
-          target: import_node_fs12.default.readlinkSync(absolute),
-          type: "symlink"
-        };
-      } else {
-        throw new Error(`Unsupported workspace entry type: ${absolute}`);
-      }
-    }
-  }
-  visit(root);
-  return { entries, schemaVersion: 1 };
-}
-function writeWorkspaceBaseline({ launchDirectory, workspace }) {
-  const destination = import_node_path14.default.join(import_node_path14.default.resolve(launchDirectory), WORKSPACE_BASELINE_FILE);
-  const manifest = createWorkspaceManifest(workspace);
-  const handle = import_node_fs12.default.openSync(destination, "wx", 384);
-  try {
-    import_node_fs12.default.writeFileSync(handle, `${JSON.stringify(manifest)}
-`, "utf8");
-  } finally {
-    import_node_fs12.default.closeSync(handle);
-  }
-  return destination;
-}
-function readWorkspaceBaseline(launchDirectory) {
-  const file = import_node_path14.default.join(import_node_path14.default.resolve(launchDirectory), WORKSPACE_BASELINE_FILE);
-  let parsed;
-  try {
-    const stat = import_node_fs12.default.lstatSync(file);
-    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("baseline is not a regular file");
-    parsed = JSON.parse(import_node_fs12.default.readFileSync(file, "utf8"));
-  } catch (error) {
-    throw new Error(`Isolated workspace baseline is unavailable: ${error.message}`);
-  }
-  if (parsed?.schemaVersion !== 1 || !parsed.entries || typeof parsed.entries !== "object") {
-    throw new Error("Isolated workspace baseline has an unsupported schema");
-  }
-  return parsed;
-}
-function sameEntry(left, right) {
-  return JSON.stringify(left || null) === JSON.stringify(right || null);
-}
-function compareWorkspaceManifests(baseline, current) {
-  const paths = /* @__PURE__ */ new Set([
-    ...Object.keys(baseline?.entries || {}),
-    ...Object.keys(current?.entries || {})
-  ]);
-  const changes = [];
-  for (const relativePath of [...paths].sort()) {
-    const before = baseline.entries[relativePath];
-    const after = current.entries[relativePath];
-    if (sameEntry(before, after)) continue;
-    changes.push({
-      after: after || null,
-      before: before || null,
-      path: relativePath,
-      status: before == null ? "added" : after == null ? "deleted" : "modified"
-    });
-  }
-  return changes;
-}
-function workspaceManifestsEqual(left, right) {
-  return compareWorkspaceManifests(left, right).length === 0;
-}
-
-// src/agent-host/workspace.js
-var WORKSPACE_MODES = Object.freeze({
-  AUTO: "auto",
-  ISOLATED_COPY: "isolated-copy",
-  READ_ONLY: "read-only",
-  WORKTREE: "worktree"
-});
-var VALID_MODES = new Set(Object.values(WORKSPACE_MODES));
-function existingDirectory2(candidate, label) {
-  const resolved = import_node_path15.default.resolve(candidate);
-  let stat;
-  try {
-    stat = import_node_fs13.default.statSync(resolved);
-  } catch {
-    throw new Error(`${label} does not exist: ${resolved}`);
-  }
-  if (!stat.isDirectory()) {
-    throw new Error(`${label} is not a directory: ${resolved}`);
-  }
-  return import_node_fs13.default.realpathSync(resolved);
-}
-function isInside2(candidate, parent) {
-  const relative4 = import_node_path15.default.relative(parent, candidate);
-  return relative4 === "" || !relative4.startsWith(`..${import_node_path15.default.sep}`) && relative4 !== ".." && !import_node_path15.default.isAbsolute(relative4);
-}
-function findGitProjectRoot(workspace, execFileSyncImpl) {
-  try {
-    const output = execFileSyncImpl("git", ["rev-parse", "--show-toplevel"], {
-      cwd: workspace,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"]
-    });
-    return existingDirectory2(String(output).trim(), "Git project root");
-  } catch {
-    return null;
-  }
-}
-function gitOutput(execFileSyncImpl, cwd, args) {
-  return String(execFileSyncImpl("git", args, {
-    cwd,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"]
-  })).trim();
-}
-function assertOutputOutsideProject(outputDestination, projectRoot) {
-  if (isInside2(outputDestination, projectRoot)) {
-    throw new Error(`Output destination must be outside the project: ${outputDestination}`);
-  }
-}
-function createGitWorktree({
-  destination,
-  execFileSyncImpl,
-  launchId,
-  projectRoot
-}) {
-  const branch = `rudi/agent/${launchId}`;
-  const baseRef = gitOutput(execFileSyncImpl, projectRoot, ["rev-parse", "--verify", "HEAD"]);
-  try {
-    execFileSyncImpl("git", ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], {
-      cwd: projectRoot,
-      stdio: "ignore"
-    });
-    throw new Error(`Worktree branch already exists: ${branch}`);
-  } catch (error) {
-    if (error?.message?.startsWith("Worktree branch already exists:")) throw error;
-  }
-  import_node_fs13.default.mkdirSync(import_node_path15.default.dirname(destination), { recursive: true, mode: 448 });
-  try {
-    execFileSyncImpl("git", ["worktree", "add", "-b", branch, destination, baseRef], {
-      cwd: projectRoot,
-      stdio: ["ignore", "pipe", "pipe"]
-    });
-  } catch (error) {
-    try {
-      execFileSyncImpl("git", ["worktree", "remove", "--force", destination], {
-        cwd: projectRoot,
-        stdio: "ignore"
-      });
-    } catch {
-    }
-    import_node_fs13.default.rmSync(destination, { recursive: true, force: true });
-    try {
-      execFileSyncImpl("git", ["branch", "-D", "--", branch], {
-        cwd: projectRoot,
-        stdio: "ignore"
-      });
-    } catch {
-    }
-    throw new Error(`Unable to create isolated Git worktree: ${error.message}`);
-  }
-  return { baseRef, branch };
-}
-function copyIsolatedWorkspace({ destination, projectRoot }) {
-  if (isInside2(destination, projectRoot)) {
-    throw new Error("Isolated workspace destination cannot be inside the source project");
-  }
-  try {
-    import_node_fs13.default.cpSync(projectRoot, destination, {
-      errorOnExist: true,
-      filter(candidate) {
-        const relative4 = import_node_path15.default.relative(projectRoot, candidate);
-        const firstPart = relative4.split(import_node_path15.default.sep)[0];
-        if (firstPart === ".git" || firstPart === ".rudi") return false;
-        const stat = import_node_fs13.default.lstatSync(candidate);
-        if (stat.isSymbolicLink()) {
-          const target = import_node_fs13.default.realpathSync(candidate);
-          if (!isInside2(target, projectRoot)) {
-            throw new Error(`Workspace contains a symlink outside the project: ${candidate}`);
-          }
-        }
-        return true;
-      },
-      force: false,
-      recursive: true
-    });
-  } catch (error) {
-    import_node_fs13.default.rmSync(destination, { recursive: true, force: true });
-    throw new Error(`Unable to create isolated workspace copy: ${error.message}`);
-  }
-}
-function resolveAgentWorkspace(options, dependencies = {}) {
-  const {
-    artifactsRoot,
-    launchId,
-    mode = WORKSPACE_MODES.AUTO,
-    originDirectory = process.cwd(),
-    outputDirectory = null,
-    privateAutomation = false,
-    workspace = null
-  } = options || {};
-  const { execFileSyncImpl = import_node_child_process5.execFileSync } = dependencies;
-  assertLaunchId(launchId);
-  if (!VALID_MODES.has(mode)) {
-    throw new Error(`Unknown workspace mode: ${mode}. Available: ${[...VALID_MODES].join(", ")}`);
-  }
-  if (privateAutomation === true && mode !== WORKSPACE_MODES.READ_ONLY) {
-    throw new Error("private automation requires read-only workspace mode");
-  }
-  if (typeof artifactsRoot !== "string" || artifactsRoot.trim() === "") {
-    throw new Error("artifactsRoot is required");
-  }
-  const resolvedOrigin = existingDirectory2(originDirectory, "Origin directory");
-  const requestedWorkspace = workspace == null ? resolvedOrigin : import_node_path15.default.resolve(resolvedOrigin, workspace);
-  const validWorkspace = existingDirectory2(requestedWorkspace, "Workspace");
-  const gitProjectRoot = findGitProjectRoot(validWorkspace, execFileSyncImpl);
-  const projectRoot = gitProjectRoot || validWorkspace;
-  const isGitRepository = Boolean(gitProjectRoot);
-  const launchDirectory = outputDirectory == null ? import_node_path15.default.resolve(artifactsRoot, launchId) : import_node_path15.default.resolve(resolvedOrigin, outputDirectory);
-  let resolvedMode = mode;
-  if (resolvedMode === WORKSPACE_MODES.AUTO) {
-    resolvedMode = isGitRepository ? WORKSPACE_MODES.WORKTREE : WORKSPACE_MODES.ISOLATED_COPY;
-  }
-  if (resolvedMode === WORKSPACE_MODES.WORKTREE && !isGitRepository) {
-    throw new Error("Workspace mode worktree requires a Git repository");
-  }
-  assertOutputOutsideProject(launchDirectory, projectRoot);
-  if (import_node_fs13.default.existsSync(launchDirectory)) {
-    throw new Error(`Output destination already exists: ${launchDirectory}`);
-  }
-  import_node_fs13.default.mkdirSync(launchDirectory, { recursive: true, mode: 448 });
-  createLaunchOwnershipMarker({ launchDirectory, launchId });
-  let executionWorkspace = projectRoot;
-  let worktreeBranch = null;
-  let baseRef = null;
-  try {
-    if (privateAutomation === true) {
-      executionWorkspace = import_node_path15.default.join(launchDirectory, "private-workspace");
-      import_node_fs13.default.mkdirSync(executionWorkspace, { mode: 320 });
-      import_node_fs13.default.chmodSync(executionWorkspace, 320);
-    } else if (resolvedMode === WORKSPACE_MODES.WORKTREE) {
-      executionWorkspace = import_node_path15.default.join(launchDirectory, "workspace");
-      const created = createGitWorktree({
-        destination: executionWorkspace,
-        execFileSyncImpl,
-        launchId,
-        projectRoot
-      });
-      worktreeBranch = created.branch;
-      baseRef = created.baseRef;
-    } else if (resolvedMode === WORKSPACE_MODES.ISOLATED_COPY) {
-      executionWorkspace = import_node_path15.default.join(launchDirectory, "workspace");
-      copyIsolatedWorkspace({ destination: executionWorkspace, projectRoot });
-      writeWorkspaceBaseline({ launchDirectory, workspace: executionWorkspace });
-    }
-  } catch (error) {
-    import_node_fs13.default.rmSync(launchDirectory, { recursive: true, force: true });
-    throw error;
-  }
-  return Object.freeze({
-    baseRef,
-    executionWorkspace: existingDirectory2(executionWorkspace, "Execution workspace"),
-    isGitRepository,
-    mode: resolvedMode,
-    originDirectory: resolvedOrigin,
-    outputDestination: launchDirectory,
-    projectRoot,
-    privateAutomation: privateAutomation === true,
-    worktreeBranch
-  });
-}
-function cleanupUnstartedWorkspace(workspace, dependencies = {}) {
-  if (!workspace || typeof workspace !== "object") return;
-  const { execFileSyncImpl = import_node_child_process5.execFileSync } = dependencies;
-  const outputDestination = import_node_path15.default.resolve(workspace.outputDestination);
-  const executionWorkspace = import_node_path15.default.resolve(workspace.executionWorkspace);
-  if (!isInside2(executionWorkspace, outputDestination) && workspace.mode !== WORKSPACE_MODES.READ_ONLY) {
-    throw new Error("Refusing to clean an execution workspace outside its launch output destination");
-  }
-  if (workspace.mode === WORKSPACE_MODES.WORKTREE) {
-    if (!/^rudi\/agent\/launch_[A-Za-z0-9_-]+$/.test(workspace.worktreeBranch || "")) {
-      throw new Error("Refusing to clean an unexpected worktree branch");
-    }
-    try {
-      execFileSyncImpl("git", ["worktree", "remove", "--force", executionWorkspace], {
-        cwd: workspace.projectRoot,
-        stdio: "ignore"
-      });
-    } catch {
-    }
-    try {
-      execFileSyncImpl("git", ["branch", "-D", "--", workspace.worktreeBranch], {
-        cwd: workspace.projectRoot,
-        stdio: "ignore"
-      });
-    } catch {
-    }
-  }
-  import_node_fs13.default.rmSync(outputDestination, { recursive: true, force: true });
-}
-
-// src/agent-host/launch.js
-function createLaunchId() {
-  return `launch_${import_node_crypto4.default.randomUUID().replaceAll("-", "")}`;
-}
-async function launchAgent(options, dependencies = {}) {
-  const {
-    artifactsRoot = getAgentHostPaths().artifactsRoot,
-    eventSink = null,
-    idFactory = createLaunchId,
-    ownerPid = null,
-    onSpawn = null,
-    preflightImpl = assertAgentHostReady,
-    privatePreflightImpl = assertPrivateAutomationHostCapabilities,
-    resolveBinaryImpl = resolveAgentProviderBinary,
-    spawnImpl,
-    stderr = process.stderr,
-    stdout = process.stdout,
-    signalEmitter = process,
-    workspaceResolver = resolveAgentWorkspace
-  } = dependencies;
-  const launchId = idFactory();
-  const privateAutomationProfile = options?.privateAutomationProfile || null;
-  if (privateAutomationProfile && options?.executionKind && options.executionKind !== "foreground") {
-    throw new Error("private automation supports foreground execution only");
-  }
-  const provider = resolveAgentProviderId(options?.provider);
-  const binaryPath = resolveBinaryImpl(provider);
-  if (!binaryPath) {
-    throw new Error(getMissingAgentProviderMessage(provider));
-  }
-  await preflightImpl({ binaryPath, provider });
-  if (privateAutomationProfile) {
-    await privatePreflightImpl({ binaryPath, profile: privateAutomationProfile });
-  }
-  const workspace = workspaceResolver({
-    artifactsRoot,
-    launchId,
-    mode: options.workspaceMode || "auto",
-    originDirectory: options.originDirectory || process.cwd(),
-    outputDirectory: options.outputDirectory || null,
-    privateAutomation: privateAutomationProfile != null,
-    workspace: options.workspace || null
-  });
-  const resolvedEventSink = eventSink || ((event) => appendLaunchEvent(
-    getLaunchArtifactFiles(workspace.outputDestination).events,
-    event
-  ));
-  let plan;
-  try {
-    plan = buildProviderProcessPlan({
-      approvalMode: options.approvalMode,
-      binaryPath,
-      cwd: workspace.executionWorkspace,
-      extraArgs: options.extraArgs,
-      images: options.images,
-      model: options.model,
-      permissionMode: options.permissionMode,
-      privateAutomationProfile,
-      prompt: options.prompt,
-      provider,
-      runtimeDirectory: workspace.outputDestination,
-      workspaceMode: workspace.mode
-    });
-  } catch (error) {
-    cleanupUnstartedWorkspace(workspace);
-    throw error;
-  }
-  const ownsStore = !dependencies.store;
-  const store = dependencies.store || createLaunchStore();
-  try {
-    store.create({
-      baseRef: workspace.baseRef,
-      executionKind: options.executionKind || "foreground",
-      executionWorkspace: workspace.executionWorkspace,
-      launchId,
-      model: plan.model,
-      originDirectory: workspace.originDirectory,
-      ownerPid,
-      outputDestination: workspace.outputDestination,
-      projectRoot: workspace.projectRoot,
-      provider,
-      status: "starting",
-      workspaceMode: workspace.mode,
-      worktreeBranch: workspace.worktreeBranch
-    });
-    return await executeForegroundLaunch({
-      eventSink: resolvedEventSink,
-      jsonOutput: options.json === true,
-      launchId,
-      onSpawn,
-      plan,
-      spawnImpl,
-      stderr,
-      stdout,
-      store,
-      signalEmitter,
-      timeoutMs: options.timeoutMs || plan.timeouts.runtimeMs
-    });
-  } catch (error) {
-    const current = store.get(launchId);
-    if (current?.status === "starting" || current?.status === "running") {
-      store.transition(launchId, "failed", { lastError: error.message });
-    } else if (!current) {
-      cleanupUnstartedWorkspace(workspace);
-    }
-    throw error;
-  } finally {
-    if (ownsStore) store.close();
-  }
-}
+var import_node_fs21 = __toESM(require("node:fs"), 1);
+var import_node_child_process10 = require("node:child_process");
 
 // src/agent-host/resume.js
-var import_node_fs14 = __toESM(require("node:fs"), 1);
-var import_node_path16 = __toESM(require("node:path"), 1);
+var import_node_fs20 = __toESM(require("node:fs"), 1);
+var import_node_path22 = __toESM(require("node:path"), 1);
 function assertWorkspaceStillExists(workspace) {
   try {
-    if (import_node_fs14.default.statSync(workspace).isDirectory()) return;
+    if (import_node_fs20.default.statSync(workspace).isDirectory()) return;
   } catch {
   }
   throw new Error(`Execution workspace no longer exists: ${workspace}`);
@@ -28386,6 +29106,7 @@ async function resumeAgentWithStore(options, dependencies) {
   } = dependencies;
   const previous = store.get(options?.launchId);
   if (!previous) throw new Error(`Launch not found: ${options?.launchId}`);
+  if (previous.workspaceMode === "registered-shared") throw new Error("registered task launches require fresh sessions; resume is forbidden");
   if (previous.status === "starting" || previous.status === "running") {
     throw new Error(`Launch is still active: ${previous.launchId}`);
   }
@@ -28399,11 +29120,11 @@ async function resumeAgentWithStore(options, dependencies) {
     throw new Error(getMissingAgentProviderMessage(previous.provider));
   }
   await preflightImpl({ binaryPath, provider: previous.provider });
-  const outputDestination = dependencies.artifactsRoot ? import_node_path16.default.resolve(artifactsRoot, launchId) : getAgentHostPaths({ launchId, rudiHome: dependencies.rudiHome }).launchDirectory;
-  if (import_node_fs14.default.existsSync(outputDestination)) {
+  const outputDestination = dependencies.artifactsRoot ? import_node_path22.default.resolve(artifactsRoot, launchId) : getAgentHostPaths({ launchId, rudiHome: dependencies.rudiHome }).launchDirectory;
+  if (import_node_fs20.default.existsSync(outputDestination)) {
     throw new Error(`Output destination already exists: ${outputDestination}`);
   }
-  import_node_fs14.default.mkdirSync(outputDestination, { recursive: true, mode: 448 });
+  import_node_fs20.default.mkdirSync(outputDestination, { recursive: true, mode: 448 });
   createLaunchOwnershipMarker({ launchDirectory: outputDestination, launchId });
   const resolvedEventSink = eventSink || ((event) => appendLaunchEvent(
     getLaunchArtifactFiles(outputDestination).events,
@@ -28426,7 +29147,7 @@ async function resumeAgentWithStore(options, dependencies) {
       workspaceMode: previous.workspaceMode
     });
   } catch (error) {
-    import_node_fs14.default.rmSync(outputDestination, { recursive: true, force: true });
+    import_node_fs20.default.rmSync(outputDestination, { recursive: true, force: true });
     throw error;
   }
   store.create({
@@ -28484,13 +29205,13 @@ function discardSink() {
   } };
 }
 function appendPrivateText(file, value) {
-  const handle = import_node_fs15.default.openSync(file, "a", 384);
+  const handle = import_node_fs21.default.openSync(file, "a", 384);
   try {
-    import_node_fs15.default.writeFileSync(handle, String(value), "utf8");
+    import_node_fs21.default.writeFileSync(handle, String(value), "utf8");
   } finally {
-    import_node_fs15.default.closeSync(handle);
+    import_node_fs21.default.closeSync(handle);
   }
-  import_node_fs15.default.chmodSync(file, 384);
+  import_node_fs21.default.chmodSync(file, 384);
 }
 async function dispatchDetachedAgent({ launchId, operation, options }, dependencies = {}) {
   assertLaunchId(launchId);
@@ -28501,7 +29222,7 @@ async function dispatchDetachedAgent({ launchId, operation, options }, dependenc
   const {
     entrypoint = process.argv[1],
     nodePath = process.execPath,
-    spawnImpl = import_node_child_process6.spawn,
+    spawnImpl = import_node_child_process10.spawn,
     timeoutMs = DEFAULT_START_TIMEOUT_MS
   } = dependencies;
   if (typeof entrypoint !== "string" || entrypoint.trim() === "") {
@@ -28647,11 +29368,11 @@ async function readDetachedWorkerRequest(stdin = process.stdin) {
 }
 
 // src/agent-host/process-lifecycle.js
-var import_node_child_process7 = require("node:child_process");
+var import_node_child_process11 = require("node:child_process");
 var TERMINAL_STATUSES3 = /* @__PURE__ */ new Set(["completed", "failed", "stopped"]);
 function verifyDetachedWorkerProcess(launch, dependencies = {}) {
   if (!launch?.ownerPid || launch.executionKind !== "detached") return false;
-  const execFileSyncImpl = dependencies.execFileSyncImpl || import_node_child_process7.execFileSync;
+  const execFileSyncImpl = dependencies.execFileSyncImpl || import_node_child_process11.execFileSync;
   try {
     const command = String(execFileSyncImpl("ps", [
       "-ww",
@@ -28716,9 +29437,9 @@ async function stopAgentLaunch(launchId, dependencies = {}) {
 }
 
 // src/agent-host/workspace-lifecycle.js
-var import_node_fs16 = __toESM(require("node:fs"), 1);
-var import_node_path17 = __toESM(require("node:path"), 1);
-var import_node_child_process8 = require("node:child_process");
+var import_node_fs22 = __toESM(require("node:fs"), 1);
+var import_node_path23 = __toESM(require("node:path"), 1);
+var import_node_child_process12 = require("node:child_process");
 var TERMINAL_STATUSES4 = /* @__PURE__ */ new Set(["completed", "failed", "stopped"]);
 var MAX_DIFF_BYTES = 20 * 1024 * 1024;
 function git(execFileSyncImpl, cwd, args) {
@@ -28731,7 +29452,7 @@ function git(execFileSyncImpl, cwd, args) {
 }
 function noIndexDiff(execFileSyncImpl, left, right) {
   try {
-    return git(execFileSyncImpl, import_node_path17.default.dirname(left), [
+    return git(execFileSyncImpl, import_node_path23.default.dirname(left), [
       "diff",
       "--no-index",
       "--binary",
@@ -28746,16 +29467,16 @@ function noIndexDiff(execFileSyncImpl, left, right) {
   }
 }
 function isInside3(candidate, parent) {
-  const relative4 = import_node_path17.default.relative(parent, candidate);
-  return relative4 === "" || !relative4.startsWith(`..${import_node_path17.default.sep}`) && relative4 !== ".." && !import_node_path17.default.isAbsolute(relative4);
+  const relative4 = import_node_path23.default.relative(parent, candidate);
+  return relative4 === "" || !relative4.startsWith(`..${import_node_path23.default.sep}`) && relative4 !== ".." && !import_node_path23.default.isAbsolute(relative4);
 }
 function safeRelative(root, relativePath) {
   if (typeof relativePath !== "string" || relativePath === "" || relativePath.includes("\0")) {
     throw new Error("Launch change contains an invalid path");
   }
-  const platformPath = relativePath.split("/").join(import_node_path17.default.sep);
-  const destination = import_node_path17.default.resolve(root, platformPath);
-  if (!isInside3(destination, import_node_path17.default.resolve(root)) || destination === import_node_path17.default.resolve(root)) {
+  const platformPath = relativePath.split("/").join(import_node_path23.default.sep);
+  const destination = import_node_path23.default.resolve(root, platformPath);
+  if (!isInside3(destination, import_node_path23.default.resolve(root)) || destination === import_node_path23.default.resolve(root)) {
     throw new Error(`Launch change escapes the workspace: ${relativePath}`);
   }
   return destination;
@@ -28764,6 +29485,7 @@ function requireManagedLaunch(store, launchId, { terminal = false } = {}) {
   assertLaunchId(launchId);
   const launch = store.get(launchId);
   if (!launch) throw new Error(`Launch not found: ${launchId}`);
+  if (launch.workspaceMode === "registered-shared") throw new Error("shared task workspaces are externally owned; lifecycle mutation is forbidden");
   if (terminal && !TERMINAL_STATUSES4.has(launch.status)) {
     throw new Error(`Launch must be terminal before this operation: ${launchId} (${launch.status})`);
   }
@@ -28780,7 +29502,7 @@ function parseNullSeparated(value) {
   return String(value || "").split("\0").filter(Boolean).sort();
 }
 function getGitChangeSet(launch, execFileSyncImpl) {
-  if (!import_node_fs16.default.existsSync(launch.executionWorkspace)) {
+  if (!import_node_fs22.default.existsSync(launch.executionWorkspace)) {
     throw new Error(`Execution workspace no longer exists: ${launch.executionWorkspace}`);
   }
   const trackedPatch = git(execFileSyncImpl, launch.executionWorkspace, [
@@ -28816,19 +29538,19 @@ function getGitChangeSet(launch, execFileSyncImpl) {
   };
 }
 function assertSafeSymlinks(workspace, relativePaths) {
-  const root = import_node_fs16.default.realpathSync(workspace);
+  const root = import_node_fs22.default.realpathSync(workspace);
   for (const relativePath of relativePaths) {
     const candidate = safeRelative(root, relativePath);
     let stat;
     try {
-      stat = import_node_fs16.default.lstatSync(candidate);
+      stat = import_node_fs22.default.lstatSync(candidate);
     } catch {
       continue;
     }
     if (!stat.isSymbolicLink()) continue;
     let target;
     try {
-      target = import_node_fs16.default.realpathSync(candidate);
+      target = import_node_fs22.default.realpathSync(candidate);
     } catch {
       throw new Error(`Launch change contains a broken symlink: ${relativePath}`);
     }
@@ -28842,7 +29564,7 @@ function cleanupGitWorktree(launch, execFileSyncImpl) {
   if (launch.worktreeBranch !== expectedBranch) {
     throw new Error(`Refusing to clean unexpected worktree branch: ${launch.worktreeBranch || "none"}`);
   }
-  if (import_node_fs16.default.existsSync(launch.executionWorkspace)) {
+  if (import_node_fs22.default.existsSync(launch.executionWorkspace)) {
     git(execFileSyncImpl, launch.projectRoot, [
       "worktree",
       "remove",
@@ -28862,33 +29584,33 @@ function copyWorkspaceEntry(sourceRoot, destinationRoot, relativePath, entry) {
   const source = safeRelative(sourceRoot, relativePath);
   const destination = safeRelative(destinationRoot, relativePath);
   if (entry.type === "directory") {
-    import_node_fs16.default.mkdirSync(destination, { recursive: true, mode: entry.mode });
-    import_node_fs16.default.chmodSync(destination, entry.mode);
+    import_node_fs22.default.mkdirSync(destination, { recursive: true, mode: entry.mode });
+    import_node_fs22.default.chmodSync(destination, entry.mode);
     return;
   }
-  import_node_fs16.default.mkdirSync(import_node_path17.default.dirname(destination), { recursive: true });
-  const temporary = import_node_path17.default.join(
-    import_node_path17.default.dirname(destination),
-    `.${import_node_path17.default.basename(destination)}.rudi-promote-${process.pid}`
+  import_node_fs22.default.mkdirSync(import_node_path23.default.dirname(destination), { recursive: true });
+  const temporary = import_node_path23.default.join(
+    import_node_path23.default.dirname(destination),
+    `.${import_node_path23.default.basename(destination)}.rudi-promote-${process.pid}`
   );
-  import_node_fs16.default.rmSync(temporary, { recursive: true, force: true });
+  import_node_fs22.default.rmSync(temporary, { recursive: true, force: true });
   if (entry.type === "file") {
-    import_node_fs16.default.copyFileSync(source, temporary, import_node_fs16.default.constants.COPYFILE_EXCL);
-    import_node_fs16.default.chmodSync(temporary, entry.mode);
+    import_node_fs22.default.copyFileSync(source, temporary, import_node_fs22.default.constants.COPYFILE_EXCL);
+    import_node_fs22.default.chmodSync(temporary, entry.mode);
   } else if (entry.type === "symlink") {
-    import_node_fs16.default.symlinkSync(entry.target, temporary);
+    import_node_fs22.default.symlinkSync(entry.target, temporary);
   } else {
     throw new Error(`Unsupported promoted entry type: ${entry.type}`);
   }
-  import_node_fs16.default.rmSync(destination, { recursive: true, force: true });
-  import_node_fs16.default.renameSync(temporary, destination);
+  import_node_fs22.default.rmSync(destination, { recursive: true, force: true });
+  import_node_fs22.default.renameSync(temporary, destination);
 }
 function restoreDirectoryFromBackup(projectRoot, backup) {
-  for (const entry of import_node_fs16.default.readdirSync(projectRoot)) {
-    import_node_fs16.default.rmSync(import_node_path17.default.join(projectRoot, entry), { recursive: true, force: true });
+  for (const entry of import_node_fs22.default.readdirSync(projectRoot)) {
+    import_node_fs22.default.rmSync(import_node_path23.default.join(projectRoot, entry), { recursive: true, force: true });
   }
-  for (const entry of import_node_fs16.default.readdirSync(backup)) {
-    import_node_fs16.default.cpSync(import_node_path17.default.join(backup, entry), import_node_path17.default.join(projectRoot, entry), {
+  for (const entry of import_node_fs22.default.readdirSync(backup)) {
+    import_node_fs22.default.cpSync(import_node_path23.default.join(backup, entry), import_node_path23.default.join(projectRoot, entry), {
       errorOnExist: true,
       force: false,
       recursive: true
@@ -28902,13 +29624,13 @@ function applyIsolatedChanges(launch, baseline, current) {
   }
   assertSafeSymlinks(launch.executionWorkspace, Object.keys(current.entries));
   const changes = compareWorkspaceManifests(baseline, current);
-  const backup = import_node_path17.default.join(launch.outputDestination, "promotion-backup");
-  if (import_node_fs16.default.existsSync(backup)) throw new Error(`Promotion backup already exists: ${backup}`);
-  import_node_fs16.default.cpSync(launch.projectRoot, backup, { errorOnExist: true, force: false, recursive: true });
+  const backup = import_node_path23.default.join(launch.outputDestination, "promotion-backup");
+  if (import_node_fs22.default.existsSync(backup)) throw new Error(`Promotion backup already exists: ${backup}`);
+  import_node_fs22.default.cpSync(launch.projectRoot, backup, { errorOnExist: true, force: false, recursive: true });
   try {
     const removals = changes.filter((change) => change.after == null).sort((left, right) => right.path.split("/").length - left.path.split("/").length);
     for (const change of removals) {
-      import_node_fs16.default.rmSync(safeRelative(launch.projectRoot, change.path), { recursive: true, force: true });
+      import_node_fs22.default.rmSync(safeRelative(launch.projectRoot, change.path), { recursive: true, force: true });
     }
     const directories = changes.filter((change) => change.after?.type === "directory");
     const otherEntries = changes.filter((change) => change.after && change.after.type !== "directory");
@@ -28939,7 +29661,7 @@ function applyIsolatedChanges(launch, baseline, current) {
     }
     throw error;
   } finally {
-    import_node_fs16.default.rmSync(backup, { recursive: true, force: true });
+    import_node_fs22.default.rmSync(backup, { recursive: true, force: true });
   }
   return changes;
 }
@@ -28955,7 +29677,7 @@ function withLaunchStore(dependencies, operation) {
 function diffAgentLaunch(launchId, dependencies = {}) {
   return withLaunchStore(dependencies, (store) => {
     const launch = requireManagedLaunch(store, launchId);
-    const execFileSyncImpl = dependencies.execFileSyncImpl || import_node_child_process8.execFileSync;
+    const execFileSyncImpl = dependencies.execFileSyncImpl || import_node_child_process12.execFileSync;
     if (launch.workspaceMode === "worktree") {
       return {
         ...getGitChangeSet(launch, execFileSyncImpl),
@@ -28983,7 +29705,7 @@ function promoteAgentLaunch(launchId, dependencies = {}) {
       return { alreadyPromoted: true, changes: null, launch: existing };
     }
     const launch = requireManagedLaunch(store, launchId, { terminal: true });
-    const execFileSyncImpl = dependencies.execFileSyncImpl || import_node_child_process8.execFileSync;
+    const execFileSyncImpl = dependencies.execFileSyncImpl || import_node_child_process12.execFileSync;
     let changes;
     if (launch.workspaceMode === "worktree") {
       const targetStatus = git(execFileSyncImpl, launch.projectRoot, [
@@ -29009,7 +29731,7 @@ function promoteAgentLaunch(launchId, dependencies = {}) {
       assertSafeSymlinks(launch.executionWorkspace, [...changedTracked, ...changes.untracked]);
       for (const relativePath of changes.untracked) {
         const destination = safeRelative(launch.projectRoot, relativePath);
-        if (import_node_fs16.default.existsSync(destination)) {
+        if (import_node_fs22.default.existsSync(destination)) {
           throw new Error(`Cannot promote untracked file because the destination exists: ${relativePath}`);
         }
       }
@@ -29032,8 +29754,8 @@ function promoteAgentLaunch(launchId, dependencies = {}) {
       for (const relativePath of changes.untracked) {
         const source = safeRelative(launch.executionWorkspace, relativePath);
         const destination = safeRelative(launch.projectRoot, relativePath);
-        import_node_fs16.default.mkdirSync(import_node_path17.default.dirname(destination), { recursive: true });
-        import_node_fs16.default.cpSync(source, destination, { errorOnExist: true, force: false, recursive: true });
+        import_node_fs22.default.mkdirSync(import_node_path23.default.dirname(destination), { recursive: true });
+        import_node_fs22.default.cpSync(source, destination, { errorOnExist: true, force: false, recursive: true });
       }
       const updated = store.setDisposition(launchId, "promoted");
       cleanupGitWorktree(updated, execFileSyncImpl);
@@ -29044,7 +29766,7 @@ function promoteAgentLaunch(launchId, dependencies = {}) {
       const current = createWorkspaceManifest(launch.executionWorkspace);
       changes = applyIsolatedChanges(launch, baseline, current);
       const updated = store.setDisposition(launchId, "promoted");
-      import_node_fs16.default.rmSync(updated.executionWorkspace, { recursive: true, force: true });
+      import_node_fs22.default.rmSync(updated.executionWorkspace, { recursive: true, force: true });
       return { changes, launch: store.get(launchId) };
     }
     throw new Error("Read-only launches have no isolated changes to promote");
@@ -29057,9 +29779,9 @@ function discardAgentLaunch(launchId, dependencies = {}) {
       return { alreadyDiscarded: true, launch: existing };
     }
     const launch = requireManagedLaunch(store, launchId, { terminal: true });
-    const execFileSyncImpl = dependencies.execFileSyncImpl || import_node_child_process8.execFileSync;
+    const execFileSyncImpl = dependencies.execFileSyncImpl || import_node_child_process12.execFileSync;
     if (launch.workspaceMode === "worktree") cleanupGitWorktree(launch, execFileSyncImpl);
-    import_node_fs16.default.rmSync(launch.outputDestination, { recursive: true, force: true });
+    import_node_fs22.default.rmSync(launch.outputDestination, { recursive: true, force: true });
     const updated = store.setDisposition(launchId, "discarded");
     return { launch: updated };
   });
@@ -29098,7 +29820,7 @@ function validateTasks(tasks) {
   return validated;
 }
 function createAgentGroupId() {
-  return `group_${import_node_crypto5.default.randomUUID().replaceAll("-", "")}`;
+  return `group_${import_node_crypto8.default.randomUUID().replaceAll("-", "")}`;
 }
 async function launchDetachedAgentGroup(request, dependencies = {}) {
   const groupId = assertAgentGroupId(request?.groupId);
@@ -29164,29 +29886,29 @@ async function stopAgentGroup(groupId, dependencies = {}) {
 }
 
 // src/daemon/runtime/lifecycle.js
-var import_node_fs18 = __toESM(require("node:fs"), 1);
-var import_node_path19 = __toESM(require("node:path"), 1);
-var import_node_child_process9 = require("node:child_process");
+var import_node_fs24 = __toESM(require("node:fs"), 1);
+var import_node_path25 = __toESM(require("node:path"), 1);
+var import_node_child_process13 = require("node:child_process");
 init_src();
 
 // src/daemon/client.js
-var import_node_fs17 = __toESM(require("node:fs"), 1);
-var import_node_path18 = __toESM(require("node:path"), 1);
+var import_node_fs23 = __toESM(require("node:fs"), 1);
+var import_node_path24 = __toESM(require("node:path"), 1);
 init_src();
-var DAEMON_PORT_FILE = import_node_path18.default.join(PATHS.home, "daemon.port");
-var DAEMON_TOKEN_FILE = import_node_path18.default.join(PATHS.home, "daemon.token");
+var DAEMON_PORT_FILE = import_node_path24.default.join(PATHS.home, "daemon.port");
+var DAEMON_TOKEN_FILE = import_node_path24.default.join(PATHS.home, "daemon.token");
 function readDaemonInfo(options = {}) {
   const portFile = options.portFile || DAEMON_PORT_FILE;
   const tokenFile = options.tokenFile || DAEMON_TOKEN_FILE;
-  if (!import_node_fs17.default.existsSync(portFile) || !import_node_fs17.default.existsSync(tokenFile)) {
+  if (!import_node_fs23.default.existsSync(portFile) || !import_node_fs23.default.existsSync(tokenFile)) {
     const error = new Error("RUDI daemon is not running. Start it with: rudi daemon start");
     error.code = "DAEMON_NOT_RUNNING";
     error.portFile = portFile;
     error.tokenFile = tokenFile;
     throw error;
   }
-  const portRaw = import_node_fs17.default.readFileSync(portFile, "utf-8").trim();
-  const token = import_node_fs17.default.readFileSync(tokenFile, "utf-8").trim();
+  const portRaw = import_node_fs23.default.readFileSync(portFile, "utf-8").trim();
+  const token = import_node_fs23.default.readFileSync(tokenFile, "utf-8").trim();
   const port = Number.parseInt(portRaw, 10);
   if (!Number.isFinite(port) || port <= 0) {
     const error = new Error("Invalid daemon port file. Restart it with: rudi daemon restart");
@@ -29765,11 +30487,11 @@ function removeDaemonConnectionFiles({
   tokenFile = DAEMON_TOKEN_FILE
 } = {}) {
   try {
-    import_node_fs18.default.unlinkSync(portFile);
+    import_node_fs24.default.unlinkSync(portFile);
   } catch {
   }
   try {
-    import_node_fs18.default.unlinkSync(tokenFile);
+    import_node_fs24.default.unlinkSync(tokenFile);
   } catch {
   }
 }
@@ -29791,13 +30513,13 @@ function spawnDaemonProcess({
   logsDir = PATHS.logs,
   nodePath = process.execPath,
   serveArgs = ["serve"],
-  spawnImpl = import_node_child_process9.spawn
+  spawnImpl = import_node_child_process13.spawn
 } = {}) {
-  import_node_fs18.default.mkdirSync(logsDir, { recursive: true });
-  const stdoutPath = import_node_path19.default.join(logsDir, "daemon.out.log");
-  const stderrPath = import_node_path19.default.join(logsDir, "daemon.err.log");
-  const stdoutFd = import_node_fs18.default.openSync(stdoutPath, "a");
-  const stderrFd = import_node_fs18.default.openSync(stderrPath, "a");
+  import_node_fs24.default.mkdirSync(logsDir, { recursive: true });
+  const stdoutPath = import_node_path25.default.join(logsDir, "daemon.out.log");
+  const stderrPath = import_node_path25.default.join(logsDir, "daemon.err.log");
+  const stdoutFd = import_node_fs24.default.openSync(stdoutPath, "a");
+  const stderrFd = import_node_fs24.default.openSync(stderrPath, "a");
   try {
     const child = spawnImpl(nodePath, [entrypoint, ...serveArgs], {
       detached: true,
@@ -29808,11 +30530,11 @@ function spawnDaemonProcess({
     return { pid: child.pid, stderrPath, stdoutPath };
   } finally {
     try {
-      import_node_fs18.default.closeSync(stdoutFd);
+      import_node_fs24.default.closeSync(stdoutFd);
     } catch {
     }
     try {
-      import_node_fs18.default.closeSync(stderrFd);
+      import_node_fs24.default.closeSync(stderrFd);
     } catch {
     }
   }
@@ -30057,6 +30779,7 @@ USAGE
   rudi agent diff <launch-id> [--json]
   rudi agent promote <launch-id> [--json]
   rudi agent discard <launch-id> [--json]
+  rudi agent task-check|task-run|task-recover <request-path> <sha256> [--json]
   rudi agent group launch --task <provider:file> --task <provider:file> --detach
   rudi agent group list [--limit <n>] [--json]
   rudi agent group status <group-id> [--json]
@@ -30127,6 +30850,16 @@ async function cmdAgent(args = [], flags = {}, passthrough = [], dependencies = 
   const privateAutomation = flagValue(flags, "private-automation", "privateAutomation") === true;
   if (privateAutomation && subcommand !== "launch") {
     throw new Error("private automation supports only rudi agent launch");
+  }
+  if (["task-check", "task-run", "task-recover"].includes(subcommand)) {
+    if (args.length !== 3 || passthrough.length || Object.keys(flags).some((key) => key !== "json")) {
+      throw new Error("Usage: rudi agent task-check|task-run|task-recover <request-path> <sha256> [--json]");
+    }
+    const reference = { path: args[1], sha256: args[2] };
+    const result = subcommand === "task-check" ? { schema_version: 1, kind: "agent-task-check", valid: true, request: reference, provider: readAgentTask(reference).profile.provider } : subcommand === "task-recover" ? await recoverAgentTask(reference) : await runAgentTask(reference);
+    console.log(JSON.stringify(result));
+    if (result.status === "failed") process.exitCode = 1;
+    return result;
   }
   if (subcommand === "_worker") {
     const launchId = requiredLaunchId(args, "_worker");
@@ -30894,13 +31627,13 @@ function resolveInstallNativeSkillHosts(flags = {}, installedAgents = []) {
   return configuredNativeSkillHosts(installedAgents);
 }
 function installedSkillDescriptor(resolved, installedPath) {
-  const packagePath = path33.resolve(installedPath);
+  const packagePath = path39.resolve(installedPath);
   const isDirectory = fsSync.existsSync(packagePath) && fsSync.lstatSync(packagePath).isDirectory();
   return {
     ...resolved,
     source: resolved.source?.type ? resolved.source : "rudi",
     path: packagePath,
-    entryPath: isDirectory ? path33.join(packagePath, "SKILL.md") : packagePath
+    entryPath: isDirectory ? path39.join(packagePath, "SKILL.md") : packagePath
   };
 }
 async function reconcileInstalledSkillsAfterInstall(skills, flags = {}, dependencies = {}) {
@@ -30933,9 +31666,9 @@ function reportInstalledSkillProjection(projection) {
   }
 }
 async function loadManifest(installPath) {
-  const manifestPath = path33.join(installPath, "manifest.json");
+  const manifestPath = path39.join(installPath, "manifest.json");
   try {
-    const content = await fs31.readFile(manifestPath, "utf-8");
+    const content = await fs37.readFile(manifestPath, "utf-8");
     return JSON.parse(content);
   } catch {
     return null;
@@ -30943,15 +31676,15 @@ async function loadManifest(installPath) {
 }
 function getBundledBinary(runtime, binary) {
   const platform = process.platform;
-  const rudiHome = process.env.RUDI_HOME || path33.join(process.env.HOME || process.env.USERPROFILE, ".rudi");
+  const rudiHome = process.env.RUDI_HOME || path39.join(process.env.HOME || process.env.USERPROFILE, ".rudi");
   if (runtime === "node") {
-    const npmPath = platform === "win32" ? path33.join(rudiHome, "runtimes", "node", "npm.cmd") : path33.join(rudiHome, "runtimes", "node", "bin", "npm");
+    const npmPath = platform === "win32" ? path39.join(rudiHome, "runtimes", "node", "npm.cmd") : path39.join(rudiHome, "runtimes", "node", "bin", "npm");
     if (fsSync.existsSync(npmPath)) {
       return npmPath;
     }
   }
   if (runtime === "python") {
-    const pipPath = platform === "win32" ? path33.join(rudiHome, "runtimes", "python", "Scripts", "pip.exe") : path33.join(rudiHome, "runtimes", "python", "bin", "pip3");
+    const pipPath = platform === "win32" ? path39.join(rudiHome, "runtimes", "python", "Scripts", "pip.exe") : path39.join(rudiHome, "runtimes", "python", "bin", "pip3");
     if (fsSync.existsSync(pipPath)) {
       return pipPath;
     }
@@ -30973,9 +31706,9 @@ function getStackCommand(manifest) {
   return command;
 }
 function getNodeProjectInfo(stackPath) {
-  const candidates = [stackPath, path33.join(stackPath, "node")];
+  const candidates = [stackPath, path39.join(stackPath, "node")];
   for (const root of candidates) {
-    const packageJsonPath = path33.join(root, "package.json");
+    const packageJsonPath = path39.join(root, "package.json");
     if (!fsSync.existsSync(packageJsonPath)) continue;
     try {
       const content = fsSync.readFileSync(packageJsonPath, "utf-8");
@@ -31002,9 +31735,9 @@ async function installDependencies(stackPath, manifest, options = {}) {
       if (project.error) {
         return { installed: false, error: `Failed to read package.json: ${project.error}` };
       }
-      const nodeModulesPath = path33.join(project.root, "node_modules");
+      const nodeModulesPath = path39.join(project.root, "node_modules");
       try {
-        await fs31.access(nodeModulesPath);
+        await fs37.access(nodeModulesPath);
         return { installed: false, reason: "Dependencies already installed" };
       } catch {
       }
@@ -31017,15 +31750,15 @@ async function installDependencies(stackPath, manifest, options = {}) {
       });
       return { installed: true };
     } else if (runtime === "python") {
-      let requirementsPath = path33.join(stackPath, "python", "requirements.txt");
-      let reqCwd = path33.join(stackPath, "python");
+      let requirementsPath = path39.join(stackPath, "python", "requirements.txt");
+      let reqCwd = path39.join(stackPath, "python");
       try {
-        await fs31.access(requirementsPath);
+        await fs37.access(requirementsPath);
       } catch {
-        requirementsPath = path33.join(stackPath, "requirements.txt");
+        requirementsPath = path39.join(stackPath, "requirements.txt");
         reqCwd = stackPath;
         try {
-          await fs31.access(requirementsPath);
+          await fs37.access(requirementsPath);
         } catch {
           return { installed: false, reason: "No requirements.txt" };
         }
@@ -31159,7 +31892,7 @@ async function syncRelatedSkillWrappers(relatedSkills, installResults, installed
   );
   const skills = (relatedSkills || []).filter((skill) => successful.has(skill.id)).map((skill) => {
     const installed = successful.get(skill.id);
-    const entryPath = fsSync.existsSync(installed.path) && fsSync.statSync(installed.path).isDirectory() ? path33.join(installed.path, "SKILL.md") : installed.path;
+    const entryPath = fsSync.existsSync(installed.path) && fsSync.statSync(installed.path).isDirectory() ? path39.join(installed.path, "SKILL.md") : installed.path;
     return {
       ...skill,
       source: "rudi",
@@ -31395,12 +32128,12 @@ function getStackEntryPoint(stackPath, manifest) {
   return { entryArg: null, entryPath: null };
 }
 function resolveContainedStackPath(stackPath, value) {
-  if (typeof value !== "string" || !value || value.includes("\0") || path33.isAbsolute(value)) {
+  if (typeof value !== "string" || !value || value.includes("\0") || path39.isAbsolute(value)) {
     return { error: `Stack command path must be relative to the installed package: ${value}` };
   }
-  const root = path33.resolve(stackPath);
-  const candidate = path33.resolve(root, value);
-  if (candidate === root || !candidate.startsWith(`${root}${path33.sep}`)) {
+  const root = path39.resolve(stackPath);
+  const candidate = path39.resolve(root, value);
+  if (candidate === root || !candidate.startsWith(`${root}${path39.sep}`)) {
     return { error: `Stack command path escapes the installed package: ${value}` };
   }
   return { path: candidate };
@@ -31414,8 +32147,8 @@ function validateExternalStackCommand(stackPath, manifest) {
       error: "External stack command must reference an entry file inside the pinned package"
     };
   }
-  const relativeEntry = path33.relative(path33.resolve(stackPath), entryPoint.entryPath);
-  const rootSegment = relativeEntry.split(path33.sep)[0];
+  const relativeEntry = path39.relative(path39.resolve(stackPath), entryPoint.entryPath);
+  const rootSegment = relativeEntry.split(path39.sep)[0];
   if (rootSegment === "runs" || rootSegment === "outputs") {
     return {
       valid: false,
@@ -31527,9 +32260,9 @@ async function checkSecrets(manifest) {
   return { found, missing };
 }
 async function parseEnvExample(installPath) {
-  const examplePath = path33.join(installPath, ".env.example");
+  const examplePath = path39.join(installPath, ".env.example");
   try {
-    const content = await fs31.readFile(examplePath, "utf-8");
+    const content = await fs37.readFile(examplePath, "utf-8");
     const keys = [];
     for (const line of content.split("\n")) {
       const trimmed = line.trim();
@@ -31547,7 +32280,7 @@ async function parseEnvExample(installPath) {
 async function cleanupFailedStackInstall(stackId, stackPath, removeConfig) {
   if (stackPath) {
     try {
-      await fs31.rm(stackPath, { recursive: true, force: true });
+      await fs37.rm(stackPath, { recursive: true, force: true });
     } catch {
     }
   }
@@ -32170,11 +32903,11 @@ async function runStack(id, options = {}) {
   const startTime = Date.now();
   const packagePath = getPackagePath(id);
   const manifestPath = import_path11.default.join(packagePath, "manifest.json");
-  const { default: fs54 } = await import("fs");
-  if (!fs54.existsSync(manifestPath)) {
+  const { default: fs60 } = await import("fs");
+  if (!fs60.existsSync(manifestPath)) {
     throw new Error(`Stack manifest not found: ${id}`);
   }
-  const manifest = JSON.parse(fs54.readFileSync(manifestPath, "utf-8"));
+  const manifest = JSON.parse(fs60.readFileSync(manifestPath, "utf-8"));
   const { command, args } = resolveCommandFromManifest(manifest, packagePath);
   const secrets = await getSecrets(manifest.requires?.secrets || []);
   const runEnv = buildStackRunEnv({
@@ -33226,10 +33959,6 @@ function formatDaemonDoctorState(daemon) {
 function shouldReportDaemonIssue(daemon) {
   return daemon.reason !== "not_running" && (!daemon.reachable || !daemon.ready);
 }
-function isSupportedNodeVersion(version) {
-  const parsed = typeof version === "string" && /^v?(\d+)\.\d+\.\d+$/.exec(version);
-  return Boolean(parsed && [22, 24].includes(Number(parsed[1])));
-}
 async function cmdDoctor(args, flags) {
   console.log("RUDI Health Check");
   console.log("\u2550".repeat(50));
@@ -33338,11 +34067,11 @@ async function cmdDoctor(args, flags) {
   console.log("\n\u{1F4CD} Environment");
   const nodeVersion = process.version;
   const nodeOk = isSupportedNodeVersion(nodeVersion);
-  console.log(`  ${nodeOk ? "\u2713" : "\u2717"} Node.js: ${nodeVersion} ${nodeOk ? "" : "(supported: Node 22 or 24 LTS)"}`);
+  console.log(`  ${nodeOk ? "\u2713" : "\u2717"} Node.js: ${nodeVersion} ${nodeOk ? "" : `(supported: ${SUPPORTED_NODE_DESCRIPTION})`}`);
   console.log(`  \u2713 Platform: ${process.platform}-${process.arch}`);
   console.log(`  \u2713 RUDI Home: ${PATHS.home}`);
   if (!nodeOk) {
-    issues.push("Unsupported Node.js version (supported: Node 22 or 24 LTS; managed default: Node 24)");
+    issues.push(`Unsupported Node.js version (supported: ${SUPPORTED_NODE_DESCRIPTION})`);
   }
   console.log("\n" + "\u2500".repeat(50));
   if (issues.length === 0) {
@@ -34308,10 +35037,10 @@ function createShim(shimPath, targetPath) {
 }
 
 // src/commands/update.js
-var import_node_crypto6 = require("node:crypto");
-var import_node_fs19 = require("node:fs");
-var fs39 = __toESM(require("node:fs/promises"), 1);
-var path40 = __toESM(require("path"), 1);
+var import_node_crypto9 = require("node:crypto");
+var import_node_fs25 = require("node:fs");
+var fs45 = __toESM(require("node:fs/promises"), 1);
+var path46 = __toESM(require("path"), 1);
 init_src5();
 init_src();
 init_src3();
@@ -34328,24 +35057,24 @@ async function resolveManagedPath(candidate, rootInput, options) {
   if (typeof candidate !== "string" || candidate.trim() !== candidate || !candidate) {
     throw new Error(`${candidateLabel} is required for transactional update`);
   }
-  const root = path40.resolve(rootInput);
-  const targetPath = path40.resolve(candidate);
-  if (targetPath === root || !targetPath.startsWith(`${root}${path40.sep}`)) {
+  const root = path46.resolve(rootInput);
+  const targetPath = path46.resolve(candidate);
+  if (targetPath === root || !targetPath.startsWith(`${root}${path46.sep}`)) {
     throw new Error(`Refusing to snapshot ${candidateLabel.toLowerCase()} outside the managed ${rootLabel}: ${candidate}`);
   }
   if (createRoot) {
-    await fs39.mkdir(root, { recursive: true });
+    await fs45.mkdir(root, { recursive: true });
   }
-  const rootStat = await fs39.lstat(root);
+  const rootStat = await fs45.lstat(root);
   if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
     throw new Error(`Managed ${rootLabel} must be a real directory: ${root}`);
   }
-  const relative4 = path40.relative(root, targetPath);
+  const relative4 = path46.relative(root, targetPath);
   let current = root;
-  for (const segment of relative4.split(path40.sep)) {
-    current = path40.join(current, segment);
+  for (const segment of relative4.split(path46.sep)) {
+    current = path46.join(current, segment);
     try {
-      const stat = await fs39.lstat(current);
+      const stat = await fs45.lstat(current);
       if (stat.isSymbolicLink()) {
         throw new Error(`Refusing symlinked path within managed ${rootLabel}: ${current}`);
       }
@@ -34370,7 +35099,7 @@ function resolveManagedLockfilePath(lockfilePath, locksRoot = PATHS.locks, optio
     ...options
   });
 }
-function resolveManagedStackStatePath(stateRoot, stateStacksRoot = path40.join(PATHS.home, "state", "stacks"), options = {}) {
+function resolveManagedStackStatePath(stateRoot, stateStacksRoot = path46.join(PATHS.home, "state", "stacks"), options = {}) {
   return resolveManagedPath(stateRoot, stateStacksRoot, {
     candidateLabel: "Stack state path",
     rootLabel: "stack state root",
@@ -34382,28 +35111,28 @@ async function buildTreeManifest(rootPath, prefix = "") {
   async function visit(currentPath, relativePath) {
     let stat;
     try {
-      stat = await fs39.lstat(currentPath);
+      stat = await fs45.lstat(currentPath);
     } catch (error) {
       if (error.code === "ENOENT" && relativePath === prefix) return;
       throw error;
     }
     const manifestPath = relativePath || ".";
     if (stat.isSymbolicLink()) {
-      entries.push([manifestPath, "symlink", await fs39.readlink(currentPath)]);
+      entries.push([manifestPath, "symlink", await fs45.readlink(currentPath)]);
       return;
     }
     if (stat.isDirectory()) {
       entries.push([manifestPath, "directory", ""]);
-      const names = await fs39.readdir(currentPath);
+      const names = await fs45.readdir(currentPath);
       names.sort();
       for (const name of names) {
-        const childRelative = relativePath ? path40.join(relativePath, name) : name;
-        await visit(path40.join(currentPath, name), childRelative);
+        const childRelative = relativePath ? path46.join(relativePath, name) : name;
+        await visit(path46.join(currentPath, name), childRelative);
       }
       return;
     }
     if (stat.isFile()) {
-      const digest = (0, import_node_crypto6.createHash)("sha256").update(await fs39.readFile(currentPath)).digest("hex");
+      const digest = (0, import_node_crypto9.createHash)("sha256").update(await fs45.readFile(currentPath)).digest("hex");
       entries.push([manifestPath, "file", digest]);
       return;
     }
@@ -34435,7 +35164,7 @@ function treeManifestsEqual(left, right) {
 async function assertSnapshotComponent(componentPath, type, label) {
   let stat;
   try {
-    stat = await fs39.lstat(componentPath);
+    stat = await fs45.lstat(componentPath);
   } catch (error) {
     if (error.code === "ENOENT") throw new Error(`Missing ${label}: ${componentPath}`);
     throw error;
@@ -34446,16 +35175,16 @@ async function assertSnapshotComponent(componentPath, type, label) {
   }
 }
 async function copyPathWithoutOverwrite(sourcePath, destinationPath, label) {
-  const sourceStat = await fs39.lstat(sourcePath);
+  const sourceStat = await fs45.lstat(sourcePath);
   if (sourceStat.isSymbolicLink()) {
     throw new Error(`Refusing to copy symlinked ${label}: ${sourcePath}`);
   }
-  await fs39.mkdir(path40.dirname(destinationPath), { recursive: true });
+  await fs45.mkdir(path46.dirname(destinationPath), { recursive: true });
   const expectedManifest = await buildTreeManifest(sourcePath);
   if (sourceStat.isFile()) {
-    await fs39.copyFile(sourcePath, destinationPath, import_node_fs19.constants.COPYFILE_EXCL);
+    await fs45.copyFile(sourcePath, destinationPath, import_node_fs25.constants.COPYFILE_EXCL);
   } else if (sourceStat.isDirectory()) {
-    await fs39.cp(sourcePath, destinationPath, {
+    await fs45.cp(sourcePath, destinationPath, {
       errorOnExist: true,
       force: false,
       preserveTimestamps: true,
@@ -34485,14 +35214,14 @@ async function validateStackUpdateSnapshot(snapshot, options = {}) {
   );
   const { targetPath: stateRoot } = await resolveManagedStackStatePath(
     snapshot.stateRoot,
-    options.stateStacksRoot || snapshot.stateStacksRoot || path40.join(PATHS.home, "state", "stacks")
+    options.stateStacksRoot || snapshot.stateStacksRoot || path46.join(PATHS.home, "state", "stacks")
   );
-  const backupRoot = path40.resolve(String(snapshot.backupRoot || ""));
-  const snapshotPath = path40.resolve(String(snapshot.snapshotPath || ""));
-  const lockfileSnapshotPath = path40.resolve(String(snapshot.lockfileSnapshotPath || ""));
-  const stateSnapshotPath = path40.resolve(String(snapshot.stateSnapshotPath || ""));
-  const expectedPrefix = `.${path40.basename(targetPath)}.update-backup-`;
-  if (path40.dirname(backupRoot) !== root || !path40.basename(backupRoot).startsWith(expectedPrefix) || snapshotPath !== path40.join(backupRoot, "snapshot") || lockfileSnapshotPath !== path40.join(backupRoot, "lockfile") || stateSnapshotPath !== path40.join(backupRoot, "state")) {
+  const backupRoot = path46.resolve(String(snapshot.backupRoot || ""));
+  const snapshotPath = path46.resolve(String(snapshot.snapshotPath || ""));
+  const lockfileSnapshotPath = path46.resolve(String(snapshot.lockfileSnapshotPath || ""));
+  const stateSnapshotPath = path46.resolve(String(snapshot.stateSnapshotPath || ""));
+  const expectedPrefix = `.${path46.basename(targetPath)}.update-backup-`;
+  if (path46.dirname(backupRoot) !== root || !path46.basename(backupRoot).startsWith(expectedPrefix) || snapshotPath !== path46.join(backupRoot, "snapshot") || lockfileSnapshotPath !== path46.join(backupRoot, "lockfile") || stateSnapshotPath !== path46.join(backupRoot, "state")) {
     throw new Error("Invalid stack update snapshot paths");
   }
   await assertSnapshotComponent(backupRoot, "directory", "stack update backup root");
@@ -34518,62 +35247,62 @@ async function validateStackUpdateSnapshot(snapshot, options = {}) {
 }
 async function createStackUpdateSnapshot(stackPath, options = {}) {
   const { root, targetPath } = await resolveManagedStackPath(stackPath, options.stacksRoot);
-  const locksRoot = path40.resolve(options.locksRoot || PATHS.locks);
+  const locksRoot = path46.resolve(options.locksRoot || PATHS.locks);
   const { targetPath: lockfilePath } = await resolveManagedLockfilePath(
     options.lockfilePath,
     locksRoot,
     { createRoot: true }
   );
-  const stateStacksRoot = path40.resolve(
-    options.stateStacksRoot || (options.stacksRoot ? path40.join(path40.dirname(root), "state", "stacks") : path40.join(PATHS.home, "state", "stacks"))
+  const stateStacksRoot = path46.resolve(
+    options.stateStacksRoot || (options.stacksRoot ? path46.join(path46.dirname(root), "state", "stacks") : path46.join(PATHS.home, "state", "stacks"))
   );
   const { targetPath: stateRoot } = await resolveManagedStackStatePath(
-    options.stateRoot || path40.join(stateStacksRoot, path40.basename(targetPath)),
+    options.stateRoot || path46.join(stateStacksRoot, path46.basename(targetPath)),
     stateStacksRoot,
     { createRoot: true }
   );
-  const stackStat = await fs39.lstat(targetPath);
+  const stackStat = await fs45.lstat(targetPath);
   if (!stackStat.isDirectory() || stackStat.isSymbolicLink()) {
     throw new Error(`Installed stack path must be a real directory: ${stackPath}`);
   }
-  const backupRoot = await fs39.mkdtemp(
-    path40.join(root, `.${path40.basename(targetPath)}.update-backup-`)
+  const backupRoot = await fs45.mkdtemp(
+    path46.join(root, `.${path46.basename(targetPath)}.update-backup-`)
   );
-  const snapshotPath = path40.join(backupRoot, "snapshot");
-  const lockfileSnapshotPath = path40.join(backupRoot, "lockfile");
-  const stateSnapshotPath = path40.join(backupRoot, "state");
+  const snapshotPath = path46.join(backupRoot, "snapshot");
+  const lockfileSnapshotPath = path46.join(backupRoot, "lockfile");
+  const stateSnapshotPath = path46.join(backupRoot, "state");
   let lockfileExisted = false;
   let stateRootExisted = false;
   const stateInitialManifest = await buildTreeManifest(stateRoot);
-  const migratedRunsManifest = await buildTreeManifest(path40.join(targetPath, "runs"), "runs");
+  const migratedRunsManifest = await buildTreeManifest(path46.join(targetPath, "runs"), "runs");
   const stateExpectedManifest = mergeExpectedStateManifest(
     stateInitialManifest,
     migratedRunsManifest
   );
   try {
-    await fs39.chmod(backupRoot, 448);
-    await fs39.cp(targetPath, snapshotPath, {
+    await fs45.chmod(backupRoot, 448);
+    await fs45.cp(targetPath, snapshotPath, {
       errorOnExist: true,
       force: false,
       preserveTimestamps: true,
       recursive: true
     });
     try {
-      const lockfileStat = await fs39.lstat(lockfilePath);
+      const lockfileStat = await fs45.lstat(lockfilePath);
       if (!lockfileStat.isFile() || lockfileStat.isSymbolicLink()) {
         throw new Error(`Stack lockfile path must be a real file: ${lockfilePath}`);
       }
-      await fs39.copyFile(lockfilePath, lockfileSnapshotPath);
+      await fs45.copyFile(lockfilePath, lockfileSnapshotPath);
       lockfileExisted = true;
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
     }
     try {
-      const stateStat = await fs39.lstat(stateRoot);
+      const stateStat = await fs45.lstat(stateRoot);
       if (!stateStat.isDirectory() || stateStat.isSymbolicLink()) {
         throw new Error(`Stack state path must be a real directory: ${stateRoot}`);
       }
-      await fs39.cp(stateRoot, stateSnapshotPath, {
+      await fs45.cp(stateRoot, stateSnapshotPath, {
         errorOnExist: true,
         force: false,
         preserveTimestamps: true,
@@ -34584,7 +35313,7 @@ async function createStackUpdateSnapshot(stackPath, options = {}) {
       if (error.code !== "ENOENT") throw error;
     }
   } catch (error) {
-    await fs39.rm(backupRoot, { force: true, recursive: true });
+    await fs45.rm(backupRoot, { force: true, recursive: true });
     throw error;
   }
   return {
@@ -34646,18 +35375,18 @@ async function restoreStackUpdateSnapshot(snapshot, options = {}) {
   ];
   const stateComponent = components[0];
   for (const component of components) {
-    component.stagedPath = path40.join(backupRoot, `failed-${component.label}`);
+    component.stagedPath = path46.join(backupRoot, `failed-${component.label}`);
     component.staged = false;
     component.promoted = false;
   }
   try {
     for (const component of components) {
       try {
-        const currentStat = await fs39.lstat(component.currentPath);
+        const currentStat = await fs45.lstat(component.currentPath);
         if (currentStat.isSymbolicLink()) {
           throw new Error(`Refusing to stage symlinked ${component.label}: ${component.currentPath}`);
         }
-        await fs39.rename(component.currentPath, component.stagedPath);
+        await fs45.rename(component.currentPath, component.stagedPath);
         component.staged = true;
       } catch (error) {
         if (error.code !== "ENOENT") throw error;
@@ -34671,8 +35400,8 @@ async function restoreStackUpdateSnapshot(snapshot, options = {}) {
     }
     for (const component of components) {
       if (!component.existedBefore) continue;
-      await fs39.mkdir(path40.dirname(component.currentPath), { recursive: true });
-      await fs39.rename(component.snapshotPath, component.currentPath);
+      await fs45.mkdir(path46.dirname(component.currentPath), { recursive: true });
+      await fs45.rename(component.snapshotPath, component.currentPath);
       component.promoted = true;
     }
   } catch (error) {
@@ -34713,11 +35442,11 @@ async function restoreStackUpdateSnapshot(snapshot, options = {}) {
     }
     throw error;
   }
-  await fs39.rm(backupRoot, { force: true, recursive: true });
+  await fs45.rm(backupRoot, { force: true, recursive: true });
 }
 async function discardStackUpdateSnapshot(snapshot, options = {}) {
   const { backupRoot } = await validateStackUpdateSnapshot(snapshot, options);
-  await fs39.rm(backupRoot, { force: true, recursive: true });
+  await fs45.rm(backupRoot, { force: true, recursive: true });
 }
 var defaultDependencies = {
   fetchIndex,
@@ -34862,7 +35591,7 @@ async function updateOnePackage(pkg, flags, deps) {
     }
     if (result.backupPath) deps.log(`  Previous skill retained at ${result.backupPath}`);
     if (kind === "stack") {
-      if (path40.resolve(result.path) !== path40.resolve(snapshot.targetPath)) {
+      if (path46.resolve(result.path) !== path46.resolve(snapshot.targetPath)) {
         throw new Error(`Updated stack path changed unexpectedly for ${pkg.id}`);
       }
       const manifest = await deps.loadStackManifest(result.path);
@@ -35160,8 +35889,8 @@ async function cmdUpdate(args, flags, dependencies = {}) {
 }
 
 // src/commands/which.js
-var fs40 = __toESM(require("fs/promises"), 1);
-var path41 = __toESM(require("path"), 1);
+var fs46 = __toESM(require("fs/promises"), 1);
+var path47 = __toESM(require("path"), 1);
 init_src5();
 init_src();
 init_src4();
@@ -35243,7 +35972,7 @@ Installed stacks:`);
     if (runtimeInfo.entry) {
       console.log("");
       console.log("Run MCP server directly:");
-      const entryPath = path41.join(stackPath, runtimeInfo.entry);
+      const entryPath = path47.join(stackPath, runtimeInfo.entry);
       if (runtimeInfo.runtime === "node") {
         console.log(`  echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | node ${entryPath}`);
       } else if (runtimeInfo.runtime === "python") {
@@ -35261,32 +35990,32 @@ Installed stacks:`);
 }
 async function detectRuntime(stackPath) {
   const layouts = [
-    { runtime: "node", runtimePath: path41.join(stackPath, "node"), entryPrefix: "node/", explicit: true },
-    { runtime: "python", runtimePath: path41.join(stackPath, "python"), entryPrefix: "python/", explicit: true },
+    { runtime: "node", runtimePath: path47.join(stackPath, "node"), entryPrefix: "node/", explicit: true },
+    { runtime: "python", runtimePath: path47.join(stackPath, "python"), entryPrefix: "python/", explicit: true },
     { runtime: "node", runtimePath: stackPath, entryPrefix: "", explicit: false },
     { runtime: "python", runtimePath: stackPath, entryPrefix: "", explicit: false }
   ];
   for (const { runtime, runtimePath, entryPrefix, explicit } of layouts) {
     try {
-      await fs40.access(runtimePath);
+      await fs46.access(runtimePath);
       if (runtime === "node") {
-        const distEntry = path41.join(runtimePath, "dist", "index.js");
-        const srcEntry = path41.join(runtimePath, "src", "index.ts");
+        const distEntry = path47.join(runtimePath, "dist", "index.js");
+        const srcEntry = path47.join(runtimePath, "src", "index.ts");
         try {
-          await fs40.access(distEntry);
+          await fs46.access(distEntry);
           return { runtime: "node", entry: `${entryPrefix}dist/index.js` };
         } catch {
           try {
-            await fs40.access(srcEntry);
+            await fs46.access(srcEntry);
             return { runtime: "node", entry: `${entryPrefix}src/index.ts` };
           } catch {
             if (explicit) return { runtime: "node", entry: null };
           }
         }
       } else if (runtime === "python") {
-        const entry = path41.join(runtimePath, "src", "index.py");
+        const entry = path47.join(runtimePath, "src", "index.py");
         try {
-          await fs40.access(entry);
+          await fs46.access(entry);
           return { runtime: "python", entry: `${entryPrefix}src/index.py` };
         } catch {
           if (explicit) return { runtime: "python", entry: null };
@@ -35306,18 +36035,18 @@ async function checkAuth(stackPath, runtime, options = {}) {
     if (!rootPath || checkedRoots.has(rootPath)) return;
     checkedRoots.add(rootPath);
     try {
-      await fs40.access(path41.join(rootPath, "token.json"));
+      await fs46.access(path47.join(rootPath, "token.json"));
       authFiles.push(labelPrefix ? `${labelPrefix}/token.json` : "token.json");
       configured = true;
     } catch {
-      const accountsPath = path41.join(rootPath, "accounts");
+      const accountsPath = path47.join(rootPath, "accounts");
       try {
-        const accounts = await fs40.readdir(accountsPath);
+        const accounts = await fs46.readdir(accountsPath);
         for (const account of accounts) {
           if (account.startsWith(".")) continue;
-          const accountTokenPath = path41.join(accountsPath, account, "token.json");
+          const accountTokenPath = path47.join(accountsPath, account, "token.json");
           try {
-            await fs40.access(accountTokenPath);
+            await fs46.access(accountTokenPath);
             const label = labelPrefix ? `${labelPrefix}/accounts/${account}/token.json` : `accounts/${account}/token.json`;
             authFiles.push(label);
             configured = true;
@@ -35329,19 +36058,19 @@ async function checkAuth(stackPath, runtime, options = {}) {
     }
   }
   if (runtime === "node" || runtime === "python") {
-    await scanAuthRoot(path41.join(stackPath, runtime), runtime);
+    await scanAuthRoot(path47.join(stackPath, runtime), runtime);
     await scanAuthRoot(stackPath, "");
   }
-  const stackName = options.stackName || path41.basename(stackPath);
+  const stackName = options.stackName || path47.basename(stackPath);
   const rudiHome = options.rudiHome || PATHS.home;
   await scanAuthRoot(
-    path41.join(rudiHome, "state", "stacks", stackName),
+    path47.join(rudiHome, "state", "stacks", stackName),
     `state/stacks/${stackName}`
   );
   const envCredentialNames = /* @__PURE__ */ new Set();
-  const envPath = path41.join(stackPath, ".env");
+  const envPath = path47.join(stackPath, ".env");
   try {
-    const envContent = await fs40.readFile(envPath, "utf-8");
+    const envContent = await fs46.readFile(envPath, "utf-8");
     for (const line of envContent.split("\n")) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith("#")) continue;
@@ -35434,8 +36163,8 @@ function checkIfRunning(stackName, options = {}) {
 }
 
 // src/commands/auth.js
-var fs41 = __toESM(require("fs/promises"), 1);
-var path42 = __toESM(require("path"), 1);
+var fs47 = __toESM(require("fs/promises"), 1);
+var path48 = __toESM(require("path"), 1);
 var import_child_process8 = require("child_process");
 init_src5();
 init_src4();
@@ -35467,31 +36196,31 @@ function isPortAvailable(port) {
 }
 async function detectRuntime2(stackPath) {
   const layouts = [
-    { runtime: "node", runtimePath: path42.join(stackPath, "node") },
+    { runtime: "node", runtimePath: path48.join(stackPath, "node") },
     { runtime: "node", runtimePath: stackPath },
-    { runtime: "python", runtimePath: path42.join(stackPath, "python") },
+    { runtime: "python", runtimePath: path48.join(stackPath, "python") },
     { runtime: "python", runtimePath: stackPath }
   ];
   for (const { runtime, runtimePath } of layouts) {
     try {
-      await fs41.access(runtimePath);
+      await fs47.access(runtimePath);
       if (runtime === "node") {
-        const authTs = path42.join(runtimePath, "src", "auth.ts");
-        const authJs = path42.join(runtimePath, "dist", "auth.js");
+        const authTs = path48.join(runtimePath, "src", "auth.ts");
+        const authJs = path48.join(runtimePath, "dist", "auth.js");
         try {
-          await fs41.access(authTs);
+          await fs47.access(authTs);
           return { runtime: "node", authScript: authTs, useTsx: true };
         } catch {
           try {
-            await fs41.access(authJs);
+            await fs47.access(authJs);
             return { runtime: "node", authScript: authJs, useTsx: false };
           } catch {
           }
         }
       } else if (runtime === "python") {
-        const authPy = path42.join(runtimePath, "src", "auth.py");
+        const authPy = path48.join(runtimePath, "src", "auth.py");
         try {
-          await fs41.access(authPy);
+          await fs47.access(authPy);
           return { runtime: "python", authScript: authPy, useTsx: false };
         } catch {
         }
@@ -35594,10 +36323,10 @@ function createAuthSubprocess({
   throw new Error(`Unsupported auth runtime: ${runtime}`);
 }
 function runAuthSubprocess(plan, options = {}) {
-  const execFileSync9 = options.execFileSync || import_child_process8.execFileSync;
+  const execFileSync12 = options.execFileSync || import_child_process8.execFileSync;
   const command = requireSubprocessArg(plan?.command, "auth command");
   const args = Array.isArray(plan?.args) ? plan.args.map((arg, index) => requireSubprocessArg(arg, `auth arg ${index}`)) : [];
-  execFileSync9(command, args, {
+  execFileSync12(command, args, {
     cwd: options.cwd,
     stdio: options.stdio || "inherit",
     ...options.env ? { env: options.env } : {}
@@ -35606,7 +36335,7 @@ function runAuthSubprocess(plan, options = {}) {
 function getTempAuthScriptPath(authScript, useTsx) {
   const safeAuthScript = requireSubprocessArg(authScript, "auth script path");
   const tempExt = useTsx ? ".ts" : ".mjs";
-  return path42.join(path42.dirname(safeAuthScript), `auth-temp${tempExt}`);
+  return path48.join(path48.dirname(safeAuthScript), `auth-temp${tempExt}`);
 }
 async function cmdAuth(args, flags) {
   const stackId = args[0];
@@ -35647,14 +36376,14 @@ Installed stacks:`);
     const port = await findAvailablePort(3456);
     console.log(`Using port: ${port}`);
     console.log("");
-    const cwd = path42.dirname(authInfo.authScript);
+    const cwd = path48.dirname(authInfo.authScript);
     if (authInfo.runtime === "node") {
-      const distAuth = path42.join(cwd, "..", "dist", "auth.js");
+      const distAuth = path48.join(cwd, "..", "dist", "auth.js");
       let useBuiltInPort = false;
       let tempAuthScript = null;
       try {
-        await fs41.access(distAuth);
-        const distContent = await fs41.readFile(distAuth, "utf-8");
+        await fs47.access(distAuth);
+        const distContent = await fs47.readFile(distAuth, "utf-8");
         if (distContent.includes("findAvailablePort")) {
           console.log("Using compiled authentication script...");
           useBuiltInPort = true;
@@ -35662,10 +36391,10 @@ Installed stacks:`);
       } catch {
       }
       if (!useBuiltInPort) {
-        const authContent = await fs41.readFile(authInfo.authScript, "utf-8");
+        const authContent = await fs47.readFile(authInfo.authScript, "utf-8");
         tempAuthScript = getTempAuthScriptPath(authInfo.authScript, authInfo.useTsx);
         const modifiedContent = authContent.replace(/localhost:3456/g, `localhost:${port}`).replace(/server\.listen\(3456/g, `server.listen(${port}`);
-        await fs41.writeFile(tempAuthScript, modifiedContent);
+        await fs47.writeFile(tempAuthScript, modifiedContent);
       }
       console.log("Starting OAuth flow...");
       console.log("");
@@ -35682,12 +36411,12 @@ Installed stacks:`);
           env: authEnv
         });
         if (tempAuthScript) {
-          await fs41.unlink(tempAuthScript);
+          await fs47.unlink(tempAuthScript);
         }
       } catch (error) {
         if (tempAuthScript) {
           try {
-            await fs41.unlink(tempAuthScript);
+            await fs47.unlink(tempAuthScript);
           } catch {
           }
         }
@@ -35723,22 +36452,22 @@ Installed stacks:`);
 }
 
 // src/commands/mcp.js
-var fs42 = __toESM(require("fs"), 1);
-var path43 = __toESM(require("path"), 1);
+var fs48 = __toESM(require("fs"), 1);
+var path49 = __toESM(require("path"), 1);
 var import_child_process9 = require("child_process");
 init_src();
 init_src4();
 function getBundledRuntime(runtime) {
   const platform = process.platform;
   if (runtime === "node") {
-    const nodePath = platform === "win32" ? path43.join(PATHS.runtimes, "node", "node.exe") : path43.join(PATHS.runtimes, "node", "bin", "node");
-    if (fs42.existsSync(nodePath)) {
+    const nodePath = platform === "win32" ? path49.join(PATHS.runtimes, "node", "node.exe") : path49.join(PATHS.runtimes, "node", "bin", "node");
+    if (fs48.existsSync(nodePath)) {
       return nodePath;
     }
   }
   if (runtime === "python") {
-    const pythonPath = platform === "win32" ? path43.join(PATHS.runtimes, "python", "python.exe") : path43.join(PATHS.runtimes, "python", "bin", "python3");
-    if (fs42.existsSync(pythonPath)) {
+    const pythonPath = platform === "win32" ? path49.join(PATHS.runtimes, "python", "python.exe") : path49.join(PATHS.runtimes, "python", "bin", "python3");
+    if (fs48.existsSync(pythonPath)) {
       return pythonPath;
     }
   }
@@ -35746,18 +36475,18 @@ function getBundledRuntime(runtime) {
 }
 function getBundledNpx() {
   const platform = process.platform;
-  const npxPath = platform === "win32" ? path43.join(PATHS.runtimes, "node", "npx.cmd") : path43.join(PATHS.runtimes, "node", "bin", "npx");
-  if (fs42.existsSync(npxPath)) {
+  const npxPath = platform === "win32" ? path49.join(PATHS.runtimes, "node", "npx.cmd") : path49.join(PATHS.runtimes, "node", "bin", "npx");
+  if (fs48.existsSync(npxPath)) {
     return npxPath;
   }
   return null;
 }
 function loadManifest2(stackPath) {
-  const manifestPath = path43.join(stackPath, "manifest.json");
-  if (!fs42.existsSync(manifestPath)) {
+  const manifestPath = path49.join(stackPath, "manifest.json");
+  if (!fs48.existsSync(manifestPath)) {
     return null;
   }
-  return JSON.parse(fs42.readFileSync(manifestPath, "utf-8"));
+  return JSON.parse(fs48.readFileSync(manifestPath, "utf-8"));
 }
 function getRequiredSecrets(manifest) {
   const secrets = manifest?.requires?.secrets || manifest?.secrets || [];
@@ -35790,8 +36519,8 @@ async function cmdMcp(args, flags) {
     console.error("Example: rudi mcp slack");
     process.exit(1);
   }
-  const stackPath = path43.join(PATHS.stacks, stackName);
-  if (!fs42.existsSync(stackPath)) {
+  const stackPath = path49.join(PATHS.stacks, stackName);
+  if (!fs48.existsSync(stackPath)) {
     console.error(`Stack not found: ${stackName}`);
     console.error(`Expected at: ${stackPath}`);
     console.error("");
@@ -35840,22 +36569,22 @@ async function cmdMcp(args, flags) {
       }
       return part;
     }
-    if (part.startsWith("./") || part.startsWith("../") || !path43.isAbsolute(part)) {
-      const resolved = path43.join(stackPath, part);
-      if (fs42.existsSync(resolved)) {
+    if (part.startsWith("./") || part.startsWith("../") || !path49.isAbsolute(part)) {
+      const resolved = path49.join(stackPath, part);
+      if (fs48.existsSync(resolved)) {
         return resolved;
       }
     }
     return part;
   });
   const [cmd, ...cmdArgs] = resolvedCommand;
-  const bundledNodeBin = path43.join(PATHS.runtimes, "node", "bin");
-  const bundledPythonBin = path43.join(PATHS.runtimes, "python", "bin");
-  if (fs42.existsSync(bundledNodeBin) || fs42.existsSync(bundledPythonBin)) {
+  const bundledNodeBin = path49.join(PATHS.runtimes, "node", "bin");
+  const bundledPythonBin = path49.join(PATHS.runtimes, "python", "bin");
+  if (fs48.existsSync(bundledNodeBin) || fs48.existsSync(bundledPythonBin)) {
     const runtimePaths = [];
-    if (fs42.existsSync(bundledNodeBin)) runtimePaths.push(bundledNodeBin);
-    if (fs42.existsSync(bundledPythonBin)) runtimePaths.push(bundledPythonBin);
-    env.PATH = runtimePaths.join(path43.delimiter) + path43.delimiter + (env.PATH || "");
+    if (fs48.existsSync(bundledNodeBin)) runtimePaths.push(bundledNodeBin);
+    if (fs48.existsSync(bundledPythonBin)) runtimePaths.push(bundledPythonBin);
+    env.PATH = runtimePaths.join(path49.delimiter) + path49.delimiter + (env.PATH || "");
   }
   if (flags.debug) {
     console.error(`[rudi mcp] Stack: ${stackName}`);
@@ -35885,47 +36614,47 @@ async function cmdMcp(args, flags) {
 }
 
 // src/commands/integrate.js
-var fs43 = __toESM(require("fs"), 1);
-var path44 = __toESM(require("path"), 1);
+var fs49 = __toESM(require("fs"), 1);
+var path50 = __toESM(require("path"), 1);
 var import_os7 = __toESM(require("os"), 1);
 init_src();
 var HOME2 = import_os7.default.homedir();
-var ROUTER_SHIM_PATH = path44.join(PATHS.bins, "rudi-router");
-var LEGACY_ROUTER_SHIM_PATH = path44.join(PATHS.home, "shims", "rudi-router");
+var ROUTER_SHIM_PATH = path50.join(PATHS.bins, "rudi-router");
+var LEGACY_ROUTER_SHIM_PATH = path50.join(PATHS.home, "shims", "rudi-router");
 function checkRouterShim() {
-  if (fs43.existsSync(ROUTER_SHIM_PATH)) return ROUTER_SHIM_PATH;
-  if (fs43.existsSync(LEGACY_ROUTER_SHIM_PATH)) return LEGACY_ROUTER_SHIM_PATH;
+  if (fs49.existsSync(ROUTER_SHIM_PATH)) return ROUTER_SHIM_PATH;
+  if (fs49.existsSync(LEGACY_ROUTER_SHIM_PATH)) return LEGACY_ROUTER_SHIM_PATH;
   throw new Error(
     `Router shim not found at ${ROUTER_SHIM_PATH}
 Run: rudi shims rebuild`
   );
 }
 function backupConfig(configPath) {
-  if (!fs43.existsSync(configPath)) return null;
+  if (!fs49.existsSync(configPath)) return null;
   const backupPath = configPath + ".backup." + Date.now();
-  fs43.copyFileSync(configPath, backupPath);
+  fs49.copyFileSync(configPath, backupPath);
   return backupPath;
 }
 function readJsonConfig(configPath) {
-  if (!fs43.existsSync(configPath)) {
+  if (!fs49.existsSync(configPath)) {
     return {};
   }
   try {
-    return JSON.parse(fs43.readFileSync(configPath, "utf-8"));
+    return JSON.parse(fs49.readFileSync(configPath, "utf-8"));
   } catch {
     return {};
   }
 }
 function writeJsonConfig(configPath, config) {
-  const dir = path44.dirname(configPath);
-  if (!fs43.existsSync(dir)) {
-    fs43.mkdirSync(dir, { recursive: true });
+  const dir = path50.dirname(configPath);
+  if (!fs49.existsSync(dir)) {
+    fs49.mkdirSync(dir, { recursive: true });
   }
-  fs43.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  fs49.writeFileSync(configPath, JSON.stringify(config, null, 2));
 }
 function getAgentTargetPath(agentConfig) {
   const configPath = findAgentConfig(agentConfig);
-  return configPath || path44.join(HOME2, agentConfig.paths[process.platform]?.[0] || agentConfig.paths.darwin[0]);
+  return configPath || path50.join(HOME2, agentConfig.paths[process.platform]?.[0] || agentConfig.paths.darwin[0]);
 }
 function tomlString(value) {
   return `"${String(value).replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
@@ -35964,9 +36693,9 @@ function buildCodexRouterTomlBlock(routerPath) {
   ].join("\n");
 }
 function patchCodexTomlRouter(content, routerPath, options = {}) {
-  const rudiMcpShimPath = options.rudiMcpShimPath || path44.join(PATHS.bins, "rudi-mcp");
-  const legacyMcpShimPath = options.legacyMcpShimPath || path44.join(PATHS.home, "shims", "rudi-mcp");
-  const rudiStacksPath = options.rudiStacksPath || path44.join(PATHS.home, "stacks");
+  const rudiMcpShimPath = options.rudiMcpShimPath || path50.join(PATHS.bins, "rudi-mcp");
+  const legacyMcpShimPath = options.legacyMcpShimPath || path50.join(PATHS.home, "shims", "rudi-mcp");
+  const rudiStacksPath = options.rudiStacksPath || path50.join(PATHS.home, "stacks");
   const blocks = splitTomlBlocks(content || "");
   const removedEntries = [];
   const removedServers = /* @__PURE__ */ new Set();
@@ -36027,23 +36756,23 @@ async function integrateCodexAgent(agentConfig, targetPath, flags) {
 ${agentConfig.name}:`);
   console.log(`  Config: ${targetPath}`);
   const routerPath = checkRouterShim();
-  const existing = fs43.existsSync(targetPath) ? fs43.readFileSync(targetPath, "utf-8") : "";
+  const existing = fs49.existsSync(targetPath) ? fs49.readFileSync(targetPath, "utf-8") : "";
   const result = patchCodexTomlRouter(existing, routerPath);
   if (result.removed.length > 0) {
     console.log(`  Removed old entries: ${result.removed.join(", ")}`);
   }
   if (result.action !== "none" || result.removed.length > 0) {
-    const dir = path44.dirname(targetPath);
-    if (!fs43.existsSync(dir)) {
-      fs43.mkdirSync(dir, { recursive: true });
+    const dir = path50.dirname(targetPath);
+    if (!fs49.existsSync(dir)) {
+      fs49.mkdirSync(dir, { recursive: true });
     }
-    if (fs43.existsSync(targetPath)) {
+    if (fs49.existsSync(targetPath)) {
       const backup = backupConfig(targetPath);
       if (backup && flags.verbose) {
         console.log(`  Backup: ${backup}`);
       }
     }
-    fs43.writeFileSync(targetPath, result.content);
+    fs49.writeFileSync(targetPath, result.content);
     if (result.action !== "none") {
       console.log(`  ${result.action === "added" ? "\u2713 Added" : "\u2713 Updated"} rudi router`);
     }
@@ -36066,7 +36795,7 @@ ${agentConfig.name}:`);
   console.log(`  Config: ${targetPath}`);
   if (agentId === "codex") {
     const routerPath = checkRouterShim();
-    const existing = fs43.existsSync(targetPath) ? fs43.readFileSync(targetPath, "utf-8") : "";
+    const existing = fs49.existsSync(targetPath) ? fs49.readFileSync(targetPath, "utf-8") : "";
     const result = patchCodexTomlRouter(existing, routerPath);
     if (result.removed.length > 0) {
       console.log(`  Would remove old entries: ${result.removed.join(", ")}`);
@@ -36101,9 +36830,9 @@ ${agentConfig.name}:`);
   if (!config[key]) {
     config[key] = {};
   }
-  const rudiMcpShimPath = path44.join(PATHS.bins, "rudi-mcp");
-  const legacyMcpShimPath = path44.join(PATHS.home, "shims", "rudi-mcp");
-  const rudiStacksPath = path44.join(PATHS.home, "stacks");
+  const rudiMcpShimPath = path50.join(PATHS.bins, "rudi-mcp");
+  const legacyMcpShimPath = path50.join(PATHS.home, "shims", "rudi-mcp");
+  const rudiStacksPath = path50.join(PATHS.home, "stacks");
   const removedEntries = [];
   for (const [serverName, serverConfig] of Object.entries(config[key])) {
     if (serverName === "rudi") continue;
@@ -36142,7 +36871,7 @@ ${agentConfig.name}:`);
     action = "updated";
   }
   if (action !== "none" || removedEntries.length > 0) {
-    if (fs43.existsSync(targetPath)) {
+    if (fs49.existsSync(targetPath)) {
       const backup = backupConfig(targetPath);
       if (backup && flags.verbose) {
         console.log(`  Backup: ${backup}`);
@@ -37521,31 +38250,31 @@ var import_fs20 = __toESM(require("fs"), 1);
 var import_path19 = __toESM(require("path"), 1);
 
 // src/runtime-inspection.js
-var import_node_fs20 = __toESM(require("node:fs"), 1);
-var import_node_path20 = __toESM(require("node:path"), 1);
+var import_node_fs26 = __toESM(require("node:fs"), 1);
+var import_node_path26 = __toESM(require("node:path"), 1);
 init_src();
 function isWithinRoot(rootPath, candidatePath) {
-  const relative4 = import_node_path20.default.relative(rootPath, candidatePath);
-  return relative4 === "" || !relative4.startsWith(`..${import_node_path20.default.sep}`) && relative4 !== ".." && !import_node_path20.default.isAbsolute(relative4);
+  const relative4 = import_node_path26.default.relative(rootPath, candidatePath);
+  return relative4 === "" || !relative4.startsWith(`..${import_node_path26.default.sep}`) && relative4 !== ".." && !import_node_path26.default.isAbsolute(relative4);
 }
 function declaredRuntimeBins(manifest) {
   if (Array.isArray(manifest?.bins)) {
-    return manifest.bins.map((name) => ({ name, relativePath: import_node_path20.default.join("bin", name) }));
+    return manifest.bins.map((name) => ({ name, relativePath: import_node_path26.default.join("bin", name) }));
   }
   if (manifest?.bins && typeof manifest.bins === "object") {
     return Object.entries(manifest.bins).map(([name, descriptor]) => ({
       name,
-      relativePath: descriptor?.path || import_node_path20.default.join("bin", name)
+      relativePath: descriptor?.path || import_node_path26.default.join("bin", name)
     }));
   }
   return [];
 }
 function inspectRuntimeInstall(packageId) {
   const installRoot = getPackagePath(packageId);
-  const manifestPath = import_node_path20.default.join(installRoot, "manifest.json");
-  const rootExists = import_node_fs20.default.existsSync(installRoot);
-  const resolvedInstallRoot = rootExists ? import_node_fs20.default.realpathSync(installRoot) : installRoot;
-  const manifestPresent = import_node_fs20.default.existsSync(manifestPath);
+  const manifestPath = import_node_path26.default.join(installRoot, "manifest.json");
+  const rootExists = import_node_fs26.default.existsSync(installRoot);
+  const resolvedInstallRoot = rootExists ? import_node_fs26.default.realpathSync(installRoot) : installRoot;
+  const manifestPresent = import_node_fs26.default.existsSync(manifestPath);
   if (!manifestPresent) {
     return {
       binaries: [],
@@ -37558,7 +38287,7 @@ function inspectRuntimeInstall(packageId) {
     };
   }
   try {
-    const manifest = JSON.parse(import_node_fs20.default.readFileSync(manifestPath, "utf8"));
+    const manifest = JSON.parse(import_node_fs26.default.readFileSync(manifestPath, "utf8"));
     if (manifest.id !== packageId) {
       const actualId = Object.hasOwn(manifest, "id") ? JSON.stringify(manifest.id) : "(missing)";
       throw new Error(`Installed runtime manifest ID mismatch: expected ${packageId}, got ${actualId}`);
@@ -37567,21 +38296,21 @@ function inspectRuntimeInstall(packageId) {
       if (typeof name !== "string" || !name || typeof relativePath !== "string" || !relativePath) {
         throw new Error("Installed runtime manifest contains an invalid binary declaration");
       }
-      const binaryPath = import_node_path20.default.resolve(installRoot, relativePath);
+      const binaryPath = import_node_path26.default.resolve(installRoot, relativePath);
       if (!isWithinRoot(installRoot, binaryPath)) {
         throw new Error(`Installed runtime binary escapes its package root: ${name}`);
       }
-      if (!import_node_fs20.default.existsSync(binaryPath)) {
+      if (!import_node_fs26.default.existsSync(binaryPath)) {
         throw new Error(`Installed runtime binary is missing: ${name}`);
       }
-      const resolvedPath = import_node_fs20.default.realpathSync(binaryPath);
+      const resolvedPath = import_node_fs26.default.realpathSync(binaryPath);
       if (!isWithinRoot(resolvedInstallRoot, resolvedPath)) {
         throw new Error(`Installed runtime binary resolves outside its package root: ${name}`);
       }
-      if (!import_node_fs20.default.statSync(resolvedPath).isFile()) {
+      if (!import_node_fs26.default.statSync(resolvedPath).isFile()) {
         throw new Error(`Installed runtime binary is not a regular file: ${name}`);
       }
-      import_node_fs20.default.accessSync(resolvedPath, import_node_fs20.default.constants.X_OK);
+      import_node_fs26.default.accessSync(resolvedPath, import_node_fs26.default.constants.X_OK);
       return { name, path: binaryPath, resolvedPath };
     });
     if (binaries.length === 0) {
@@ -38741,11 +39470,11 @@ async function cmdStudio(args, flags) {
 
 // src/commands/serve.js
 var import_node_http = __toESM(require("node:http"), 1);
-var import_node_url2 = require("node:url");
+var import_node_url4 = require("node:url");
 
 // src/daemon/http/context.js
-var import_node_crypto7 = __toESM(require("node:crypto"), 1);
-var import_node_url = require("node:url");
+var import_node_crypto10 = __toESM(require("node:crypto"), 1);
+var import_node_url3 = require("node:url");
 
 // src/daemon/http/errors.js
 function defineError(code, status, defaultMessage) {
@@ -38812,11 +39541,11 @@ function createDaemonHttpContext() {
   function createRequestContext(req) {
     let pathname = "/";
     try {
-      pathname = new import_node_url.URL(req?.url || "/", "http://localhost").pathname;
+      pathname = new import_node_url3.URL(req?.url || "/", "http://localhost").pathname;
     } catch {
     }
     return {
-      requestId: import_node_crypto7.default.randomUUID(),
+      requestId: import_node_crypto10.default.randomUUID(),
       method: req?.method || null,
       path: pathname,
       startedAt: Date.now(),
@@ -38964,7 +39693,7 @@ function createDaemonHttpContext() {
     if (!token || typeof candidate !== "string") return false;
     const expected = Buffer.from(token);
     const actual = Buffer.from(candidate);
-    return expected.length === actual.length && import_node_crypto7.default.timingSafeEqual(expected, actual);
+    return expected.length === actual.length && import_node_crypto10.default.timingSafeEqual(expected, actual);
   }
   return {
     REQUEST_ID_HEADER,
@@ -38974,7 +39703,7 @@ function createDaemonHttpContext() {
     checkAuth: checkAuth2,
     createRequestContext,
     error,
-    generateToken: () => import_node_crypto7.default.randomBytes(32).toString("hex"),
+    generateToken: () => import_node_crypto10.default.randomBytes(32).toString("hex"),
     getRequestContext,
     invalidField,
     json,
@@ -38991,7 +39720,7 @@ function createDaemonHttpContext() {
 init_src5();
 
 // src/daemon/operations/health.js
-var import_node_os4 = __toESM(require("node:os"), 1);
+var import_node_os6 = __toESM(require("node:os"), 1);
 init_src();
 function requireValidResult(name, result, validation) {
   if (!validation.ok) {
@@ -39054,7 +39783,7 @@ function getDaemonStatus2(options = {}) {
     port: normalizePort(options.port),
     uptimeMs,
     rudiHome: typeof options.rudiHome === "string" && options.rudiHome.length > 0 ? options.rudiHome : PATHS.home,
-    platform: typeof options.platform === "string" && options.platform.length > 0 ? options.platform : import_node_os4.default.platform(),
+    platform: typeof options.platform === "string" && options.platform.length > 0 ? options.platform : import_node_os6.default.platform(),
     runtime: options.runtime && typeof options.runtime === "object" && !Array.isArray(options.runtime) ? options.runtime : {
       name: "node",
       version: process.version
@@ -39165,13 +39894,13 @@ function buildDaemonHealthRoutes(ctx, options = {}) {
 }
 
 // src/daemon/routes/env.js
-var import_node_os5 = __toESM(require("node:os"), 1);
+var import_node_os7 = __toESM(require("node:os"), 1);
 function buildEnvRoutes(ctx) {
   const { json } = ctx;
   return {
     handle(_req, res, url) {
       if (url.pathname !== "/env") return false;
-      json(res, { home: import_node_os5.default.homedir(), platform: import_node_os5.default.platform() });
+      json(res, { home: import_node_os7.default.homedir(), platform: import_node_os7.default.platform() });
       return true;
     }
   };
@@ -39532,7 +40261,7 @@ function buildLocalLlmRoutes(ctx, deps = {}) {
 }
 
 // src/daemon/routes/agent-host-validation.js
-var import_node_path21 = __toESM(require("node:path"), 1);
+var import_node_path27 = __toESM(require("node:path"), 1);
 var MAX_AGENT_HOST_BODY_BYTES = 12 * 1024 * 1024;
 var LAUNCH_FIELDS = /* @__PURE__ */ new Set([
   "approvalMode",
@@ -39633,7 +40362,7 @@ function validateRequest(body, allowed, { resume = false } = {}) {
   }
   if (!resume) {
     Object.assign(options, {
-      originDirectory: import_node_path21.default.resolve(requireText(body.originDirectory, "originDirectory")),
+      originDirectory: import_node_path27.default.resolve(requireText(body.originDirectory, "originDirectory")),
       outputDirectory: body.outputDirectory == null ? void 0 : requireText(body.outputDirectory, "outputDirectory"),
       provider: requireText(body.provider, "provider", 64),
       workspace: body.workspace == null ? void 0 : requireText(body.workspace, "workspace"),
@@ -39703,7 +40432,7 @@ function validateAgentGroupRequest(body) {
   });
   return {
     groupId: assertAgentGroupId(body.groupId),
-    originDirectory: import_node_path21.default.resolve(requireText(body.originDirectory, "originDirectory")),
+    originDirectory: import_node_path27.default.resolve(requireText(body.originDirectory, "originDirectory")),
     tasks,
     workspace: requireText(body.workspace, "workspace"),
     workspaceMode: body.workspaceMode == null ? "auto" : requireText(body.workspaceMode, "workspaceMode", 32)
@@ -39931,7 +40660,7 @@ function buildAgentHostRoutes(ctx, dependencies = {}) {
 
 // src/daemon/routes/packages.js
 var import_crypto2 = __toESM(require("crypto"), 1);
-var fs51 = __toESM(require("fs/promises"), 1);
+var fs57 = __toESM(require("fs/promises"), 1);
 var fsSync2 = __toESM(require("fs"), 1);
 var import_path23 = __toESM(require("path"), 1);
 init_src5();
@@ -40003,7 +40732,7 @@ var defaultDeps = {
 async function loadManifest3(installPath) {
   const manifestPath = import_path23.default.join(installPath, "manifest.json");
   try {
-    const content = await fs51.readFile(manifestPath, "utf-8");
+    const content = await fs57.readFile(manifestPath, "utf-8");
     return JSON.parse(content);
   } catch {
     return null;
@@ -40148,7 +40877,7 @@ async function checkSecrets3(manifest, deps) {
 async function parseEnvExample2(installPath) {
   const examplePath = import_path23.default.join(installPath, ".env.example");
   try {
-    const content = await fs51.readFile(examplePath, "utf-8");
+    const content = await fs57.readFile(examplePath, "utf-8");
     const keys = [];
     for (const line of content.split("\n")) {
       const trimmed = line.trim();
@@ -40164,7 +40893,7 @@ async function parseEnvExample2(installPath) {
 async function cleanupFailedStackInstall2(stackId, stackPath, removeConfig, deps) {
   if (stackPath) {
     try {
-      await fs51.rm(stackPath, { recursive: true, force: true });
+      await fs57.rm(stackPath, { recursive: true, force: true });
     } catch {
     }
   }
@@ -40712,7 +41441,7 @@ async function cmdServe(_args, flags = {}) {
     const requestContext = createRequestContext(req);
     attachRequestContext(res, requestContext);
     if (auth.handleCorsPreflight(req, res, requestContext)) return;
-    const url = new import_node_url2.URL(req.url || "/", "http://localhost");
+    const url = new import_node_url4.URL(req.url || "/", "http://localhost");
     const startedAt = Date.now();
     try {
       if (healthRoutes.handlePublic(req, res, url)) return;
@@ -41640,7 +42369,7 @@ async function cmdLeverage(args, flags) {
 }
 
 // src/index.js
-var VERSION = true ? "1.10.29" : process.env.npm_package_version || "0.0.0";
+var VERSION = true ? "1.11.0-rc.1" : process.env.npm_package_version || "0.0.0";
 var RETIRED_COMMANDS = /* @__PURE__ */ new Map([
   ["apply", "Provider transcripts remain authoritative; organization-plan execution was removed."],
   ["database", "Use Studio only if you still need the isolated compatibility database."],

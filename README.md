@@ -19,7 +19,7 @@ rudi init --skip-downloads
 rudi home
 ```
 
-Install Node.js 22 or 24 and npm first. npm installs the CLI executable and its
+Install Node.js 22 or 24.22+ and npm first. npm installs the CLI executable and its
 dependencies into your npm prefix; it does not create `~/.rudi/`. Initialization
 creates the local RUDI directories and settings. It also installs a managed
 RUDI instruction block in your Codex home; add `--no-agent-instructions` to skip
@@ -32,6 +32,13 @@ These fixes and the companion registry update to Node 24.21.0 are local
 candidates awaiting publication. The public registry still supplies Node 20.10.0,
 outside this CLI's supported Node versions; keep a supported Node on PATH
 until the registry update is published.
+The 24.21.0 candidate also needs revision before adoption: Node 24.19–24.21
+can abort while collecting native SQLite objects. This checkout requires
+24.22+ on the Node 24 line and rejects older versions before opening Agent Host
+state. `pnpm build` exercises allocation-driven SQLite GC and worker teardown;
+the packaged `scripts/verify-sqlite-teardown.mjs` provides the same acceptance
+probe against the package's own dependency. No installed runtime is upgraded
+automatically. See the [teardown verification](docs/swe-compliance/2026-10-16-sqlite-teardown.md).
 `--skip-downloads` initializes local structure without installing runtimes. See the
 [fresh-install findings and verification guide](https://github.com/learnrudi/cli/blob/main/docs/cli-layout-and-installation.md)
 for the tested scope and remaining registry compatibility gap.
@@ -717,3 +724,5 @@ Native projections retain complete trigger descriptions and bundled Codex
 metadata. Ownership receipts, exact force scope, conflict preservation and
 restartRequired reporting continue to govern native updates. Deploy the
 compatible CLI before publishing a registry that migrates existing flat skills.
+
+Registered shared task execution is described in [the Agent Host task contract](docs/agent-task-execution.md). It remains a foreground-only fixture candidate. GitHub source integration does not publish an npm release or authorize deployment and cutover.
