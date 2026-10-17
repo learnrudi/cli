@@ -151,3 +151,26 @@ test('launch receipt persistence failure terminates the provider and records fai
   assert.match(result.lastError, /receipt EIO/);
   assert.throws(() => process.kill(result.pid, 0), /ESRCH/);
 });
+
+test('selected task account does not depend on the ambient Codex login', async t => {
+  const { root, profile, store } = fixture(t);
+  const accountDirectory = path.join(root, 'codex-account');
+  fs.mkdirSync(accountDirectory, { mode: 0o700 });
+  const selected = validateTaskProfile({ ...profile, account: { id: 'codex-work',
+    email: 'work@example.test', config_directory: accountDirectory } }, {
+    working_directory: profile.working_directory,
+    outputs: { runtime: path.join(root, 'runtime'), deliverables: profile.write_roots },
+  });
+  const events = [{ type: 'thread.started', thread_id: 'selected_session' },
+    { type: 'item.completed', item: { type: 'agent_message', text: '{"outcome":"no_work","outputs":[]}' } },
+    { type: 'turn.completed', usage: {} }];
+  const result = await launchAgent({ provider: 'codex', model: selected.model, prompt: 'fixture',
+    taskProfile: selected, workspace: selected.working_directory, workspaceMode: selected.workspace_mode }, {
+    artifactsRoot: path.join(root, 'runtime'), store, idFactory: () => 'launch_selected_account',
+    preflightImpl: async () => { throw new Error('ambient login must not be inspected'); },
+    taskPreflightImpl: async ({ profile: observed }) => { assert.equal(observed.account.id, 'codex-work'); return { account: observed.account }; },
+    resolveBinaryImpl: () => '/fake/codex', spawnImpl: spawnFixture(events, []),
+    stdout: { write() {} }, stderr: { write() {} }, signalEmitter: new EventEmitter(),
+  });
+  assert.equal(result.status, 'completed');
+});

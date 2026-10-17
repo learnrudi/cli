@@ -60,7 +60,7 @@ export async function launchAgent(options, dependencies = {}) {
   if (!binaryPath) {
     throw new Error(getMissingAgentProviderMessage(provider));
   }
-  if (!taskProfile || provider !== 'claude') await preflightImpl({ binaryPath, provider });
+  if (!taskProfile?.account) await preflightImpl({ binaryPath, provider });
   if (privateAutomationProfile) {
     await privatePreflightImpl({ binaryPath, profile: privateAutomationProfile });
   }

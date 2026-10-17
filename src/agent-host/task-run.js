@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { runTaskCapsule } from './task-capsule.js';
+import { inspectCodexTaskSeat } from './task-codex-account.js';
+import { taskEnvironment } from './task-codex.js';
 import { launchAgent } from './launch.js';
 import { openTaskCustody, recoverTaskCustody } from './task-custody.js';
 import { createLaunchStore } from './launch-store.js';
@@ -86,7 +88,7 @@ function verifyOutputs(manifest, profile) {
 export async function runAgentTask(reference, dependencies = {}) {
   if(Object.keys(dependencies).some(key=>key!=='environment'))throw new Error('unsupported capsule dependency; use the explicit in-session fixture interface');
   const environment=dependencies.environment || process.env;
-  const {request}=checkAgentTask(reference,environment);
+  const {request}=await checkAgentTask(reference,environment);
   computeBinding(environment);
   return runTaskCapsule(reference,request,environment);
 }
@@ -98,6 +100,7 @@ export async function runAgentTaskInSession(reference, dependencies = {}) {
   fs.mkdirSync(runDirectory, { mode: 0o700 }); // Exclusive: an interrupted run is evidence, never replayed in place.
   const base = { schema_version: 1, task: request.task, request: reference, compute,
     instructions: request.instructions, execution_profile: request.execution_profile,
+    ...(profile.reasoning_effort !== undefined ? { reasoning_effort: profile.reasoning_effort } : {}),
     ...(profile.account ? {account:profile.account} : {}) };
   const store = createLaunchStore({ databasePath: path.join(request.outputs.runtime, 'agent-hosts.db') });
   let custody;
@@ -155,13 +158,14 @@ export async function recoverAgentTask(reference) {
 }
 
 
-export function checkAgentTask(reference, environment = process.env) {
+export async function checkAgentTask(reference, environment = process.env) {
   const checked = readAgentTask(reference,environment);
   assertTaskProviderQualified(checked.profile);
-  if (checked.profile.provider === 'claude') {
-    const binaryPath = checked.nativeBinary || resolveAgentProviderBinary('claude');
-    if (!binaryPath) throw new Error('Native Claude executable unavailable');
-    assertTaskHostCapabilities({binaryPath,profile:checked.profile});
+  if (checked.profile.account) {
+    const binaryPath = checked.nativeBinary || resolveAgentProviderBinary(checked.profile.provider);
+    if (!binaryPath) throw new Error('Native task executable unavailable');
+    if (checked.profile.provider === 'claude') await assertTaskHostCapabilities({binaryPath,profile:checked.profile});
+    else await inspectCodexTaskSeat(binaryPath, checked.profile, taskEnvironment(binaryPath, checked.profile));
   }
   return checked;
 }

@@ -4,17 +4,19 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { auditHelperPath } from './task-audit.js';
 import { getPrivateCodexDisabledFeatures } from './private-automation-profile.js';
+import { inspectCodexTaskSeat } from './task-codex-account.js';
 
 // This boundary is qualified on this native release, not inferred from a version range.
 export const TASK_CODEX_VERSION = '0.160.1';
 // Unlike tool-free private automation, tasks need the native command transport.
 const TASK_DISABLED = getPrivateCodexDisabledFeatures().filter(feature => !['shell_tool', 'unified_exec', 'code_mode_host'].includes(feature));
 
-export function taskEnvironment(binaryPath) {
+export function taskEnvironment(binaryPath, profile = null) {
   const result = { PATH: `${path.dirname(binaryPath)}:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin` };
   for (const key of ['HOME', 'USER', 'LOGNAME', 'LANG', 'LC_ALL']) {
     if (typeof process.env[key] === 'string') result[key] = process.env[key];
   }
+  if (profile?.account) result.CODEX_HOME = profile.account.config_directory;
   return result;
 }
 
@@ -28,6 +30,10 @@ export function taskPermissionArgs(profile) {
 
 export function taskCodexArgs(context) {
   const args = ['--ask-for-approval', 'never', '--no-daemon', '--enable', 'code_mode_host'];
+  if (context.taskProfile.account) args.push('-c', 'cli_auth_credentials_store="file"');
+  if (context.taskProfile.reasoning_effort !== undefined) {
+    args.push('-c', `model_reasoning_effort=${JSON.stringify(context.taskProfile.reasoning_effort)}`);
+  }
   for (const feature of TASK_DISABLED) args.push('--disable', feature);
   args.push(...taskPermissionArgs(context.taskProfile), '-c', 'mcp_servers={}',
     '-c', 'shell_environment_policy.inherit="none"', '-c', 'web_search="disabled"',
@@ -36,7 +42,7 @@ export function taskCodexArgs(context) {
   return args;
 }
 
-export function assertTaskHostCapabilities({ binaryPath, profile }, { spawnSyncImpl = spawnSync } = {}) {
+export async function assertTaskHostCapabilities({ binaryPath, profile }, { spawnSyncImpl = spawnSync, spawnImpl } = {}) {
   if (process.platform !== 'darwin') throw new Error('task shared permissions currently qualified on macOS only');
   // User config is ignored. Reject other local layers rather than allow legacy
   // sandbox_mode or hooks to override the registered permission profile.
@@ -47,7 +53,9 @@ export function assertTaskHostCapabilities({ binaryPath, profile }, { spawnSyncI
     if (cursor === path.dirname(cursor)) break;
   }
   if (fs.existsSync('/etc/codex/config.toml')) throw new Error('system Codex config requires explicit task qualification');
-  const probe = (args, input) => spawnSyncImpl(binaryPath, args, { encoding: 'utf8', input, timeout: 5000, maxBuffer: 262144, env: taskEnvironment(binaryPath) });
+  const environment = taskEnvironment(binaryPath, profile);
+  const account = profile.account ? await inspectCodexTaskSeat(binaryPath, profile, environment, { spawnImpl }) : null;
+  const probe = (args, input) => spawnSyncImpl(binaryPath, args, { encoding: 'utf8', input, timeout: 5000, maxBuffer: 262144, env: environment });
   const version = probe(['--version']);
   if (version.status !== 0 || String(version.stdout).trim() !== `codex-cli ${TASK_CODEX_VERSION}`) {
     throw new Error('native Codex version is not qualified for task permissions');
@@ -63,5 +71,5 @@ export function assertTaskHostCapabilities({ binaryPath, profile }, { spawnSyncI
   if(containment.status!==0 || String(containment.stdout).trim()!==JSON.stringify({audit_session_escape_denied:true,supervisor_signal_denied:true})) {
     throw new Error('native audit containment capability probe failed');
   }
-  return { version: TASK_CODEX_VERSION };
+  return { version: TASK_CODEX_VERSION, ...(account ? { account } : {}) };
 }

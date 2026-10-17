@@ -19,6 +19,7 @@ export function taskClaudeArgs(context) {
   };
   return ['--print', '--verbose', '--output-format', 'stream-json', '--input-format', 'text',
     '--model', context.model, '--safe-mode', '--restricted',
+    ...(profile.reasoning_effort !== undefined ? ['--effort', profile.reasoning_effort] : []),
     '--no-chrome', '--disable-slash-commands', '--tools', 'Read,Write,Edit',
     '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}', '--setting-sources', '',
     '--permission-mode', 'dontAsk', '--settings', JSON.stringify(settings),

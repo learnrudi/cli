@@ -352,6 +352,7 @@
     "available": [
       {
         "id": "gpt-5.6-sol",
+        "reasoningEfforts": ["low","medium","high","xhigh","max","ultra"],
         "alias": "sol",
         "name": "GPT-5.6 Sol",
         "description": "Flagship model for complex coding, computer use, research, and security work",
@@ -359,12 +360,14 @@
       },
       {
         "id": "gpt-5.6-terra",
+        "reasoningEfforts": ["low","medium","high","xhigh","max","ultra"],
         "alias": "terra",
         "name": "GPT-5.6 Terra",
         "description": "Balanced everyday workhorse for production tasks and coordinating subagents"
       },
       {
         "id": "gpt-5.6-luna",
+        "reasoningEfforts": ["low","medium","high","xhigh","max"],
         "alias": "luna",
         "name": "GPT-5.6 Luna",
         "description": "Fast, low-cost model for narrow, repeatable, and high-volume work"
