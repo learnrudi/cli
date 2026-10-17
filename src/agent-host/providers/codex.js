@@ -33,7 +33,7 @@ export function buildCodexPlan(options) {
     if ((options.extraArgs || []).length || (options.images || []).length || options.approvalMode || options.permissionMode) {
       throw new Error('task execution forbids permission overrides, images and passthrough arguments');
     }
-    return finishPlan(context, taskCodexArgs(context), 'registered-shared', taskEnvironment(context.binaryPath));
+    return finishPlan(context, taskCodexArgs(context), 'registered-shared', taskEnvironment(context.binaryPath, context.taskProfile));
   }
   if (context.privateAutomationProfile) {
     if ((options.extraArgs || []).length > 0 || (options.images || []).length > 0) {

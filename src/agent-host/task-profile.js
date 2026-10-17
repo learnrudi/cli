@@ -83,11 +83,17 @@ function roots(value, label) {
 
 export function validateTaskProfile(value, binding) {
   exactFields(value, ['schema_version', 'provider', 'model', 'workspace_mode', 'working_directory',
-    'read_roots', 'write_roots', 'network', 'timeout_ms', ...(value?.provider === 'claude' ? ['account'] : [])], 'execution profile');
+    'read_roots', 'write_roots', 'network', 'timeout_ms',
+    ...(value?.provider === 'claude' || Object.hasOwn(value || {}, 'account') ? ['account'] : []),
+    ...(Object.hasOwn(value || {}, 'reasoning_effort') ? ['reasoning_effort'] : [])], 'execution profile');
   if (value.schema_version !== 1 || !['codex', 'claude'].includes(value.provider) || value.workspace_mode !== TASK_MODE) {
     throw new Error('unsupported task provider/profile version/workspace mode');
   }
-  if (getModelDef(loadProviderConfig(value.provider), value.model)?.id !== value.model) throw new Error('task requires an exact configured model');
+  const model = getModelDef(loadProviderConfig(value.provider), value.model);
+  if (model?.id !== value.model) throw new Error('task requires an exact configured model');
+  if (Object.hasOwn(value, 'reasoning_effort') && !model.reasoningEfforts?.includes(value.reasoning_effort)) {
+    throw new Error('unsupported reasoning effort for task provider/model');
+  }
   if (!['enabled', 'disabled'].includes(value.network)) throw new Error('network must be enabled or disabled');
   if (!Number.isSafeInteger(value.timeout_ms) || value.timeout_ms < 1 || value.timeout_ms > 3600000) throw new Error('invalid task timeout');
   const project = canonicalDirectory(value.working_directory, 'working_directory');
@@ -100,11 +106,29 @@ export function validateTaskProfile(value, binding) {
       || write.some(root => inside(project, root) || inside(runtime, root) || inside(root, runtime))) {
     throw new Error('write roots must exactly match deliverables and exclude project/control roots');
   }
-  const account = value.provider === 'claude' ? validateClaudeAccount(value.account, [...read, ...write, runtime]) : null;
+  const account = value.provider === 'claude' ? validateClaudeAccount(value.account, [...read, ...write, runtime])
+    : Object.hasOwn(value, 'account') ? validateCodexAccount(value.account, [...read, ...write, runtime]) : null;
   const profile = Object.freeze({ ...value, ...(account ? { account } : {}), read_roots: Object.freeze(read), write_roots: Object.freeze(write) });
   assertWritableTaskRoots(profile);
   validatedProfiles.add(profile);
   return profile;
+}
+
+function validateCodexAccount(value, workspaceRoots) {
+  exactFields(value, ['id', 'email', 'config_directory'], 'Codex account');
+  if (typeof value.id !== 'string' || !/^codex-[a-z0-9][a-z0-9-]{0,47}$/u.test(value.id)) throw new Error('invalid Codex account id');
+  taskText(value.email, 'Codex account email', 254);
+  if (!/^[^\s@]+@[^\s@]+$/u.test(value.email)) throw new Error('invalid Codex account email');
+  const directory = canonicalDirectory(value.config_directory, 'Codex account directory');
+  const stat = fs.statSync(directory);
+  if (stat.uid !== process.getuid() || (stat.mode & 0o077) !== 0) throw new Error('Codex account directory must be private and owned by this user');
+  if (workspaceRoots.some(root => inside(root, directory) || inside(directory, root))) throw new Error('Codex account directory overlaps task roots');
+  // The native account probe cannot ignore user config. Dedicated account
+  // homes therefore carry authentication/session state only, never config.
+  for (const name of ['config.toml', 'managed_config.toml', 'requirements.toml']) {
+    if (fs.existsSync(path.join(directory, name))) throw new Error('Codex account configuration requires separate qualification');
+  }
+  return Object.freeze({ ...value });
 }
 
 export function assertTaskProfile(profile) {

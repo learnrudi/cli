@@ -71,8 +71,8 @@ Python `sqlite3` job store is independent of this Node compatibility constraint.
 
 ## Execution profile
 
-A Compute task revision pins this UTF-8 JSON file by path and SHA-256. Only these
-keys are accepted; directories must exist and be canonical, without symlink or
+A Compute task revision pins this UTF-8 JSON file by path and SHA-256. The fields shown below plus the documented `account` object and optional
+`reasoning_effort` are accepted; directories must exist and be canonical, without symlink or
 glob spellings. Replace the illustrative paths with isolated fixture paths.
 
 ```json
@@ -80,6 +80,7 @@ glob spellings. Replace the illustrative paths with isolated fixture paths.
   "schema_version": 1,
   "provider": "codex",
   "model": "gpt-5.6-sol",
+  "reasoning_effort": "high",
   "workspace_mode": "registered-shared",
   "working_directory": "/absolute/shared/project",
   "read_roots": ["/absolute/shared/project"],
@@ -88,6 +89,69 @@ glob spellings. Replace the illustrative paths with isolated fixture paths.
   "timeout_ms": 300000
 }
 ```
+
+### Reasoning effort and Codex account selection
+
+An explicit `reasoning_effort` is validated against the exact model's
+`reasoningEfforts` catalog entry. Codex receives `model_reasoning_effort`;
+Claude receives `--effort`. Unsupported values, types and model combinations
+are rejected before admission. No aliases, translation between different effort
+levels, or silent fallback are accepted. The current catalog accepts:
+
+| Model | Effort values |
+| --- | --- |
+| GPT-5.6 Sol, Terra | low, medium, high, xhigh, max, ultra |
+| GPT-5.6 Luna | low, medium, high, xhigh, max |
+| Claude Fable 5, Opus 5, Sonnet 5 | low, medium, high, xhigh, max |
+| Claude Haiku 4.5 | No effort field; that model does not support this control |
+
+The Claude combinations follow the provider's [model configuration contract](https://code.claude.com/docs/en/model-config#adjust-effort-level).
+This is a requested native setting, not a measured amount of model reasoning.
+Provider-side policy and availability still apply; native qualification is
+required before releasing a new model/runtime combination.
+
+Existing v1 profiles may omit effort and retain native default behavior. New
+jobs should pin it whenever the selected model supports it. An older runner
+rejects these new fields; register a new profile revision and an upgraded,
+hash-pinned runner rather than editing an existing profile in place. Launch and
+completion receipts record requested effort together with the profile hash.
+
+Codex profiles can additionally select this non-secret account object:
+
+```json
+"account": {
+  "id": "codex-example",
+  "email": "operator@example.test",
+  "config_directory": "/Users/operator/.rudi/agent-identities/codex-example/codex"
+}
+```
+
+The directory must exist, be canonical, owned by the execution user, private
+(no group/other access), and disjoint from all task read/write/runtime roots.
+Use a dedicated native account home without `config.toml`,
+`managed_config.toml`, or `requirements.toml`. It stores native authentication
+and sessions; it is not a project or a deliverable. Authenticate interactively
+on the execution host, selecting this directory as Codex's native home and
+`cli_auth_credentials_store="file"`. Do not copy credentials from another
+profile. The same home and credential-store setting are used at admission,
+preflight, and inference. Native sessions stay under that home's `sessions/`.
+
+Agent Host requests only `initialize` and `account/read` from a private native
+stdio app-server process, without starting a session or requesting token refresh.
+Inspection is bounded to ten seconds and 256 KiB of combined output; raw native
+diagnostics are never returned. API-key/absent/mismatched accounts fail closed.
+The selected email must match the native ChatGPT account before admission and
+again before execution. The public native account response exposes email,
+not a ChatGPT workspace ID, so this contract does not assert workspace identity.
+Receipts distinguish the selected account from the observed account metadata.
+Global login state and API-key environment variables are not used for selected
+accounts. Legacy Codex profiles without an account retain their prior login
+behavior; Claude continues to require its explicit account object above.
+
+Both optional fields are part of the hashed execution profile. Compute continues
+to treat that profile as opaque; Agent Host owns validation and provider arguments.
+This source increment requires separate selected-account/effort native acceptance
+on Admin before an installed worker can claim support.
 
 Model IDs must be exact configured IDs, not aliases. The only session mode is
 fresh. Read roots explicitly include the working directory. Write roots exactly

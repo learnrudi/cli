@@ -31,59 +31,6 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// packages/env/src/index.js
-var import_path, import_os, RUDI_HOME, CLAUDE_HOME, PATHS;
-var init_src = __esm({
-  "packages/env/src/index.js"() {
-    import_path = __toESM(require("path"), 1);
-    import_os = __toESM(require("os"), 1);
-    RUDI_HOME = process.env.RUDI_HOME ? import_path.default.resolve(process.env.RUDI_HOME) : import_path.default.join(import_os.default.homedir(), ".rudi");
-    CLAUDE_HOME = process.env.CLAUDE_HOME ? import_path.default.resolve(process.env.CLAUDE_HOME) : import_path.default.join(import_os.default.homedir(), ".claude");
-    PATHS = {
-      // Root
-      home: RUDI_HOME,
-      // Installed machine-local applications
-      apps: import_path.default.join(RUDI_HOME, "apps"),
-      // Installed RUDI packages
-      packages: import_path.default.join(RUDI_HOME, "packages"),
-      stacks: import_path.default.join(RUDI_HOME, "stacks"),
-      skills: import_path.default.join(RUDI_HOME, "skills"),
-      prompts: import_path.default.join(RUDI_HOME, "skills"),
-      // Backward compat alias -> skills
-      workflows: import_path.default.join(RUDI_HOME, "workflows"),
-      // Durable generated artifacts. `output/` is retained only as a legacy
-      // compatibility path while existing consumers migrate to `outputs/`.
-      outputs: import_path.default.join(RUDI_HOME, "outputs"),
-      legacyOutput: import_path.default.join(RUDI_HOME, "output"),
-      // Runtimes (interpreters: node, python, deno, bun)
-      runtimes: import_path.default.join(RUDI_HOME, "runtimes"),
-      // Binaries (utility CLIs: ffmpeg, imagemagick, ripgrep, etc.)
-      binaries: import_path.default.join(RUDI_HOME, "binaries"),
-      // Legacy RUDI-managed agent metadata. Retained only for explicit migration
-      // and removal; native Agent Hosts are discovered outside ~/.rudi.
-      agents: import_path.default.join(RUDI_HOME, "agents"),
-      // Runtime binaries (content-addressed)
-      store: import_path.default.join(RUDI_HOME, "store"),
-      // Shims (symlinks to store/)
-      bins: import_path.default.join(RUDI_HOME, "bins"),
-      // Lockfiles
-      locks: import_path.default.join(RUDI_HOME, "locks"),
-      // Secrets (OS Keychain preferred, encrypted file fallback)
-      vault: import_path.default.join(RUDI_HOME, "vault"),
-      // Database (shared with Studio)
-      db: RUDI_HOME,
-      dbFile: import_path.default.join(RUDI_HOME, "rudi.db"),
-      // Cache
-      cache: import_path.default.join(RUDI_HOME, "cache"),
-      registryCache: import_path.default.join(RUDI_HOME, "cache", "registry.json"),
-      // Config
-      config: import_path.default.join(RUDI_HOME, "config.json"),
-      // Logs
-      logs: import_path.default.join(RUDI_HOME, "logs")
-    };
-  }
-});
-
 // node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/codegen/code.js
 var require_code = __commonJS({
   "node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/compile/codegen/code.js"(exports2) {
@@ -6930,6 +6877,59 @@ var require_ajv = __commonJS({
     Object.defineProperty(exports2, "MissingRefError", { enumerable: true, get: function() {
       return ref_error_1.default;
     } });
+  }
+});
+
+// packages/env/src/index.js
+var import_path, import_os, RUDI_HOME, CLAUDE_HOME, PATHS;
+var init_src = __esm({
+  "packages/env/src/index.js"() {
+    import_path = __toESM(require("path"), 1);
+    import_os = __toESM(require("os"), 1);
+    RUDI_HOME = process.env.RUDI_HOME ? import_path.default.resolve(process.env.RUDI_HOME) : import_path.default.join(import_os.default.homedir(), ".rudi");
+    CLAUDE_HOME = process.env.CLAUDE_HOME ? import_path.default.resolve(process.env.CLAUDE_HOME) : import_path.default.join(import_os.default.homedir(), ".claude");
+    PATHS = {
+      // Root
+      home: RUDI_HOME,
+      // Installed machine-local applications
+      apps: import_path.default.join(RUDI_HOME, "apps"),
+      // Installed RUDI packages
+      packages: import_path.default.join(RUDI_HOME, "packages"),
+      stacks: import_path.default.join(RUDI_HOME, "stacks"),
+      skills: import_path.default.join(RUDI_HOME, "skills"),
+      prompts: import_path.default.join(RUDI_HOME, "skills"),
+      // Backward compat alias -> skills
+      workflows: import_path.default.join(RUDI_HOME, "workflows"),
+      // Durable generated artifacts. `output/` is retained only as a legacy
+      // compatibility path while existing consumers migrate to `outputs/`.
+      outputs: import_path.default.join(RUDI_HOME, "outputs"),
+      legacyOutput: import_path.default.join(RUDI_HOME, "output"),
+      // Runtimes (interpreters: node, python, deno, bun)
+      runtimes: import_path.default.join(RUDI_HOME, "runtimes"),
+      // Binaries (utility CLIs: ffmpeg, imagemagick, ripgrep, etc.)
+      binaries: import_path.default.join(RUDI_HOME, "binaries"),
+      // Legacy RUDI-managed agent metadata. Retained only for explicit migration
+      // and removal; native Agent Hosts are discovered outside ~/.rudi.
+      agents: import_path.default.join(RUDI_HOME, "agents"),
+      // Runtime binaries (content-addressed)
+      store: import_path.default.join(RUDI_HOME, "store"),
+      // Shims (symlinks to store/)
+      bins: import_path.default.join(RUDI_HOME, "bins"),
+      // Lockfiles
+      locks: import_path.default.join(RUDI_HOME, "locks"),
+      // Secrets (OS Keychain preferred, encrypted file fallback)
+      vault: import_path.default.join(RUDI_HOME, "vault"),
+      // Database (shared with Studio)
+      db: RUDI_HOME,
+      dbFile: import_path.default.join(RUDI_HOME, "rudi.db"),
+      // Cache
+      cache: import_path.default.join(RUDI_HOME, "cache"),
+      registryCache: import_path.default.join(RUDI_HOME, "cache", "registry.json"),
+      // Config
+      config: import_path.default.join(RUDI_HOME, "config.json"),
+      // Logs
+      logs: import_path.default.join(RUDI_HOME, "logs")
+    };
   }
 });
 
@@ -14278,7 +14278,7 @@ var init_shims = __esm({
 // src/agent-host/task-capsule-worker.js
 var import_node_fs16 = __toESM(require("node:fs"), 1);
 var import_node_path19 = __toESM(require("node:path"), 1);
-var import_node_child_process11 = require("node:child_process");
+var import_node_child_process12 = require("node:child_process");
 
 // src/agent-host/task-audit.js
 var import_node_fs = __toESM(require("node:fs"), 1);
@@ -14639,6 +14639,7 @@ var claude_default = {
     available: [
       {
         id: "claude-fable-5",
+        reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
         alias: "fable",
         name: "Claude Fable 5",
         description: "Anthropic's highest-capability widely released model for long-running agents",
@@ -14652,6 +14653,7 @@ var claude_default = {
       },
       {
         id: "claude-opus-5",
+        reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
         alias: "opus",
         name: "Claude Opus 5",
         description: "Recommended for complex agentic coding and enterprise work",
@@ -14666,6 +14668,7 @@ var claude_default = {
       },
       {
         id: "claude-sonnet-5",
+        reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
         alias: "sonnet",
         name: "Claude Sonnet 5",
         description: "Best combination of speed and intelligence",
@@ -15064,6 +15067,7 @@ var codex_default = {
     available: [
       {
         id: "gpt-5.6-sol",
+        reasoningEfforts: ["low", "medium", "high", "xhigh", "max", "ultra"],
         alias: "sol",
         name: "GPT-5.6 Sol",
         description: "Flagship model for complex coding, computer use, research, and security work",
@@ -15071,12 +15075,14 @@ var codex_default = {
       },
       {
         id: "gpt-5.6-terra",
+        reasoningEfforts: ["low", "medium", "high", "xhigh", "max", "ultra"],
         alias: "terra",
         name: "GPT-5.6 Terra",
         description: "Balanced everyday workhorse for production tasks and coordinating subagents"
       },
       {
         id: "gpt-5.6-luna",
+        reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
         alias: "luna",
         name: "GPT-5.6 Luna",
         description: "Fast, low-cost model for narrow, repeatable, and high-volume work"
@@ -15565,12 +15571,17 @@ function validateTaskProfile(value, binding) {
     "write_roots",
     "network",
     "timeout_ms",
-    ...value?.provider === "claude" ? ["account"] : []
+    ...value?.provider === "claude" || Object.hasOwn(value || {}, "account") ? ["account"] : [],
+    ...Object.hasOwn(value || {}, "reasoning_effort") ? ["reasoning_effort"] : []
   ], "execution profile");
   if (value.schema_version !== 1 || !["codex", "claude"].includes(value.provider) || value.workspace_mode !== TASK_MODE) {
     throw new Error("unsupported task provider/profile version/workspace mode");
   }
-  if (getModelDef(loadProviderConfig(value.provider), value.model)?.id !== value.model) throw new Error("task requires an exact configured model");
+  const model = getModelDef(loadProviderConfig(value.provider), value.model);
+  if (model?.id !== value.model) throw new Error("task requires an exact configured model");
+  if (Object.hasOwn(value, "reasoning_effort") && !model.reasoningEfforts?.includes(value.reasoning_effort)) {
+    throw new Error("unsupported reasoning effort for task provider/model");
+  }
   if (!["enabled", "disabled"].includes(value.network)) throw new Error("network must be enabled or disabled");
   if (!Number.isSafeInteger(value.timeout_ms) || value.timeout_ms < 1 || value.timeout_ms > 36e5) throw new Error("invalid task timeout");
   const project = canonicalDirectory(value.working_directory, "working_directory");
@@ -15582,11 +15593,25 @@ function validateTaskProfile(value, binding) {
   if ([...write].sort().join("\0") !== [...deliverables].sort().join("\0") || write.some((root) => inside(project, root) || inside(runtime, root) || inside(root, runtime))) {
     throw new Error("write roots must exactly match deliverables and exclude project/control roots");
   }
-  const account = value.provider === "claude" ? validateClaudeAccount(value.account, [...read2, ...write, runtime]) : null;
+  const account = value.provider === "claude" ? validateClaudeAccount(value.account, [...read2, ...write, runtime]) : Object.hasOwn(value, "account") ? validateCodexAccount(value.account, [...read2, ...write, runtime]) : null;
   const profile = Object.freeze({ ...value, ...account ? { account } : {}, read_roots: Object.freeze(read2), write_roots: Object.freeze(write) });
   assertWritableTaskRoots(profile);
   validatedProfiles.add(profile);
   return profile;
+}
+function validateCodexAccount(value, workspaceRoots) {
+  exactFields(value, ["id", "email", "config_directory"], "Codex account");
+  if (typeof value.id !== "string" || !/^codex-[a-z0-9][a-z0-9-]{0,47}$/u.test(value.id)) throw new Error("invalid Codex account id");
+  taskText(value.email, "Codex account email", 254);
+  if (!/^[^\s@]+@[^\s@]+$/u.test(value.email)) throw new Error("invalid Codex account email");
+  const directory = canonicalDirectory(value.config_directory, "Codex account directory");
+  const stat = import_node_fs3.default.statSync(directory);
+  if (stat.uid !== process.getuid() || (stat.mode & 63) !== 0) throw new Error("Codex account directory must be private and owned by this user");
+  if (workspaceRoots.some((root) => inside(root, directory) || inside(directory, root))) throw new Error("Codex account directory overlaps task roots");
+  for (const name of ["config.toml", "managed_config.toml", "requirements.toml"]) {
+    if (import_node_fs3.default.existsSync(import_node_path3.default.join(directory, name))) throw new Error("Codex account configuration requires separate qualification");
+  }
+  return Object.freeze({ ...value });
 }
 function assertTaskProfile(profile) {
   if (!validatedProfiles.has(profile)) throw new Error("registered shared workspace requires a validated task profile");
@@ -15660,12 +15685,556 @@ function capsuleRecord(filename, value) {
 var import_node_fs15 = __toESM(require("node:fs"), 1);
 var import_node_path18 = __toESM(require("node:path"), 1);
 
+// src/agent-host/task-codex-account.js
+var import_node_child_process3 = require("node:child_process");
+var PROBE_SUPERVISOR = `
+const { spawn } = require('node:child_process');
+const stop = () => process.kill(-process.pid, 'SIGKILL');
+process.on('disconnect', stop);
+process.on('SIGTERM', stop);
+process.on('SIGINT', stop);
+setTimeout(stop, 10000);
+const native = spawn(process.argv[1], process.argv.slice(2), { stdio: [0, 1, 2] });
+const failed = () => {
+  if (process.connected) process.send('native-exited', error => { if (error) stop(); });
+  else stop();
+};
+native.on('error', failed);
+native.on('exit', failed);
+`;
+async function inspectCodexTaskSeat(binaryPath, profile, environment, { spawnImpl = import_node_child_process3.spawn } = {}) {
+  const expected = profile.account;
+  if (!expected) throw new Error("Codex account selection required");
+  const account = await readNativeAccount(binaryPath, expected.config_directory, environment, spawnImpl);
+  if (account?.type !== "chatgpt" || account.email !== expected.email) {
+    throw new Error("native Codex account does not match the pinned execution profile");
+  }
+  return Object.freeze({ ...expected, auth_method: "chatgpt" });
+}
+function readNativeAccount(binaryPath, directory, environment, spawnImpl) {
+  return new Promise((resolve2, reject) => {
+    const child = spawnImpl(
+      process.execPath,
+      [
+        "-e",
+        PROBE_SUPERVISOR,
+        binaryPath,
+        "--no-daemon",
+        "-c",
+        'cli_auth_credentials_store="file"',
+        "-c",
+        "mcp_servers={}",
+        "-c",
+        'model_provider="openai"',
+        "app-server",
+        "--stdio",
+        "--strict-config"
+      ],
+      { cwd: directory, env: environment, stdio: ["pipe", "pipe", "pipe", "ipc"], detached: true }
+    );
+    let buffer = "", bytes = 0, state = "initialize", result, failure, stopping = false, settled = false, exited = false;
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.stdin.destroy();
+      child.stdout.destroy();
+      child.stderr.destroy();
+      if (child.connected) child.disconnect();
+      child.unref?.();
+      if (error) reject(error);
+      else resolve2(result);
+    };
+    const stop = (error) => {
+      if (stopping) return;
+      stopping = true;
+      failure = error;
+      if (!exited) {
+        try {
+          if (child.pid) process.kill(-child.pid, "SIGKILL");
+          else child.kill("SIGKILL");
+        } catch {
+          child.kill("SIGKILL");
+        }
+      }
+    };
+    const fail = () => stop(new Error("native Codex account inspection failed"));
+    const timer = setTimeout(() => {
+      const error = new Error("native Codex account inspection timed out");
+      stop(error);
+      finish(error);
+    }, 1e4);
+    const send = (value) => child.stdin.write(`${JSON.stringify(value)}
+`);
+    child.on("error", () => {
+      const error = new Error("native Codex account inspection unavailable");
+      stop(error);
+      finish(error);
+    });
+    child.stdin.on("error", fail);
+    child.on("message", fail);
+    child.stderr.on("data", (data) => {
+      bytes += data.length;
+      if (bytes > 262144) fail();
+    });
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (data) => {
+      if (stopping) return;
+      bytes += Buffer.byteLength(data);
+      if (bytes > 262144) {
+        fail();
+        return;
+      }
+      buffer += data;
+      while (buffer.includes("\n") && !stopping) {
+        const end = buffer.indexOf("\n");
+        const line = buffer.slice(0, end);
+        buffer = buffer.slice(end + 1);
+        let message;
+        try {
+          message = parseTaskJson(line);
+        } catch {
+          fail();
+          return;
+        }
+        if (!message || typeof message !== "object" || Array.isArray(message)) {
+          fail();
+          return;
+        }
+        if (message.id === void 0) continue;
+        if (message.error || !message.result) {
+          fail();
+          return;
+        }
+        if (state === "initialize" && message.id === 1) {
+          state = "account";
+          send({ method: "initialized", params: {} });
+          send({ id: 2, method: "account/read", params: { refreshToken: false } });
+        } else if (state === "account" && message.id === 2) {
+          result = message.result.account;
+          stop(null);
+        } else {
+          fail();
+          return;
+        }
+      }
+    });
+    const onExit = () => {
+      exited = true;
+      finish(failure || !stopping && new Error("native Codex account inspection ended early"));
+    };
+    child.on("exit", onExit);
+    child.on("close", onExit);
+    send({ id: 1, method: "initialize", params: { clientInfo: { name: "rudi_task_account_check", version: "1" }, capabilities: {} } });
+  });
+}
+
+// src/agent-host/task-codex.js
+var import_node_fs5 = __toESM(require("node:fs"), 1);
+var import_node_os3 = __toESM(require("node:os"), 1);
+var import_node_path5 = __toESM(require("node:path"), 1);
+var import_node_child_process5 = require("node:child_process");
+
+// src/agent-host/private-automation-profile.js
+var import_node_path4 = __toESM(require("node:path"), 1);
+var import_node_child_process4 = require("node:child_process");
+var import_ajv = __toESM(require_ajv(), 1);
+var PRIVATE_AUTOMATION_PROFILE_ID = "private-automation-v1";
+var PRIVATE_AUTOMATION_MAX_FINAL_OUTPUT_BYTES = 64 * 1024;
+var PRIVATE_AUTOMATION_MAX_RAW_OUTPUT_BYTES = 2 * 1024 * 1024;
+var PRIVATE_AUTOMATION_MAX_SCHEMA_BYTES = 64 * 1024;
+var PRIVATE_PROVIDERS = /* @__PURE__ */ new Set(["claude", "codex"]);
+var PRIVATE_RAW_EVENT_TYPES = Object.freeze({
+  claude: /* @__PURE__ */ new Set(["assistant", "error", "rate_limit_event", "result", "system", "user"]),
+  codex: /* @__PURE__ */ new Set([
+    "error",
+    "item.completed",
+    "item.started",
+    "item.updated",
+    "thread.started",
+    "turn.completed",
+    "turn.failed",
+    "turn.started"
+  ])
+});
+var PRIVATE_CODEX_ITEM_TYPES = /* @__PURE__ */ new Set(["agent_message", "reasoning"]);
+var PRIVATE_CODEX_DISABLED_CAPABILITY_DIAGNOSTIC = "Code Mode is unavailable because code-mode host is disabled.";
+var PRIVATE_CLAUDE_ASSISTANT_BLOCK_TYPES = /* @__PURE__ */ new Set(["text", "thinking"]);
+var PRIVATE_CLAUDE_SYSTEM_SUBTYPES = /* @__PURE__ */ new Set(["init", "thinking_tokens"]);
+var PRIVATE_CLAUDE_THINKING_TOKEN_KEYS = /* @__PURE__ */ new Set([
+  "estimated_tokens",
+  "estimated_tokens_delta",
+  "session_id",
+  "subtype",
+  "type",
+  "uuid"
+]);
+var PRIVATE_CLAUDE_SYNTHETIC_USER_KEYS = /* @__PURE__ */ new Set([
+  "isSynthetic",
+  "message",
+  "parent_tool_use_id",
+  "session_id",
+  "timestamp",
+  "type",
+  "uuid"
+]);
+var PRIVATE_OUTPUT_SCHEMA_COMPILER = new import_ajv.default({ allErrors: true, strict: false });
+var PRIVATE_CODEX_DISABLED_FEATURES = Object.freeze([
+  "apps",
+  "browser_use",
+  "browser_use_external",
+  "browser_use_full_cdp_access",
+  "code_mode_host",
+  "computer_use",
+  "enable_mcp_apps",
+  "image_generation",
+  "in_app_browser",
+  "multi_agent",
+  "plugins",
+  "remote_plugin",
+  "shell_snapshot",
+  "shell_tool",
+  "skill_search",
+  "tool_call_mcp_elicitation",
+  "tool_suggest",
+  "unified_exec",
+  "view_image"
+]);
+function getPrivateCodexDisabledFeatures() {
+  return [...PRIVATE_CODEX_DISABLED_FEATURES];
+}
+function requiredText(value, field, maxBytes = 4096) {
+  if (typeof value !== "string" || value.trim() === "" || value.includes("\0")) {
+    throw new Error(`${field} must be a non-empty string without NUL bytes`);
+  }
+  if (Buffer.byteLength(value, "utf8") > maxBytes) {
+    throw new Error(`${field} exceeds ${maxBytes} bytes`);
+  }
+  return value;
+}
+function containsToolEvent(value) {
+  if (Array.isArray(value)) return value.some(containsToolEvent);
+  if (!value || typeof value !== "object") return false;
+  if ([
+    "command_execution",
+    "file_change",
+    "mcp_tool_call",
+    "permission",
+    "permission_request",
+    "server_tool_use",
+    "tool_result",
+    "tool_use"
+  ].includes(value.type)) return true;
+  return Object.values(value).some(containsToolEvent);
+}
+function boundedUsage(usage2) {
+  if (!usage2 || typeof usage2 !== "object" || Array.isArray(usage2)) return void 0;
+  const projected = {};
+  for (const [key, raw] of Object.entries(usage2)) {
+    const value = Number(raw);
+    if (Number.isSafeInteger(value) && value >= 0 && value <= Number.MAX_SAFE_INTEGER) {
+      projected[key] = value;
+    }
+  }
+  return Object.keys(projected).length > 0 ? projected : void 0;
+}
+function projectPrivateAutomationEventMetadata(event) {
+  if (!event || typeof event !== "object" || Array.isArray(event)) {
+    throw new Error("private automation event must be an object");
+  }
+  if (containsToolEvent(event)) {
+    throw new Error("private automation tool event is forbidden");
+  }
+  const metadata = { type: requiredText(event.type, "private automation event type", 128) };
+  if (typeof event.model === "string" && event.model.length > 0) metadata.model = event.model;
+  if (Array.isArray(event.content)) metadata.contentBlockCount = event.content.length;
+  const usage2 = boundedUsage(event.usage);
+  if (usage2) metadata.usage = usage2;
+  if (typeof event.durationMs === "number" && Number.isFinite(event.durationMs) && event.durationMs >= 0) {
+    metadata.durationMs = Math.floor(event.durationMs);
+  }
+  if (typeof event.numTurns === "number" && Number.isSafeInteger(event.numTurns) && event.numTurns >= 0) {
+    metadata.numTurns = event.numTurns;
+  }
+  return Object.freeze(metadata);
+}
+function assertPrivateAutomationRawEvent(provider, event, expectedModel = null) {
+  if (!PRIVATE_PROVIDERS.has(provider) || !event || typeof event !== "object" || Array.isArray(event)) {
+    throw new Error("private automation provider event is invalid");
+  }
+  if (!PRIVATE_RAW_EVENT_TYPES[provider].has(event.type)) {
+    throw new Error("private automation provider event type is not allowlisted");
+  }
+  if (provider === "codex" && event.type.startsWith("item.")) {
+    const itemType = event.item?.type;
+    const isBlockedCapabilityDiagnostic = event.type === "item.completed" && itemType === "error" && typeof event.item?.message === "string" && event.item.message.startsWith(PRIVATE_CODEX_DISABLED_CAPABILITY_DIAGNOSTIC);
+    if (!PRIVATE_CODEX_ITEM_TYPES.has(itemType) && !isBlockedCapabilityDiagnostic) {
+      throw new Error("private automation Codex item type is not allowlisted");
+    }
+  }
+  if (provider === "claude" && event.type === "system") {
+    if (!PRIVATE_CLAUDE_SYSTEM_SUBTYPES.has(event.subtype)) {
+      throw new Error("private automation Claude system subtype is not allowlisted");
+    }
+    if (Array.isArray(event.tools) && event.tools.length > 0 || Array.isArray(event.mcp_servers) && event.mcp_servers.length > 0) {
+      throw new Error("private automation Claude init capabilities are not empty");
+    }
+    if (event.subtype === "thinking_tokens" && (Object.keys(event).some((key) => !PRIVATE_CLAUDE_THINKING_TOKEN_KEYS.has(key)) || !Number.isFinite(event.estimated_tokens) || event.estimated_tokens < 0 || !Number.isFinite(event.estimated_tokens_delta) || event.estimated_tokens_delta < 0)) {
+      throw new Error("private automation Claude thinking-token metadata is invalid");
+    }
+  }
+  if (provider === "claude" && event.type === "assistant") {
+    const message = event.message && typeof event.message === "object" ? event.message : null;
+    const content = Array.isArray(event.content) ? event.content : Array.isArray(message?.content) ? message.content : [];
+    if (content.some((block) => !block || typeof block !== "object" || !PRIVATE_CLAUDE_ASSISTANT_BLOCK_TYPES.has(block.type))) {
+      throw new Error("private automation Claude content block is not allowlisted");
+    }
+  }
+  if (provider === "claude" && event.type === "user") {
+    const content = Array.isArray(event.message?.content) ? event.message.content : [];
+    const textBytes = content.reduce((total, block) => total + (typeof block?.text === "string" ? Buffer.byteLength(block.text, "utf8") : 0), 0);
+    if (event.isSynthetic !== true || event.parent_tool_use_id != null || Object.keys(event).some((key) => !PRIVATE_CLAUDE_SYNTHETIC_USER_KEYS.has(key)) || event.message?.role !== "user" || content.length < 1 || content.length > 4 || content.some((block) => block?.type !== "text" || typeof block.text !== "string") || textBytes > 4096) {
+      throw new Error("private automation Claude synthetic user metadata is invalid");
+    }
+  }
+  if (provider === "claude" && event.type === "result" && expectedModel != null) {
+    const observedModels = event.modelUsage && typeof event.modelUsage === "object" && !Array.isArray(event.modelUsage) ? Object.keys(event.modelUsage) : [];
+    if (observedModels.length !== 1 || observedModels[0] !== expectedModel) {
+      throw new Error("private automation Claude model usage does not match the exact model");
+    }
+  }
+  if (containsToolEvent(event)) {
+    throw new Error("private automation tool event is forbidden");
+  }
+  return event;
+}
+function successfulProbe(result) {
+  return result && !result.error && result.status === 0;
+}
+function probeOutput(result) {
+  return `${String(result?.stdout || "")}
+${String(result?.stderr || "")}`;
+}
+function semverAtLeast(actual, minimum) {
+  const actualParts = actual.split(".").map(Number);
+  const minimumParts = minimum.split(".").map(Number);
+  for (let index = 0; index < 3; index += 1) {
+    if (actualParts[index] > minimumParts[index]) return true;
+    if (actualParts[index] < minimumParts[index]) return false;
+  }
+  return true;
+}
+function assertPrivateAutomationHostCapabilities({ binaryPath, profile }, dependencies = {}) {
+  const spawnSyncImpl = dependencies.spawnSyncImpl || import_node_child_process4.spawnSync;
+  if (!profile || profile.id !== PRIVATE_AUTOMATION_PROFILE_ID) {
+    throw new Error("private automation profile is required for capability preflight");
+  }
+  if (profile.provider === "codex") {
+    const versionProbe = spawnSyncImpl(binaryPath, ["--version"], {
+      encoding: "utf8",
+      timeout: 5e3
+    });
+    const versionMatch = probeOutput(versionProbe).match(/codex-cli\s+(\d+)\.(\d+)\.(\d+)/u);
+    const minimumVersion = loadProviderConfig("codex").headless.privateAutomation.minimumVersion;
+    const versionSupported = versionMatch && semverAtLeast(
+      `${versionMatch[1]}.${versionMatch[2]}.${versionMatch[3]}`,
+      minimumVersion
+    );
+    if (!successfulProbe(versionProbe) || !versionSupported) {
+      throw new Error("Codex host version does not satisfy private automation config controls");
+    }
+    const disabledFeatures = getPrivateCodexDisabledFeatures();
+    const configArgs = ["--ask-for-approval", "never"];
+    for (const feature of disabledFeatures) configArgs.push("--disable", feature);
+    configArgs.push(
+      "-c",
+      "mcp_servers={}",
+      "-c",
+      'web_search="disabled"',
+      "exec",
+      "-",
+      "--json",
+      "--skip-git-repo-check",
+      "--color",
+      "never",
+      "-C",
+      import_node_path4.default.dirname(profile.outputSchema.path),
+      "-m",
+      profile.model,
+      "--output-schema",
+      profile.outputSchema.path,
+      "--ephemeral",
+      "--strict-config",
+      "--ignore-user-config",
+      "--ignore-rules",
+      "-s",
+      "read-only"
+    );
+    const configProbe2 = spawnSyncImpl(binaryPath, configArgs, {
+      encoding: "utf8",
+      input: "",
+      timeout: 5e3
+    });
+    if (configProbe2?.error || configProbe2?.status === 0 || !probeOutput(configProbe2).includes("No prompt provided via stdin.")) {
+      throw new Error("Codex host does not satisfy private automation config controls");
+    }
+    const helpProbe = spawnSyncImpl(binaryPath, ["exec", "--help"], {
+      encoding: "utf8",
+      timeout: 5e3
+    });
+    const help = probeOutput(helpProbe);
+    const requiredHelp = [
+      "--ephemeral",
+      "--ignore-rules",
+      "--ignore-user-config",
+      "--output-schema",
+      "--sandbox"
+    ];
+    if (!successfulProbe(helpProbe) || requiredHelp.some((flag) => !help.includes(flag))) {
+      throw new Error("Codex host does not satisfy private automation config and CLI capabilities");
+    }
+    const featureProbe = spawnSyncImpl(binaryPath, ["features", "list"], {
+      encoding: "utf8",
+      timeout: 5e3
+    });
+    const features = probeOutput(featureProbe);
+    const missingFeature = PRIVATE_CODEX_DISABLED_FEATURES.some((feature) => {
+      const line = features.split("\n").find((candidate) => candidate.trim().startsWith(`${feature} `));
+      return !line || /\bremoved\b/u.test(line);
+    });
+    if (!successfulProbe(featureProbe) || missingFeature) {
+      throw new Error("Codex host does not satisfy private automation feature controls");
+    }
+    return true;
+  }
+  const configProbe = spawnSyncImpl(binaryPath, [
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--print",
+    "--input-format",
+    "text",
+    "--model",
+    profile.model,
+    "--no-session-persistence",
+    "--safe-mode",
+    "--no-chrome",
+    "--disable-slash-commands",
+    "--tools",
+    "",
+    "--strict-mcp-config",
+    "--mcp-config",
+    '{"mcpServers":{}}',
+    "--setting-sources",
+    "",
+    "--permission-mode",
+    "plan"
+  ], {
+    encoding: "utf8",
+    input: "",
+    timeout: 5e3
+  });
+  if (configProbe?.error || configProbe?.status === 0 || !probeOutput(configProbe).includes("Input must be provided either through stdin")) {
+    throw new Error("Claude host does not satisfy private automation CLI capabilities");
+  }
+  return true;
+}
+
+// src/agent-host/task-codex.js
+var TASK_CODEX_VERSION = "0.160.1";
+var TASK_DISABLED = getPrivateCodexDisabledFeatures().filter((feature) => !["shell_tool", "unified_exec", "code_mode_host"].includes(feature));
+function taskEnvironment(binaryPath, profile = null) {
+  const result = { PATH: `${import_node_path5.default.dirname(binaryPath)}:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin` };
+  for (const key of ["HOME", "USER", "LOGNAME", "LANG", "LC_ALL"]) {
+    if (typeof process.env[key] === "string") result[key] = process.env[key];
+  }
+  if (profile?.account) result.CODEX_HOME = profile.account.config_directory;
+  return result;
+}
+function taskPermissionArgs(profile) {
+  const filesystem = { ":minimal": "read" };
+  for (const root of profile.read_roots) filesystem[root] = "read";
+  for (const root of profile.write_roots) filesystem[root] = "write";
+  const rules = Object.entries(filesystem).map(([key, value]) => `${JSON.stringify(key)}=${JSON.stringify(value)}`).join(",");
+  return ["-c", 'default_permissions="rudi_task"', "-c", `permissions={rudi_task={filesystem={${rules}},network={enabled=${profile.network === "enabled"}}}}`];
+}
+function taskCodexArgs(context) {
+  const args = ["--ask-for-approval", "never", "--no-daemon", "--enable", "code_mode_host"];
+  if (context.taskProfile.account) args.push("-c", 'cli_auth_credentials_store="file"');
+  if (context.taskProfile.reasoning_effort !== void 0) {
+    args.push("-c", `model_reasoning_effort=${JSON.stringify(context.taskProfile.reasoning_effort)}`);
+  }
+  for (const feature of TASK_DISABLED) args.push("--disable", feature);
+  args.push(
+    ...taskPermissionArgs(context.taskProfile),
+    "-c",
+    "mcp_servers={}",
+    "-c",
+    'shell_environment_policy.inherit="none"',
+    "-c",
+    'web_search="disabled"',
+    "exec",
+    "-",
+    "--json",
+    "--skip-git-repo-check",
+    "--color",
+    "never",
+    "--strict-config",
+    "--ignore-user-config",
+    "--ignore-rules",
+    "-C",
+    context.cwd,
+    "-m",
+    context.model
+  );
+  return args;
+}
+async function assertTaskHostCapabilities({ binaryPath, profile }, { spawnSyncImpl = import_node_child_process5.spawnSync, spawnImpl } = {}) {
+  if (process.platform !== "darwin") throw new Error("task shared permissions currently qualified on macOS only");
+  for (let cursor = profile.working_directory; ; cursor = import_node_path5.default.dirname(cursor)) {
+    if (cursor !== import_node_os3.default.homedir() && import_node_fs5.default.existsSync(import_node_path5.default.join(cursor, ".codex", "config.toml"))) {
+      throw new Error("task workspace ancestor contains native config; explicit qualification required");
+    }
+    if (cursor === import_node_path5.default.dirname(cursor)) break;
+  }
+  if (import_node_fs5.default.existsSync("/etc/codex/config.toml")) throw new Error("system Codex config requires explicit task qualification");
+  const environment = taskEnvironment(binaryPath, profile);
+  const account = profile.account ? await inspectCodexTaskSeat(binaryPath, profile, environment, { spawnImpl }) : null;
+  const probe = (args2, input) => spawnSyncImpl(binaryPath, args2, { encoding: "utf8", input, timeout: 5e3, maxBuffer: 262144, env: environment });
+  const version = probe(["--version"]);
+  if (version.status !== 0 || String(version.stdout).trim() !== `codex-cli ${TASK_CODEX_VERSION}`) {
+    throw new Error("native Codex version is not qualified for task permissions");
+  }
+  const args = taskCodexArgs({ taskProfile: profile, cwd: profile.working_directory, model: profile.model });
+  const config = probe(args, "");
+  if (config.error || config.status === 0 || !`${config.stdout}${config.stderr}`.includes("No prompt provided via stdin.")) {
+    throw new Error("native task configuration probe failed");
+  }
+  const helper = auditHelperPath();
+  const containment = probe([
+    "sandbox",
+    "-P",
+    "rudi_task",
+    ...taskPermissionArgs({ ...profile, read_roots: [...profile.read_roots, helper] }),
+    "-C",
+    profile.working_directory,
+    "--",
+    helper,
+    "probe",
+    String(process.pid)
+  ]);
+  if (containment.status !== 0 || String(containment.stdout).trim() !== JSON.stringify({ audit_session_escape_denied: true, supervisor_signal_denied: true })) {
+    throw new Error("native audit containment capability probe failed");
+  }
+  return { version: TASK_CODEX_VERSION, ...account ? { account } : {} };
+}
+
 // src/agent-host/launch.js
 var import_node_crypto5 = __toESM(require("node:crypto"), 1);
 
 // src/agent-host/artifacts.js
-var import_node_fs5 = __toESM(require("node:fs"), 1);
-var import_node_path4 = __toESM(require("node:path"), 1);
+var import_node_fs6 = __toESM(require("node:fs"), 1);
+var import_node_path6 = __toESM(require("node:path"), 1);
 init_src();
 var LAUNCH_ID_PATTERN = /^launch_[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 var OWNERSHIP_MARKER = ".rudi-agent-launch.json";
@@ -15683,42 +16252,42 @@ function getAgentHostPaths({
   launchId = null,
   rudiHome = PATHS.home
 } = {}) {
-  const home = import_node_path4.default.resolve(rudiHome);
-  const stateDirectory = import_node_path4.default.join(home, "state");
-  const artifactsRoot = import_node_path4.default.join(home, "artifacts", "agent-launches");
+  const home = import_node_path6.default.resolve(rudiHome);
+  const stateDirectory = import_node_path6.default.join(home, "state");
+  const artifactsRoot = import_node_path6.default.join(home, "artifacts", "agent-launches");
   const result = {
     artifactsRoot,
-    stateDatabase: import_node_path4.default.join(stateDirectory, "agent-hosts.db"),
+    stateDatabase: import_node_path6.default.join(stateDirectory, "agent-hosts.db"),
     stateDirectory
   };
   if (launchId != null) {
     assertLaunchId(launchId);
-    result.launchDirectory = import_node_path4.default.join(artifactsRoot, launchId);
-    result.workspaceDirectory = import_node_path4.default.join(result.launchDirectory, "workspace");
+    result.launchDirectory = import_node_path6.default.join(artifactsRoot, launchId);
+    result.workspaceDirectory = import_node_path6.default.join(result.launchDirectory, "workspace");
   }
   return result;
 }
 function getLaunchArtifactFiles(launchDirectory) {
-  const directory = import_node_path4.default.resolve(launchDirectory);
+  const directory = import_node_path6.default.resolve(launchDirectory);
   return Object.freeze({
-    events: import_node_path4.default.join(directory, EVENTS_FILE),
-    marker: import_node_path4.default.join(directory, OWNERSHIP_MARKER),
-    stderr: import_node_path4.default.join(directory, STDERR_FILE)
+    events: import_node_path6.default.join(directory, EVENTS_FILE),
+    marker: import_node_path6.default.join(directory, OWNERSHIP_MARKER),
+    stderr: import_node_path6.default.join(directory, STDERR_FILE)
   });
 }
 function createLaunchOwnershipMarker({ launchDirectory, launchId }) {
   assertLaunchId(launchId);
-  const directory = import_node_path4.default.resolve(launchDirectory);
-  const stat = import_node_fs5.default.statSync(directory);
+  const directory = import_node_path6.default.resolve(launchDirectory);
+  const stat = import_node_fs6.default.statSync(directory);
   if (!stat.isDirectory()) throw new Error(`Launch artifact path is not a directory: ${directory}`);
   const { marker } = getLaunchArtifactFiles(directory);
   const payload = `${JSON.stringify({ launchId, schemaVersion: 1 })}
 `;
-  const handle = import_node_fs5.default.openSync(marker, "wx", 384);
+  const handle = import_node_fs6.default.openSync(marker, "wx", 384);
   try {
-    import_node_fs5.default.writeFileSync(handle, payload, "utf8");
+    import_node_fs6.default.writeFileSync(handle, payload, "utf8");
   } finally {
-    import_node_fs5.default.closeSync(handle);
+    import_node_fs6.default.closeSync(handle);
   }
   return marker;
 }
@@ -15728,18 +16297,18 @@ function appendLaunchEvent(eventFile, event) {
   if (Buffer.byteLength(serialized, "utf8") > MAX_EVENT_BYTES) {
     throw new Error(`Agent event exceeds ${MAX_EVENT_BYTES} bytes`);
   }
-  const file = import_node_path4.default.resolve(eventFile);
-  const handle = import_node_fs5.default.openSync(file, "a", 384);
+  const file = import_node_path6.default.resolve(eventFile);
+  const handle = import_node_fs6.default.openSync(file, "a", 384);
   try {
-    import_node_fs5.default.writeFileSync(handle, serialized, "utf8");
+    import_node_fs6.default.writeFileSync(handle, serialized, "utf8");
   } finally {
-    import_node_fs5.default.closeSync(handle);
+    import_node_fs6.default.closeSync(handle);
   }
-  import_node_fs5.default.chmodSync(file, 384);
+  import_node_fs6.default.chmodSync(file, 384);
 }
 
 // src/agent-host/events/stream.js
-var import_node_child_process5 = require("node:child_process");
+var import_node_child_process7 = require("node:child_process");
 
 // src/agent-host/events/providers/claude-task.js
 function consumeClaudeTaskEvent(state, event) {
@@ -15761,24 +16330,24 @@ function consumeClaudeTaskEvent(state, event) {
 }
 
 // src/agent-host/task-custody.js
-var import_node_fs6 = __toESM(require("node:fs"), 1);
-var import_node_path5 = __toESM(require("node:path"), 1);
+var import_node_fs7 = __toESM(require("node:fs"), 1);
+var import_node_path7 = __toESM(require("node:path"), 1);
 var import_node_crypto2 = __toESM(require("node:crypto"), 1);
 var import_node_url2 = require("node:url");
-var import_node_child_process3 = require("node:child_process");
+var import_node_child_process6 = require("node:child_process");
 var import_meta2 = {};
 var delay = (ms) => new Promise((resolve2) => setTimeout(resolve2, ms));
 function processIdentity(pid) {
   if (!Number.isSafeInteger(pid) || pid < 2) throw new Error("invalid custody PID");
   try {
-    const value = (0, import_node_child_process3.execFileSync)(
+    const value = (0, import_node_child_process6.execFileSync)(
       "/bin/ps",
       ["-p", String(pid), "-o", "pid=,pgid=,uid=,lstart="],
       { encoding: "utf8", timeout: 2e3, maxBuffer: 4096, env: { PATH: "/usr/bin:/bin", LC_ALL: "C" }, stdio: ["ignore", "pipe", "pipe"] }
     ).trim();
     const match = value.match(/^(\d+)\s+(\d+)\s+(\d+)\s+(.+)$/u);
     if (!match) throw new Error("invalid process identity");
-    const boot = process.platform === "linux" ? import_node_fs6.default.readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim() : (0, import_node_child_process3.execFileSync)(
+    const boot = process.platform === "linux" ? import_node_fs7.default.readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim() : (0, import_node_child_process6.execFileSync)(
       "/usr/sbin/sysctl",
       ["-n", "kern.bootsessionuuid"],
       { encoding: "utf8", timeout: 2e3, maxBuffer: 4096, stdio: ["ignore", "pipe", "pipe"] }
@@ -15793,17 +16362,17 @@ function sameProcess(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 function record(directory, name, value) {
-  const fd = import_node_fs6.default.openSync(import_node_path5.default.join(directory, name), "wx", 384);
+  const fd = import_node_fs7.default.openSync(import_node_path7.default.join(directory, name), "wx", 384);
   try {
-    import_node_fs6.default.writeFileSync(fd, `${JSON.stringify(value)}
+    import_node_fs7.default.writeFileSync(fd, `${JSON.stringify(value)}
 `);
-    import_node_fs6.default.fsyncSync(fd);
+    import_node_fs7.default.fsyncSync(fd);
   } finally {
-    import_node_fs6.default.closeSync(fd);
+    import_node_fs7.default.closeSync(fd);
   }
 }
 function read(directory, name) {
-  return parseTaskJson(readTaskRegularFile(import_node_path5.default.join(directory, name), 16384, true).toString("utf8"));
+  return parseTaskJson(readTaskRegularFile(import_node_path7.default.join(directory, name), 16384, true).toString("utf8"));
 }
 function quarantineTaskCustody(directory, reason) {
   try {
@@ -15827,10 +16396,10 @@ function groupAlive(pgid) {
   }
 }
 async function stopOwnedNative(directory) {
-  if (import_node_fs6.default.existsSync(import_node_path5.default.join(directory, "session.json"))) {
+  if (import_node_fs7.default.existsSync(import_node_path7.default.join(directory, "session.json"))) {
     const scope = read(directory, "session.json");
     if (read(directory, "owner.json").process.boot !== processIdentity(process.pid).boot) return;
-    const guardian = import_node_fs6.default.existsSync(import_node_path5.default.join(directory, "guardian-audit.json")) ? read(directory, "guardian-audit.json") : null;
+    const guardian = import_node_fs7.default.existsSync(import_node_path7.default.join(directory, "guardian-audit.json")) ? read(directory, "guardian-audit.json") : null;
     await drainAuditScope(scope, guardian);
     return;
   }
@@ -15852,28 +16421,28 @@ async function stopOwnedNative(directory) {
 }
 async function recoverTaskCustody(runtime) {
   canonicalDirectory(runtime, "task runtime");
-  const directory = import_node_path5.default.join(runtime, "custody.lock");
-  if (!import_node_fs6.default.existsSync(directory)) return { status: "clear" };
+  const directory = import_node_path7.default.join(runtime, "custody.lock");
+  if (!import_node_fs7.default.existsSync(directory)) return { status: "clear" };
   canonicalDirectory(directory, "custody directory");
-  const gate = import_node_path5.default.join(runtime, "custody-recovery.lock");
-  import_node_fs6.default.mkdirSync(gate, { mode: 448 });
+  const gate = import_node_path7.default.join(runtime, "custody-recovery.lock");
+  import_node_fs7.default.mkdirSync(gate, { mode: 448 });
   try {
     const owner = read(directory, "owner.json");
     validateIdentity(owner.process);
     if (sameProcess(processIdentity(owner.process.pid), owner.process)) throw new Error("active task custody");
     quarantineTaskCustody(directory, "owner lost; task outcome requires reconciliation");
-    if (import_node_fs6.default.existsSync(import_node_path5.default.join(directory, "guardian.json"))) {
+    if (import_node_fs7.default.existsSync(import_node_path7.default.join(directory, "guardian.json"))) {
       const guardian = validateIdentity(read(directory, "guardian.json"));
       const end = Date.now() + 8e3;
       while (sameProcess(processIdentity(guardian.pid), guardian) && Date.now() < end) await delay(100);
       if (sameProcess(processIdentity(guardian.pid), guardian)) throw new Error("active guardian custody");
     }
-    const cleaned = import_node_fs6.default.existsSync(import_node_path5.default.join(directory, "orphan-cleanup.json")) && read(directory, "orphan-cleanup.json").audit_session_drained === true;
+    const cleaned = import_node_fs7.default.existsSync(import_node_path7.default.join(directory, "orphan-cleanup.json")) && read(directory, "orphan-cleanup.json").audit_session_drained === true;
     if (!cleaned) await stopOwnedNative(directory);
     record(directory, `recovery-${import_node_crypto2.default.randomUUID()}.json`, { native_group_gone: true, at: (/* @__PURE__ */ new Date()).toISOString() });
     return { status: "quarantined", evidence: directory };
   } finally {
-    import_node_fs6.default.rmdirSync(gate);
+    import_node_fs7.default.rmdirSync(gate);
   }
 }
 async function openTaskCustody({ runtime, runDirectory, jobId, workerPath, capsule }) {
@@ -15883,8 +16452,8 @@ async function openTaskCustody({ runtime, runDirectory, jobId, workerPath, capsu
   const recovered = await recoverTaskCustody(runtime);
   if (recovered.status !== "clear") throw new Error("task custody quarantined; containment reconciliation required");
   const scope = createAuditScope(capsule);
-  const directory = import_node_path5.default.join(runtime, "custody.lock");
-  import_node_fs6.default.mkdirSync(directory, { mode: 448 });
+  const directory = import_node_path7.default.join(runtime, "custody.lock");
+  import_node_fs7.default.mkdirSync(directory, { mode: 448 });
   record(directory, "owner.json", { process: processIdentity(process.pid), job_id: jobId, attempt: runDirectory });
   record(directory, "session.json", scope);
   let guardian = null;
@@ -15900,8 +16469,8 @@ async function openTaskCustody({ runtime, runDirectory, jobId, workerPath, capsu
     return stopPromise;
   };
   const entry = process.argv[1] || "";
-  const worker = workerPath || (entry.endsWith(".cjs") ? import_node_path5.default.join(import_node_path5.default.dirname(entry), "task-custody-worker.cjs") : (0, import_node_url2.fileURLToPath)(new URL("./task-custody-worker.js", import_meta2.url)));
-  guardian = (0, import_node_child_process3.spawn)(process.execPath, [worker, directory], { detached: true, stdio: ["ignore", "ignore", "ignore", "ipc"], env: { PATH: "/usr/bin:/bin" } });
+  const worker = workerPath || (entry.endsWith(".cjs") ? import_node_path7.default.join(import_node_path7.default.dirname(entry), "task-custody-worker.cjs") : (0, import_node_url2.fileURLToPath)(new URL("./task-custody-worker.js", import_meta2.url)));
+  guardian = (0, import_node_child_process6.spawn)(process.execPath, [worker, directory], { detached: true, stdio: ["ignore", "ignore", "ignore", "ipc"], env: { PATH: "/usr/bin:/bin" } });
   guardianExit = new Promise((resolve2) => guardian.once("exit", (code) => {
     if (!closing || code !== 0) {
       guardianLost = true;
@@ -15945,7 +16514,7 @@ async function openTaskCustody({ runtime, runDirectory, jobId, workerPath, capsu
       if (closed) return;
       closing = true;
       await stop();
-      if (guardian?.connected) guardian.send(import_node_fs6.default.existsSync(import_node_path5.default.join(directory, "quarantine.json")) ? "abort" : "done");
+      if (guardian?.connected) guardian.send(import_node_fs7.default.existsSync(import_node_path7.default.join(directory, "quarantine.json")) ? "abort" : "done");
       if (guardianExit) {
         let timer;
         try {
@@ -15957,10 +16526,10 @@ async function openTaskCustody({ runtime, runDirectory, jobId, workerPath, capsu
         }
       }
       if (guardianLost) throw new Error("watchdog custody lost");
-      if (import_node_fs6.default.existsSync(import_node_path5.default.join(directory, "quarantine.json"))) throw new Error("task custody quarantined");
+      if (import_node_fs7.default.existsSync(import_node_path7.default.join(directory, "quarantine.json"))) throw new Error("task custody quarantined");
       if (guardian && read(directory, "orphan-cleanup.json").mode !== "normal") throw new Error("watchdog normal completion unconfirmed");
       record(directory, "closed.json", { at: (/* @__PURE__ */ new Date()).toISOString(), native_group_gone: true, audit_session_drained: true });
-      import_node_fs6.default.renameSync(directory, import_node_path5.default.join(runDirectory, "custody"));
+      import_node_fs7.default.renameSync(directory, import_node_path7.default.join(runDirectory, "custody"));
       closed = true;
     }
   };
@@ -16683,311 +17252,6 @@ function renderAgentEvent(event) {
   return [];
 }
 
-// src/agent-host/private-automation-profile.js
-var import_node_path6 = __toESM(require("node:path"), 1);
-var import_node_child_process4 = require("node:child_process");
-var import_ajv = __toESM(require_ajv(), 1);
-var PRIVATE_AUTOMATION_PROFILE_ID = "private-automation-v1";
-var PRIVATE_AUTOMATION_MAX_FINAL_OUTPUT_BYTES = 64 * 1024;
-var PRIVATE_AUTOMATION_MAX_RAW_OUTPUT_BYTES = 2 * 1024 * 1024;
-var PRIVATE_AUTOMATION_MAX_SCHEMA_BYTES = 64 * 1024;
-var PRIVATE_PROVIDERS = /* @__PURE__ */ new Set(["claude", "codex"]);
-var PRIVATE_RAW_EVENT_TYPES = Object.freeze({
-  claude: /* @__PURE__ */ new Set(["assistant", "error", "rate_limit_event", "result", "system", "user"]),
-  codex: /* @__PURE__ */ new Set([
-    "error",
-    "item.completed",
-    "item.started",
-    "item.updated",
-    "thread.started",
-    "turn.completed",
-    "turn.failed",
-    "turn.started"
-  ])
-});
-var PRIVATE_CODEX_ITEM_TYPES = /* @__PURE__ */ new Set(["agent_message", "reasoning"]);
-var PRIVATE_CODEX_DISABLED_CAPABILITY_DIAGNOSTIC = "Code Mode is unavailable because code-mode host is disabled.";
-var PRIVATE_CLAUDE_ASSISTANT_BLOCK_TYPES = /* @__PURE__ */ new Set(["text", "thinking"]);
-var PRIVATE_CLAUDE_SYSTEM_SUBTYPES = /* @__PURE__ */ new Set(["init", "thinking_tokens"]);
-var PRIVATE_CLAUDE_THINKING_TOKEN_KEYS = /* @__PURE__ */ new Set([
-  "estimated_tokens",
-  "estimated_tokens_delta",
-  "session_id",
-  "subtype",
-  "type",
-  "uuid"
-]);
-var PRIVATE_CLAUDE_SYNTHETIC_USER_KEYS = /* @__PURE__ */ new Set([
-  "isSynthetic",
-  "message",
-  "parent_tool_use_id",
-  "session_id",
-  "timestamp",
-  "type",
-  "uuid"
-]);
-var PRIVATE_OUTPUT_SCHEMA_COMPILER = new import_ajv.default({ allErrors: true, strict: false });
-var PRIVATE_CODEX_DISABLED_FEATURES = Object.freeze([
-  "apps",
-  "browser_use",
-  "browser_use_external",
-  "browser_use_full_cdp_access",
-  "code_mode_host",
-  "computer_use",
-  "enable_mcp_apps",
-  "image_generation",
-  "in_app_browser",
-  "multi_agent",
-  "plugins",
-  "remote_plugin",
-  "shell_snapshot",
-  "shell_tool",
-  "skill_search",
-  "tool_call_mcp_elicitation",
-  "tool_suggest",
-  "unified_exec",
-  "view_image"
-]);
-function getPrivateCodexDisabledFeatures() {
-  return [...PRIVATE_CODEX_DISABLED_FEATURES];
-}
-function requiredText(value, field, maxBytes = 4096) {
-  if (typeof value !== "string" || value.trim() === "" || value.includes("\0")) {
-    throw new Error(`${field} must be a non-empty string without NUL bytes`);
-  }
-  if (Buffer.byteLength(value, "utf8") > maxBytes) {
-    throw new Error(`${field} exceeds ${maxBytes} bytes`);
-  }
-  return value;
-}
-function containsToolEvent(value) {
-  if (Array.isArray(value)) return value.some(containsToolEvent);
-  if (!value || typeof value !== "object") return false;
-  if ([
-    "command_execution",
-    "file_change",
-    "mcp_tool_call",
-    "permission",
-    "permission_request",
-    "server_tool_use",
-    "tool_result",
-    "tool_use"
-  ].includes(value.type)) return true;
-  return Object.values(value).some(containsToolEvent);
-}
-function boundedUsage(usage2) {
-  if (!usage2 || typeof usage2 !== "object" || Array.isArray(usage2)) return void 0;
-  const projected = {};
-  for (const [key, raw] of Object.entries(usage2)) {
-    const value = Number(raw);
-    if (Number.isSafeInteger(value) && value >= 0 && value <= Number.MAX_SAFE_INTEGER) {
-      projected[key] = value;
-    }
-  }
-  return Object.keys(projected).length > 0 ? projected : void 0;
-}
-function projectPrivateAutomationEventMetadata(event) {
-  if (!event || typeof event !== "object" || Array.isArray(event)) {
-    throw new Error("private automation event must be an object");
-  }
-  if (containsToolEvent(event)) {
-    throw new Error("private automation tool event is forbidden");
-  }
-  const metadata = { type: requiredText(event.type, "private automation event type", 128) };
-  if (typeof event.model === "string" && event.model.length > 0) metadata.model = event.model;
-  if (Array.isArray(event.content)) metadata.contentBlockCount = event.content.length;
-  const usage2 = boundedUsage(event.usage);
-  if (usage2) metadata.usage = usage2;
-  if (typeof event.durationMs === "number" && Number.isFinite(event.durationMs) && event.durationMs >= 0) {
-    metadata.durationMs = Math.floor(event.durationMs);
-  }
-  if (typeof event.numTurns === "number" && Number.isSafeInteger(event.numTurns) && event.numTurns >= 0) {
-    metadata.numTurns = event.numTurns;
-  }
-  return Object.freeze(metadata);
-}
-function assertPrivateAutomationRawEvent(provider, event, expectedModel = null) {
-  if (!PRIVATE_PROVIDERS.has(provider) || !event || typeof event !== "object" || Array.isArray(event)) {
-    throw new Error("private automation provider event is invalid");
-  }
-  if (!PRIVATE_RAW_EVENT_TYPES[provider].has(event.type)) {
-    throw new Error("private automation provider event type is not allowlisted");
-  }
-  if (provider === "codex" && event.type.startsWith("item.")) {
-    const itemType = event.item?.type;
-    const isBlockedCapabilityDiagnostic = event.type === "item.completed" && itemType === "error" && typeof event.item?.message === "string" && event.item.message.startsWith(PRIVATE_CODEX_DISABLED_CAPABILITY_DIAGNOSTIC);
-    if (!PRIVATE_CODEX_ITEM_TYPES.has(itemType) && !isBlockedCapabilityDiagnostic) {
-      throw new Error("private automation Codex item type is not allowlisted");
-    }
-  }
-  if (provider === "claude" && event.type === "system") {
-    if (!PRIVATE_CLAUDE_SYSTEM_SUBTYPES.has(event.subtype)) {
-      throw new Error("private automation Claude system subtype is not allowlisted");
-    }
-    if (Array.isArray(event.tools) && event.tools.length > 0 || Array.isArray(event.mcp_servers) && event.mcp_servers.length > 0) {
-      throw new Error("private automation Claude init capabilities are not empty");
-    }
-    if (event.subtype === "thinking_tokens" && (Object.keys(event).some((key) => !PRIVATE_CLAUDE_THINKING_TOKEN_KEYS.has(key)) || !Number.isFinite(event.estimated_tokens) || event.estimated_tokens < 0 || !Number.isFinite(event.estimated_tokens_delta) || event.estimated_tokens_delta < 0)) {
-      throw new Error("private automation Claude thinking-token metadata is invalid");
-    }
-  }
-  if (provider === "claude" && event.type === "assistant") {
-    const message = event.message && typeof event.message === "object" ? event.message : null;
-    const content = Array.isArray(event.content) ? event.content : Array.isArray(message?.content) ? message.content : [];
-    if (content.some((block) => !block || typeof block !== "object" || !PRIVATE_CLAUDE_ASSISTANT_BLOCK_TYPES.has(block.type))) {
-      throw new Error("private automation Claude content block is not allowlisted");
-    }
-  }
-  if (provider === "claude" && event.type === "user") {
-    const content = Array.isArray(event.message?.content) ? event.message.content : [];
-    const textBytes = content.reduce((total, block) => total + (typeof block?.text === "string" ? Buffer.byteLength(block.text, "utf8") : 0), 0);
-    if (event.isSynthetic !== true || event.parent_tool_use_id != null || Object.keys(event).some((key) => !PRIVATE_CLAUDE_SYNTHETIC_USER_KEYS.has(key)) || event.message?.role !== "user" || content.length < 1 || content.length > 4 || content.some((block) => block?.type !== "text" || typeof block.text !== "string") || textBytes > 4096) {
-      throw new Error("private automation Claude synthetic user metadata is invalid");
-    }
-  }
-  if (provider === "claude" && event.type === "result" && expectedModel != null) {
-    const observedModels = event.modelUsage && typeof event.modelUsage === "object" && !Array.isArray(event.modelUsage) ? Object.keys(event.modelUsage) : [];
-    if (observedModels.length !== 1 || observedModels[0] !== expectedModel) {
-      throw new Error("private automation Claude model usage does not match the exact model");
-    }
-  }
-  if (containsToolEvent(event)) {
-    throw new Error("private automation tool event is forbidden");
-  }
-  return event;
-}
-function successfulProbe(result) {
-  return result && !result.error && result.status === 0;
-}
-function probeOutput(result) {
-  return `${String(result?.stdout || "")}
-${String(result?.stderr || "")}`;
-}
-function semverAtLeast(actual, minimum) {
-  const actualParts = actual.split(".").map(Number);
-  const minimumParts = minimum.split(".").map(Number);
-  for (let index = 0; index < 3; index += 1) {
-    if (actualParts[index] > minimumParts[index]) return true;
-    if (actualParts[index] < minimumParts[index]) return false;
-  }
-  return true;
-}
-function assertPrivateAutomationHostCapabilities({ binaryPath, profile }, dependencies = {}) {
-  const spawnSyncImpl = dependencies.spawnSyncImpl || import_node_child_process4.spawnSync;
-  if (!profile || profile.id !== PRIVATE_AUTOMATION_PROFILE_ID) {
-    throw new Error("private automation profile is required for capability preflight");
-  }
-  if (profile.provider === "codex") {
-    const versionProbe = spawnSyncImpl(binaryPath, ["--version"], {
-      encoding: "utf8",
-      timeout: 5e3
-    });
-    const versionMatch = probeOutput(versionProbe).match(/codex-cli\s+(\d+)\.(\d+)\.(\d+)/u);
-    const minimumVersion = loadProviderConfig("codex").headless.privateAutomation.minimumVersion;
-    const versionSupported = versionMatch && semverAtLeast(
-      `${versionMatch[1]}.${versionMatch[2]}.${versionMatch[3]}`,
-      minimumVersion
-    );
-    if (!successfulProbe(versionProbe) || !versionSupported) {
-      throw new Error("Codex host version does not satisfy private automation config controls");
-    }
-    const disabledFeatures = getPrivateCodexDisabledFeatures();
-    const configArgs = ["--ask-for-approval", "never"];
-    for (const feature of disabledFeatures) configArgs.push("--disable", feature);
-    configArgs.push(
-      "-c",
-      "mcp_servers={}",
-      "-c",
-      'web_search="disabled"',
-      "exec",
-      "-",
-      "--json",
-      "--skip-git-repo-check",
-      "--color",
-      "never",
-      "-C",
-      import_node_path6.default.dirname(profile.outputSchema.path),
-      "-m",
-      profile.model,
-      "--output-schema",
-      profile.outputSchema.path,
-      "--ephemeral",
-      "--strict-config",
-      "--ignore-user-config",
-      "--ignore-rules",
-      "-s",
-      "read-only"
-    );
-    const configProbe2 = spawnSyncImpl(binaryPath, configArgs, {
-      encoding: "utf8",
-      input: "",
-      timeout: 5e3
-    });
-    if (configProbe2?.error || configProbe2?.status === 0 || !probeOutput(configProbe2).includes("No prompt provided via stdin.")) {
-      throw new Error("Codex host does not satisfy private automation config controls");
-    }
-    const helpProbe = spawnSyncImpl(binaryPath, ["exec", "--help"], {
-      encoding: "utf8",
-      timeout: 5e3
-    });
-    const help = probeOutput(helpProbe);
-    const requiredHelp = [
-      "--ephemeral",
-      "--ignore-rules",
-      "--ignore-user-config",
-      "--output-schema",
-      "--sandbox"
-    ];
-    if (!successfulProbe(helpProbe) || requiredHelp.some((flag) => !help.includes(flag))) {
-      throw new Error("Codex host does not satisfy private automation config and CLI capabilities");
-    }
-    const featureProbe = spawnSyncImpl(binaryPath, ["features", "list"], {
-      encoding: "utf8",
-      timeout: 5e3
-    });
-    const features = probeOutput(featureProbe);
-    const missingFeature = PRIVATE_CODEX_DISABLED_FEATURES.some((feature) => {
-      const line = features.split("\n").find((candidate) => candidate.trim().startsWith(`${feature} `));
-      return !line || /\bremoved\b/u.test(line);
-    });
-    if (!successfulProbe(featureProbe) || missingFeature) {
-      throw new Error("Codex host does not satisfy private automation feature controls");
-    }
-    return true;
-  }
-  const configProbe = spawnSyncImpl(binaryPath, [
-    "--output-format",
-    "stream-json",
-    "--verbose",
-    "--print",
-    "--input-format",
-    "text",
-    "--model",
-    profile.model,
-    "--no-session-persistence",
-    "--safe-mode",
-    "--no-chrome",
-    "--disable-slash-commands",
-    "--tools",
-    "",
-    "--strict-mcp-config",
-    "--mcp-config",
-    '{"mcpServers":{}}',
-    "--setting-sources",
-    "",
-    "--permission-mode",
-    "plan"
-  ], {
-    encoding: "utf8",
-    input: "",
-    timeout: 5e3
-  });
-  if (configProbe?.error || configProbe?.status === 0 || !probeOutput(configProbe).includes("Input must be provided either through stdin")) {
-    throw new Error("Claude host does not satisfy private automation CLI capabilities");
-  }
-  return true;
-}
-
 // src/agent-host/events/stream.js
 function boundedAppend(current, value, maxLength = 4096) {
   const combined = `${current}${value}`;
@@ -17018,7 +17282,7 @@ function executeForegroundLaunch({
   launchId,
   onSpawn = null,
   plan,
-  spawnImpl = import_node_child_process5.spawn,
+  spawnImpl = import_node_child_process7.spawn,
   taskStop = null,
   stderr = process.stderr,
   stdout = process.stdout,
@@ -17461,8 +17725,8 @@ function executeForegroundLaunch({
 }
 
 // src/agent-host/launch-store.js
-var import_node_fs7 = __toESM(require("node:fs"), 1);
-var import_node_path7 = __toESM(require("node:path"), 1);
+var import_node_fs8 = __toESM(require("node:fs"), 1);
+var import_node_path8 = __toESM(require("node:path"), 1);
 var import_better_sqlite3 = __toESM(require("better-sqlite3"), 1);
 
 // src/runtime/node-policy.js
@@ -17666,10 +17930,10 @@ function createLaunchStore({
   now = () => (/* @__PURE__ */ new Date()).toISOString()
 } = {}) {
   assertSupportedNodeVersion();
-  const resolvedPath = import_node_path7.default.resolve(databasePath);
-  import_node_fs7.default.mkdirSync(import_node_path7.default.dirname(resolvedPath), { recursive: true, mode: 448 });
+  const resolvedPath = import_node_path8.default.resolve(databasePath);
+  import_node_fs8.default.mkdirSync(import_node_path8.default.dirname(resolvedPath), { recursive: true, mode: 448 });
   const database = new import_better_sqlite3.default(resolvedPath);
-  import_node_fs7.default.chmodSync(resolvedPath, 384);
+  import_node_fs8.default.chmodSync(resolvedPath, 384);
   initialize(database);
   const getStatement = database.prepare("SELECT * FROM agent_launches WHERE launch_id = ?");
   function get(launchId) {
@@ -17925,7 +18189,7 @@ function createLaunchStore({
 
 // src/agent-host/preflight.js
 var import_node_path14 = __toESM(require("node:path"), 1);
-var import_node_child_process8 = require("node:child_process");
+var import_node_child_process9 = require("node:child_process");
 
 // packages/mcp/src/agents.js
 var import_fs = __toESM(require("fs"), 1);
@@ -18133,20 +18397,20 @@ function readAgentMcpServers(agentConfig) {
 }
 
 // packages/mcp/src/registry.js
-var path9 = __toESM(require("path"), 1);
-var os4 = __toESM(require("os"), 1);
-var HOME = os4.homedir();
+var path10 = __toESM(require("path"), 1);
+var os5 = __toESM(require("os"), 1);
+var HOME = os5.homedir();
 var AGENT_CONFIGS2 = {
-  claude: path9.join(HOME, ".claude", "settings.json"),
-  codex: path9.join(HOME, ".codex", "config.toml"),
-  gemini: path9.join(HOME, ".gemini", "settings.json")
+  claude: path10.join(HOME, ".claude", "settings.json"),
+  codex: path10.join(HOME, ".codex", "config.toml"),
+  gemini: path10.join(HOME, ".gemini", "settings.json")
 };
-var RUDI_ROUTER_SHIM = path9.join(HOME, ".rudi", "bins", "rudi-router");
+var RUDI_ROUTER_SHIM = path10.join(HOME, ".rudi", "bins", "rudi-router");
 
 // src/agent-host/providers/common.js
-var import_node_fs8 = __toESM(require("node:fs"), 1);
-var import_node_os3 = __toESM(require("node:os"), 1);
-var import_node_path8 = __toESM(require("node:path"), 1);
+var import_node_fs9 = __toESM(require("node:fs"), 1);
+var import_node_os4 = __toESM(require("node:os"), 1);
+var import_node_path9 = __toESM(require("node:path"), 1);
 var MAX_PROMPT_BYTES = 10 * 1024 * 1024;
 var PERMISSION_ALIASES = Object.freeze({
   "accept-edits": "acceptEdits",
@@ -18256,28 +18520,28 @@ function validateImages(images) {
   return images.map((image, index) => requiredText2(image, `images[${index}]`, 4096));
 }
 function canonicalPath2(candidate) {
-  const absolute = import_node_path8.default.resolve(candidate);
+  const absolute = import_node_path9.default.resolve(candidate);
   try {
-    return import_node_fs8.default.realpathSync(absolute);
+    return import_node_fs9.default.realpathSync(absolute);
   } catch {
     return absolute;
   }
 }
 function isInsidePath(root, candidate) {
-  const child = import_node_path8.default.relative(root, candidate);
-  return child === "" || child !== ".." && !child.startsWith(`..${import_node_path8.default.sep}`) && !import_node_path8.default.isAbsolute(child);
+  const child = import_node_path9.default.relative(root, candidate);
+  return child === "" || child !== ".." && !child.startsWith(`..${import_node_path9.default.sep}`) && !import_node_path9.default.isAbsolute(child);
 }
 function rudiOwnedPathRoots(environment) {
-  const home = environment.HOME || import_node_os3.default.homedir();
+  const home = environment.HOME || import_node_os4.default.homedir();
   return [
-    import_node_path8.default.join(home, ".rudi"),
+    import_node_path9.default.join(home, ".rudi"),
     environment.RUDI_HOME,
     process.env.RUDI_HOME
-  ].filter((root) => typeof root === "string" && import_node_path8.default.isAbsolute(root)).flatMap((root) => [import_node_path8.default.resolve(root), canonicalPath2(root)]);
+  ].filter((root) => typeof root === "string" && import_node_path9.default.isAbsolute(root)).flatMap((root) => [import_node_path9.default.resolve(root), canonicalPath2(root)]);
 }
 function isRudiOwnedPathEntry(entry, roots2) {
   if (typeof entry !== "string" || entry.length === 0) return false;
-  const lexicalEntry = import_node_path8.default.resolve(entry);
+  const lexicalEntry = import_node_path9.default.resolve(entry);
   const canonicalEntry = canonicalPath2(entry);
   return roots2.some((root) => isInsidePath(root, lexicalEntry) || isInsidePath(root, canonicalEntry));
 }
@@ -18285,10 +18549,10 @@ function buildAgentExecutableEnvironment(binaryPath, overrides = {}, baseEnviron
   const merged = { ...baseEnvironment, ...overrides };
   const rudiRoots = rudiOwnedPathRoots(merged);
   const entries = [
-    import_node_path8.default.dirname(binaryPath),
-    ...String(merged.PATH || "").split(import_node_path8.default.delimiter)
-  ].filter((entry) => entry && import_node_path8.default.isAbsolute(entry) && !isRudiOwnedPathEntry(entry, rudiRoots));
-  merged.PATH = [...new Set(entries)].join(import_node_path8.default.delimiter);
+    import_node_path9.default.dirname(binaryPath),
+    ...String(merged.PATH || "").split(import_node_path9.default.delimiter)
+  ].filter((entry) => entry && import_node_path9.default.isAbsolute(entry) && !isRudiOwnedPathEntry(entry, rudiRoots));
+  merged.PATH = [...new Set(entries)].join(import_node_path9.default.delimiter);
   return merged;
 }
 var PRIVATE_OPERATIONAL_ENVIRONMENT_KEYS = Object.freeze([
@@ -18316,10 +18580,10 @@ function buildPrivateProviderEnvironment(config, binaryPath, options = {}) {
 }
 function buildProviderEnvironment(config, options = {}) {
   const baseEnvironment = options.baseEnvironment || process.env;
-  const rudiHome = options.rudiHome || process.env.RUDI_HOME || import_node_path8.default.join(import_node_os3.default.homedir(), ".rudi");
+  const rudiHome = options.rudiHome || process.env.RUDI_HOME || import_node_path9.default.join(import_node_os4.default.homedir(), ".rudi");
   let storedSecrets = {};
   try {
-    const parsed = JSON.parse(import_node_fs8.default.readFileSync(import_node_path8.default.join(rudiHome, "secrets.json"), "utf8"));
+    const parsed = JSON.parse(import_node_fs9.default.readFileSync(import_node_path9.default.join(rudiHome, "secrets.json"), "utf8"));
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
       storedSecrets = Object.fromEntries(
         Object.entries(parsed).filter(([, value]) => typeof value === "string" && value.length > 0)
@@ -18371,10 +18635,10 @@ function buildAntigravityPlan(options) {
 }
 
 // src/agent-host/task-claude-sandbox.js
-var import_node_fs9 = __toESM(require("node:fs"), 1);
-var import_node_os4 = __toESM(require("node:os"), 1);
-var import_node_path9 = __toESM(require("node:path"), 1);
-function claudeSandboxPolicy(binaryPath, profile, temporaryDirectory, homeDirectory = import_node_os4.default.homedir()) {
+var import_node_fs10 = __toESM(require("node:fs"), 1);
+var import_node_os5 = __toESM(require("node:os"), 1);
+var import_node_path10 = __toESM(require("node:path"), 1);
+function claudeSandboxPolicy(binaryPath, profile, temporaryDirectory, homeDirectory = import_node_os5.default.homedir()) {
   const account = profile.account;
   if (!account) throw new Error("Claude sandbox requires an explicit account");
   const read2 = [
@@ -18402,16 +18666,16 @@ function claudeSandboxPolicy(binaryPath, profile, temporaryDirectory, homeDirect
   const subpaths = (values) => [...new Set(values)].map((value) => `(subpath ${JSON.stringify(value)})`).join("");
   const directories = /* @__PURE__ */ new Set([
     "/",
-    import_node_path9.default.dirname(binaryPath),
-    import_node_path9.default.dirname(account.config_directory),
-    import_node_path9.default.join(homeDirectory, ".CFUserTextEncoding")
+    import_node_path10.default.dirname(binaryPath),
+    import_node_path10.default.dirname(account.config_directory),
+    import_node_path10.default.join(homeDirectory, ".CFUserTextEncoding")
   ]);
-  for (let cursor = homeDirectory; cursor !== import_node_path9.default.dirname(cursor); cursor = import_node_path9.default.dirname(cursor)) directories.add(cursor);
+  for (let cursor = homeDirectory; cursor !== import_node_path10.default.dirname(cursor); cursor = import_node_path10.default.dirname(cursor)) directories.add(cursor);
   return `(version 1)(allow default)(deny system-audit)(deny signal)(allow signal (target self))(deny file-read-data)(deny file-write*)(allow file-read-data ${subpaths(read2)}${[...directories].map((value) => `(literal ${JSON.stringify(value)})`).join("")})(allow file-write* (literal "/dev/null")${subpaths(write)})`;
 }
 function claudeSandboxPlan(context, plan) {
-  const temporaryDirectory = import_node_path9.default.join(canonicalDirectory(context.runtimeDirectory, "Claude runtime"), "native-tmp");
-  import_node_fs9.default.mkdirSync(temporaryDirectory, { mode: 448 });
+  const temporaryDirectory = import_node_path10.default.join(canonicalDirectory(context.runtimeDirectory, "Claude runtime"), "native-tmp");
+  import_node_fs10.default.mkdirSync(temporaryDirectory, { mode: 448 });
   canonicalDirectory(temporaryDirectory, "Claude temporary directory");
   return Object.freeze({
     ...plan,
@@ -18422,8 +18686,8 @@ function claudeSandboxPlan(context, plan) {
 }
 
 // src/agent-host/task-claude.js
-var import_node_path10 = __toESM(require("node:path"), 1);
-var import_node_child_process6 = require("node:child_process");
+var import_node_path11 = __toESM(require("node:path"), 1);
+var import_node_child_process8 = require("node:child_process");
 function taskClaudeArgs(context) {
   const profile = context.taskProfile;
   if (profile.network !== "disabled") throw new Error("Claude task requires disabled tool network");
@@ -18448,6 +18712,7 @@ function taskClaudeArgs(context) {
     context.model,
     "--safe-mode",
     "--restricted",
+    ...profile.reasoning_effort !== void 0 ? ["--effort", profile.reasoning_effort] : [],
     "--no-chrome",
     "--disable-slash-commands",
     "--tools",
@@ -18466,7 +18731,7 @@ function taskClaudeArgs(context) {
 }
 function taskClaudeEnvironment(binaryPath, profile = null) {
   const environment = {
-    PATH: `${import_node_path10.default.dirname(binaryPath)}:/usr/bin:/bin:/usr/sbin:/sbin`,
+    PATH: `${import_node_path11.default.dirname(binaryPath)}:/usr/bin:/bin:/usr/sbin:/sbin`,
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
     CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1",
     CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
@@ -18481,7 +18746,7 @@ function taskClaudeEnvironment(binaryPath, profile = null) {
   }
   return environment;
 }
-function inspectClaudeTaskSeat(binaryPath, { spawnSyncImpl = import_node_child_process6.spawnSync, profile = null } = {}) {
+function inspectClaudeTaskSeat(binaryPath, { spawnSyncImpl = import_node_child_process8.spawnSync, profile = null } = {}) {
   const result = spawnSyncImpl(binaryPath, ["auth", "status"], {
     encoding: "utf8",
     timeout: 5e3,
@@ -18499,7 +18764,7 @@ function inspectClaudeTaskSeat(binaryPath, { spawnSyncImpl = import_node_child_p
   let account;
   if (profile?.account) {
     const expected = profile.account;
-    if (status.email !== expected.email || status.orgId !== expected.organization_id || status.configDirectory !== expected.config_directory || status.projectsDirectory !== import_node_path10.default.join(expected.config_directory, "projects")) {
+    if (status.email !== expected.email || status.orgId !== expected.organization_id || status.configDirectory !== expected.config_directory || status.projectsDirectory !== import_node_path11.default.join(expected.config_directory, "projects")) {
       throw new Error("native Claude account does not match the pinned execution profile");
     }
     account = Object.freeze({ ...expected, projects_directory: status.projectsDirectory });
@@ -18586,92 +18851,6 @@ function buildClaudePlan(options) {
   return finishPlan(context, args, permission.mode);
 }
 
-// src/agent-host/task-codex.js
-var import_node_fs10 = __toESM(require("node:fs"), 1);
-var import_node_os5 = __toESM(require("node:os"), 1);
-var import_node_path11 = __toESM(require("node:path"), 1);
-var import_node_child_process7 = require("node:child_process");
-var TASK_CODEX_VERSION = "0.160.1";
-var TASK_DISABLED = getPrivateCodexDisabledFeatures().filter((feature) => !["shell_tool", "unified_exec", "code_mode_host"].includes(feature));
-function taskEnvironment(binaryPath) {
-  const result = { PATH: `${import_node_path11.default.dirname(binaryPath)}:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin` };
-  for (const key of ["HOME", "USER", "LOGNAME", "LANG", "LC_ALL"]) {
-    if (typeof process.env[key] === "string") result[key] = process.env[key];
-  }
-  return result;
-}
-function taskPermissionArgs(profile) {
-  const filesystem = { ":minimal": "read" };
-  for (const root of profile.read_roots) filesystem[root] = "read";
-  for (const root of profile.write_roots) filesystem[root] = "write";
-  const rules = Object.entries(filesystem).map(([key, value]) => `${JSON.stringify(key)}=${JSON.stringify(value)}`).join(",");
-  return ["-c", 'default_permissions="rudi_task"', "-c", `permissions={rudi_task={filesystem={${rules}},network={enabled=${profile.network === "enabled"}}}}`];
-}
-function taskCodexArgs(context) {
-  const args = ["--ask-for-approval", "never", "--no-daemon", "--enable", "code_mode_host"];
-  for (const feature of TASK_DISABLED) args.push("--disable", feature);
-  args.push(
-    ...taskPermissionArgs(context.taskProfile),
-    "-c",
-    "mcp_servers={}",
-    "-c",
-    'shell_environment_policy.inherit="none"',
-    "-c",
-    'web_search="disabled"',
-    "exec",
-    "-",
-    "--json",
-    "--skip-git-repo-check",
-    "--color",
-    "never",
-    "--strict-config",
-    "--ignore-user-config",
-    "--ignore-rules",
-    "-C",
-    context.cwd,
-    "-m",
-    context.model
-  );
-  return args;
-}
-function assertTaskHostCapabilities({ binaryPath, profile }, { spawnSyncImpl = import_node_child_process7.spawnSync } = {}) {
-  if (process.platform !== "darwin") throw new Error("task shared permissions currently qualified on macOS only");
-  for (let cursor = profile.working_directory; ; cursor = import_node_path11.default.dirname(cursor)) {
-    if (cursor !== import_node_os5.default.homedir() && import_node_fs10.default.existsSync(import_node_path11.default.join(cursor, ".codex", "config.toml"))) {
-      throw new Error("task workspace ancestor contains native config; explicit qualification required");
-    }
-    if (cursor === import_node_path11.default.dirname(cursor)) break;
-  }
-  if (import_node_fs10.default.existsSync("/etc/codex/config.toml")) throw new Error("system Codex config requires explicit task qualification");
-  const probe = (args2, input) => spawnSyncImpl(binaryPath, args2, { encoding: "utf8", input, timeout: 5e3, maxBuffer: 262144, env: taskEnvironment(binaryPath) });
-  const version = probe(["--version"]);
-  if (version.status !== 0 || String(version.stdout).trim() !== `codex-cli ${TASK_CODEX_VERSION}`) {
-    throw new Error("native Codex version is not qualified for task permissions");
-  }
-  const args = taskCodexArgs({ taskProfile: profile, cwd: profile.working_directory, model: profile.model });
-  const config = probe(args, "");
-  if (config.error || config.status === 0 || !`${config.stdout}${config.stderr}`.includes("No prompt provided via stdin.")) {
-    throw new Error("native task configuration probe failed");
-  }
-  const helper = auditHelperPath();
-  const containment = probe([
-    "sandbox",
-    "-P",
-    "rudi_task",
-    ...taskPermissionArgs({ ...profile, read_roots: [...profile.read_roots, helper] }),
-    "-C",
-    profile.working_directory,
-    "--",
-    helper,
-    "probe",
-    String(process.pid)
-  ]);
-  if (containment.status !== 0 || String(containment.stdout).trim() !== JSON.stringify({ audit_session_escape_denied: true, supervisor_signal_denied: true })) {
-    throw new Error("native audit containment capability probe failed");
-  }
-  return { version: TASK_CODEX_VERSION };
-}
-
 // src/agent-host/providers/codex.js
 var APPROVAL_ALIASES = Object.freeze({
   onRequest: "on-request",
@@ -18693,7 +18872,7 @@ function buildCodexPlan(options) {
     if ((options.extraArgs || []).length || (options.images || []).length || options.approvalMode || options.permissionMode) {
       throw new Error("task execution forbids permission overrides, images and passthrough arguments");
     }
-    return finishPlan(context, taskCodexArgs(context), "registered-shared", taskEnvironment(context.binaryPath));
+    return finishPlan(context, taskCodexArgs(context), "registered-shared", taskEnvironment(context.binaryPath, context.taskProfile));
   }
   if (context.privateAutomationProfile) {
     if ((options.extraArgs || []).length > 0 || (options.images || []).length > 0) {
@@ -19314,7 +19493,7 @@ function hasRudiRouter(provider) {
   return readAgentMcpServers(config).some((server) => server.name === "rudi" || import_node_path14.default.basename(String(server.command)) === "rudi-router");
 }
 async function inspectAgentHost(provider, dependencies = {}) {
-  const { spawnSyncImpl = import_node_child_process8.spawnSync } = dependencies;
+  const { spawnSyncImpl = import_node_child_process9.spawnSync } = dependencies;
   const canonicalProvider = resolveAgentProviderId(provider);
   const summarizeSkills = dependencies.summarizeNativeSkillHostImpl || summarizeNativeSkillHost;
   let skillProjection;
@@ -19376,7 +19555,7 @@ async function assertAgentHostReady({ binaryPath, provider }, dependencies = {})
 // src/agent-host/workspace.js
 var import_node_fs13 = __toESM(require("node:fs"), 1);
 var import_node_path16 = __toESM(require("node:path"), 1);
-var import_node_child_process9 = require("node:child_process");
+var import_node_child_process10 = require("node:child_process");
 
 // src/agent-host/workspace-manifest.js
 var import_node_crypto4 = __toESM(require("node:crypto"), 1);
@@ -19573,7 +19752,7 @@ function resolveAgentWorkspace(options, dependencies = {}) {
     taskProfile = null,
     workspace = null
   } = options || {};
-  const { execFileSyncImpl = import_node_child_process9.execFileSync } = dependencies;
+  const { execFileSyncImpl = import_node_child_process10.execFileSync } = dependencies;
   assertLaunchId(launchId);
   if (mode === TASK_MODE) assertTaskProfile(taskProfile);
   if (!VALID_MODES.has(mode)) {
@@ -19649,7 +19828,7 @@ function resolveAgentWorkspace(options, dependencies = {}) {
 }
 function cleanupUnstartedWorkspace(workspace, dependencies = {}) {
   if (!workspace || typeof workspace !== "object") return;
-  const { execFileSyncImpl = import_node_child_process9.execFileSync } = dependencies;
+  const { execFileSyncImpl = import_node_child_process10.execFileSync } = dependencies;
   const outputDestination = import_node_path16.default.resolve(workspace.outputDestination);
   const executionWorkspace = import_node_path16.default.resolve(workspace.executionWorkspace);
   if (!isInside2(executionWorkspace, outputDestination) && ![WORKSPACE_MODES.READ_ONLY, TASK_MODE].includes(workspace.mode)) {
@@ -19681,9 +19860,9 @@ function cleanupUnstartedWorkspace(workspace, dependencies = {}) {
 var import_node_fs14 = __toESM(require("node:fs"), 1);
 var import_node_os7 = __toESM(require("node:os"), 1);
 var import_node_path17 = __toESM(require("node:path"), 1);
-var import_node_child_process10 = require("node:child_process");
+var import_node_child_process11 = require("node:child_process");
 var TASK_CLAUDE_VERSION = "2.1.294";
-function assertClaudeTaskCapabilities({ binaryPath, profile }, { spawnSyncImpl = import_node_child_process10.spawnSync, helperPathImpl = auditHelperPath } = {}) {
+function assertClaudeTaskCapabilities({ binaryPath, profile }, { spawnSyncImpl = import_node_child_process11.spawnSync, helperPathImpl = auditHelperPath } = {}) {
   const helper = helperPathImpl();
   if (!profile.account || profile.network !== "disabled") throw new Error("Claude task requires an explicit account and disabled tool network");
   for (const policy of [
@@ -19765,7 +19944,7 @@ async function launchAgent(options, dependencies = {}) {
   if (!binaryPath) {
     throw new Error(getMissingAgentProviderMessage(provider));
   }
-  if (!taskProfile || provider !== "claude") await preflightImpl({ binaryPath, provider });
+  if (!taskProfile?.account) await preflightImpl({ binaryPath, provider });
   if (privateAutomationProfile) {
     await privatePreflightImpl({ binaryPath, profile: privateAutomationProfile });
   }
@@ -19930,6 +20109,7 @@ async function runAgentTaskInSession(reference, dependencies = {}) {
     compute,
     instructions: request.instructions,
     execution_profile: request.execution_profile,
+    ...profile.reasoning_effort !== void 0 ? { reasoning_effort: profile.reasoning_effort } : {},
     ...profile.account ? { account: profile.account } : {}
   };
   const store = createLaunchStore({ databasePath: import_node_path18.default.join(request.outputs.runtime, "agent-hosts.db") });
@@ -20052,7 +20232,7 @@ async function main() {
     capsuleRecord(import_node_path19.default.join(directory, "result.json"), { error: String(error.message).slice(0, 2048) });
   } finally {
     clearInterval(monitor);
-    if (creatorLost) (0, import_node_child_process11.spawnSync)("/bin/launchctl", ["bootout", `gui/${process.getuid()}/${input.label}`], { timeout: 1e4, stdio: "ignore" });
+    if (creatorLost) (0, import_node_child_process12.spawnSync)("/bin/launchctl", ["bootout", `gui/${process.getuid()}/${input.label}`], { timeout: 1e4, stdio: "ignore" });
   }
 }
 main().catch((error) => {

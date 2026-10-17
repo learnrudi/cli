@@ -140,7 +140,7 @@ export async function cmdAgent(args = [], flags = {}, passthrough = [], dependen
       throw new Error('Usage: rudi agent task-check|task-run|task-recover <request-path> <sha256> [--json]');
     }
     const reference = { path: args[1], sha256: args[2] };
-    const checkedTask = subcommand === 'task-check' ? checkAgentTask(reference) : null;
+    const checkedTask = subcommand === 'task-check' ? await checkAgentTask(reference) : null;
     const result = subcommand === 'task-check'
       ? { schema_version: 1, kind: 'agent-task-check', valid: true, request: reference, provider: checkedTask.profile.provider }
       : subcommand === 'task-recover' ? await recoverAgentTask(reference) : await runAgentTask(reference);
