@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Exact package version to publish from main
+        description: Exact package version to publish from the accepted release branch
         required: true
         type: string
 
@@ -19,7 +19,7 @@ concurrency:
 jobs:
   publish:
     name: publish
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release/1.10'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -51,6 +51,10 @@ jobs:
         env:
           EXPECTED_VERSION: ${{ inputs.version }}
         run: |
+          if [ "$GITHUB_REF" = "refs/heads/release/1.10" ] && [[ ! "$EXPECTED_VERSION" =~ ^1\.10\.[0-9]+$ ]]; then
+            echo "The 1.10 maintenance branch can publish only stable 1.10 patch versions." >&2
+            exit 1
+          fi
           ACTUAL_VERSION="$(node -p "require('./package.json').version")"
           if [ "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]; then
             echo "Requested version $EXPECTED_VERSION does not match package version $ACTUAL_VERSION" >&2

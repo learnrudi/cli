@@ -177,3 +177,25 @@ test('normal builds use the checked-in package manifest without a sibling regist
   assert.equal(packageJson.scripts['generate:manifest'], 'node scripts/generate-manifest.js');
   assert.match(packageJson.scripts.build, /src\/packages-manifest\.json/);
 });
+
+test('maintenance publishing accepts only the named stable line and its patch versions', () => {
+  const workflow = read('.github/workflows/publish-npm.yml');
+  const publish = workflowJob(workflow, 'publish');
+  assert.equal(publish.match(/^    if: (.+)$/m)?.[1],
+    "github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release/1.10'");
+  const guard = publish.match(/          if \[ "\$GITHUB_REF"[^]*?          fi/)?.[0];
+  assert.ok(guard, 'maintenance releases must enforce their stable version line');
+  for (const [ref, version, accepted] of [
+    ['refs/heads/release/1.10', '1.10.30', true],
+    ['refs/heads/release/1.10', '1.11.0', false],
+    ['refs/heads/release/1.10', '1.10.30-rc.1', false],
+    ['refs/heads/release/1.10', 'invalid', false],
+    ['refs/heads/main', '1.11.0', true],
+  ]) {
+    const result = spawnSync('/bin/bash', ['-c', guard], {
+      encoding: 'utf8', timeout: 1000,
+      env: { PATH: '/usr/bin:/bin', GITHUB_REF: ref, EXPECTED_VERSION: version },
+    });
+    assert.equal(result.status, accepted ? 0 : 1, ref + ' ' + version);
+  }
+});
