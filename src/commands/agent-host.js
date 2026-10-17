@@ -1,3 +1,4 @@
+import { readAgentTask, runAgentTask, recoverAgentTask } from '../agent-host/task-run.js';
 import { attachAgentLaunch } from '../agent-host/attach.js';
 import {
   buildDetachedOptions,
@@ -55,6 +56,7 @@ USAGE
   rudi agent diff <launch-id> [--json]
   rudi agent promote <launch-id> [--json]
   rudi agent discard <launch-id> [--json]
+  rudi agent task-check|task-run|task-recover <request-path> <sha256> [--json]
   rudi agent group launch --task <provider:file> --task <provider:file> --detach
   rudi agent group list [--limit <n>] [--json]
   rudi agent group status <group-id> [--json]
@@ -131,6 +133,19 @@ export async function cmdAgent(args = [], flags = {}, passthrough = [], dependen
 
   if (privateAutomation && subcommand !== 'launch') {
     throw new Error('private automation supports only rudi agent launch');
+  }
+
+  if (['task-check','task-run','task-recover'].includes(subcommand)) {
+    if (args.length !== 3 || passthrough.length || Object.keys(flags).some(key => key !== 'json')) {
+      throw new Error('Usage: rudi agent task-check|task-run|task-recover <request-path> <sha256> [--json]');
+    }
+    const reference = { path: args[1], sha256: args[2] };
+    const result = subcommand === 'task-check'
+      ? { schema_version: 1, kind: 'agent-task-check', valid: true, request: reference, provider: readAgentTask(reference).profile.provider }
+      : subcommand === 'task-recover' ? await recoverAgentTask(reference) : await runAgentTask(reference);
+    console.log(JSON.stringify(result));
+    if (result.status === 'failed') process.exitCode = 1;
+    return result;
   }
 
   if (subcommand === '_worker') {

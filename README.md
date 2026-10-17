@@ -717,3 +717,5 @@ Native projections retain complete trigger descriptions and bundled Codex
 metadata. Ownership receipts, exact force scope, conflict preservation and
 restartRequired reporting continue to govern native updates. Deploy the
 compatible CLI before publishing a registry that migrates existing flat skills.
+
+Registered shared task execution is described in [the Agent Host task contract](docs/agent-task-execution.md). It is an unpublished, foreground-only capability qualified with isolated fixtures; deployment and cutover require separate approval.

@@ -8,6 +8,7 @@ import {
   providerContext,
   validateImages,
 } from './common.js';
+import { taskCodexArgs, taskEnvironment } from '../task-codex.js';
 import { getPrivateCodexDisabledFeatures } from '../private-automation-profile.js';
 
 const APPROVAL_ALIASES = Object.freeze({
@@ -28,6 +29,12 @@ function approvalPolicy(value) {
 
 export function buildCodexPlan(options) {
   const context = providerContext(options, 'codex');
+  if (context.taskProfile) {
+    if ((options.extraArgs || []).length || (options.images || []).length || options.approvalMode || options.permissionMode) {
+      throw new Error('task execution forbids permission overrides, images and passthrough arguments');
+    }
+    return finishPlan(context, taskCodexArgs(context), 'registered-shared', taskEnvironment(context.binaryPath));
+  }
   if (context.privateAutomationProfile) {
     if ((options.extraArgs || []).length > 0 || (options.images || []).length > 0) {
       throw new Error('private automation forbids Codex passthrough arguments and images');

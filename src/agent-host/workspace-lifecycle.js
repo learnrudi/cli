@@ -61,6 +61,7 @@ function requireManagedLaunch(store, launchId, { terminal = false } = {}) {
   assertLaunchId(launchId);
   const launch = store.get(launchId);
   if (!launch) throw new Error(`Launch not found: ${launchId}`);
+  if (launch.workspaceMode === 'registered-shared') throw new Error('shared task workspaces are externally owned; lifecycle mutation is forbidden');
   if (terminal && !TERMINAL_STATUSES.has(launch.status)) {
     throw new Error(`Launch must be terminal before this operation: ${launchId} (${launch.status})`);
   }

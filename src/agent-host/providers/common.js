@@ -9,6 +9,7 @@ import {
   loadProviderConfig,
   resolveModel,
 } from './catalog.js';
+import { assertTaskProfile, TASK_MODE } from '../task-profile.js';
 import { PRIVATE_AUTOMATION_PROFILE_ID } from '../private-automation-profile.js';
 
 const MAX_PROMPT_BYTES = 10 * 1024 * 1024;
@@ -53,6 +54,14 @@ export function validateExtraArgs(value) {
 
 export function providerContext(options, provider) {
   const config = loadProviderConfig(provider);
+  const taskProfile = options.taskProfile || null;
+  if (taskProfile) {
+    assertTaskProfile(taskProfile);
+    if (provider !== taskProfile.provider || options.model !== taskProfile.model
+        || options.nativeSessionId || options.workspaceMode !== TASK_MODE || options.cwd !== taskProfile.working_directory) {
+      throw new Error("task execution binding mismatch or resume forbidden");
+    }
+  } else if (options.workspaceMode === TASK_MODE) assertTaskProfile(null);
   const privateAutomationProfile = options.privateAutomationProfile || null;
   if (privateAutomationProfile != null) {
     if (privateAutomationProfile.id !== PRIVATE_AUTOMATION_PROFILE_ID) {
@@ -82,7 +91,7 @@ export function providerContext(options, provider) {
   }
 
   const workspaceMode = options.workspaceMode;
-  if (!['read-only', 'worktree', 'isolated-copy'].includes(workspaceMode)) {
+  if (!['read-only', 'worktree', 'isolated-copy', TASK_MODE].includes(workspaceMode)) {
     throw new Error(`Unknown resolved workspace mode: ${workspaceMode}`);
   }
 
@@ -97,6 +106,7 @@ export function providerContext(options, provider) {
       : requiredText(options.nativeSessionId, 'nativeSessionId', 1024),
     prompt,
     privateAutomationProfile,
+    taskProfile,
     provider,
     runtimeDirectory: options.runtimeDirectory == null
       ? null
@@ -234,7 +244,7 @@ export function finishPlan(context, args, permissionMode, providerEnvironment = 
       ? buildPrivateProviderEnvironment(context.config, context.binaryPath)
       : buildProviderEnvironment(context.config)
   );
-  const environment = context.privateAutomationProfile
+  const environment = (context.privateAutomationProfile || context.taskProfile)
     ? resolvedProviderEnvironment
     : buildAgentExecutableEnvironment(context.binaryPath, resolvedProviderEnvironment);
   return Object.freeze({
@@ -246,6 +256,7 @@ export function finishPlan(context, args, permissionMode, providerEnvironment = 
       privateAutomationProfile: context.privateAutomationProfile,
       stdin: context.prompt,
     } : {}),
+    ...(context.taskProfile ? { taskProfile: context.taskProfile, stdin: context.prompt, maxRawOutputBytes: 8 * 1024 * 1024 } : {}),
     model: context.model,
     permissionMode,
     provider: context.provider,

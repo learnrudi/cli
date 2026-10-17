@@ -18,6 +18,8 @@ import {
   cleanupUnstartedWorkspace,
   resolveAgentWorkspace,
 } from './workspace.js';
+import { assertTaskHostCapabilities } from './task-codex.js';
+import { assertTaskProfile, assertWritableTaskRoots } from './task-profile.js';
 import { assertPrivateAutomationHostCapabilities } from './private-automation-profile.js';
 
 export function createLaunchId() {
@@ -33,6 +35,7 @@ export async function launchAgent(options, dependencies = {}) {
     onSpawn = null,
     preflightImpl = assertAgentHostReady,
     privatePreflightImpl = assertPrivateAutomationHostCapabilities,
+    taskPreflightImpl = assertTaskHostCapabilities,
     resolveBinaryImpl = resolveAgentProviderBinary,
     spawnImpl,
     stderr = process.stderr,
@@ -46,6 +49,11 @@ export async function launchAgent(options, dependencies = {}) {
   if (privateAutomationProfile && options?.executionKind && options.executionKind !== 'foreground') {
     throw new Error('private automation supports foreground execution only');
   }
+  const taskProfile = options?.taskProfile || null;
+  if (taskProfile) {
+    assertTaskProfile(taskProfile);
+    if (options.executionKind && options.executionKind !== "foreground") throw new Error("task execution is foreground only");
+  }
   const provider = resolveAgentProviderId(options?.provider);
   const binaryPath = resolveBinaryImpl(provider);
   if (!binaryPath) {
@@ -56,6 +64,8 @@ export async function launchAgent(options, dependencies = {}) {
     await privatePreflightImpl({ binaryPath, profile: privateAutomationProfile });
   }
 
+  if (taskProfile) await taskPreflightImpl({ binaryPath, profile: taskProfile });
+
   const workspace = workspaceResolver({
     artifactsRoot,
     launchId,
@@ -63,6 +73,7 @@ export async function launchAgent(options, dependencies = {}) {
     originDirectory: options.originDirectory || process.cwd(),
     outputDirectory: options.outputDirectory || null,
     privateAutomation: privateAutomationProfile != null,
+    taskProfile,
     workspace: options.workspace || null,
   });
   const resolvedEventSink = eventSink || (event => appendLaunchEvent(
@@ -80,6 +91,7 @@ export async function launchAgent(options, dependencies = {}) {
       model: options.model,
       permissionMode: options.permissionMode,
       privateAutomationProfile,
+      taskProfile,
       prompt: options.prompt,
       provider,
       runtimeDirectory: workspace.outputDestination,
@@ -109,6 +121,7 @@ export async function launchAgent(options, dependencies = {}) {
       worktreeBranch: workspace.worktreeBranch,
     });
 
+    if (taskProfile) assertWritableTaskRoots(taskProfile);
     return await executeForegroundLaunch({
       eventSink: resolvedEventSink,
       jsonOutput: options.json === true,
@@ -120,7 +133,7 @@ export async function launchAgent(options, dependencies = {}) {
       stdout,
       store,
       signalEmitter,
-      timeoutMs: options.timeoutMs || plan.timeouts.runtimeMs,
+      timeoutMs: taskProfile?.timeout_ms || options.timeoutMs || plan.timeouts.runtimeMs,
     });
   } catch (error) {
     const current = store.get(launchId);
