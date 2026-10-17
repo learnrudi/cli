@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { auditHelperPath } from './task-audit.js';
 import { getPrivateCodexDisabledFeatures } from './private-automation-profile.js';
 
 // This boundary is qualified on this native release, not inferred from a version range.
@@ -55,6 +56,12 @@ export function assertTaskHostCapabilities({ binaryPath, profile }, { spawnSyncI
   const config = probe(args, '');
   if (config.error || config.status === 0 || !`${config.stdout}${config.stderr}`.includes('No prompt provided via stdin.')) {
     throw new Error('native task configuration probe failed');
+  }
+  const helper=auditHelperPath();
+  const containment=probe(['sandbox','-P','rudi_task',...taskPermissionArgs({...profile,read_roots:[...profile.read_roots,helper]}),
+    '-C',profile.working_directory,'--',helper,'probe',String(process.pid)]);
+  if(containment.status!==0 || String(containment.stdout).trim()!==JSON.stringify({audit_session_escape_denied:true,supervisor_signal_denied:true})) {
+    throw new Error('native audit containment capability probe failed');
   }
   return { version: TASK_CODEX_VERSION };
 }

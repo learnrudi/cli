@@ -198,13 +198,15 @@ test('discoverStackTools falls back when Windows taskkill exits nonzero', () => 
         path: process.argv[2],
         launch: { bin: process.execPath, args: [process.argv[3], process.argv[4]] },
       }, { timeout: 500 });
-      await new Promise(resolve => setTimeout(resolve, 500));
       const childPid = Number(fs.readFileSync(process.argv[4], 'utf8'));
-      let childAlive = false;
-      try {
-        process.kill(childPid, 0);
-        childAlive = true;
-      } catch {}
+      // Observe asynchronous fallback completion before the fixture's natural
+      // five-second exit, without racing taskkill close and escalation events.
+      const deadline = Date.now() + 3000;
+      let childAlive = true;
+      while (childAlive && Date.now() < deadline) {
+        try { process.kill(childPid, 0); } catch { childAlive = false; }
+        if (childAlive) await new Promise(resolve => setTimeout(resolve, 25));
+      }
       if (childAlive) process.kill(childPid, 'SIGKILL');
       console.log(JSON.stringify({ childAlive, result }));
     `;

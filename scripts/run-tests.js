@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { isQualifiedTaskAuditHost } from '../src/agent-host/task-audit.js';
 
 const require = createRequire(import.meta.url);
 const WORKDIR = process.cwd();
@@ -140,6 +141,13 @@ function runNode(nodePath, args) {
 }
 
 const testArgs = resolveTestArgs(process.argv.slice(2));
+if (isQualifiedTaskAuditHost()) {
+  const preparation = spawnSync(process.execPath, ['scripts/build-task-audit.mjs'], {
+    cwd: WORKDIR,
+    stdio: 'inherit',
+  });
+  if (preparation.status !== 0) process.exit(1);
+}
 const compatibility = canLoadBetterSqlite3();
 
 if (compatibility.ok) {

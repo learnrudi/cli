@@ -44,6 +44,7 @@ export function executeForegroundLaunch({
   onSpawn = null,
   plan,
   spawnImpl = spawn,
+  taskStop = null,
   stderr = process.stderr,
   stdout = process.stdout,
   store,
@@ -85,6 +86,10 @@ export function executeForegroundLaunch({
     let privateUsage = null;
 
     function terminateProvider(signal) {
+      if(taskExecution && taskStop) {
+        void taskStop().catch(()=>{taskFailure='task audit cleanup unresolved';});
+        return true;
+      }
       if (taskExecution) {
         try {
           if (!taskIdentity || JSON.stringify(processIdentity(child.pid)) !== JSON.stringify(taskIdentity)) {
@@ -465,6 +470,7 @@ export function executeForegroundLaunch({
     });
 
     child.stderr.on('data', (chunk) => {
+      if(taskExecution)stderrTail=boundedAppend(stderrTail,chunk.toString());
       if (supervised) return;
       const text = chunk.toString();
       stderrTail = boundedAppend(stderrTail, text);
@@ -483,8 +489,9 @@ export function executeForegroundLaunch({
       );
     });
 
+    if(taskExecution && taskStop)child.once('exit',()=>terminateProvider('SIGKILL'));
     child.once('close', (exitCode, signal) => {
-      if (privateProviderGroupAlive()) {
+      if (!(taskExecution && taskStop) && privateProviderGroupAlive()) {
         terminateProvider('SIGKILL');
         if (taskExecution) taskFailure = 'task process group remained alive';
         privateFailure = 'private_termination_unconfirmed';

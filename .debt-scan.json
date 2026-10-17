@@ -119,7 +119,11 @@
         "scripts/validate-publish-runtime.mjs",
         "scripts/run-tests.js",
         "scripts/verify-task-permissions.mjs",
-        "src/agent-host/task-custody-worker.js"
+        "src/agent-host/task-custody-worker.js",
+        "src/agent-host/task-capsule-worker.js",
+        "scripts/build-task-audit.mjs",
+        "scripts/verify-task-containment.mjs",
+        "scripts/verify-sqlite-teardown.mjs"
       ],
       "checks": [
         "orphans",

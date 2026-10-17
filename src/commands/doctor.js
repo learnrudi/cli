@@ -12,6 +12,8 @@ import {
 import { listSecretNames } from '@learnrudi/runner';
 import fs from 'fs';
 import { getDaemonStatus } from '../daemon/client.js';
+import { isSupportedNodeVersion, SUPPORTED_NODE_DESCRIPTION } from '../runtime/node-policy.js';
+export { isSupportedNodeVersion } from '../runtime/node-policy.js';
 
 export function formatDaemonDoctorState(daemon) {
   if (daemon.ready) return 'ready';
@@ -22,11 +24,6 @@ export function formatDaemonDoctorState(daemon) {
 
 export function shouldReportDaemonIssue(daemon) {
   return daemon.reason !== 'not_running' && (!daemon.reachable || !daemon.ready);
-}
-
-export function isSupportedNodeVersion(version) {
-  const parsed = typeof version === 'string' && /^v?(\d+)\.\d+\.\d+$/.exec(version);
-  return Boolean(parsed && [22, 24].includes(Number(parsed[1])));
 }
 
 export async function cmdDoctor(args, flags) {
@@ -165,12 +162,12 @@ export async function cmdDoctor(args, flags) {
   console.log('\n📍 Environment');
   const nodeVersion = process.version;
   const nodeOk = isSupportedNodeVersion(nodeVersion);
-  console.log(`  ${nodeOk ? '✓' : '✗'} Node.js: ${nodeVersion} ${nodeOk ? '' : '(supported: Node 22 or 24 LTS)'}`);
+  console.log(`  ${nodeOk ? '✓' : '✗'} Node.js: ${nodeVersion} ${nodeOk ? '' : `(supported: ${SUPPORTED_NODE_DESCRIPTION})`}`);
   console.log(`  ✓ Platform: ${process.platform}-${process.arch}`);
   console.log(`  ✓ RUDI Home: ${PATHS.home}`);
 
   if (!nodeOk) {
-    issues.push('Unsupported Node.js version (supported: Node 22 or 24 LTS; managed default: Node 24)');
+    issues.push(`Unsupported Node.js version (supported: ${SUPPORTED_NODE_DESCRIPTION})`);
   }
 
   // Summary

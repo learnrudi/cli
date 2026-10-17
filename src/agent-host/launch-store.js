@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
+import { assertSupportedNodeVersion } from '../runtime/node-policy.js';
 
 import { assertLaunchId, getAgentHostPaths } from './artifacts.js';
 
@@ -197,6 +198,7 @@ export function createLaunchStore({
   databasePath = getAgentHostPaths().stateDatabase,
   now = () => new Date().toISOString(),
 } = {}) {
+  assertSupportedNodeVersion();
   const resolvedPath = path.resolve(databasePath);
   fs.mkdirSync(path.dirname(resolvedPath), { recursive: true, mode: 0o700 });
   const database = new Database(resolvedPath);

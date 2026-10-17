@@ -4,7 +4,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { sha256 } from '../../agent-host/task-profile.js';
-import { runAgentTask } from '../../agent-host/task-run.js';
+import { runAgentTaskInSession, runAgentTask as dispatchAgentTask } from '../../agent-host/task-run.js';
+const runAgentTask=(reference,dependencies={})=>runAgentTaskInSession(reference,{...dependencies,
+  custodyFactory:async()=>({track:async()=>{},stop:async()=>{},close:async()=>{}})});
+
+test('public capsule dispatch rejects provider injection before resolving any task',async()=>{
+  await assert.rejects(dispatchAgentTask(null,{launchDependencies:{resolveBinaryImpl:()=>{throw new Error('must not resolve');}}}),/unsupported capsule dependency/);
+});
 
 test('bridge receipt binds task/job/launch and hashes only allowed regular outputs', async t => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'task-run-')));

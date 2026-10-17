@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { runTaskCapsule } from './task-capsule.js';
 import { launchAgent } from './launch.js';
 import { openTaskCustody, recoverTaskCustody } from './task-custody.js';
 import { createLaunchStore } from './launch-store.js';
@@ -76,6 +77,14 @@ function verifyOutputs(manifest, profile) {
 }
 
 export async function runAgentTask(reference, dependencies = {}) {
+  if(Object.keys(dependencies).some(key=>key!=='environment'))throw new Error('unsupported capsule dependency; use the explicit in-session fixture interface');
+  const environment=dependencies.environment || process.env;
+  const {request}=readAgentTask(reference,environment);
+  computeBinding(environment);
+  return runTaskCapsule(reference,request,environment);
+}
+
+export async function runAgentTaskInSession(reference, dependencies = {}) {
   const { request, profile, instructions, nativeBinary } = readAgentTask(reference, dependencies.environment || process.env);
   const compute = computeBinding(dependencies.environment || process.env);
   const runDirectory = path.join(request.outputs.runtime, `${compute.job_id}-attempt-1`);
@@ -84,7 +93,7 @@ export async function runAgentTask(reference, dependencies = {}) {
     instructions: request.instructions, execution_profile: request.execution_profile };
   const store = createLaunchStore({ databasePath: path.join(request.outputs.runtime, 'agent-hosts.db') });
   let custody;
-  try { custody = await openTaskCustody({runtime:request.outputs.runtime,runDirectory,jobId:compute.job_id,
+  try { custody = await (dependencies.custodyFactory || openTaskCustody)({capsule:dependencies.capsule,runtime:request.outputs.runtime,runDirectory,jobId:compute.job_id,
     workerPath:dependencies.custodyWorkerPath}); }
   catch (error) {store.close();throw error;}
   let launchReference = null;
@@ -104,17 +113,21 @@ export async function runAgentTask(reference, dependencies = {}) {
       outputDirectory: path.join(runDirectory, 'host'),
       prompt: `${instructions}\n\nReturn a final JSON object with exactly outcome and outputs. outcome is complete, no_work, partial, needs_evidence, or failed. outputs is an array of absolute paths to files produced in the declared write roots. complete requires at least one file; no_work requires none. Do not include Markdown fences.\nDeclared write roots: ${JSON.stringify(profile.write_roots)}`,
     }, { ...dependencies.launchDependencies,
-      ...(nativeBinary ? {resolveBinaryImpl:()=>nativeBinary} : {}), store, onSpawn: async value => {
+      ...(nativeBinary ? {resolveBinaryImpl:()=>nativeBinary} : {}), taskStop:()=>custody.stop(), store, onSpawn: async value => {
       await custody.track(value.pid);
       recordLaunch(value);
     }, stdout: { write() {} } });
     recordLaunch(launch);
     if (launch.status !== 'completed' || !launch.nativeSessionId) throw new Error(launch.lastError || 'native launch did not complete');
-    outputs = verifyOutputs(launch.taskFinalOutput, profile);
+
   } catch (caught) { error = String(caught.message || 'task execution failed').slice(0, 2048); }
   finally {
     store.close();
+    dependencies.beforeCustodyClose?.();
     try { await custody.close(); } catch (caught) { error = `Task custody unresolved: ${caught.message}`.slice(0,2048); }
+  }
+  if(!error) {
+    try {outputs=verifyOutputs(launch.taskFinalOutput,profile);}catch(caught){error=String(caught.message).slice(0,2048);}
   }
   const receipt = writeReceipt(path.join(runDirectory, 'completion.json'), {
     ...base, status: error ? 'failed' : 'completed', outcome: error ? 'failed' : launch.taskFinalOutput.outcome,
