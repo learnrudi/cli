@@ -14639,12 +14639,21 @@ var claude_default = {
     available: [
       {
         id: "claude-fable-5",
-        reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
+        reasoningEfforts: [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
         alias: "fable",
         name: "Claude Fable 5",
         description: "Anthropic's highest-capability widely released model for long-running agents",
         tier: "frontier",
-        pricing: { inputPerMTok: 10, outputPerMTok: 50 },
+        pricing: {
+          inputPerMTok: 10,
+          outputPerMTok: 50
+        },
         contextWindow: 1e6,
         maxOutputTokens: 128e3,
         knowledgeCutoff: "2026-01",
@@ -14653,13 +14662,24 @@ var claude_default = {
       },
       {
         id: "claude-opus-5",
-        reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
+        reasoningEfforts: [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
         alias: "opus",
         name: "Claude Opus 5",
         description: "Recommended for complex agentic coding and enterprise work",
         tier: "pro",
         default: true,
-        pricing: { inputPerMTok: 5, outputPerMTok: 25, cachedReadPerMTok: 0.5, cachedWritePerMTok: 6.25 },
+        pricing: {
+          inputPerMTok: 5,
+          outputPerMTok: 25,
+          cachedReadPerMTok: 0.5,
+          cachedWritePerMTok: 6.25
+        },
         contextWindow: 1e6,
         maxOutputTokens: 128e3,
         knowledgeCutoff: "2026-05",
@@ -14668,12 +14688,23 @@ var claude_default = {
       },
       {
         id: "claude-sonnet-5",
-        reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
+        reasoningEfforts: [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
         alias: "sonnet",
         name: "Claude Sonnet 5",
         description: "Best combination of speed and intelligence",
         tier: "pro",
-        pricing: { inputPerMTok: 3, outputPerMTok: 15, cachedReadPerMTok: 0.3, cachedWritePerMTok: 3.75 },
+        pricing: {
+          inputPerMTok: 3,
+          outputPerMTok: 15,
+          cachedReadPerMTok: 0.3,
+          cachedWritePerMTok: 3.75
+        },
         contextWindow: 1e6,
         maxOutputTokens: 128e3,
         knowledgeCutoff: "2026-01",
@@ -14686,11 +14717,124 @@ var claude_default = {
         name: "Haiku 4.5",
         description: "Fastest model with near-frontier intelligence",
         tier: "free",
-        pricing: { inputPerMTok: 1, outputPerMTok: 5, cachedReadPerMTok: 0.1, cachedWritePerMTok: 1.25 },
+        pricing: {
+          inputPerMTok: 1,
+          outputPerMTok: 5,
+          cachedReadPerMTok: 0.1,
+          cachedWritePerMTok: 1.25
+        },
         contextWindow: 2e5,
         maxOutputTokens: 64e3,
         knowledgeCutoff: "2025-02",
         trainingCutoff: "2025-07"
+      },
+      {
+        id: "claude-fable-5-1",
+        alias: "fable-5-1",
+        name: "Claude Fable 5.1",
+        description: "Exact Claude model ID; account access and runtime qualification apply.",
+        reasoningEfforts: [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      {
+        id: "claude-opus-5-5",
+        alias: "opus-5-5",
+        name: "Claude Opus 5.5",
+        description: "Exact Claude model ID; account access and runtime qualification apply.",
+        reasoningEfforts: [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      {
+        id: "claude-sonnet-5-5",
+        alias: "sonnet-5-5",
+        name: "Claude Sonnet 5.5",
+        description: "Exact Claude model ID; account access and runtime qualification apply.",
+        reasoningEfforts: [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      {
+        id: "claude-haiku-5-5",
+        alias: "haiku-5-5",
+        name: "Claude Haiku 5.5",
+        description: "Exact Claude model ID; account access and runtime qualification apply.",
+        reasoningEfforts: [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      {
+        id: "claude-opus-4-8",
+        alias: "opus-4-8",
+        name: "Claude Opus 4.8",
+        description: "Exact Claude model ID; account access and runtime qualification apply.",
+        reasoningEfforts: [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      {
+        id: "claude-opus-4-7",
+        alias: "opus-4-7",
+        name: "Claude Opus 4.7",
+        description: "Exact Claude model ID; account access and runtime qualification apply.",
+        reasoningEfforts: [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      {
+        id: "claude-opus-4-6",
+        alias: "opus-4-6",
+        name: "Claude Opus 4.6",
+        description: "Exact Claude model ID; account access and runtime qualification apply.",
+        reasoningEfforts: [
+          "low",
+          "medium",
+          "high",
+          "max"
+        ]
+      },
+      {
+        id: "claude-sonnet-4-6",
+        alias: "sonnet-4-6",
+        name: "Claude Sonnet 4.6",
+        description: "Exact Claude model ID; account access and runtime qualification apply.",
+        reasoningEfforts: [
+          "low",
+          "medium",
+          "high",
+          "max"
+        ]
+      },
+      {
+        id: "claude-opus-4-5-20251101",
+        alias: "opus-4-5-20251101",
+        name: "Claude Opus 4.5",
+        description: "Exact Claude model ID; account access and runtime qualification apply."
       }
     ]
   },
@@ -15066,8 +15210,70 @@ var codex_default = {
     default: "gpt-5.6-sol",
     available: [
       {
+        id: "gpt-6-luna",
+        reasoningEfforts: [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        alias: "6-luna",
+        name: "GPT-6-Luna",
+        description: "Fast and affordable model for easier tasks."
+      },
+      {
+        id: "gpt-6-sol",
+        reasoningEfforts: [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ],
+        alias: "6-sol",
+        name: "GPT-6-Sol",
+        description: "Previous generation workhorse model."
+      },
+      {
+        id: "gpt-6.1-sol",
+        reasoningEfforts: [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ],
+        alias: "6.1-sol",
+        name: "GPT-6.1-Sol",
+        description: "Latest workhorse model for coding and everyday work."
+      },
+      {
+        id: "gpt-6-astra",
+        reasoningEfforts: [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ],
+        alias: "astra",
+        name: "GPT-6 Astra",
+        description: "Frontier intelligence for the most demanding work."
+      },
+      {
         id: "gpt-5.6-sol",
-        reasoningEfforts: ["low", "medium", "high", "xhigh", "max", "ultra"],
+        reasoningEfforts: [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ],
         alias: "sol",
         name: "GPT-5.6 Sol",
         description: "Flagship model for complex coding, computer use, research, and security work",
@@ -15075,14 +15281,27 @@ var codex_default = {
       },
       {
         id: "gpt-5.6-terra",
-        reasoningEfforts: ["low", "medium", "high", "xhigh", "max", "ultra"],
+        reasoningEfforts: [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ],
         alias: "terra",
         name: "GPT-5.6 Terra",
         description: "Balanced everyday workhorse for production tasks and coordinating subagents"
       },
       {
         id: "gpt-5.6-luna",
-        reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
+        reasoningEfforts: [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
         alias: "luna",
         name: "GPT-5.6 Luna",
         description: "Fast, low-cost model for narrow, repeatable, and high-volume work"
