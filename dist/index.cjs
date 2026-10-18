@@ -25699,7 +25699,7 @@ function readNativeAccount(binaryPath, directory, environment, spawnImpl) {
 var import_node_fs11 = __toESM(require("node:fs"), 1);
 var import_node_os5 = __toESM(require("node:os"), 1);
 var import_node_path12 = __toESM(require("node:path"), 1);
-var import_node_child_process6 = require("node:child_process");
+var import_node_child_process7 = require("node:child_process");
 
 // src/agent-host/private-automation-profile.js
 var import_node_fs9 = __toESM(require("node:fs"), 1);
@@ -26113,6 +26113,7 @@ function assertPrivateAutomationHostCapabilities({ binaryPath, profile }, depend
 var import_node_fs10 = __toESM(require("node:fs"), 1);
 var import_node_os4 = __toESM(require("node:os"), 1);
 var import_node_path11 = __toESM(require("node:path"), 1);
+var import_node_child_process6 = require("node:child_process");
 function taskRouter() {
   const command = import_node_path11.default.join(import_node_os4.default.homedir(), ".rudi", "bins", "rudi-router");
   try {
@@ -26135,6 +26136,29 @@ function trustedTaskPath(binaryPath) {
     "/usr/local/bin",
     "/opt/homebrew/bin"
   ].join(":");
+}
+function trustedCodexToolApprovalArgs(binary, args, env, cwd, spawnSyncImpl = import_node_child_process6.spawnSync) {
+  const result = spawnSyncImpl(binary, [...args, "mcp", "list", "--json"], {
+    env,
+    cwd,
+    encoding: "utf8",
+    timeout: 1e4,
+    maxBuffer: 2 * 1024 * 1024
+  });
+  if (result.error || result.status !== 0) throw new Error("trusted task MCP configuration discovery failed");
+  let servers;
+  try {
+    servers = JSON.parse(result.stdout);
+  } catch {
+    throw new Error("invalid trusted task MCP configuration inventory");
+  }
+  if (!Array.isArray(servers) || servers.length > 128 || servers.some((server) => !server || typeof server.name !== "string" || !/^[a-zA-Z0-9_-]{1,128}$/u.test(server.name) || typeof server.enabled !== "boolean")) throw new Error("invalid trusted task MCP configuration inventory");
+  const names = /* @__PURE__ */ new Set(["rudi", ...servers.filter((server) => server.enabled).map((server) => server.name)]);
+  return [
+    "-c",
+    'apps._default.default_tools_approval_mode="approve"',
+    ...[...names].flatMap((name) => ["-c", `mcp_servers.${name}.default_tools_approval_mode="approve"`])
+  ];
 }
 
 // src/agent-host/task-codex.js
@@ -26167,7 +26191,7 @@ function taskPermissionArgs(profile) {
   const rules = Object.entries(filesystem).map(([key, value]) => `${JSON.stringify(key)}=${JSON.stringify(value)}`).join(",");
   return ["-c", 'default_permissions="rudi_task"', "-c", `permissions={rudi_task={filesystem={${rules}},network={enabled=${profile.network === "enabled"}}}}`];
 }
-function taskCodexArgs(context) {
+function taskCodexArgs(context, { spawnSyncImpl = import_node_child_process7.spawnSync } = {}) {
   const args = ["--ask-for-approval", "never", "--no-daemon", "--enable", "code_mode_host"];
   if (context.taskProfile.account) args.push("-c", 'cli_auth_credentials_store="file"');
   if (context.taskProfile.reasoning_effort !== void 0) {
@@ -26188,6 +26212,13 @@ function taskCodexArgs(context) {
       "-c",
       'web_search="live"'
     );
+    args.push(...trustedCodexToolApprovalArgs(
+      context.binaryPath,
+      args,
+      taskEnvironment(context.binaryPath, context.taskProfile),
+      context.cwd,
+      spawnSyncImpl
+    ));
   } else {
     for (const feature of TASK_DISABLED) args.push("--disable", feature);
     args.push("-c", "mcp_servers={}", "-c", 'web_search="disabled"');
@@ -26211,7 +26242,7 @@ function taskCodexArgs(context) {
   );
   return args;
 }
-async function assertTaskHostCapabilities({ binaryPath, profile }, { spawnSyncImpl = import_node_child_process6.spawnSync, spawnImpl } = {}) {
+async function assertTaskHostCapabilities({ binaryPath, profile }, { spawnSyncImpl = import_node_child_process7.spawnSync, spawnImpl } = {}) {
   if (process.platform !== "darwin") throw new Error("task shared permissions currently qualified on macOS only");
   for (let cursor = profile.working_directory; ; cursor = import_node_path12.default.dirname(cursor)) {
     if (profile.access_mode !== "trusted" && cursor !== import_node_os5.default.homedir() && import_node_fs11.default.existsSync(import_node_path12.default.join(cursor, ".codex", "config.toml"))) {
@@ -26227,7 +26258,7 @@ async function assertTaskHostCapabilities({ binaryPath, profile }, { spawnSyncIm
   if (version.status !== 0 || String(version.stdout).trim() !== `codex-cli ${TASK_CODEX_VERSION}`) {
     throw new Error("native Codex version is not qualified for task permissions");
   }
-  const args = taskCodexArgs({ taskProfile: profile, cwd: profile.working_directory, model: profile.model });
+  const args = taskCodexArgs({ binaryPath, taskProfile: profile, cwd: profile.working_directory, model: profile.model }, { spawnSyncImpl });
   const config = probe(args, "");
   if (config.error || config.status === 0 || !`${config.stdout}${config.stderr}`.includes("No prompt provided via stdin.")) {
     throw new Error("native task configuration probe failed");
@@ -26395,7 +26426,7 @@ function readLaunchEvents({ eventFile, limitBytes = 1024 * 1024, offset = 0 }) {
 }
 
 // src/agent-host/events/stream.js
-var import_node_child_process8 = require("node:child_process");
+var import_node_child_process9 = require("node:child_process");
 
 // src/agent-host/events/providers/claude-task.js
 function consumeClaudeTaskEvent(state, event) {
@@ -26420,19 +26451,19 @@ function consumeClaudeTaskEvent(state, event) {
 var import_node_fs13 = __toESM(require("node:fs"), 1);
 var import_node_path14 = __toESM(require("node:path"), 1);
 var import_node_crypto5 = __toESM(require("node:crypto"), 1);
-var import_node_child_process7 = require("node:child_process");
+var import_node_child_process8 = require("node:child_process");
 var delay2 = (ms) => new Promise((resolve4) => setTimeout(resolve4, ms));
 function processIdentity(pid) {
   if (!Number.isSafeInteger(pid) || pid < 2) throw new Error("invalid custody PID");
   try {
-    const value = (0, import_node_child_process7.execFileSync)(
+    const value = (0, import_node_child_process8.execFileSync)(
       "/bin/ps",
       ["-p", String(pid), "-o", "pid=,pgid=,uid=,lstart="],
       { encoding: "utf8", timeout: 2e3, maxBuffer: 4096, env: { PATH: "/usr/bin:/bin", LC_ALL: "C" }, stdio: ["ignore", "pipe", "pipe"] }
     ).trim();
     const match = value.match(/^(\d+)\s+(\d+)\s+(\d+)\s+(.+)$/u);
     if (!match) throw new Error("invalid process identity");
-    const boot = process.platform === "linux" ? import_node_fs13.default.readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim() : (0, import_node_child_process7.execFileSync)(
+    const boot = process.platform === "linux" ? import_node_fs13.default.readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim() : (0, import_node_child_process8.execFileSync)(
       "/usr/sbin/sysctl",
       ["-n", "kern.bootsessionuuid"],
       { encoding: "utf8", timeout: 2e3, maxBuffer: 4096, stdio: ["ignore", "pipe", "pipe"] }
@@ -27278,7 +27309,7 @@ function executeForegroundLaunch({
   launchId,
   onSpawn = null,
   plan,
-  spawnImpl = import_node_child_process8.spawn,
+  spawnImpl = import_node_child_process9.spawn,
   taskStop = null,
   stderr = process.stderr,
   stdout = process.stdout,
@@ -28185,7 +28216,7 @@ function createLaunchStore({
 
 // src/agent-host/preflight.js
 var import_node_path20 = __toESM(require("node:path"), 1);
-var import_node_child_process10 = require("node:child_process");
+var import_node_child_process11 = require("node:child_process");
 
 // src/agent-host/providers/common.js
 var import_node_fs15 = __toESM(require("node:fs"), 1);
@@ -28472,7 +28503,7 @@ function claudeSandboxPlan(context, plan) {
 
 // src/agent-host/task-claude.js
 var import_node_path18 = __toESM(require("node:path"), 1);
-var import_node_child_process9 = require("node:child_process");
+var import_node_child_process10 = require("node:child_process");
 function taskClaudeArgs(context) {
   const profile = context.taskProfile;
   if (profile.access_mode === "trusted") return trustedClaudeArgs(context);
@@ -28558,7 +28589,7 @@ function taskClaudeEnvironment(binaryPath, profile = null) {
   }
   return environment;
 }
-function inspectClaudeTaskSeat(binaryPath, { spawnSyncImpl = import_node_child_process9.spawnSync, profile = null } = {}) {
+function inspectClaudeTaskSeat(binaryPath, { spawnSyncImpl = import_node_child_process10.spawnSync, profile = null } = {}) {
   const result = spawnSyncImpl(binaryPath, ["auth", "status"], {
     encoding: "utf8",
     timeout: 5e3,
@@ -28861,7 +28892,7 @@ function hasRudiRouter(provider) {
   return readAgentMcpServers(config).some((server) => server.name === "rudi" || import_node_path20.default.basename(String(server.command)) === "rudi-router");
 }
 async function inspectAgentHost(provider, dependencies = {}) {
-  const { spawnSyncImpl = import_node_child_process10.spawnSync } = dependencies;
+  const { spawnSyncImpl = import_node_child_process11.spawnSync } = dependencies;
   const canonicalProvider = resolveAgentProviderId(provider);
   const summarizeSkills = dependencies.summarizeNativeSkillHostImpl || summarizeNativeSkillHost;
   let skillProjection;
@@ -28923,7 +28954,7 @@ async function assertAgentHostReady({ binaryPath, provider }, dependencies = {})
 // src/agent-host/workspace.js
 var import_node_fs19 = __toESM(require("node:fs"), 1);
 var import_node_path22 = __toESM(require("node:path"), 1);
-var import_node_child_process11 = require("node:child_process");
+var import_node_child_process12 = require("node:child_process");
 
 // src/agent-host/workspace-manifest.js
 var import_node_crypto6 = __toESM(require("node:crypto"), 1);
@@ -29160,7 +29191,7 @@ function resolveAgentWorkspace(options, dependencies = {}) {
     taskProfile = null,
     workspace = null
   } = options || {};
-  const { execFileSyncImpl = import_node_child_process11.execFileSync } = dependencies;
+  const { execFileSyncImpl = import_node_child_process12.execFileSync } = dependencies;
   assertLaunchId(launchId);
   if (mode === TASK_MODE) assertTaskProfile(taskProfile);
   if (!VALID_MODES.has(mode)) {
@@ -29236,7 +29267,7 @@ function resolveAgentWorkspace(options, dependencies = {}) {
 }
 function cleanupUnstartedWorkspace(workspace, dependencies = {}) {
   if (!workspace || typeof workspace !== "object") return;
-  const { execFileSyncImpl = import_node_child_process11.execFileSync } = dependencies;
+  const { execFileSyncImpl = import_node_child_process12.execFileSync } = dependencies;
   const outputDestination = import_node_path22.default.resolve(workspace.outputDestination);
   const executionWorkspace = import_node_path22.default.resolve(workspace.executionWorkspace);
   if (!isInside2(executionWorkspace, outputDestination) && ![WORKSPACE_MODES.READ_ONLY, TASK_MODE].includes(workspace.mode)) {
@@ -29268,9 +29299,9 @@ function cleanupUnstartedWorkspace(workspace, dependencies = {}) {
 var import_node_fs20 = __toESM(require("node:fs"), 1);
 var import_node_os8 = __toESM(require("node:os"), 1);
 var import_node_path23 = __toESM(require("node:path"), 1);
-var import_node_child_process12 = require("node:child_process");
+var import_node_child_process13 = require("node:child_process");
 var TASK_CLAUDE_VERSION = "2.1.294";
-function assertClaudeTaskCapabilities({ binaryPath, profile }, { spawnSyncImpl = import_node_child_process12.spawnSync, helperPathImpl = auditHelperPath } = {}) {
+function assertClaudeTaskCapabilities({ binaryPath, profile }, { spawnSyncImpl = import_node_child_process13.spawnSync, helperPathImpl = auditHelperPath } = {}) {
   const helper = helperPathImpl();
   if (!profile.account || profile.access_mode !== "trusted" && profile.network !== "disabled") throw new Error("Claude task requires an explicit account and disabled tool network");
   for (const policy of [
@@ -29813,7 +29844,7 @@ var import_node_crypto8 = __toESM(require("node:crypto"), 1);
 
 // src/agent-host/detached.js
 var import_node_fs24 = __toESM(require("node:fs"), 1);
-var import_node_child_process13 = require("node:child_process");
+var import_node_child_process14 = require("node:child_process");
 
 // src/agent-host/resume.js
 var import_node_fs23 = __toESM(require("node:fs"), 1);
@@ -29967,7 +29998,7 @@ async function dispatchDetachedAgent({ launchId, operation, options }, dependenc
   const {
     entrypoint = process.argv[1],
     nodePath = process.execPath,
-    spawnImpl = import_node_child_process13.spawn,
+    spawnImpl = import_node_child_process14.spawn,
     timeoutMs = DEFAULT_START_TIMEOUT_MS
   } = dependencies;
   if (typeof entrypoint !== "string" || entrypoint.trim() === "") {
@@ -30113,11 +30144,11 @@ async function readDetachedWorkerRequest(stdin = process.stdin) {
 }
 
 // src/agent-host/process-lifecycle.js
-var import_node_child_process14 = require("node:child_process");
+var import_node_child_process15 = require("node:child_process");
 var TERMINAL_STATUSES3 = /* @__PURE__ */ new Set(["completed", "failed", "stopped"]);
 function verifyDetachedWorkerProcess(launch, dependencies = {}) {
   if (!launch?.ownerPid || launch.executionKind !== "detached") return false;
-  const execFileSyncImpl = dependencies.execFileSyncImpl || import_node_child_process14.execFileSync;
+  const execFileSyncImpl = dependencies.execFileSyncImpl || import_node_child_process15.execFileSync;
   try {
     const command = String(execFileSyncImpl("ps", [
       "-ww",
@@ -30184,7 +30215,7 @@ async function stopAgentLaunch(launchId, dependencies = {}) {
 // src/agent-host/workspace-lifecycle.js
 var import_node_fs25 = __toESM(require("node:fs"), 1);
 var import_node_path27 = __toESM(require("node:path"), 1);
-var import_node_child_process15 = require("node:child_process");
+var import_node_child_process16 = require("node:child_process");
 var TERMINAL_STATUSES4 = /* @__PURE__ */ new Set(["completed", "failed", "stopped"]);
 var MAX_DIFF_BYTES = 20 * 1024 * 1024;
 function git(execFileSyncImpl, cwd, args) {
@@ -30422,7 +30453,7 @@ function withLaunchStore(dependencies, operation) {
 function diffAgentLaunch(launchId, dependencies = {}) {
   return withLaunchStore(dependencies, (store) => {
     const launch = requireManagedLaunch(store, launchId);
-    const execFileSyncImpl = dependencies.execFileSyncImpl || import_node_child_process15.execFileSync;
+    const execFileSyncImpl = dependencies.execFileSyncImpl || import_node_child_process16.execFileSync;
     if (launch.workspaceMode === "worktree") {
       return {
         ...getGitChangeSet(launch, execFileSyncImpl),
@@ -30450,7 +30481,7 @@ function promoteAgentLaunch(launchId, dependencies = {}) {
       return { alreadyPromoted: true, changes: null, launch: existing };
     }
     const launch = requireManagedLaunch(store, launchId, { terminal: true });
-    const execFileSyncImpl = dependencies.execFileSyncImpl || import_node_child_process15.execFileSync;
+    const execFileSyncImpl = dependencies.execFileSyncImpl || import_node_child_process16.execFileSync;
     let changes;
     if (launch.workspaceMode === "worktree") {
       const targetStatus = git(execFileSyncImpl, launch.projectRoot, [
@@ -30524,7 +30555,7 @@ function discardAgentLaunch(launchId, dependencies = {}) {
       return { alreadyDiscarded: true, launch: existing };
     }
     const launch = requireManagedLaunch(store, launchId, { terminal: true });
-    const execFileSyncImpl = dependencies.execFileSyncImpl || import_node_child_process15.execFileSync;
+    const execFileSyncImpl = dependencies.execFileSyncImpl || import_node_child_process16.execFileSync;
     if (launch.workspaceMode === "worktree") cleanupGitWorktree(launch, execFileSyncImpl);
     import_node_fs25.default.rmSync(launch.outputDestination, { recursive: true, force: true });
     const updated = store.setDisposition(launchId, "discarded");
@@ -30633,7 +30664,7 @@ async function stopAgentGroup(groupId, dependencies = {}) {
 // src/daemon/runtime/lifecycle.js
 var import_node_fs27 = __toESM(require("node:fs"), 1);
 var import_node_path29 = __toESM(require("node:path"), 1);
-var import_node_child_process16 = require("node:child_process");
+var import_node_child_process17 = require("node:child_process");
 init_src();
 
 // src/daemon/client.js
@@ -31258,7 +31289,7 @@ function spawnDaemonProcess({
   logsDir = PATHS.logs,
   nodePath = process.execPath,
   serveArgs = ["serve"],
-  spawnImpl = import_node_child_process16.spawn
+  spawnImpl = import_node_child_process17.spawn
 } = {}) {
   import_node_fs27.default.mkdirSync(logsDir, { recursive: true });
   const stdoutPath = import_node_path29.default.join(logsDir, "daemon.out.log");
