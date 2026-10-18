@@ -24788,7 +24788,7 @@ var codex_default = {
     }
   },
   models: {
-    default: "gpt-5.6-sol",
+    default: "gpt-6.1-sol",
     available: [
       {
         id: "gpt-6-luna",
@@ -24799,7 +24799,7 @@ var codex_default = {
           "xhigh",
           "max"
         ],
-        alias: "6-luna",
+        alias: "luna",
         name: "GPT-6-Luna",
         description: "Fast and affordable model for easier tasks."
       },
@@ -24827,9 +24827,10 @@ var codex_default = {
           "max",
           "ultra"
         ],
-        alias: "6.1-sol",
+        alias: "sol",
         name: "GPT-6.1-Sol",
-        description: "Latest workhorse model for coding and everyday work."
+        description: "Latest workhorse model for coding and everyday work.",
+        default: true
       },
       {
         id: "gpt-6-astra",
@@ -24855,10 +24856,9 @@ var codex_default = {
           "max",
           "ultra"
         ],
-        alias: "sol",
+        alias: "sol-5.6",
         name: "GPT-5.6 Sol",
-        description: "Flagship model for complex coding, computer use, research, and security work",
-        default: true
+        description: "Flagship model for complex coding, computer use, research, and security work"
       },
       {
         id: "gpt-5.6-terra",
@@ -24883,7 +24883,7 @@ var codex_default = {
           "xhigh",
           "max"
         ],
-        alias: "luna",
+        alias: "luna-5.6",
         name: "GPT-5.6 Luna",
         description: "Fast, low-cost model for narrow, repeatable, and high-volume work"
       }
