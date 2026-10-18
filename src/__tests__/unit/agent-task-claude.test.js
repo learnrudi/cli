@@ -70,7 +70,11 @@ test('Claude task candidate keeps stdin, exact roots and a closed file-tool surf
 });
 
 test('Claude tasks request the same native completion schema in both access modes', t => {
-  const { profile } = fixture(t);
+  const { root, profile } = fixture(t);
+  t.mock.method(os, 'homedir', () => root);
+  const router = path.join(root, '.rudi/bins/rudi-router');
+  fs.mkdirSync(path.dirname(router), { recursive: true });
+  fs.writeFileSync(router, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
   for (const access_mode of ['restricted', 'trusted']) {
     const args = claudeTask.taskClaudeArgs({ model: profile.model, taskProfile: { ...profile, access_mode } });
     assert.equal(args.filter(value => value === '--json-schema').length, 1);

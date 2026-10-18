@@ -24,6 +24,7 @@
 - Explicit test runtime Node22.23.2 via PATH and RUDI_CLI_TEST_NODE. Full suite: 940 passed, 10 skipped, 0 failed (96.4s). Build and npm pack dry-run passed; existing esbuild import.meta warnings remain unchanged.
 - Changed-file debt runner: zero findings. Focused SWE scan with actual src/index.js entrypoint: zero findings (default daemon-only roots produced false orphan warnings before entrypoint correction).
 - Pinned Admin Claude2.1.294 help confirms native --json-schema support. End-to-end native scheduled acceptance remains a deployment gate.
+- First CI run found the new dual-mode argument test depended on the developer's installed router. The test now mocks homedir and creates its own executable router, matching existing trusted-mode fixtures. No product code changed; focused suite rerun passes. Cross-platform CI must pass before merge.
 
 ## Phase 5: Verification and delivery
 - Focused tests, full pnpm test, pnpm build, changed-file debt scanner, focused SWE debt scan, npm pack dry-run.
