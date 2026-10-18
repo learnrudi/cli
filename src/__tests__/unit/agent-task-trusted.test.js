@@ -8,6 +8,7 @@ import { taskCodexArgs, taskEnvironment, taskPermissionArgs } from '../../agent-
 import { taskClaudeArgs, taskClaudeEnvironment } from '../../agent-host/task-claude.js';
 import { claudeSandboxPolicy } from '../../agent-host/task-claude-sandbox.js';
 import { readAgentTask, runAgentTaskInSession } from '../../agent-host/task-run.js';
+import { trustedCodexToolApprovalArgs } from '../../agent-host/task-integrations.js';
 
 function fixture(t, provider = 'codex') {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'task-trusted-')));
@@ -140,7 +141,17 @@ test('trusted Codex uses native configuration and RUDI without clearing configur
   fs.writeFileSync(path.join(input.account.config_directory, 'config.toml'), '[mcp_servers.configured]\ncommand="configured-server"\n');
   fs.symlinkSync('config.toml', path.join(input.account.config_directory, 'rudi-trusted.config.toml'));
   const profile = validateTaskProfile(input, binding);
-  const args = taskCodexArgs({ taskProfile: profile, cwd: profile.working_directory, model: profile.model });
+  const args = taskCodexArgs({ binaryPath: '/native/codex', taskProfile: profile, cwd: profile.working_directory, model: profile.model }, {
+    spawnSyncImpl: (_binary, probeArgs, options) => {
+      assert.deepEqual(probeArgs.slice(-3), ['mcp', 'list', '--json']);
+      assert.equal(options.cwd, profile.working_directory);
+      return { status: 0, stdout: JSON.stringify([{ name: 'configured', enabled: true }, { name: 'disabled', enabled: false }]) };
+    },
+  });
+  assert.ok(args.includes('mcp_servers.rudi.default_tools_approval_mode="approve"'));
+  assert.ok(args.includes('mcp_servers.configured.default_tools_approval_mode="approve"'));
+  assert.ok(!args.includes('mcp_servers.disabled.default_tools_approval_mode="approve"'));
+  assert.ok(args.includes('apps._default.default_tools_approval_mode="approve"'));
   assert.ok(!args.includes('mcp_servers={}'));
   assert.ok(!args.includes('--ignore-user-config'));
   assert.ok(!args.includes('--ignore-rules'));
@@ -157,4 +168,13 @@ test('trusted Codex uses native configuration and RUDI without clearing configur
   assert.equal(environment.OPENAI_API_KEY, undefined);
   fs.unlinkSync(router);
   assert.throws(() => taskCodexArgs({ taskProfile: profile }), /RUDI router/);
+});
+
+test('trusted MCP discovery fails closed without exposing configuration on invalid inventory', () => {
+  for (const result of [{ status: 1, stderr: 'private config' }, { status: 0, stdout: 'not json' },
+    { status: 0, stdout: JSON.stringify([{ name: 'rudi.default_tools_approval_mode', enabled: true }]) },
+    { status: 0, stdout: JSON.stringify([{ name: 'rudi', enabled: 'yes' }]) }]) {
+    assert.throws(() => trustedCodexToolApprovalArgs('/native/codex', [], {}, '/task/project', () => result),
+      error => /trusted task MCP configuration/.test(error.message) && !error.message.includes('private'));
+  }
 });

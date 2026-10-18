@@ -42,7 +42,7 @@ try {
     fs.rmdirSync(path.join(root, 'project/.git'));
     evidence.push({ provider, version: version.stdout.trim(), writes });
   }
-  const args = taskCodexArgs({ taskProfile: profile, cwd: profile.working_directory, model: 'gpt-6.1-sol' });
+  const args = taskCodexArgs({ binaryPath: codex, taskProfile: profile, cwd: profile.working_directory, model: 'gpt-6.1-sol' });
   const listed = spawnSync(codex, [...args.slice(0, args.indexOf('exec')), 'mcp', 'list', '--json'],
     { encoding: 'utf8', timeout: 10000, maxBuffer: 4 * 1024 * 1024, env });
   assert.equal(listed.status, 0, 'native MCP configuration listing failed');
