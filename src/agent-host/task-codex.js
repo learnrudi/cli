@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { auditHelperPath } from './task-audit.js';
 import { getPrivateCodexDisabledFeatures } from './private-automation-profile.js';
 import { inspectCodexTaskSeat } from './task-codex-account.js';
-import { taskRouter, trustedTaskPath } from './task-integrations.js';
+import { taskRouter, trustedTaskPath, trustedCodexToolApprovalArgs } from './task-integrations.js';
 import { inside } from './task-profile.js';
 
 // This boundary is qualified on this native release, not inferred from a version range.
@@ -42,7 +42,7 @@ export function taskPermissionArgs(profile) {
   return ['-c', 'default_permissions="rudi_task"', '-c', `permissions={rudi_task={filesystem={${rules}},network={enabled=${profile.network === 'enabled'}}}}`];
 }
 
-export function taskCodexArgs(context) {
+export function taskCodexArgs(context, { spawnSyncImpl = spawnSync } = {}) {
   const args = ['--ask-for-approval', 'never', '--no-daemon', '--enable', 'code_mode_host'];
   if (context.taskProfile.account) args.push('-c', 'cli_auth_credentials_store="file"');
   if (context.taskProfile.reasoning_effort !== undefined) {
@@ -59,6 +59,8 @@ export function taskCodexArgs(context) {
     args.push('-c', `mcp_servers.rudi.command=${JSON.stringify(taskRouter())}`,
       '-c', 'mcp_servers.rudi.enabled=true', '-c', 'model_provider="openai"',
       '-c', 'web_search="live"');
+    args.push(...trustedCodexToolApprovalArgs(context.binaryPath, args,
+      taskEnvironment(context.binaryPath, context.taskProfile), context.cwd, spawnSyncImpl));
   } else {
     for (const feature of TASK_DISABLED) args.push('--disable', feature);
     args.push('-c', 'mcp_servers={}', '-c', 'web_search="disabled"');
@@ -88,7 +90,7 @@ export async function assertTaskHostCapabilities({ binaryPath, profile }, { spaw
   if (version.status !== 0 || String(version.stdout).trim() !== `codex-cli ${TASK_CODEX_VERSION}`) {
     throw new Error('native Codex version is not qualified for task permissions');
   }
-  const args = taskCodexArgs({ taskProfile: profile, cwd: profile.working_directory, model: profile.model });
+  const args = taskCodexArgs({ binaryPath, taskProfile: profile, cwd: profile.working_directory, model: profile.model }, { spawnSyncImpl });
   const config = probe(args, '');
   if (config.error || config.status === 0 || !`${config.stdout}${config.stderr}`.includes('No prompt provided via stdin.')) {
     throw new Error('native task configuration probe failed');

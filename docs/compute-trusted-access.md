@@ -49,6 +49,15 @@ replacing the account home, or adding `config.toml` to an otherwise restricted
 account. Restricted tasks never select this named profile. Existing files must
 be inspected and preserved; do not replace a different profile silently.
 
+Trusted Codex tasks discover enabled MCP servers through the selected native
+configuration and set their default tool approval mode, plus the native app
+fallback, to `approve`. Otherwise unattended `approval_policy=never` can deny
+even a read-only router call that requests a prompt. Explicit per-tool, per-app
+and managed restrictions remain in effect. Discovery is bounded and fails
+closed on errors or server names that cannot safely form native override keys;
+configuration contents and secrets are never copied into arguments or errors.
+This does not authorize external actions beyond the approved task.
+
 Claude exposes its default native tool set and configured MCPs, adds the RUDI
 router, and uses noninteractive native tool permissions inside the existing OS
 filesystem sandbox. Trusted mode additionally grants the execution host's
