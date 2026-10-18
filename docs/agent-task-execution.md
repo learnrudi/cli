@@ -171,6 +171,12 @@ to treat that profile as opaque; Agent Host owns validation and provider argumen
 This source increment requires separate selected-account/effort native acceptance
 on Admin before an installed worker can claim support.
 
+The rules below describe the default restricted profile. For authorized project
+maintenance and native integrations, opt into `access_mode: "trusted"` as
+documented in [Trusted Compute workspaces](compute-trusted-access.md). Existing
+profiles do not change implicitly; trusted mode still requires explicit roots,
+account selection, enabled network and a supporting installed release.
+
 Model IDs must be exact configured IDs, not aliases. The only session mode is
 fresh. Read roots explicitly include the working directory. Write roots exactly
 match the task's deliverable roots; they cannot grant the entire working

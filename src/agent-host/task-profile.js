@@ -84,6 +84,7 @@ function roots(value, label) {
 export function validateTaskProfile(value, binding) {
   exactFields(value, ['schema_version', 'provider', 'model', 'workspace_mode', 'working_directory',
     'read_roots', 'write_roots', 'network', 'timeout_ms',
+    ...(Object.hasOwn(value || {}, 'access_mode') ? ['access_mode'] : []),
     ...(value?.provider === 'claude' || Object.hasOwn(value || {}, 'account') ? ['account'] : []),
     ...(Object.hasOwn(value || {}, 'reasoning_effort') ? ['reasoning_effort'] : [])], 'execution profile');
   if (value.schema_version !== 1 || !['codex', 'claude'].includes(value.provider) || value.workspace_mode !== TASK_MODE) {
@@ -95,6 +96,9 @@ export function validateTaskProfile(value, binding) {
     throw new Error('unsupported reasoning effort for task provider/model');
   }
   if (!['enabled', 'disabled'].includes(value.network)) throw new Error('network must be enabled or disabled');
+  if (Object.hasOwn(value, 'access_mode') && !['restricted', 'trusted'].includes(value.access_mode)) throw new Error('unsupported task access mode');
+  const trusted = value.access_mode === 'trusted';
+  if (trusted && (!value.account || value.network !== 'enabled')) throw new Error('trusted tasks require an explicit account and enabled network');
   if (!Number.isSafeInteger(value.timeout_ms) || value.timeout_ms < 1 || value.timeout_ms > 3600000) throw new Error('invalid task timeout');
   const project = canonicalDirectory(value.working_directory, 'working_directory');
   const read = roots(value.read_roots, 'read roots');
@@ -102,19 +106,21 @@ export function validateTaskProfile(value, binding) {
   const runtime = canonicalDirectory(binding.outputs.runtime, 'runtime');
   const deliverables = roots(binding.outputs.deliverables, 'deliverables');
   if (project !== binding.working_directory || !read.includes(project)) throw new Error('shared working directory must match and be a read root');
-  if ([...write].sort().join('\0') !== [...deliverables].sort().join('\0')
+  if (trusted ? deliverables.some(root => !write.some(allowed => inside(root, allowed)))
+    : [...write].sort().join('\0') !== [...deliverables].sort().join('\0')
       || write.some(root => inside(project, root) || inside(runtime, root) || inside(root, runtime))) {
     throw new Error('write roots must exactly match deliverables and exclude project/control roots');
   }
-  const account = value.provider === 'claude' ? validateClaudeAccount(value.account, [...read, ...write, runtime])
-    : Object.hasOwn(value, 'account') ? validateCodexAccount(value.account, [...read, ...write, runtime]) : null;
+  const accountRoots = trusted ? [] : [...read, ...write, runtime];
+  const account = value.provider === 'claude' ? validateClaudeAccount(value.account, accountRoots)
+    : Object.hasOwn(value, 'account') ? validateCodexAccount(value.account, accountRoots, trusted) : null;
   const profile = Object.freeze({ ...value, ...(account ? { account } : {}), read_roots: Object.freeze(read), write_roots: Object.freeze(write) });
   assertWritableTaskRoots(profile);
   validatedProfiles.add(profile);
   return profile;
 }
 
-function validateCodexAccount(value, workspaceRoots) {
+function validateCodexAccount(value, workspaceRoots, trusted = false) {
   exactFields(value, ['id', 'email', 'config_directory'], 'Codex account');
   if (typeof value.id !== 'string' || !/^codex-[a-z0-9][a-z0-9-]{0,47}$/u.test(value.id)) throw new Error('invalid Codex account id');
   taskText(value.email, 'Codex account email', 254);
@@ -126,7 +132,7 @@ function validateCodexAccount(value, workspaceRoots) {
   // The native account probe cannot ignore user config. Dedicated account
   // homes therefore carry authentication/session state only, never config.
   for (const name of ['config.toml', 'managed_config.toml', 'requirements.toml']) {
-    if (fs.existsSync(path.join(directory, name))) throw new Error('Codex account configuration requires separate qualification');
+    if (!trusted && fs.existsSync(path.join(directory, name))) throw new Error('Codex account configuration requires separate qualification');
   }
   return Object.freeze({ ...value });
 }
@@ -138,6 +144,9 @@ export function assertTaskProfile(profile) {
 // Path sandboxes cannot make an existing hardlink safe: writing the allowed
 // name changes the read-only inode too. Reject aliases before provider startup.
 export function assertWritableTaskRoots(profile) {
+  // Trusted operators can maintain real repositories and runtime trees with
+  // links. Declared roots are command permissions, not hostile-code isolation.
+  if (profile.access_mode === 'trusted') return;
   const pending = [...profile.write_roots];
   let visited = 0;
   while (pending.length) {

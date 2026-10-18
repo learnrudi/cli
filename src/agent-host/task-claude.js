@@ -1,9 +1,11 @@
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { taskRouter, trustedTaskPath } from './task-integrations.js';
 
 // Native tool permissions complement the separately enforced OS sandbox.
 export function taskClaudeArgs(context) {
   const profile = context.taskProfile;
+  if (profile.access_mode === 'trusted') return trustedClaudeArgs(context);
   if (profile.network !== 'disabled') throw new Error('Claude task requires disabled tool network');
   // Claude permission rules have their own glob/delimiter syntax. Do not let
   // canonical but unrepresentable paths silently widen a permission rule.
@@ -26,10 +28,21 @@ export function taskClaudeArgs(context) {
     ...roots.flatMap(root => ['--add-dir', root])];
 }
 
+function trustedClaudeArgs({ taskProfile: profile, model }) {
+  const roots = [...new Set([...profile.read_roots, ...profile.write_roots])];
+  return ['--print', '--verbose', '--output-format', 'stream-json', '--input-format', 'text',
+    '--model', model, ...(profile.reasoning_effort !== undefined ? ['--effort', profile.reasoning_effort] : []),
+    '--tools', 'default', '--permission-mode', 'bypassPermissions', '--permission-prompts', 'none',
+    '--settings', JSON.stringify({ disableAllHooks: true }),
+    '--mcp-config', JSON.stringify({ mcpServers: { rudi: { command: taskRouter(), args: [] } } }),
+    ...roots.flatMap(root => ['--add-dir', root])];
+}
+
 export function taskClaudeEnvironment(binaryPath, profile = null) {
   const environment = { PATH: `${path.dirname(binaryPath)}:/usr/bin:/bin:/usr/sbin:/sbin`,
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1', CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1',
     CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1', CLAUDE_CODE_NO_MODEL_FALLBACK: '1' };
+  if (profile?.access_mode === 'trusted') environment.PATH = trustedTaskPath(binaryPath);
   // Native seat discovery uses the original HOME/keychain. Never forward API
   // keys, OAuth tokens, alternate config homes, proxy or provider overrides.
   for (const key of ['HOME', 'USER', 'LOGNAME', 'LANG', 'LC_ALL']) {
