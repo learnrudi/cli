@@ -9,14 +9,14 @@ import { launchAgent } from '../../agent-host/launch.js';
 import { createLaunchStore } from '../../agent-host/launch-store.js';
 import { validateTaskProfile } from '../../agent-host/task-profile.js';
 
-function fixture(t) {
+function fixture(t, timeout_ms = 1000) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'task-launch-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   for (const d of ['project', 'project/out', 'runtime']) fs.mkdirSync(path.join(root, d));
   const binding = { working_directory: path.join(root, 'project'), outputs: { deliverables: [path.join(root, 'project/out')], runtime: path.join(root, 'runtime') } };
   const profile = validateTaskProfile({ schema_version: 1, provider: 'codex', model: 'gpt-5.6-sol',
     workspace_mode: 'registered-shared', working_directory: binding.working_directory,
-    read_roots: [binding.working_directory], write_roots: binding.outputs.deliverables, network: 'disabled', timeout_ms: 1000 }, binding);
+    read_roots: [binding.working_directory], write_roots: binding.outputs.deliverables, network: 'disabled', timeout_ms }, binding);
   const store = createLaunchStore({ databasePath: path.join(root, 'state.db') });
   t.after(() => store.close());
   return { root, profile, store };
@@ -173,4 +173,44 @@ test('selected task account does not depend on the ambient Codex login', async t
     stdout: { write() {} }, stderr: { write() {} }, signalEmitter: new EventEmitter(),
   });
   assert.equal(result.status, 'completed');
+});
+
+
+test('unlimited task launch does not install a native runtime timer', async t => {
+  const {root,profile,store} = fixture(t, 0);
+  const timers = [];
+  const original = globalThis.setTimeout;
+  t.mock.method(globalThis, 'setTimeout', (fn, ms, ...args) => {
+    timers.push(ms); return original(fn, ms, ...args);
+  });
+  const result = await launchAgent({provider:'codex', model:profile.model, prompt:'fixture',
+    taskProfile:profile, workspace:profile.working_directory, workspaceMode:'registered-shared'}, {
+    artifactsRoot:path.join(root,'runtime'), store, idFactory:()=> 'launch_unlimited',
+    preflightImpl:async()=>{}, taskPreflightImpl:async()=>{}, resolveBinaryImpl:()=>'/fake/codex',
+    spawnImpl:spawnFixture([{type:'thread.started',thread_id:'native_unlimited'},
+      {type:'item.completed',item:{type:'agent_message',text:'{"outcome":"no_work","outputs":[]}'}},
+      {type:'turn.completed',usage:{}}],[]),
+    stdout:{write(){}},stderr:{write(){}},signalEmitter:new EventEmitter(),
+  });
+  assert.equal(result.status,'completed');
+  assert.deepEqual(timers, [], 'zero must not fall back to the provider runtime limit');
+});
+
+test('unlimited task still responds to cancellation and drains its provider', async t => {
+  const {root,profile,store} = fixture(t, 0);
+  const providerFile = path.join(root, 'cancel-provider.cjs');
+  fs.writeFileSync(providerFile, 'setInterval(()=>{},1000);');
+  const {executeForegroundLaunch} = await import('../../agent-host/events/stream.js');
+  const signals = new EventEmitter();
+  store.create({launchId:'launch_cancel_unlimited',provider:'codex',model:profile.model,
+    originDirectory:root,projectRoot:root,executionWorkspace:root,
+    outputDestination:path.join(root,'runtime'),workspaceMode:'registered-shared'});
+  const result = await executeForegroundLaunch({launchId:'launch_cancel_unlimited',store,
+    plan:{taskProfile:profile,provider:'codex',model:profile.model,stdin:'fixture',
+      args:[providerFile],spawn:{command:process.execPath,cwd:root},environment:{},
+      maxRawOutputBytes:1024,timeouts:{runtimeMs:1000,shutdownGraceMs:100}},
+    timeoutMs:0,onSpawn:()=>setTimeout(()=>signals.emit('SIGTERM'),50),
+    stdout:{write(){}},stderr:{write(){}},signalEmitter:signals});
+  assert.equal(result.status,'stopped');
+  assert.throws(()=>process.kill(result.pid,0), /ESRCH/);
 });

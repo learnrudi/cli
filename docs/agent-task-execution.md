@@ -340,3 +340,14 @@ inference. The custody suite exercises isolated launchd jobs, crash quarantine,
 double-fork and a controlled fork/exit during census; unrelated canaries must survive.
 Native/package fixtures and immutable evidence for this change are recorded in
 `docs/swe-compliance/2026-10-16-detached-process-containment.md`.
+
+## Unlimited task runtime
+
+Set profile `timeout_ms` and Compute `timeout_seconds` to integer `0` together
+for explicitly unlimited task execution. Zero creates no native, capsule or
+Compute elapsed-time timer. Missing, negative, fractional, boolean and mismatched
+budgets are rejected. Existing positive limits and defaults are unchanged.
+This is scoped to registered task execution; ordinary foreground launches keep
+requiring a positive timeout. Startup, shutdown, custody and integration calls
+remain bounded. Cancellation, owner loss, process cleanup and output bounds still
+apply. Unlimited duration cannot promise completion or provider availability.

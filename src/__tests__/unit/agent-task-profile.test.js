@@ -17,6 +17,10 @@ test('registered profile preserves shared inputs and rejects broad or aliased wr
     read_roots: [project], write_roots: [output], network: 'disabled', timeout_ms: 1000 };
   const binding = { working_directory: project, outputs: { deliverables: [output], runtime: path.join(root, 'runtime') } };
   assert.equal(validateTaskProfile(profile, binding).working_directory, project);
+  assert.equal(validateTaskProfile({ ...profile, timeout_ms: 0 }, binding).timeout_ms, 0);
+  for (const timeout_ms of [-1, null, false, '0', 3600001]) {
+    assert.throws(() => validateTaskProfile({ ...profile, timeout_ms }, binding), /timeout/);
+  }
   assert.equal(fs.readFileSync(path.join(project, 'dirty.txt'), 'utf8'), 'uncommitted');
   assert.throws(() => validateTaskProfile({ ...profile, write_roots: [project] }, binding), /write roots/);
   assert.throws(() => validateTaskProfile({ ...profile, fallback_model: 'x' }, binding), /fields/);
