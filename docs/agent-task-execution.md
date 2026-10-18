@@ -79,7 +79,7 @@ glob spellings. Replace the illustrative paths with isolated fixture paths.
 {
   "schema_version": 1,
   "provider": "codex",
-  "model": "gpt-5.6-sol",
+  "model": "gpt-6.1-sol",
   "reasoning_effort": "high",
   "workspace_mode": "registered-shared",
   "working_directory": "/absolute/shared/project",
@@ -112,8 +112,12 @@ The seven non-hidden Codex models are included; provider-internal hidden models
 are excluded. The thirteen active general-purpose Claude models are included per
 [model lifecycle status](https://platform.claude.com/docs/en/about-claude/model-deprecations);
 restricted Mythos and deprecated/retired models are outside this general-purpose catalog.
-Exact model IDs are required for registered tasks. Existing short aliases and
-provider defaults remain unchanged for compatibility.
+Exact model IDs are required for registered tasks. Codex now defaults to GPT-6.1 Sol;
+`sol` selects GPT-6.1 Sol, `astra` selects GPT-6 Astra, and `luna` selects GPT-6 Luna.
+Older exact IDs remain available for pinned profiles. Claude aliases/defaults are unchanged.
+The Codex choices follow [current official model guidance](https://learn.chatgpt.com/docs/models).
+Existing guarded workers retain their packaged catalog until a new immutable
+release is qualified and adopted; never edit a hash-pinned bundle in place.
 Newer Claude models require a sufficiently recent native CLI (Haiku 5.5 requires
 2.1.293 or newer). Catalog presence is neither account entitlement nor runtime
 qualification; only explicitly tested combinations have live execution evidence.

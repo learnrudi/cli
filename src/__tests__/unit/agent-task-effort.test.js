@@ -28,6 +28,20 @@ test('registered Codex job pins its requested reasoning effort in the native inv
   assert.equal(plan.taskProfile.reasoning_effort, 'high');
 });
 
+test('registered Codex jobs admit current models and preserve their exact effort', t => {
+  const { input, binding } = fixture(t);
+  for (const model of ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6-sol', 'gpt-6-luna']) {
+    const profile = validateTaskProfile({ ...input, model, reasoning_effort: 'xhigh' }, binding);
+    const plan = buildCodexPlan({ binaryPath: '/native/codex', cwd: profile.working_directory,
+      workspaceMode: profile.workspace_mode, taskProfile: profile, model: profile.model,
+      prompt: 'fixture', runtimeDirectory: binding.outputs.runtime });
+    assert.equal(plan.args[plan.args.indexOf('-m') + 1], model);
+    assert.ok(plan.args.includes('model_reasoning_effort="xhigh"'));
+  }
+  assert.throws(() => validateTaskProfile({ ...input, model: 'gpt-6-luna', reasoning_effort: 'ultra' }, binding), /reasoning effort/);
+  assert.throws(() => validateTaskProfile({ ...input, model: 'gpt-6-astra', reasoning_effort: 'none' }, binding), /reasoning effort/);
+});
+
 test('registered profiles reject unsupported effort instead of silently choosing another level', t => {
   const { input, binding } = fixture(t);
   for (const reasoning_effort of ['', null, 3, {}, 'HIGH', 'automatic', 'high"\npermissions={}']) {
