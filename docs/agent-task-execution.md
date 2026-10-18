@@ -100,21 +100,28 @@ levels, or silent fallback are accepted. The current catalog accepts:
 
 | Model | Effort values |
 | --- | --- |
-| GPT-6 Astra, GPT-6.1 Sol, GPT-6 Sol | low, medium, high, xhigh, max, ultra |
-| GPT-6 Luna | low, medium, high, xhigh, max |
-| GPT-5.6 Sol, Terra | low, medium, high, xhigh, max, ultra |
-| GPT-5.6 Luna | low, medium, high, xhigh, max |
-| Claude Fable 5, Opus 5, Sonnet 5 | low, medium, high, xhigh, max |
-| Claude Haiku 4.5 | No effort field; that model does not support this control |
+| GPT-6.1 Sol, GPT-6 Astra, GPT-6 Sol, GPT-5.6 Sol/Terra | low, medium, high, xhigh, max, ultra |
+| GPT-6 Luna, GPT-5.6 Luna | low, medium, high, xhigh, max |
+| Claude Fable 5.1/5; Opus 5.5/5/4.8/4.7; Sonnet 5.5/5; Haiku 5.5 | low, medium, high, xhigh, max |
+| Claude Opus 4.6, Sonnet 4.6 | low, medium, high, max |
+| Claude Opus 4.5, Haiku 4.5 | No explicit effort control in this Claude Code adapter |
 
-The Codex catalog follows the [current Codex model guidance](https://learn.chatgpt.com/docs/models)
-(checked October 17, 2026). The default and `sol` alias select GPT-6.1 Sol;
-`astra` selects GPT-6 Astra and `luna` selects GPT-6 Luna. Previous exact model
-IDs remain available for pinned task profiles. These are Codex effort values,
-not a claim that every API effort value is supported by this task contract.
-Catalog inclusion does not prove account access or qualify an installed release.
+Catalog refreshed 2026-10-17 from native Codex 0.160.1 `model/list` and
+[Claude Code model configuration](https://code.claude.com/docs/en/model-config).
+The seven non-hidden Codex models are included; provider-internal hidden models
+are excluded. The thirteen active general-purpose Claude models are included per
+[model lifecycle status](https://platform.claude.com/docs/en/about-claude/model-deprecations);
+restricted Mythos and deprecated/retired models are outside this general-purpose catalog.
+Exact model IDs are required for registered tasks. Codex now defaults to GPT-6.1 Sol;
+`sol` selects GPT-6.1 Sol, `astra` selects GPT-6 Astra, and `luna` selects GPT-6 Luna.
+Older exact IDs remain available for pinned profiles. Claude aliases/defaults are unchanged.
+The Codex choices follow [current official model guidance](https://learn.chatgpt.com/docs/models).
 Existing guarded workers retain their packaged catalog until a new immutable
 release is qualified and adopted; never edit a hash-pinned bundle in place.
+Newer Claude models require a sufficiently recent native CLI (Haiku 5.5 requires
+2.1.293 or newer). Catalog presence is neither account entitlement nor runtime
+qualification; only explicitly tested combinations have live execution evidence.
+Opus 4.5 API effort support does not imply Claude Code `--effort` support.
 
 The Claude combinations follow the provider's [model configuration contract](https://code.claude.com/docs/en/model-config#adjust-effort-level).
 This is a requested native setting, not a measured amount of model reasoning.

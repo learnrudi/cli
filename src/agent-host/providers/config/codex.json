@@ -351,51 +351,98 @@
     "default": "gpt-6.1-sol",
     "available": [
       {
-        "id": "gpt-6-astra",
-        "reasoningEfforts": ["low","medium","high","xhigh","max","ultra"],
-        "alias": "astra",
-        "name": "GPT-6 Astra",
-        "description": "Most capable model for complex coding, apps, and research"
-      },
-      {
-        "id": "gpt-6.1-sol",
-        "reasoningEfforts": ["low","medium","high","xhigh","max","ultra"],
-        "alias": "sol",
-        "name": "GPT-6.1 Sol",
-        "description": "Near-Astra performance for complex work at a lower cost",
-        "default": true
+        "id": "gpt-6-luna",
+        "reasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "alias": "luna",
+        "name": "GPT-6-Luna",
+        "description": "Fast and affordable model for easier tasks."
       },
       {
         "id": "gpt-6-sol",
-        "reasoningEfforts": ["low","medium","high","xhigh","max","ultra"],
-        "alias": "sol-6",
-        "name": "GPT-6 Sol",
-        "description": "Previous-generation Sol for existing pinned workflows"
+        "reasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ],
+        "alias": "6-sol",
+        "name": "GPT-6-Sol",
+        "description": "Previous generation workhorse model."
       },
       {
-        "id": "gpt-6-luna",
-        "reasoningEfforts": ["low","medium","high","xhigh","max"],
-        "alias": "luna",
-        "name": "GPT-6 Luna",
-        "description": "Efficient model for focused coding and high-volume tasks"
+        "id": "gpt-6.1-sol",
+        "reasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ],
+        "alias": "sol",
+        "name": "GPT-6.1-Sol",
+        "description": "Latest workhorse model for coding and everyday work.",
+        "default": true
+      },
+      {
+        "id": "gpt-6-astra",
+        "reasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ],
+        "alias": "astra",
+        "name": "GPT-6 Astra",
+        "description": "Frontier intelligence for the most demanding work."
       },
       {
         "id": "gpt-5.6-sol",
-        "reasoningEfforts": ["low","medium","high","xhigh","max","ultra"],
+        "reasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ],
         "alias": "sol-5.6",
         "name": "GPT-5.6 Sol",
-        "description": "Previous-generation Sol for existing pinned workflows"
+        "description": "Flagship model for complex coding, computer use, research, and security work"
       },
       {
         "id": "gpt-5.6-terra",
-        "reasoningEfforts": ["low","medium","high","xhigh","max","ultra"],
+        "reasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ],
         "alias": "terra",
         "name": "GPT-5.6 Terra",
         "description": "Balanced everyday workhorse for production tasks and coordinating subagents"
       },
       {
         "id": "gpt-5.6-luna",
-        "reasoningEfforts": ["low","medium","high","xhigh","max"],
+        "reasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
         "alias": "luna-5.6",
         "name": "GPT-5.6 Luna",
         "description": "Fast, low-cost model for narrow, repeatable, and high-volume work"
