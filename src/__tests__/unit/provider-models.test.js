@@ -99,13 +99,18 @@ describe('frontier agent provider registry', () => {
     assert.equal(hasCapability(config, 'rawArgs'), true);
   });
 
-  test('registers GPT-5.6 Sol, Terra, and Luna as first-class Codex models', () => {
+  test('uses current Codex aliases while retaining exact previous-generation IDs', () => {
     const config = loadProviderConfig('codex');
 
-    assert.equal(config.models.default, 'gpt-5.6-sol');
-    assert.equal(resolveModel(config, 'sol'), 'gpt-5.6-sol');
+    assert.equal(config.models.default, 'gpt-6.1-sol');
+    assert.equal(resolveModel(config, 'sol'), 'gpt-6.1-sol');
+    assert.equal(resolveModel(config, 'astra'), 'gpt-6-astra');
     assert.equal(resolveModel(config, 'terra'), 'gpt-5.6-terra');
-    assert.equal(resolveModel(config, 'luna'), 'gpt-5.6-luna');
+    assert.equal(resolveModel(config, 'luna'), 'gpt-6-luna');
+    for (const id of ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-6-sol']) {
+      assert.equal(getModelDef(config, id)?.id, id);
+    }
+    assert.deepEqual(config.models.available.filter(model => model.default).map(model => model.id), ['gpt-6.1-sol']);
     assert.equal(getModelDef(config, 'sol')?.alias, 'sol');
     assert.equal(hasCapability(config, 'subagents'), true);
     assert.equal(hasCapability(config, 'forkSession'), true);

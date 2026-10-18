@@ -79,7 +79,7 @@ glob spellings. Replace the illustrative paths with isolated fixture paths.
 {
   "schema_version": 1,
   "provider": "codex",
-  "model": "gpt-5.6-sol",
+  "model": "gpt-6.1-sol",
   "reasoning_effort": "high",
   "workspace_mode": "registered-shared",
   "working_directory": "/absolute/shared/project",
@@ -100,10 +100,21 @@ levels, or silent fallback are accepted. The current catalog accepts:
 
 | Model | Effort values |
 | --- | --- |
+| GPT-6 Astra, GPT-6.1 Sol, GPT-6 Sol | low, medium, high, xhigh, max, ultra |
+| GPT-6 Luna | low, medium, high, xhigh, max |
 | GPT-5.6 Sol, Terra | low, medium, high, xhigh, max, ultra |
 | GPT-5.6 Luna | low, medium, high, xhigh, max |
 | Claude Fable 5, Opus 5, Sonnet 5 | low, medium, high, xhigh, max |
 | Claude Haiku 4.5 | No effort field; that model does not support this control |
+
+The Codex catalog follows the [current Codex model guidance](https://learn.chatgpt.com/docs/models)
+(checked October 17, 2026). The default and `sol` alias select GPT-6.1 Sol;
+`astra` selects GPT-6 Astra and `luna` selects GPT-6 Luna. Previous exact model
+IDs remain available for pinned task profiles. These are Codex effort values,
+not a claim that every API effort value is supported by this task contract.
+Catalog inclusion does not prove account access or qualify an installed release.
+Existing guarded workers retain their packaged catalog until a new immutable
+release is qualified and adopted; never edit a hash-pinned bundle in place.
 
 The Claude combinations follow the provider's [model configuration contract](https://code.claude.com/docs/en/model-config#adjust-effort-level).
 This is a requested native setting, not a measured amount of model reasoning.
