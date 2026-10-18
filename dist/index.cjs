@@ -26442,9 +26442,15 @@ function consumeClaudeTaskEvent(state, event) {
   if (!state.sessionId && event.type !== "system") throw new Error("Claude event before initialization");
   if (event.type === "error" || event.error) throw new Error("Claude native failure");
   if (event.type !== "result") return;
-  if (!state.sessionId || event.session_id !== state.sessionId || event.subtype !== "success" || event.is_error !== false || !Array.isArray(event.permission_denials) || event.permission_denials.length !== 0 || typeof event.result !== "string" || Buffer.byteLength(event.result) > 65536) throw new Error("invalid Claude terminal result");
+  if (!state.sessionId || event.session_id !== state.sessionId || event.subtype !== "success" || event.is_error !== false || !Array.isArray(event.permission_denials) || event.permission_denials.length !== 0) throw new Error("invalid Claude terminal result");
+  const structured = Object.hasOwn(event, "structured_output");
+  if (structured && (!event.structured_output || typeof event.structured_output !== "object" || Array.isArray(event.structured_output))) throw new Error("invalid Claude structured output");
+  const finalOutput = structured ? JSON.stringify(event.structured_output) : event.result;
+  if (typeof finalOutput !== "string" || Buffer.byteLength(finalOutput) > 65536) {
+    throw new Error("invalid Claude terminal result");
+  }
   state.terminal = true;
-  state.finalOutput = event.result;
+  state.finalOutput = finalOutput;
 }
 
 // src/agent-host/task-custody.js
@@ -28504,6 +28510,15 @@ function claudeSandboxPlan(context, plan) {
 // src/agent-host/task-claude.js
 var import_node_path18 = __toESM(require("node:path"), 1);
 var import_node_child_process10 = require("node:child_process");
+var TASK_COMPLETION_SCHEMA = JSON.stringify({
+  type: "object",
+  additionalProperties: false,
+  required: ["outcome", "outputs"],
+  properties: {
+    outcome: { type: "string", enum: ["complete", "no_work", "partial", "needs_evidence", "failed"] },
+    outputs: { type: "array", items: { type: "string" }, maxItems: 64 }
+  }
+});
 function taskClaudeArgs(context) {
   const profile = context.taskProfile;
   if (profile.access_mode === "trusted") return trustedClaudeArgs(context);
@@ -28525,6 +28540,8 @@ function taskClaudeArgs(context) {
     "stream-json",
     "--input-format",
     "text",
+    "--json-schema",
+    TASK_COMPLETION_SCHEMA,
     "--model",
     context.model,
     "--safe-mode",
@@ -28555,6 +28572,8 @@ function trustedClaudeArgs({ taskProfile: profile, model }) {
     "stream-json",
     "--input-format",
     "text",
+    "--json-schema",
+    TASK_COMPLETION_SCHEMA,
     "--model",
     model,
     ...profile.reasoning_effort !== void 0 ? ["--effort", profile.reasoning_effort] : [],
