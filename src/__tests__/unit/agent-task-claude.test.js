@@ -69,6 +69,22 @@ test('Claude task candidate keeps stdin, exact roots and a closed file-tool surf
   assert.throws(() => validateTaskProfile({ ...input, write_roots: [input.working_directory] }, binding), /write roots/);
 });
 
+test('Claude tasks request the same native completion schema in both access modes', t => {
+  const { profile } = fixture(t);
+  for (const access_mode of ['restricted', 'trusted']) {
+    const args = claudeTask.taskClaudeArgs({ model: profile.model, taskProfile: { ...profile, access_mode } });
+    assert.equal(args.filter(value => value === '--json-schema').length, 1);
+    const schema = JSON.parse(args[args.indexOf('--json-schema') + 1]);
+    assert.equal(schema.type, 'object');
+    assert.equal(schema.additionalProperties, false);
+    assert.deepEqual(schema.required, ['outcome', 'outputs']);
+    assert.deepEqual(schema.properties.outcome.enum, ['complete', 'no_work', 'partial', 'needs_evidence', 'failed']);
+    assert.equal(schema.properties.outputs.type, 'array');
+    assert.equal(schema.properties.outputs.items.type, 'string');
+    assert.equal(schema.properties.outputs.maxItems, 64);
+  }
+});
+
 test('native fixture retains a failure receipt for malformed provider output', t => {
   const { root } = fixture(t);
   const bin = path.join(root, '.local', 'bin');
@@ -160,7 +176,7 @@ process.stdin.resume(); process.stdin.on('end',()=>{
 fs.writeFileSync(${JSON.stringify(output)},'fixture proof');
 console.log(JSON.stringify({type:'system',subtype:'init',session_id:'native-fixture'}));
 console.log(JSON.stringify({type:'result',subtype:'success',session_id:'native-fixture',is_error:false,
-permission_denials:[],result:JSON.stringify({outcome:'complete',outputs:[${JSON.stringify(output)}]})}));
+permission_denials:[],result:'Static review complete.',structured_output:{outcome:'complete',outputs:[${JSON.stringify(output)}]}}));
 });`);
   const environment = { RUDI_COMPUTE_JOB_ID: 'job_claude_fixture', RUDI_COMPUTE_ATTEMPT: '1', RUDI_COMPUTE_SPEC_HASH: 'b'.repeat(64) };
   const result = await runAgentTaskInSession(reference, { environment,
@@ -212,6 +228,20 @@ test('Claude task completion requires one successful result bound to its initial
   const success = await run([init, result]);
   assert.equal(success.status, 'completed');
   assert.deepEqual(success.taskFinalOutput, { outcome: 'no_work', outputs: [] });
+  const structured = await run([init, { ...result, result: 'Static review complete.',
+    structured_output: { outcome: 'no_work', outputs: [] } }]);
+  assert.equal(structured.status, 'completed');
+  assert.deepEqual(structured.taskFinalOutput, { outcome: 'no_work', outputs: [] });
+  assert.equal((await run([init, { ...result, result: undefined,
+    structured_output: { outcome: 'no_work', outputs: [] } }])).status, 'completed');
+  // A present invalid native record cannot fall back to valid JSON in result.
+  for (const structured_output of [null, [], 'not an object', {},
+    { outcome: 'unknown', outputs: [] }, { outcome: 'failed', outputs: [] },
+    { outcome: 'no_work', outputs: 'report.txt' },
+    { outcome: 'no_work', outputs: [], extra: true },
+    { outcome: 'complete', outputs: ['x'.repeat(65536)] }]) {
+    assert.equal((await run([init, { ...result, structured_output }])).status, 'failed');
+  }
   const prelude = { type: 'system', subtype: 'ui_invalidate', session_id: init.session_id };
   assert.equal((await run([prelude, init, result])).status, 'completed');
   for (const events of [[init], [result], [init, { ...result, session_id: 'wrong' }],
@@ -219,6 +249,7 @@ test('Claude task completion requires one successful result bound to its initial
     [init, { ...result, is_error: true }], [init, { ...result, subtype: 'error_max_turns' }],
     [init, result, result], [init, { ...result, permission_denials: [{ tool_name: 'Write' }] }],
     [init, { ...result, result: '{"outcome":"no_work","outcome":"complete","outputs":[]}' }],
+    [init, { ...result, result: 'Static review complete.' }],
     [init, { type: 'turn.completed' }]]) {
     const failed = await run(events);
     assert.equal(failed.status, 'failed', JSON.stringify(events));

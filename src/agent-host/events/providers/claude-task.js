@@ -17,8 +17,16 @@ export function consumeClaudeTaskEvent(state, event) {
   if (event.type !== 'result') return;
   if (!state.sessionId || event.session_id !== state.sessionId || event.subtype !== 'success'
       || event.is_error !== false || !Array.isArray(event.permission_denials)
-      || event.permission_denials.length !== 0 || typeof event.result !== 'string'
-      || Buffer.byteLength(event.result) > 65536) throw new Error('invalid Claude terminal result');
+      || event.permission_denials.length !== 0) throw new Error('invalid Claude terminal result');
+  // Native structured output is the machine contract; result may be human prose.
+  // A present but invalid structured field must never fall back to result text.
+  const structured = Object.hasOwn(event, 'structured_output');
+  if (structured && (!event.structured_output || typeof event.structured_output !== 'object'
+      || Array.isArray(event.structured_output))) throw new Error('invalid Claude structured output');
+  const finalOutput = structured ? JSON.stringify(event.structured_output) : event.result;
+  if (typeof finalOutput !== 'string' || Buffer.byteLength(finalOutput) > 65536) {
+    throw new Error('invalid Claude terminal result');
+  }
   state.terminal = true;
-  state.finalOutput = event.result;
+  state.finalOutput = finalOutput;
 }

@@ -2,6 +2,16 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { taskRouter, trustedTaskPath } from './task-integrations.js';
 
+// Request a native machine completion record, independently of response prose.
+// Receipt validation still enforces outcome semantics and verifies output files.
+const TASK_COMPLETION_SCHEMA = JSON.stringify({
+  type: 'object', additionalProperties: false, required: ['outcome', 'outputs'],
+  properties: {
+    outcome: { type: 'string', enum: ['complete', 'no_work', 'partial', 'needs_evidence', 'failed'] },
+    outputs: { type: 'array', items: { type: 'string' }, maxItems: 64 },
+  },
+});
+
 // Native tool permissions complement the separately enforced OS sandbox.
 export function taskClaudeArgs(context) {
   const profile = context.taskProfile;
@@ -20,6 +30,7 @@ export function taskClaudeArgs(context) {
     disableAllHooks: true,
   };
   return ['--print', '--verbose', '--output-format', 'stream-json', '--input-format', 'text',
+    '--json-schema', TASK_COMPLETION_SCHEMA,
     '--model', context.model, '--safe-mode', '--restricted',
     ...(profile.reasoning_effort !== undefined ? ['--effort', profile.reasoning_effort] : []),
     '--no-chrome', '--disable-slash-commands', '--tools', 'Read,Write,Edit',
@@ -31,6 +42,7 @@ export function taskClaudeArgs(context) {
 function trustedClaudeArgs({ taskProfile: profile, model }) {
   const roots = [...new Set([...profile.read_roots, ...profile.write_roots])];
   return ['--print', '--verbose', '--output-format', 'stream-json', '--input-format', 'text',
+    '--json-schema', TASK_COMPLETION_SCHEMA,
     '--model', model, ...(profile.reasoning_effort !== undefined ? ['--effort', profile.reasoning_effort] : []),
     '--tools', 'default', '--permission-mode', 'bypassPermissions', '--permission-prompts', 'none',
     '--settings', JSON.stringify({ disableAllHooks: true }),

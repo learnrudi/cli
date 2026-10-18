@@ -44,6 +44,11 @@ they are not separate macOS users or a security boundary against the operator.
 
 Claude completion requires exactly one successful result bound to the initialized
 session, no native error or permission denials, and a valid final manifest.
+Task launches request that manifest using native `--json-schema`. The terminal
+event's `structured_output` object is the machine contract; `result` may contain
+human-readable prose. A present invalid structured record fails without falling
+back to prose. Older terminal events without that field must still contain a
+strict JSON manifest in `result`; report files alone never imply completion.
 The shared receipt path verifies output roots and hashes after custody closes.
 Native executable pins use `RUDI_AGENT_TASK_CLAUDE_PATH` and
 `RUDI_AGENT_TASK_CLAUDE_SHA256`; cross-provider pins are rejected.
