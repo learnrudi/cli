@@ -14,6 +14,13 @@ export function claudeSandboxPolicy(binaryPath, profile, temporaryDirectory, hom
     account.config_directory, account.anthropic_directory, temporaryDirectory,
     ...profile.read_roots, ...profile.write_roots];
   const write = [account.config_directory, account.anthropic_directory, temporaryDirectory, ...profile.write_roots];
+  if (profile.access_mode === 'trusted') {
+    // The local router needs its installed runtimes, secret mediation, cache
+    // and outputs even when a task's shared runtime root is a remote mount.
+    const localRuntime = path.join(homeDirectory, '.rudi');
+    read.push('/opt/homebrew', '/usr/local', path.join(homeDirectory, '.local'), localRuntime);
+    write.push(localRuntime);
+  }
   const subpaths = values => [...new Set(values)].map(value => `(subpath ${JSON.stringify(value)})`).join('');
   // Bun opens the root and HOME directories themselves during startup. These
   // literal exceptions permit directory enumeration, not reading their files.

@@ -10,10 +10,10 @@ export const TASK_CLAUDE_VERSION = '2.1.294';
 
 export function assertClaudeTaskCapabilities({binaryPath,profile}, {spawnSyncImpl=spawnSync,helperPathImpl=auditHelperPath}={}) {
   const helper = helperPathImpl(); // Enforces the qualified OS/architecture and installed helper.
-  if (!profile.account || profile.network !== 'disabled') throw new Error('Claude task requires an explicit account and disabled tool network');
+  if (!profile.account || (profile.access_mode !== 'trusted' && profile.network !== 'disabled')) throw new Error('Claude task requires an explicit account and disabled tool network');
   for (const policy of ['/Library/Application Support/ClaudeCode/managed-settings.json',
     '/Library/Application Support/ClaudeCode/managed-settings.d',path.join(profile.account.config_directory,'managed-settings.json')]) {
-    if (fs.existsSync(policy)) throw new Error('Managed Claude policy requires separate task qualification');
+    if (profile.access_mode !== 'trusted' && fs.existsSync(policy)) throw new Error('Managed Claude policy requires separate task qualification');
   }
   const env = taskClaudeEnvironment(binaryPath,profile);
   const version = spawnSyncImpl(binaryPath,['--version'],{encoding:'utf8',timeout:5000,maxBuffer:65536,env});

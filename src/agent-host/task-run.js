@@ -47,7 +47,7 @@ export function readAgentTask(reference, environment = process.env) {
   if (profile.timeout_ms > (request.timeout_seconds - 20) * 1000) throw new Error('native timeout must leave 20 seconds for bridge shutdown');
   if (inside(request.outputs.runtime, request.working_directory) || inside(request.working_directory, request.outputs.runtime)) throw new Error('task runtime and workspace overlap');
   for (const control of [reference.path, request.instructions.path, request.execution_profile.path]) {
-    if (profile.write_roots.some(root => inside(control, root))) throw new Error('task control references cannot be writable outputs');
+    if (profile.access_mode !== 'trusted' && profile.write_roots.some(root => inside(control, root))) throw new Error('task control references cannot be writable outputs');
   }
   return { request, profile, instructions, nativeBinary };
 }
@@ -69,7 +69,7 @@ function computeBinding(environment) {
   return { job_id: job, attempt: 1, spec_sha256: hash };
 }
 
-function verifyOutputs(manifest, profile) {
+function verifyOutputs(manifest, deliverables) {
   exactFields(manifest, ['outcome', 'outputs'], 'task final manifest');
   if (!['complete', 'no_work', 'partial', 'needs_evidence'].includes(manifest.outcome)
       || !Array.isArray(manifest.outputs) || manifest.outputs.length > 64
@@ -79,7 +79,7 @@ function verifyOutputs(manifest, profile) {
   return manifest.outputs.map(filename => {
     taskText(filename, 'output path');
     if (!path.isAbsolute(filename) || fs.realpathSync(filename) !== filename
-        || !profile.write_roots.some(root => inside(filename, root))) throw new Error('output path outside declared roots or aliased');
+        || !deliverables.some(root => inside(filename, root))) throw new Error('output path outside declared deliverables or aliased');
     const bytes = readTaskRegularFile(filename, 32 * 1024 * 1024, true);
     return { path: filename, sha256: sha256(bytes), bytes: bytes.length };
   });
@@ -100,6 +100,7 @@ export async function runAgentTaskInSession(reference, dependencies = {}) {
   fs.mkdirSync(runDirectory, { mode: 0o700 }); // Exclusive: an interrupted run is evidence, never replayed in place.
   const base = { schema_version: 1, task: request.task, request: reference, compute,
     instructions: request.instructions, execution_profile: request.execution_profile,
+    access_mode: profile.access_mode || 'restricted',
     ...(profile.reasoning_effort !== undefined ? { reasoning_effort: profile.reasoning_effort } : {}),
     ...(profile.account ? {account:profile.account} : {}) };
   const store = createLaunchStore({ databasePath: path.join(request.outputs.runtime, 'agent-hosts.db') });
@@ -123,7 +124,7 @@ export async function runAgentTaskInSession(reference, dependencies = {}) {
     launch = await launchImpl({ provider: profile.provider, model: profile.model, taskProfile: profile,
       workspaceMode: profile.workspace_mode, workspace: request.working_directory, originDirectory: request.working_directory,
       outputDirectory: path.join(runDirectory, 'host'),
-      prompt: `${instructions}\n\nReturn a final JSON object with exactly outcome and outputs. outcome is complete, no_work, partial, needs_evidence, or failed. outputs is an array of absolute paths to files produced in the declared write roots. complete requires at least one file; no_work requires none. Do not include Markdown fences.\nDeclared write roots: ${JSON.stringify(profile.write_roots)}`,
+      prompt: `${instructions}\n\nReturn a final JSON object with exactly outcome and outputs. outcome is complete, no_work, partial, needs_evidence, or failed. outputs is an array of absolute paths to files produced in the declared deliverable roots. complete requires at least one file; no_work requires none. Do not include Markdown fences.\nDeclared deliverable roots: ${JSON.stringify(request.outputs.deliverables)}\nFilesystem write roots: ${JSON.stringify(profile.write_roots)}`,
     }, { ...dependencies.launchDependencies,
       ...(nativeBinary ? {resolveBinaryImpl:()=>nativeBinary} : {}), taskStop:()=>custody.stop(), store, onSpawn: async value => {
       await custody.track(value.pid);
@@ -139,7 +140,7 @@ export async function runAgentTaskInSession(reference, dependencies = {}) {
     try { await custody.close(); } catch (caught) { error = `Task custody unresolved: ${caught.message}`.slice(0,2048); }
   }
   if(!error) {
-    try {outputs=verifyOutputs(launch.taskFinalOutput,profile);}catch(caught){error=String(caught.message).slice(0,2048);}
+    try {outputs=verifyOutputs(launch.taskFinalOutput,request.outputs.deliverables);}catch(caught){error=String(caught.message).slice(0,2048);}
   }
   const receipt = writeReceipt(path.join(runDirectory, 'completion.json'), {
     ...base, status: error ? 'failed' : 'completed', outcome: error ? 'failed' : launch.taskFinalOutput.outcome,
