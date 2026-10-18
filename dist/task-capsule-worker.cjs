@@ -15806,7 +15806,7 @@ function validateTaskProfile(value, binding) {
   if (Object.hasOwn(value, "access_mode") && !["restricted", "trusted"].includes(value.access_mode)) throw new Error("unsupported task access mode");
   const trusted = value.access_mode === "trusted";
   if (trusted && (!value.account || value.network !== "enabled")) throw new Error("trusted tasks require an explicit account and enabled network");
-  if (!Number.isSafeInteger(value.timeout_ms) || value.timeout_ms < 1 || value.timeout_ms > 36e5) throw new Error("invalid task timeout");
+  if (!Number.isSafeInteger(value.timeout_ms) || value.timeout_ms < 0 || value.timeout_ms > 36e5) throw new Error("invalid task timeout");
   const project = canonicalDirectory(value.working_directory, "working_directory");
   const read2 = roots(value.read_roots, "read roots");
   const write = roots(value.write_roots, "write roots");
@@ -17605,7 +17605,8 @@ function executeForegroundLaunch({
   timeoutMs = plan.timeouts.runtimeMs,
   signalEmitter = process
 }) {
-  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 24 * 60 * 60 * 1e3) {
+  const unlimitedTask = timeoutMs === 0 && plan.taskProfile?.timeout_ms === 0;
+  if (!unlimitedTask && (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 24 * 60 * 60 * 1e3)) {
     throw new Error("timeoutMs must be an integer between 1 and 86400000");
   }
   return new Promise((resolve2, reject) => {
@@ -17927,7 +17928,7 @@ function executeForegroundLaunch({
       }
       resolve2(taskExecution ? { ...updated, taskFinalOutput } : updated);
     }
-    const runtimeTimer = setTimeout(() => {
+    const runtimeTimer = unlimitedTask ? null : setTimeout(() => {
       timedOut = true;
       terminateProvider("SIGTERM");
       forceTimer = setTimeout(
@@ -20375,7 +20376,7 @@ async function launchAgent(options, dependencies = {}) {
       stdout,
       store,
       signalEmitter,
-      timeoutMs: taskProfile?.timeout_ms || options.timeoutMs || plan.timeouts.runtimeMs
+      timeoutMs: taskProfile?.timeout_ms ?? (options.timeoutMs || plan.timeouts.runtimeMs)
     });
     return taskProfile ? { ...result, taskAccount: taskCapabilities?.account || null } : result;
   } catch (error) {
@@ -20411,7 +20412,7 @@ function readAgentTask(reference, environment = process.env) {
   exactFields(request, ["schema_version", "task", "instructions", "execution_profile", "working_directory", "outputs", "timeout_seconds"], "task request");
   exactFields(request.task, ["id", "revision", "definition_sha256"], "task binding");
   exactFields(request.outputs, ["deliverables", "runtime"], "task outputs");
-  if (request.schema_version !== 1 || !/^[a-z][a-z0-9-]{0,63}$/u.test(request.task.id) || !Number.isSafeInteger(request.task.revision) || request.task.revision < 1 || !/^[a-f0-9]{64}$/u.test(request.task.definition_sha256) || !Number.isSafeInteger(request.timeout_seconds) || request.timeout_seconds < 21 || request.timeout_seconds > 3620) {
+  if (request.schema_version !== 1 || !/^[a-z][a-z0-9-]{0,63}$/u.test(request.task.id) || !Number.isSafeInteger(request.task.revision) || request.task.revision < 1 || !/^[a-f0-9]{64}$/u.test(request.task.definition_sha256) || !Number.isSafeInteger(request.timeout_seconds) || request.timeout_seconds !== 0 && (request.timeout_seconds < 21 || request.timeout_seconds > 3620)) {
     throw new Error("invalid task request identity/version/budget");
   }
   canonicalDirectory(request.working_directory, "task working directory");
@@ -20419,7 +20420,7 @@ function readAgentTask(reference, environment = process.env) {
   if (!instructions.trim()) throw new Error("empty instructions");
   const profile = validateTaskProfile(parseTaskJson(readTaskReference(request.execution_profile, "execution profile")), request);
   const nativeBinary = pinnedNative(environment, profile.provider);
-  if (profile.timeout_ms > (request.timeout_seconds - 20) * 1e3) throw new Error("native timeout must leave 20 seconds for bridge shutdown");
+  if (profile.timeout_ms === 0 !== (request.timeout_seconds === 0) || request.timeout_seconds !== 0 && profile.timeout_ms > (request.timeout_seconds - 20) * 1e3) throw new Error("native timeout must leave 20 seconds for bridge shutdown");
   if (inside(request.outputs.runtime, request.working_directory) || inside(request.working_directory, request.outputs.runtime)) throw new Error("task runtime and workspace overlap");
   for (const control of [reference.path, request.instructions.path, request.execution_profile.path]) {
     if (profile.access_mode !== "trusted" && profile.write_roots.some((root) => inside(control, root))) throw new Error("task control references cannot be writable outputs");

@@ -15,6 +15,27 @@ export function capsuleRecord(filename,value) {
   const fd=fs.openSync(filename,'wx',0o600);
   try {fs.writeFileSync(fd,JSON.stringify(value)+'\n');fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
 }
+export async function waitForCapsuleResult(directory, timeoutSeconds, workerAlive = () => true) {
+  const startupEnd = Date.now() + 5000;
+  let observedRunning = false;
+  const end = timeoutSeconds === 0 ? Infinity : Date.now() + (timeoutSeconds + 15) * 1000;
+  while (Date.now() < end) {
+    const filename = path.join(directory, 'result.json');
+    if (fs.existsSync(filename)) {
+      return parseTaskJson(readTaskRegularFile(filename, 32768, true).toString('utf8'));
+    }
+    if (workerAlive()) observedRunning = true;
+    else if (observedRunning || Date.now() >= startupEnd) {
+      // Completion can be published between the first read and the exit probe.
+      if (fs.existsSync(filename)) {
+        return parseTaskJson(readTaskRegularFile(filename, 32768, true).toString('utf8'));
+      }
+      throw new Error(`task capsule worker exited or failed to start; retain custody evidence at ${directory}`);
+    }
+    await delay(100);
+  }
+  return null;
+}
 export async function runTaskCapsule(reference,request,environment) {
   auditHelperPath();
   const creator=auditIdentity(process.pid);
@@ -36,15 +57,15 @@ export async function runTaskCapsule(reference,request,environment) {
   let complete=false;
   try {
     execFileSync('/bin/launchctl',['bootstrap',`gui/${process.getuid()}`,path.join(directory,'job.plist')],{stdio:'pipe',timeout:5000});
-    const end=Date.now()+(request.timeout_seconds+15)*1000;
-    while(Date.now()<end) {
-      if(fs.existsSync(path.join(directory,'result.json'))) {
-        const result=parseTaskJson(readTaskRegularFile(path.join(directory,'result.json'),32768,true).toString('utf8'));
-        complete=true;
-        if(result.error)throw new Error(result.error);
-        return result.value;
-      }
-      await delay(100);
+    const result = await waitForCapsuleResult(directory, request.timeout_seconds, () => {
+      // A finite probe detects a dead supervisor; it never limits healthy runtime.
+      const state = execFileSync('/bin/launchctl', ['print', target], {encoding:'utf8',timeout:2000,maxBuffer:262144});
+      return /^\s*pid = [1-9][0-9]*$/m.test(state) && /^\s*state = running$/m.test(state);
+    });
+    if (result) {
+      complete = true;
+      if (result.error) throw new Error(result.error);
+      return result.value;
     }
     spawnSync('/bin/launchctl',['kill','SIGTERM',target],{timeout:5000,stdio:'pipe'});
     throw new Error(`task capsule timed out; retain custody evidence at ${directory}`);

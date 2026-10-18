@@ -99,7 +99,7 @@ export function validateTaskProfile(value, binding) {
   if (Object.hasOwn(value, 'access_mode') && !['restricted', 'trusted'].includes(value.access_mode)) throw new Error('unsupported task access mode');
   const trusted = value.access_mode === 'trusted';
   if (trusted && (!value.account || value.network !== 'enabled')) throw new Error('trusted tasks require an explicit account and enabled network');
-  if (!Number.isSafeInteger(value.timeout_ms) || value.timeout_ms < 1 || value.timeout_ms > 3600000) throw new Error('invalid task timeout');
+  if (!Number.isSafeInteger(value.timeout_ms) || value.timeout_ms < 0 || value.timeout_ms > 3600000) throw new Error('invalid task timeout');
   const project = canonicalDirectory(value.working_directory, 'working_directory');
   const read = roots(value.read_roots, 'read roots');
   const write = roots(value.write_roots, 'write roots');

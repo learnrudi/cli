@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { sha256 } from '../../agent-host/task-profile.js';
-import { runAgentTaskInSession, runAgentTask as dispatchAgentTask } from '../../agent-host/task-run.js';
+import { readAgentTask, runAgentTaskInSession, runAgentTask as dispatchAgentTask } from '../../agent-host/task-run.js';
 const runAgentTask=(reference,dependencies={})=>runAgentTaskInSession(reference,{...dependencies,
   custodyFactory:async()=>({track:async()=>{},stop:async()=>{},close:async()=>{}})});
 
@@ -18,11 +18,12 @@ test('bridge receipt binds task/job/launch and hashes only allowed regular outpu
   for (const d of ['project', 'out', 'runtime']) fs.mkdirSync(path.join(root, d));
   const ref = (name, value) => { const p = path.join(root, name); fs.writeFileSync(p, value); return { path: p, sha256: sha256(value) }; };
   const profile = { schema_version: 1, provider: 'codex', model: 'gpt-5.6-sol', workspace_mode: 'registered-shared',
-    working_directory: path.join(root, 'project'), read_roots: [path.join(root, 'project')], write_roots: [path.join(root, 'out')], network: 'disabled', timeout_ms: 1000 };
+    working_directory: path.join(root, 'project'), read_roots: [path.join(root, 'project')], write_roots: [path.join(root, 'out')], network: 'disabled', timeout_ms: 0 };
   const request = { schema_version: 1, task: { id: 'fixture', revision: 1, definition_sha256: 'a'.repeat(64) },
     instructions: ref('instructions.md', 'test'), execution_profile: ref('profile.json', JSON.stringify(profile)),
-    working_directory: profile.working_directory, outputs: { deliverables: profile.write_roots, runtime: path.join(root, 'runtime') }, timeout_seconds: 30 };
+    working_directory: profile.working_directory, outputs: { deliverables: profile.write_roots, runtime: path.join(root, 'runtime') }, timeout_seconds: 0 };
   const requestRef = ref('request.json', JSON.stringify(request));
+  assert.throws(() => readAgentTask(ref('mismatched.json', JSON.stringify({ ...request, timeout_seconds: 30 }))), /timeout|budget/);
   const output = path.join(root, 'out', 'report.txt'); fs.writeFileSync(output, 'proof');
   const environment = { RUDI_COMPUTE_JOB_ID: 'job_fixture', RUDI_COMPUTE_ATTEMPT: '1', RUDI_COMPUTE_SPEC_HASH: 'b'.repeat(64) };
   const launchImpl = async options => ({ launchId: 'launch_fixture', nativeSessionId: 'native_fixture', status: 'completed',

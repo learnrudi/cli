@@ -36,7 +36,7 @@ export function readAgentTask(reference, environment = process.env) {
   if (request.schema_version !== 1 || !/^[a-z][a-z0-9-]{0,63}$/u.test(request.task.id)
       || !Number.isSafeInteger(request.task.revision) || request.task.revision < 1
       || !/^[a-f0-9]{64}$/u.test(request.task.definition_sha256)
-      || !Number.isSafeInteger(request.timeout_seconds) || request.timeout_seconds < 21 || request.timeout_seconds > 3620) {
+      || !Number.isSafeInteger(request.timeout_seconds) || (request.timeout_seconds !== 0 && (request.timeout_seconds < 21 || request.timeout_seconds > 3620))) {
     throw new Error('invalid task request identity/version/budget');
   }
   canonicalDirectory(request.working_directory, 'task working directory');
@@ -44,7 +44,8 @@ export function readAgentTask(reference, environment = process.env) {
   if (!instructions.trim()) throw new Error('empty instructions');
   const profile = validateTaskProfile(parseTaskJson(readTaskReference(request.execution_profile, 'execution profile')), request);
   const nativeBinary = pinnedNative(environment, profile.provider);
-  if (profile.timeout_ms > (request.timeout_seconds - 20) * 1000) throw new Error('native timeout must leave 20 seconds for bridge shutdown');
+  if ((profile.timeout_ms === 0) !== (request.timeout_seconds === 0)
+      || (request.timeout_seconds !== 0 && profile.timeout_ms > (request.timeout_seconds - 20) * 1000)) throw new Error('native timeout must leave 20 seconds for bridge shutdown');
   if (inside(request.outputs.runtime, request.working_directory) || inside(request.working_directory, request.outputs.runtime)) throw new Error('task runtime and workspace overlap');
   for (const control of [reference.path, request.instructions.path, request.execution_profile.path]) {
     if (profile.access_mode !== 'trusted' && profile.write_roots.some(root => inside(control, root))) throw new Error('task control references cannot be writable outputs');

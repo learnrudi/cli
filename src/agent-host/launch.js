@@ -135,7 +135,7 @@ export async function launchAgent(options, dependencies = {}) {
       stdout,
       store,
       signalEmitter,
-      timeoutMs: taskProfile?.timeout_ms || options.timeoutMs || plan.timeouts.runtimeMs,
+      timeoutMs: taskProfile?.timeout_ms ?? (options.timeoutMs || plan.timeouts.runtimeMs),
     });
     return taskProfile ? {...result, taskAccount: taskCapabilities?.account || null} : result;
   } catch (error) {

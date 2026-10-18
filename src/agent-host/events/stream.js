@@ -52,7 +52,8 @@ export function executeForegroundLaunch({
   timeoutMs = plan.timeouts.runtimeMs,
   signalEmitter = process,
 }) {
-  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 24 * 60 * 60 * 1000) {
+  const unlimitedTask = timeoutMs === 0 && plan.taskProfile?.timeout_ms === 0;
+  if (!unlimitedTask && (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 24 * 60 * 60 * 1000)) {
     throw new Error('timeoutMs must be an integer between 1 and 86400000');
   }
 
@@ -405,7 +406,7 @@ export function executeForegroundLaunch({
       resolve(taskExecution ? { ...updated, taskFinalOutput } : updated);
     }
 
-    const runtimeTimer = setTimeout(() => {
+    const runtimeTimer = unlimitedTask ? null : setTimeout(() => {
       timedOut = true;
       terminateProvider('SIGTERM');
       forceTimer = setTimeout(
