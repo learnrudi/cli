@@ -25,15 +25,18 @@ creates the local RUDI directories and settings. It also installs a managed
 RUDI instruction block in your Codex home; add `--no-agent-instructions` to skip
 that integration.
 
-The published 1.10.29 package has initialization and npm-inventory defects.
-This checkout fixes both: `rudi init` uses the verified registry installer and
-returns nonzero on incomplete setup; `rudi list` includes dynamic npm tools.
-These fixes and the companion registry update to Node 24.21.0 are local
-candidates awaiting publication. The public registry still supplies Node 20.10.0,
-outside this CLI's supported Node versions; keep a supported Node on PATH
-until the registry update is published.
-The 24.21.0 candidate also needs revision before adoption: Node 24.19–24.21
-can abort while collecting native SQLite objects. This checkout requires
+This source includes the initialization and npm-inventory fixes first verified
+against 1.10.29: `rudi init` uses the verified registry installer and returns
+nonzero on incomplete setup; `rudi list` includes dynamic npm tools. Check
+`rudi --version` and the installed package's `engines` before applying source
+guidance to a published release.
+
+Registry and CLI releases are independent. The Registry's accepted
+[Node manifest](https://github.com/learnrudi/registry/blob/main/catalog/runtimes/node.json)
+was 24.21.0 at the October 20, 2026 source review. That still falls below this
+checkout's Node 24 minimum. Keep a supported Node on PATH and recheck the
+manifest and this package's `engines` when selecting a runtime.
+Node 24.19–24.21 can abort while collecting native SQLite objects. This checkout requires
 24.22+ on the Node 24 line and rejects older versions before opening Agent Host
 state. `pnpm build` exercises allocation-driven SQLite GC and worker teardown;
 the packaged `scripts/verify-sqlite-teardown.mjs` provides the same acceptance
@@ -41,7 +44,7 @@ probe against the package's own dependency. No installed runtime is upgraded
 automatically. See the [teardown verification](docs/swe-compliance/2026-10-16-sqlite-teardown.md).
 `--skip-downloads` initializes local structure without installing runtimes. See the
 [fresh-install findings and verification guide](https://github.com/learnrudi/cli/blob/main/docs/cli-layout-and-installation.md)
-for the tested scope and remaining registry compatibility gap.
+for dated test evidence and the remaining registry compatibility gap.
 
 Shims are opt-in. If you want PATH exposure for installed tools:
 
@@ -730,4 +733,12 @@ metadata. Ownership receipts, exact force scope, conflict preservation and
 restartRequired reporting continue to govern native updates. Deploy the
 compatible CLI before publishing a registry that migrates existing flat skills.
 
-Registered shared task execution is described in [the Agent Host task contract](docs/agent-task-execution.md). It remains a foreground-only fixture candidate. GitHub source integration does not publish an npm release or authorize deployment and cutover.
+Registered shared task execution is described in [the Agent Host task contract](docs/agent-task-execution.md).
+Compute owns manual and recurring admission; Agent Host provides foreground
+completion through a launchd custody capsule on qualified hosts. Explicit
+unlimited duration is supported with matching zero timeouts; cleanup, output
+limits and qualification gates remain active. Source support does not establish
+an installed release, deployment or schedule activation.
+
+Documentation ownership and the review requirements are in
+[AGENTS.md](AGENTS.md#documentation-maintenance).

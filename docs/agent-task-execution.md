@@ -243,8 +243,10 @@ keys and non-finite numbers are rejected.
 
 The request contains `schema_version`, `task` (id/revision/definition_sha256),
 `instructions`, `execution_profile`, `working_directory`, `outputs`, and
-`timeout_seconds`. The profile's native timeout must leave 20 seconds inside
-Compute's timeout. Compute additionally retains its 10-second shutdown grace.
+`timeout_seconds`. With positive timeouts, the profile's native timeout must
+leave 20 seconds inside Compute's timeout. Explicit unlimited duration instead
+requires both timeouts to be integer zero, as described below. Compute
+additionally retains its 10-second shutdown grace.
 The provider runs in a separate process group inside the capsule's audit session.
 Startup receipt failure, output overflow, timeout, native exit and signals enter
 supervised audit-session cleanup, including descendants that detach from that group.

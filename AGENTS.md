@@ -142,3 +142,34 @@ After editing JS/TS, run the focused debt scan described by the global
 instructions. Build output under `dist/` is tracked; refresh it in a dedicated
 build commit. CI in `.github/workflows/quality.yml` enforces tests, build
 reproducibility, changed-file debt scanning, and package contents.
+
+## Documentation maintenance
+
+The change author owns documentation impact; the reviewer checks it before
+acceptance. Update the current guide in the same change as observable behavior,
+commands, contracts, schema, configuration or operating procedures. A dated
+compliance record is evidence, not a replacement for current guidance.
+
+| Changed surface | Current documentation to review |
+| --- | --- |
+| Commands, flags, installation, runtime requirements | `README.md`, `docs/cli-layout-and-installation.md`, `package.json` |
+| Native hosts, registered tasks, permissions | `docs/frontier-agent-hosts.md`, `docs/agent-task-execution.md`, `docs/compute-trusted-access.md` |
+| Daemon routes | `docs/rudi-local-daemon-architecture.md`; generate `docs/daemon/openapi.json` from `src/contracts/daemon-openapi.js` |
+| Registry/runtime or Compute bridge compatibility | The owning Registry/Compute contract and the affected CLI guide; record the peer revision inspected |
+
+- Record the affected guides and source/consumer revisions in the PR. If no
+  documentation change is needed, explain why using the actual behavior delta.
+- Check examples, local links, command names and compatibility claims against
+  source. Use repository-relative links within this repo and owning-repository
+  links across Git boundaries; sibling checkouts are not assumed.
+- Keep historical ledgers and archived instructions dated. Current guides must
+  identify superseded advice and link to the accepted contract instead of
+  silently replaying old rollout steps.
+- Distinguish implemented source, published packages, installed artifacts and
+  deployed services. Date live-state claims and link their observation evidence;
+  a merge or successful build does not prove deployment.
+- Keep secrets, account state and private records out of documentation. Record
+  verification limits honestly, including unverified host/consumer acceptance.
+- Use `.github/pull_request_template.md` for the review record. This checklist
+  requires review; existing CI does not establish semantic documentation
+  correctness or ongoing freshness.
