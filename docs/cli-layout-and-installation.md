@@ -94,8 +94,12 @@ src/router-mcp.js + its imports
   └─ pnpm build → dist/router-mcp.js
 src/packages-manifest.json
   └─ pnpm build → dist/packages-manifest.json
+src/agent-host/task-custody-worker.js + task-capsule-worker.js
+  └─ pnpm build → dist/task-custody-worker.cjs + dist/task-capsule-worker.cjs
+native task-audit helper
+  └─ scripts/build-task-audit.mjs → dist/task-audit-darwin
 
-npm package: three dist files + README.md + LICENSE + package.json
+npm package: package.json files allowlist + npm's standard metadata/license files
   └─ npm install -g @learnrudi/cli
       ├─ <npm-prefix>/lib/node_modules/@learnrudi/cli/  (macOS/Linux)
       └─ <npm-prefix>/bin/rudi → package's dist/index.cjs
@@ -107,7 +111,10 @@ installed stacks/skills/runtimes/tools
       └─ ~/.rudi/bins/...    Optional command shims and MCP router entrypoint
 ```
 
-The npm package does not ship the source tree, workspace `packages/db`, tests,
+The package includes the task workers, native audit helper and
+`scripts/verify-sqlite-teardown.mjs` as well as the CLI/router bundles. Its exact
+payload is defined by `package.json` and verified with `npm pack --dry-run`.
+It does not ship the source tree, workspace `packages/db`, tests, other
 development scripts, archives, or your installed stacks, credentials, and data.
 Production dependencies are installed by npm. `better-sqlite3` remains required
 by the current Agent Host launch store even though the older database package
@@ -155,6 +162,13 @@ Git URL is supported. Test the generated tarball with `npm pack` and an isolated
 npm install prefix to verify the source-to-package boundary.
 
 ## October 15, 2026 installation audit
+
+This section preserves the October 15 observations. It is not a current
+publication inventory. At the October 20 source review, Registry `main` already
+selects Node 24.21.0; this CLI source requires Node 22 or 24.22+. The remaining
+compatibility gap is the Node 24 minimum, not an unpublished move from Node 20.
+See [the current installation guidance](../README.md#installation) and inspect
+the installed package separately before a rollout.
 
 Public npm version tested: **1.10.29**. Tests use empty temporary homes, separate
 npm prefixes/caches/config files, an allowlisted environment, and a working

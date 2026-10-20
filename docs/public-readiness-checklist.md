@@ -9,7 +9,9 @@ report. Workspace paths and example catalog entries may have changed. Use the
 [October 15 fresh-install audit](swe-compliance/2026-10-15-cli-cleanup-and-fresh-install.md)
 for the source layout and original setup findings. The
 [onboarding fix ledger](swe-compliance/2026-10-15-cli-onboarding-fixes.md) records
-the unpublished fixes and the remaining registry runtime compatibility gap.
+the fixes and registry compatibility gap observed on October 15. Use the
+current guide for later source changes; this ledger does not establish today's
+publication or installed-runtime state.
 
 This checklist tracks the work required to make RUDI ready for public use as a clean CLI, registry, and local capability layer. It covers the relationship between:
 
