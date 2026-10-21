@@ -128,6 +128,37 @@ distribution files; it does not update the installed `rudi` command. Use
 selected working Node. Regenerating active launchers is a separate installation
 step and must use the intended CLI version.
 
+### CI delivery identity
+
+The Quality workflow runs a generated `delivery-binding` metadata job before
+the jobs that check out and execute pull-request code. This job performs no
+source checkout. On PRs, it binds the repository ID, PR number, head/base/merge
+revisions, run ID and attempt to an immutable `delivery-binding` artifact.
+Only that metadata job has `id-token: write`; the existing test/build matrix
+continues with read-only repository permission and no OIDC minting permission.
+The existing strict `quality` aggregate and main-push coverage are preserved.
+
+The GitHub-signed token uses the custom audience
+`urn:rudi:platform-delivery:ci-proof` as offline CI identity evidence. There is
+no cloud credential exchange, provider configuration or deployment. Tokens and
+request bearers stay opaque and must never be printed in logs or reports;
+only artifact ID/digest custody metadata is logged. Main-push runs skip the
+PR-only identity upload and continue normal verification.
+
+Identity endpoint redirects are prohibited; request and response bounds and
+sanitized failure handling prevent an unavailable identity proof from producing
+an artifact. The producer treats the JWT as opaque; cryptographic claim
+validation belongs to the separately qualified controller.
+
+The job is an exact projection of the corrected frozen v2 System generator at
+`rudi-system/scripts/platform-delivery/binding-job.mjs`, SHA-256
+`a69af1e7d8455c3f5fbdd001d5fd9c08a278a58af8ca08a4607a2f21d9413c16`.
+It has focused Astra producer-source approval; consumer-wide review and hosted
+identity/artifact custody, runtime R2 crypto and Admin qualification remain
+pending. Controller and automatic live behavior stay disabled. Review changes
+in that owning source before regenerating. Local validation and limits are in the
+[binding compliance record](docs/swe-compliance/2026-10-21-platform-delivery-binding.md).
+
 Downloaded runtime updates are verified and extracted in a sibling staging
 directory before replacing the installed runtime. Failed downloads, invalid
 executables, and lockfile-write failures preserve the previous runtime. A
