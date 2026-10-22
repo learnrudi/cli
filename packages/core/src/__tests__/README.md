@@ -248,13 +248,14 @@ node --inspect-brk ../../scripts/run-tests.js src/__tests__/unit/platform-resolv
 
 ## Related Documentation
 
-- [Registry Schema v2](../../../../../../registry/SCHEMA.md)
-- [Platform Resolver API](../../platform-resolver.js)
-- [Installer API](../../installer.js)
+- [Registry Schema v2](https://github.com/learnrudi/registry/blob/main/SCHEMA.md)
+- [Platform Resolver API](../platform-resolver.js)
+- [Installer API](../installer.js)
 
 ## Test Data
 
-Sample manifests for manual testing are in `/Users/hoff/dev/RUDI/apps/registry/`.
+Sample manifests for manual testing are in
+`/Users/<user>/RUDI/apps/platform/registry/`.
 
 To test against local registry:
 
