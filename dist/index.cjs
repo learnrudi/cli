@@ -25495,13 +25495,29 @@ function capsuleRecord(filename, value) {
 async function waitForCapsuleResult(directory, timeoutSeconds, workerAlive = () => true) {
   const startupEnd = Date.now() + 5e3;
   let observedRunning = false;
+  let consecutiveProbeTimeouts = 0;
   const end = timeoutSeconds === 0 ? Infinity : Date.now() + (timeoutSeconds + 15) * 1e3;
   while (Date.now() < end) {
     const filename = import_node_path9.default.join(directory, "result.json");
     if (import_node_fs8.default.existsSync(filename)) {
       return parseTaskJson(readTaskRegularFile(filename, 32768, true).toString("utf8"));
     }
-    if (workerAlive()) observedRunning = true;
+    let alive;
+    try {
+      alive = workerAlive();
+      consecutiveProbeTimeouts = 0;
+    } catch (error) {
+      if (import_node_fs8.default.existsSync(filename)) {
+        return parseTaskJson(readTaskRegularFile(filename, 32768, true).toString("utf8"));
+      }
+      if (error.code !== "ETIMEDOUT") throw error;
+      if (++consecutiveProbeTimeouts >= 3) {
+        throw new Error(`task capsule status probe timed out three consecutive times; retain custody evidence at ${directory}`, { cause: error });
+      }
+      await delay(100);
+      continue;
+    }
+    if (alive) observedRunning = true;
     else if (observedRunning || Date.now() >= startupEnd) {
       if (import_node_fs8.default.existsSync(filename)) {
         return parseTaskJson(readTaskRegularFile(filename, 32768, true).toString("utf8"));
