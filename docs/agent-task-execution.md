@@ -291,6 +291,17 @@ subsequent execution fails closed. `rudi agent task-recover REQUEST SHA256` is t
 bounded provider-neutral reconciliation interface used by Compute before lease
 recovery. There is no automatic quarantine-clear operation.
 
+The capsule creator polls worker status with a two-second `launchctl print`
+deadline. One timed-out observation does not establish worker loss: it retries
+at most twice, resetting that allowance after a successful status observation.
+Three consecutive timeouts, other probe errors, or an observed worker exit
+without a result fail closed. A completion result published during a failed
+probe is read and validated before deciding failure. These retries do not
+extend a finite task deadline or disable the independent creator watchdog;
+unlimited tasks still stop when supervision cannot be established. Historical
+quarantine and partial business work require operator reconciliation before a
+separate run can resume them.
+
 The package includes `dist/task-custody-worker.cjs`, `dist/task-capsule-worker.cjs`
 and the compiled `dist/task-audit-darwin` helper. Each task's temporary
 `com.learnrudi.containment.<uuid>` job uses `SessionCreate`; setsid, setpgid,
