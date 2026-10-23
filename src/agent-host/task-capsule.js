@@ -18,13 +18,29 @@ export function capsuleRecord(filename,value) {
 export async function waitForCapsuleResult(directory, timeoutSeconds, workerAlive = () => true) {
   const startupEnd = Date.now() + 5000;
   let observedRunning = false;
+  let consecutiveProbeTimeouts = 0;
   const end = timeoutSeconds === 0 ? Infinity : Date.now() + (timeoutSeconds + 15) * 1000;
   while (Date.now() < end) {
     const filename = path.join(directory, 'result.json');
     if (fs.existsSync(filename)) {
       return parseTaskJson(readTaskRegularFile(filename, 32768, true).toString('utf8'));
     }
-    if (workerAlive()) observedRunning = true;
+    let alive;
+    try {
+      alive = workerAlive();
+      consecutiveProbeTimeouts = 0;
+    } catch (error) {
+      if (fs.existsSync(filename)) {
+        return parseTaskJson(readTaskRegularFile(filename, 32768, true).toString('utf8'));
+      }
+      if (error.code !== 'ETIMEDOUT') throw error;
+      if (++consecutiveProbeTimeouts >= 3) {
+        throw new Error(`task capsule status probe timed out three consecutive times; retain custody evidence at ${directory}`, {cause:error});
+      }
+      await delay(100);
+      continue;
+    }
+    if (alive) observedRunning = true;
     else if (observedRunning || Date.now() >= startupEnd) {
       // Completion can be published between the first read and the exit probe.
       if (fs.existsSync(filename)) {
